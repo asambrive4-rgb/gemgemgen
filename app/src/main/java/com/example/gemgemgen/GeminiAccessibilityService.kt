@@ -40,39 +40,24 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
                     attempt = 1,
                     onStateChange = onStateChange,
                     onDone = {
-                        handler.postDelayed(
-                            {
-                                clickNewChatNearSearch(
+                        clickNewChatNearSearch(
+                            attempt = 1,
+                            onStateChange = onStateChange,
+                            onDone = {
+                                setPromptText(
+                                    prompt = prompt,
                                     attempt = 1,
                                     onStateChange = onStateChange,
                                     onDone = {
-                                        handler.postDelayed(
-                                            {
-                                                setPromptText(
-                                                    prompt = prompt,
-                                                    attempt = 1,
-                                                    onStateChange = onStateChange,
-                                                    onDone = {
-                                                        handler.postDelayed(
-                                                            {
-                                                                clickSendWhenReady(
-                                                                    prompt = prompt,
-                                                                    attempt = 1,
-                                                                    onStateChange = onStateChange,
-                                                                    onDone = onDone
-                                                                )
-                                                            },
-                                                            AFTER_INPUT_WAIT_MS
-                                                        )
-                                                    }
-                                                )
-                                            },
-                                            AFTER_NEW_CHAT_WAIT_MS
+                                        clickSendWhenReady(
+                                            prompt = prompt,
+                                            attempt = 1,
+                                            onStateChange = onStateChange,
+                                            onDone = onDone
                                         )
                                     }
                                 )
-                            },
-                            AFTER_SIDEBAR_WAIT_MS
+                            }
                         )
                     }
                 )
@@ -150,8 +135,25 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
                 )
             }
             if (inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
-                onStateChange(AutomationUiState.Running("프롬프트 입력 완료"))
-                onDone()
+                onStateChange(AutomationUiState.Running("프롬프트 입력 반영 확인 중"))
+                handler.postDelayed(
+                    {
+                        if (isPromptTextApplied(prompt)) {
+                            onStateChange(AutomationUiState.Running("프롬프트 입력 완료"))
+                            onDone()
+                        } else {
+                            retryOrFail(
+                                attempt = attempt,
+                                maxAttempts = INPUT_MAX_ATTEMPTS,
+                                failureMessage = "프롬프트 입력 반영 실패",
+                                onStateChange = onStateChange
+                            ) {
+                                setPromptText(prompt, attempt + 1, onStateChange, onDone)
+                            }
+                        }
+                    },
+                    INPUT_CONFIRM_WAIT_MS
+                )
                 return
             }
         }
@@ -249,6 +251,10 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         } else {
             PromptInputAfterSend.Empty
         }
+    }
+
+    private fun isPromptTextApplied(prompt: String): Boolean {
+        return findInputNode()?.text?.toString()?.contains(prompt) == true
     }
 
     private fun findNewChatNearestToSearch(): AccessibilityNodeInfo? {
@@ -350,9 +356,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
 
         private const val INPUT_RESOURCE_ID =
             "com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_half_sheet"
-        private const val AFTER_SIDEBAR_WAIT_MS = 300L
-        private const val AFTER_NEW_CHAT_WAIT_MS = 1500L
-        private const val AFTER_INPUT_WAIT_MS = 500L
+        private const val INPUT_CONFIRM_WAIT_MS = 500L
         private const val SEND_CONFIRM_WAIT_MS = 1000L
         private const val RETRY_WAIT_MS = 1000L
         private const val SIDEBAR_MAX_ATTEMPTS = 10

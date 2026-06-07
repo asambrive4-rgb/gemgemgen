@@ -59,6 +59,7 @@ internal fun GeminiAutoSenderApp() {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshStatus()
+                focusManager.clearFocus()
             }
         }
 
