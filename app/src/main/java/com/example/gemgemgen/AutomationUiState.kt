@@ -23,17 +23,7 @@ object AutomationUiText {
     fun statusText(automationState: AutomationUiState): String {
         return when (automationState) {
             AutomationUiState.Idle -> "자동화 대기 중"
-            is AutomationUiState.Running -> {
-                val progress = if (
-                    automationState.currentIndex != null &&
-                    automationState.totalCount != null
-                ) {
-                    " (${automationState.currentIndex}/${automationState.totalCount})"
-                } else {
-                    ""
-                }
-                "진행 중: ${automationState.step}$progress"
-            }
+            is AutomationUiState.Running -> automationState.step
             AutomationUiState.Success -> "자동화 성공"
             AutomationUiState.Stopped -> "자동화 중지됨"
             is AutomationUiState.Failure -> "자동화 실패: ${automationState.message}"

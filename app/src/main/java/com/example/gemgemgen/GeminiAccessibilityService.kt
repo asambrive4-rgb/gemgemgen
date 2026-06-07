@@ -89,7 +89,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("사이드바 여는 중 ($attempt/$SIDEBAR_MAX_ATTEMPTS)"))
+        onStateChange(AutomationUiState.Running("사이드바 여는 중 (#$attempt)"))
 
         val node = findNodeByTextOrDescription("사이드바 열기")
         if (node != null && clickNodeOrParent(node)) {
@@ -113,7 +113,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("채팅 검색 근처 새 채팅 찾는 중 ($attempt/$NEW_CHAT_MAX_ATTEMPTS)"))
+        onStateChange(AutomationUiState.Running("채팅 검색 근처 새 채팅 찾는 중 (#$attempt)"))
 
         val node = findNewChatNearestToSearch()
         if (node != null && clickNodeOrParent(node)) {
@@ -138,7 +138,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("입력창 찾는 중 ($attempt/$INPUT_MAX_ATTEMPTS)"))
+        onStateChange(AutomationUiState.Running("입력창 찾는 중 (#$attempt)"))
 
         val inputNode = findInputNode()
         if (inputNode != null) {
@@ -172,7 +172,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("보내기 버튼 활성화 대기 중 ($attempt/$SEND_MAX_ATTEMPTS)"))
+        onStateChange(AutomationUiState.Running("보내기 버튼 활성화 대기 중 (#$attempt)"))
 
         val node = findNodeByTextOrDescription("보내기")
         val clickableNode = node?.let(::findClickableNodeOrParent)

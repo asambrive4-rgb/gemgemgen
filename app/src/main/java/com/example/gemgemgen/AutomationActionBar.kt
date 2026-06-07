@@ -72,6 +72,16 @@ internal fun AutomationActionBar(
                     color = dotColor
                 ) {}
 
+                if (automationState is AutomationUiState.Running &&
+                    automationState.currentIndex != null &&
+                    automationState.totalCount != null
+                ) {
+                    ProgressBadge(
+                        currentIndex = automationState.currentIndex,
+                        totalCount = automationState.totalCount
+                    )
+                }
+
                 Text(
                     text = statusText,
                     style = MaterialTheme.typography.bodyMedium,
@@ -123,5 +133,26 @@ internal fun AutomationActionBar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ProgressBadge(
+    currentIndex: Int,
+    totalCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = RoundedCornerShape(6.dp),
+        modifier = modifier
+    ) {
+        Text(
+            text = "[$currentIndex/$totalCount]",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }
