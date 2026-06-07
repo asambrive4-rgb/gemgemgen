@@ -19,21 +19,19 @@ data class EnvironmentStatus(
     val isAccessibilityServiceEnabled: Boolean = false,
     val hasWriteSecureSettingsPermission: Boolean = false,
     val isWildcardDirectoryAccessible: Boolean = false,
-    val hasPromptTemplate: Boolean = false,
     val wildcardDirectoryPath: String = "",
     val nullKeyboardTargetImeId: String = AppDefaults.NULL_KEYBOARD_IME_ID,
     val adbGrantCommand: String = ""
 ) {
-    val isReadyToStart: Boolean
+    val isReady: Boolean
         get() = isGeminiInstalled &&
             isAccessibilityServiceEnabled &&
             hasWriteSecureSettingsPermission &&
-            isWildcardDirectoryAccessible &&
-            hasPromptTemplate
+            isWildcardDirectoryAccessible
 }
 
 object EnvironmentStatusChecker {
-    fun check(context: Context, promptTemplate: String): EnvironmentStatus {
+    fun check(context: Context): EnvironmentStatus {
         val wildcardFolderUri = WildcardFolderStore.getFolderUri(context)
 
         return EnvironmentStatus(
@@ -42,7 +40,6 @@ object EnvironmentStatusChecker {
             hasWriteSecureSettingsPermission = hasWriteSecureSettingsPermission(context),
             isWildcardDirectoryAccessible = wildcardFolderUri != null &&
                 WildcardRepository.canReadFolder(context, wildcardFolderUri),
-            hasPromptTemplate = promptTemplate.isNotBlank(),
             wildcardDirectoryPath = wildcardFolderUri?.toString().orEmpty(),
             nullKeyboardTargetImeId = AppDefaults.NULL_KEYBOARD_IME_ID,
             adbGrantCommand = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"

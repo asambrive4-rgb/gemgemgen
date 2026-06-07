@@ -6,15 +6,14 @@ import org.junit.Test
 
 class EnvironmentStatusTest {
     @Test
-    fun isReadyToStart_isTrueOnlyWhenEveryRequiredStateIsReady() {
+    fun isReady_isTrueOnlyWhenEveryEnvironmentStateIsReady() {
         assertTrue(
             EnvironmentStatus(
                 isGeminiInstalled = true,
                 isAccessibilityServiceEnabled = true,
                 hasWriteSecureSettingsPermission = true,
-                isWildcardDirectoryAccessible = true,
-                hasPromptTemplate = true
-            ).isReadyToStart
+                isWildcardDirectoryAccessible = true
+            ).isReady
         )
 
         assertFalse(
@@ -22,9 +21,8 @@ class EnvironmentStatusTest {
                 isGeminiInstalled = true,
                 isAccessibilityServiceEnabled = true,
                 hasWriteSecureSettingsPermission = true,
-                isWildcardDirectoryAccessible = true,
-                hasPromptTemplate = false
-            ).isReadyToStart
+                isWildcardDirectoryAccessible = false
+            ).isReady
         )
     }
 }

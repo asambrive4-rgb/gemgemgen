@@ -20,4 +20,9 @@ class RepeatCountParserTest {
     fun parse_returnsValidNumber() {
         assertEquals(25, RepeatCountParser.parse("25"))
     }
+
+    @Test
+    fun normalizeInput_keepsOnlyDigits() {
+        assertEquals("1234", RepeatCountParser.normalizeInput("a1b2c3d4"))
+    }
 }

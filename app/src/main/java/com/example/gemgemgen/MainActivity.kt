@@ -1,6 +1,5 @@
 package com.example.gemgemgen
 
-import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
@@ -35,13 +34,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,10 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,43 +68,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun GeminiAutoSenderApp() {
     val context = LocalContext.current
+    val viewModel: MainViewModel = viewModel(
+        factory = remember(context) { MainViewModelFactory(context) }
+    )
+    val uiState by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var promptTemplate by rememberSaveable { mutableStateOf("") }
-    var repeatCount by rememberSaveable {
-        mutableStateOf(AppDefaults.DEFAULT_REPEAT_COUNT.toString())
-    }
-    var status by remember { mutableStateOf(EnvironmentStatus()) }
-    var showSettings by rememberSaveable { mutableStateOf(false) }
-    var settingsMessage by rememberSaveable { mutableStateOf("") }
-    var settingsError by rememberSaveable { mutableStateOf("") }
-    var automationState by remember { mutableStateOf<AutomationUiState>(AutomationUiState.Idle) }
-    var showRecentLogs by rememberSaveable { mutableStateOf(false) }
-    val runLogger = remember(context) {
-        RunLogger.android(context.applicationContext)
-    }
-    var recentLogs by remember { mutableStateOf(runLogger.loadRecent()) }
-    val mvpAutomation = remember(context, runLogger) {
-        GeminiMvpAutomation(
-            context = context.applicationContext,
-            runLogger = runLogger
-        )
-    }
-
-    fun refreshStatus() {
-        status = EnvironmentStatusChecker.check(context, promptTemplate)
-    }
-
-    fun refreshLogs() {
-        recentLogs = runLogger.loadRecent()
-    }
-
-    fun handleAutomationState(state: AutomationUiState) {
-        automationState = state
-        if (state.isTerminal()) {
-            refreshLogs()
-        }
-    }
 
     val wildcardFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -122,24 +85,18 @@ private fun GeminiAutoSenderApp() {
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
-            WildcardFolderStore.saveFolderUri(context, uri)
-            settingsMessage = "wildcard 폴더를 선택했습니다."
-            settingsError = ""
-            refreshStatus()
+            viewModel.saveWildcardFolder(uri.toString())
         } catch (error: SecurityException) {
-            settingsMessage = ""
-            settingsError = "폴더 권한 저장 실패: ${error.message ?: "다시 선택해주세요."}"
+            viewModel.showWildcardFolderSaveError(
+                "폴더 권한 저장 실패: ${error.message ?: "다시 선택해주세요."}"
+            )
         }
     }
 
-    LaunchedEffect(promptTemplate) {
-        refreshStatus()
-    }
-
-    DisposableEffect(lifecycleOwner, promptTemplate) {
+    DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                refreshStatus()
+                viewModel.refreshStatus()
             }
         }
 
@@ -149,6 +106,41 @@ private fun GeminiAutoSenderApp() {
         }
     }
 
+    GeminiAutoSenderScreen(
+        uiState = uiState,
+        onClearFocus = { focusManager.clearFocus() },
+        onShowSettings = viewModel::showSettings,
+        onHideSettings = viewModel::hideSettings,
+        onRefreshStatus = viewModel::refreshStatus,
+        onSelectWildcardFolder = { wildcardFolderLauncher.launch(null) },
+        onOpenAccessibilitySettings = {
+            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        },
+        onPromptTemplateChange = viewModel::onPromptTemplateChange,
+        onImportFromClipboard = viewModel::importPromptFromClipboard,
+        onRepeatCountChange = viewModel::onRepeatCountChange,
+        onRunMvp = viewModel::runAutomation,
+        onCancelAutomation = viewModel::cancelAutomation,
+        onToggleRecentLogs = viewModel::toggleRecentLogs
+    )
+}
+
+@Composable
+private fun GeminiAutoSenderScreen(
+    uiState: MainUiState,
+    onClearFocus: () -> Unit,
+    onShowSettings: () -> Unit,
+    onHideSettings: () -> Unit,
+    onRefreshStatus: () -> Unit,
+    onSelectWildcardFolder: () -> Unit,
+    onOpenAccessibilitySettings: () -> Unit,
+    onPromptTemplateChange: (String) -> Unit,
+    onImportFromClipboard: () -> Unit,
+    onRepeatCountChange: (String) -> Unit,
+    onRunMvp: () -> Unit,
+    onCancelAutomation: () -> Unit,
+    onToggleRecentLogs: () -> Unit
+) {
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Box(
             modifier = Modifier
@@ -159,7 +151,7 @@ private fun GeminiAutoSenderApp() {
                         val down = awaitFirstDown(pass = PointerEventPass.Final)
                         val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
                         if (up != null && !down.isConsumed && !up.isConsumed) {
-                            focusManager.clearFocus()
+                            onClearFocus()
                         }
                     }
                 }
@@ -183,29 +175,20 @@ private fun GeminiAutoSenderApp() {
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    OutlinedButton(onClick = { showSettings = true }) {
+                    OutlinedButton(onClick = onShowSettings) {
                         Text("설정")
                     }
                 }
 
                 PromptSection(
-                    promptTemplate = promptTemplate,
-                    onPromptTemplateChange = { promptTemplate = it },
-                    onImportFromClipboard = {
-                        val clipboardManager = context.getSystemService(ClipboardManager::class.java)
-                        promptTemplate = clipboardManager.primaryClip
-                            ?.getItemAt(0)
-                            ?.coerceToText(context)
-                            ?.toString()
-                            .orEmpty()
-                    }
+                    promptTemplate = uiState.promptTemplate,
+                    onPromptTemplateChange = onPromptTemplateChange,
+                    onImportFromClipboard = onImportFromClipboard
                 )
 
                 OutlinedTextField(
-                    value = repeatCount,
-                    onValueChange = { value ->
-                        repeatCount = value.filter { it.isDigit() }.take(3)
-                    },
+                    value = uiState.repeatCountText,
+                    onValueChange = onRepeatCountChange,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("반복 횟수") },
                     singleLine = true,
@@ -213,40 +196,28 @@ private fun GeminiAutoSenderApp() {
                 )
 
                 ActionSection(
-                    status = status,
-                    automationState = automationState,
-                    onRunMvp = {
-                        mvpAutomation.run(
-                            promptTemplate = promptTemplate,
-                            repeatCountText = repeatCount,
-                            onStateChange = ::handleAutomationState
-                        )
-                    },
-                    onCancelAutomation = {
-                        mvpAutomation.cancel(::handleAutomationState)
-                    },
-                    recentLogs = recentLogs,
-                    showRecentLogs = showRecentLogs,
-                    onToggleRecentLogs = {
-                        refreshLogs()
-                        showRecentLogs = !showRecentLogs
-                    }
+                    automationState = uiState.automationState,
+                    canRun = uiState.canRun,
+                    isRunning = uiState.isRunning,
+                    readinessMessage = uiState.readinessMessage,
+                    onRunMvp = onRunMvp,
+                    onCancelAutomation = onCancelAutomation,
+                    recentLogs = uiState.recentLogs,
+                    showRecentLogs = uiState.showRecentLogs,
+                    onToggleRecentLogs = onToggleRecentLogs
                 )
             }
 
-            if (showSettings) {
+            if (uiState.showSettings) {
                 StatusSettingsDialog(
-                    status = status,
-                    message = settingsMessage,
-                    error = settingsError,
-                    onDismiss = { showSettings = false },
-                    onRefresh = ::refreshStatus,
-                    onSelectWildcardFolder = {
-                        wildcardFolderLauncher.launch(null)
-                    },
-                    onOpenAccessibilitySettings = {
-                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    }
+                    status = uiState.environmentStatus,
+                    hasPromptTemplate = uiState.hasPromptTemplate,
+                    message = uiState.settingsMessage,
+                    error = uiState.settingsError,
+                    onDismiss = onHideSettings,
+                    onRefresh = onRefreshStatus,
+                    onSelectWildcardFolder = onSelectWildcardFolder,
+                    onOpenAccessibilitySettings = onOpenAccessibilitySettings
                 )
             }
         }
@@ -257,13 +228,28 @@ private fun GeminiAutoSenderApp() {
 @Composable
 private fun GeminiAutoSenderAppPreview() {
     GemgemgenTheme {
-        GeminiAutoSenderApp()
+        GeminiAutoSenderScreen(
+            uiState = MainUiState(),
+            onClearFocus = {},
+            onShowSettings = {},
+            onHideSettings = {},
+            onRefreshStatus = {},
+            onSelectWildcardFolder = {},
+            onOpenAccessibilitySettings = {},
+            onPromptTemplateChange = {},
+            onImportFromClipboard = {},
+            onRepeatCountChange = {},
+            onRunMvp = {},
+            onCancelAutomation = {},
+            onToggleRecentLogs = {}
+        )
     }
 }
 
 @Composable
 private fun StatusSettingsDialog(
     status: EnvironmentStatus,
+    hasPromptTemplate: Boolean,
     message: String,
     error: String,
     onDismiss: () -> Unit,
@@ -303,7 +289,7 @@ private fun StatusSettingsDialog(
                 StatusRow("접근성 서비스", status.isAccessibilityServiceEnabled)
                 StatusRow("WRITE_SECURE_SETTINGS", status.hasWriteSecureSettingsPermission)
                 StatusRow("wildcard 폴더", status.isWildcardDirectoryAccessible)
-                StatusRow("프롬프트", status.hasPromptTemplate)
+                StatusRow("프롬프트", hasPromptTemplate)
 
                 if (!status.isAccessibilityServiceEnabled) {
                     Button(onClick = onOpenAccessibilitySettings) {
@@ -415,22 +401,21 @@ private fun PromptSection(
 
 @Composable
 private fun ActionSection(
-    status: EnvironmentStatus,
     automationState: AutomationUiState,
+    canRun: Boolean,
+    isRunning: Boolean,
+    readinessMessage: String,
     onRunMvp: () -> Unit,
     onCancelAutomation: () -> Unit,
     recentLogs: List<AutomationRunLog>,
     showRecentLogs: Boolean,
     onToggleRecentLogs: () -> Unit
 ) {
-    val isRunning = automationState is AutomationUiState.Running
-    val canRunMvp = status.isReadyToStart && !isRunning
-
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = onRunMvp,
             modifier = Modifier.fillMaxWidth(),
-            enabled = canRunMvp
+            enabled = canRun
         ) {
             Text("실행 시작")
         }
@@ -459,11 +444,7 @@ private fun ActionSection(
         }
 
         Text(
-            text = if (status.isReadyToStart) {
-                "실행 준비 상태가 충족되었습니다."
-            } else {
-                "실행 전 필요한 상태를 먼저 채워주세요."
-            },
+            text = readinessMessage,
             style = MaterialTheme.typography.bodySmall
         )
     }
@@ -518,7 +499,7 @@ private fun RunLogRow(log: AutomationRunLog) {
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = "${formatLogTime(log.finishedAtMillis)} · ${log.statusLabel()}",
+                text = RunLogUiText.title(log),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
@@ -550,18 +531,4 @@ private fun RunLogRow(log: AutomationRunLog) {
             }
         }
     }
-}
-
-private fun AutomationRunLog.statusLabel(): String {
-    return when (status) {
-        AutomationRunLogStatus.SUCCESS -> "성공"
-        AutomationRunLogStatus.STOPPED -> "중지"
-        AutomationRunLogStatus.FAILURE -> "실패"
-        else -> status
-    }
-}
-
-private fun formatLogTime(timeMillis: Long): String {
-    return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        .format(Date(timeMillis))
 }
