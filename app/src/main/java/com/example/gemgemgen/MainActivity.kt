@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
@@ -79,24 +81,15 @@ private fun GeminiAutoSenderApp() {
         mutableStateOf(AppDefaults.DEFAULT_REPEAT_COUNT.toString())
     }
     var status by remember { mutableStateOf(EnvironmentStatus()) }
-    var generatedPrompts by remember { mutableStateOf<List<GeneratedPrompt>>(emptyList()) }
-    var previewMessage by rememberSaveable { mutableStateOf("") }
-    var previewError by rememberSaveable { mutableStateOf("") }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var settingsMessage by rememberSaveable { mutableStateOf("") }
+    var settingsError by rememberSaveable { mutableStateOf("") }
     var automationState by remember { mutableStateOf<AutomationUiState>(AutomationUiState.Idle) }
     var showRecentLogs by rememberSaveable { mutableStateOf(false) }
-    val previewReadiness = PreviewReadiness.check(
-        promptTemplate = promptTemplate,
-        isWildcardDirectoryAccessible = status.isWildcardDirectoryAccessible
-    )
     val runLogger = remember(context) {
         RunLogger.android(context.applicationContext)
     }
     var recentLogs by remember { mutableStateOf(runLogger.loadRecent()) }
-    val previewUseCase = remember(context) {
-        PromptPreviewUseCase(
-            loadWildcards = { WildcardRepository(context).load() }
-        )
-    }
     val mvpAutomation = remember(context, runLogger) {
         GeminiMvpAutomation(
             context = context.applicationContext,
@@ -106,16 +99,6 @@ private fun GeminiAutoSenderApp() {
 
     fun refreshStatus() {
         status = EnvironmentStatusChecker.check(context, promptTemplate)
-    }
-
-    fun generatePreview() {
-        val result = previewUseCase.generate(
-            promptTemplate = promptTemplate,
-            repeatCountText = repeatCount
-        )
-        generatedPrompts = result.generatedPrompts
-        previewMessage = result.message
-        previewError = result.error
     }
 
     fun refreshLogs() {
@@ -140,12 +123,12 @@ private fun GeminiAutoSenderApp() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
             WildcardFolderStore.saveFolderUri(context, uri)
-            previewMessage = "wildcard 폴더를 선택했습니다."
-            previewError = ""
+            settingsMessage = "wildcard 폴더를 선택했습니다."
+            settingsError = ""
             refreshStatus()
         } catch (error: SecurityException) {
-            previewMessage = ""
-            previewError = "폴더 권한 저장 실패: ${error.message ?: "다시 선택해주세요."}"
+            settingsMessage = ""
+            settingsError = "폴더 권한 저장 실패: ${error.message ?: "다시 선택해주세요."}"
         }
     }
 
@@ -188,22 +171,22 @@ private fun GeminiAutoSenderApp() {
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Gemini Auto Sender",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                StatusSection(
-                    status = status,
-                    onRefresh = ::refreshStatus,
-                    onSelectWildcardFolder = {
-                        wildcardFolderLauncher.launch(null)
-                    },
-                    onOpenAccessibilitySettings = {
-                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Gemini Auto Sender",
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    OutlinedButton(onClick = { showSettings = true }) {
+                        Text("설정")
                     }
-                )
+                }
 
                 PromptSection(
                     promptTemplate = promptTemplate,
@@ -229,14 +212,6 @@ private fun GeminiAutoSenderApp() {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
 
-                PreviewSection(
-                    generatedPrompts = generatedPrompts,
-                    message = previewMessage,
-                    error = previewError,
-                    onGeneratePreview = ::generatePreview,
-                    readiness = previewReadiness
-                )
-
                 ActionSection(
                     status = status,
                     automationState = automationState,
@@ -258,6 +233,22 @@ private fun GeminiAutoSenderApp() {
                     }
                 )
             }
+
+            if (showSettings) {
+                StatusSettingsDialog(
+                    status = status,
+                    message = settingsMessage,
+                    error = settingsError,
+                    onDismiss = { showSettings = false },
+                    onRefresh = ::refreshStatus,
+                    onSelectWildcardFolder = {
+                        wildcardFolderLauncher.launch(null)
+                    },
+                    onOpenAccessibilitySettings = {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }
+                )
+            }
         }
     }
 }
@@ -271,68 +262,97 @@ private fun GeminiAutoSenderAppPreview() {
 }
 
 @Composable
-private fun StatusSection(
+private fun StatusSettingsDialog(
     status: EnvironmentStatus,
+    message: String,
+    error: String,
+    onDismiss: () -> Unit,
     onRefresh: () -> Unit,
     onSelectWildcardFolder: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "설정",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "상태",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                OutlinedButton(onClick = onRefresh) {
-                    Text("새로고침")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "상태",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    OutlinedButton(onClick = onRefresh) {
+                        Text("새로고침")
+                    }
                 }
-            }
 
-            StatusRow("Gemini 앱", status.isGeminiInstalled)
-            StatusRow("접근성 서비스", status.isAccessibilityServiceEnabled)
-            StatusRow("WRITE_SECURE_SETTINGS", status.hasWriteSecureSettingsPermission)
-            StatusRow("wildcard 폴더", status.isWildcardDirectoryAccessible)
-            StatusRow("프롬프트", status.hasPromptTemplate)
+                StatusRow("Gemini 앱", status.isGeminiInstalled)
+                StatusRow("접근성 서비스", status.isAccessibilityServiceEnabled)
+                StatusRow("WRITE_SECURE_SETTINGS", status.hasWriteSecureSettingsPermission)
+                StatusRow("wildcard 폴더", status.isWildcardDirectoryAccessible)
+                StatusRow("프롬프트", status.hasPromptTemplate)
 
-            if (!status.isAccessibilityServiceEnabled) {
-                Button(onClick = onOpenAccessibilitySettings) {
-                    Text("접근성 설정 열기")
+                if (!status.isAccessibilityServiceEnabled) {
+                    Button(onClick = onOpenAccessibilitySettings) {
+                        Text("접근성 설정 열기")
+                    }
                 }
-            }
 
-            OutlinedButton(onClick = onSelectWildcardFolder) {
-                Text("wildcard 폴더 선택")
-            }
+                OutlinedButton(onClick = onSelectWildcardFolder) {
+                    Text("wildcard 폴더 선택")
+                }
 
-            if (!status.hasWriteSecureSettingsPermission && status.adbGrantCommand.isNotBlank()) {
+                if (!status.hasWriteSecureSettingsPermission && status.adbGrantCommand.isNotBlank()) {
+                    Text(
+                        text = "ADB 권한 명령어:\n${status.adbGrantCommand}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
                 Text(
-                    text = "ADB 권한 명령어:\n${status.adbGrantCommand}",
+                    text = "wildcard 폴더: ${status.wildcardDirectoryPath.ifBlank { "선택 안 됨" }}",
                     style = MaterialTheme.typography.bodySmall
                 )
-            }
+                Text(
+                    text = "Null Keyboard 전환 대상: ${status.nullKeyboardTargetImeId}",
+                    style = MaterialTheme.typography.bodySmall
+                )
 
-            Text(
-                text = "wildcard 폴더: ${status.wildcardDirectoryPath.ifBlank { "선택 안 됨" }}",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "Null Keyboard 전환 대상: ${status.nullKeyboardTargetImeId}",
-                style = MaterialTheme.typography.bodySmall
-            )
+                if (message.isNotBlank()) {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                if (error.isNotBlank()) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("닫기")
+            }
         }
-    }
+    )
 }
 
 @Composable
@@ -384,77 +404,11 @@ private fun PromptSection(
             onValueChange = onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("프롬프트 템플릿") },
-            minLines = 6
+            minLines = 6,
+            maxLines = 10
         )
         OutlinedButton(onClick = onImportFromClipboard) {
             Text("클립보드에서 가져오기")
-        }
-    }
-}
-
-@Composable
-private fun PreviewSection(
-    generatedPrompts: List<GeneratedPrompt>,
-    message: String,
-    error: String,
-    onGeneratePreview: () -> Unit,
-    readiness: PreviewReadiness
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            onClick = onGeneratePreview,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = readiness.canPreview
-        ) {
-            Text("생성 미리보기")
-        }
-
-        Text(
-            text = readiness.reason,
-            style = MaterialTheme.typography.bodySmall
-        )
-
-        if (message.isNotBlank()) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-
-        if (error.isNotBlank()) {
-            Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-
-        generatedPrompts.forEach { generatedPrompt ->
-            GeneratedPromptRow(generatedPrompt)
-        }
-    }
-}
-
-@Composable
-private fun GeneratedPromptRow(generatedPrompt: GeneratedPrompt) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = "${generatedPrompt.index}번째 생성 결과",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = generatedPrompt.finalPrompt,
-                style = MaterialTheme.typography.bodyMedium
-            )
         }
     }
 }
@@ -528,15 +482,6 @@ private fun AutomationStateText(automationState: AutomationUiState) {
         color = color,
         style = MaterialTheme.typography.bodySmall
     )
-
-    if (automationState is AutomationUiState.Running &&
-        automationState.lastPrompt.isNotBlank()
-    ) {
-        Text(
-            text = "마지막 생성 프롬프트:\n${automationState.lastPrompt}",
-            style = MaterialTheme.typography.bodySmall
-        )
-    }
 }
 
 @Composable
