@@ -52,6 +52,24 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -165,7 +183,8 @@ private fun GeminiAutoSenderScreen(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "Gemini Auto Sender",
@@ -186,22 +205,17 @@ private fun GeminiAutoSenderScreen(
                     onImportFromClipboard = onImportFromClipboard
                 )
 
-                OutlinedTextField(
-                    value = uiState.repeatCountText,
-                    onValueChange = onRepeatCountChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("반복 횟수") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-
-                ActionSection(
-                    automationState = uiState.automationState,
-                    canRun = uiState.canRun,
-                    isRunning = uiState.isRunning,
-                    readinessMessage = uiState.readinessMessage,
+                AutomationControlStrip(
+                    repeatCountText = uiState.repeatCountText,
+                    onRepeatCountChange = onRepeatCountChange,
                     onRunMvp = onRunMvp,
                     onCancelAutomation = onCancelAutomation,
+                    canRun = uiState.canRun,
+                    isRunning = uiState.isRunning,
+                    automationState = uiState.automationState
+                )
+
+                RecentLogsSectionWrapper(
                     recentLogs = uiState.recentLogs,
                     showRecentLogs = uiState.showRecentLogs,
                     onToggleRecentLogs = onToggleRecentLogs
@@ -384,104 +398,272 @@ private fun PromptSection(
     onPromptTemplateChange: (String) -> Unit,
     onImportFromClipboard: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "프롬프트 템플릿",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = onImportFromClipboard,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Text(
+                    text = "가져오기",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
         OutlinedTextField(
             value = promptTemplate,
             onValueChange = onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("프롬프트 템플릿") },
             minLines = 6,
             maxLines = 10
         )
-        OutlinedButton(onClick = onImportFromClipboard) {
-            Text("클립보드에서 가져오기")
+    }
+}
+
+@Composable
+private fun RepeatCountStepper(
+    repeatCountText: String,
+    onRepeatCountChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val currentVal = RepeatCountParser.parse(repeatCountText)
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(
+                        color = if (currentVal > 1) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
+                    .clickable(enabled = currentVal > 1) {
+                        onRepeatCountChange((currentVal - 1).toString())
+                    }
+                    .wrapContentSize(Alignment.Center)
+            ) {
+                Text(
+                    text = "—",
+                    color = if (currentVal > 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            BasicTextField(
+                value = repeatCountText,
+                onValueChange = { newValue ->
+                    val filtered = RepeatCountParser.normalizeInput(newValue)
+                    if (filtered.length <= 3) {
+                        onRepeatCountChange(filtered)
+                    }
+                },
+                modifier = Modifier
+                    .width(28.dp)
+                    .padding(vertical = 2.dp),
+                textStyle = TextStyle(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                ),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(
+                        color = if (currentVal < 999) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    )
+                    .clickable(enabled = currentVal < 999) {
+                        onRepeatCountChange((currentVal + 1).toString())
+                    }
+                    .wrapContentSize(Alignment.Center)
+            ) {
+                Text(
+                    text = "＋",
+                    color = if (currentVal < 999) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ActionSection(
-    automationState: AutomationUiState,
-    canRun: Boolean,
-    isRunning: Boolean,
-    readinessMessage: String,
+private fun AutomationControlStrip(
+    repeatCountText: String,
+    onRepeatCountChange: (String) -> Unit,
     onRunMvp: () -> Unit,
     onCancelAutomation: () -> Unit,
+    canRun: Boolean,
+    isRunning: Boolean,
+    automationState: AutomationUiState,
+    modifier: Modifier = Modifier
+) {
+    val statusText = AutomationUiText.statusText(automationState)
+    val isError = automationState is AutomationUiState.Failure
+
+    val dotColor = when {
+        isError -> MaterialTheme.colorScheme.error
+        automationState is AutomationUiState.Running -> MaterialTheme.colorScheme.primary
+        automationState is AutomationUiState.Success -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.outline
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 4.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(8.dp),
+                    shape = RoundedCornerShape(50),
+                    color = dotColor
+                ) {}
+
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            RepeatCountStepper(
+                repeatCountText = repeatCountText,
+                onRepeatCountChange = onRepeatCountChange
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Box(
+                modifier = Modifier.width(68.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!isRunning) {
+                    Button(
+                        onClick = onRunMvp,
+                        enabled = canRun,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().height(34.dp)
+                    ) {
+                        Text("시작", style = MaterialTheme.typography.labelMedium)
+                    }
+                } else {
+                    Button(
+                        onClick = onCancelAutomation,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().height(34.dp)
+                    ) {
+                        Text("중지", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentLogsSectionWrapper(
     recentLogs: List<AutomationRunLog>,
     showRecentLogs: Boolean,
-    onToggleRecentLogs: () -> Unit
+    onToggleRecentLogs: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            onClick = onRunMvp,
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            enabled = canRun
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("실행 시작")
-        }
+            Text(
+                text = "최근 로그",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
 
-        AutomationStateText(automationState)
-
-        if (isRunning) {
-            OutlinedButton(
-                onClick = onCancelAutomation,
-                modifier = Modifier.fillMaxWidth()
+            TextButton(
+                onClick = onToggleRecentLogs,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
             ) {
-                Text("중지")
+                Text(
+                    text = if (showRecentLogs) "닫기" else "보기",
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
         }
 
-        OutlinedButton(
-            onClick = onToggleRecentLogs,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = true
-        ) {
-            Text(if (showRecentLogs) "최근 로그 닫기" else "최근 로그")
-        }
-
         if (showRecentLogs) {
-            RecentLogsSection(recentLogs)
-        }
-
-        Text(
-            text = readinessMessage,
-            style = MaterialTheme.typography.bodySmall
-        )
-    }
-}
-
-@Composable
-private fun AutomationStateText(automationState: AutomationUiState) {
-    val text = AutomationUiText.statusText(automationState)
-    val color = when (automationState) {
-        is AutomationUiState.Failure -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-    Text(
-        text = text,
-        color = color,
-        style = MaterialTheme.typography.bodySmall
-    )
-}
-
-@Composable
-private fun RecentLogsSection(recentLogs: List<AutomationRunLog>) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "최근 로그",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-
-        if (recentLogs.isEmpty()) {
-            Text(
-                text = "저장된 로그가 없습니다.",
-                style = MaterialTheme.typography.bodySmall
-            )
-        } else {
-            recentLogs.forEach { log ->
-                RunLogRow(log)
+            if (recentLogs.isEmpty()) {
+                Text(
+                    text = "저장된 로그가 없습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                recentLogs.forEach { log ->
+                    RunLogRow(log)
+                }
             }
         }
     }

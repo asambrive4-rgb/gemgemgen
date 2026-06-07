@@ -23,10 +23,4 @@ data class MainUiState(
     val canRun: Boolean
         get() = hasRunRequirements && !isRunning
 
-    val readinessMessage: String
-        get() = if (hasRunRequirements) {
-            "실행 준비 상태가 충족되었습니다."
-        } else {
-            "실행 전 필요한 상태를 먼저 채워주세요."
-        }
 }
