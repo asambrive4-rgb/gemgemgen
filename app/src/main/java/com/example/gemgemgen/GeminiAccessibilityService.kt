@@ -8,7 +8,7 @@ import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
-class GeminiAccessibilityService : AccessibilityService() {
+class GeminiAccessibilityService : AccessibilityService(), OneShotAutomationService {
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onServiceConnected() {
@@ -29,11 +29,25 @@ class GeminiAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
-    fun runOneShot(
+    override fun runOneShot(
         prompt: String,
         onStateChange: (AutomationUiState) -> Unit
     ) {
         handler.removeCallbacksAndMessages(null)
+        sendPrompt(
+            prompt = prompt,
+            onStateChange = onStateChange,
+            onDone = { onStateChange(AutomationUiState.Success) },
+            startDelayMillis = APP_LAUNCH_WAIT_MS
+        )
+    }
+
+    override fun sendPrompt(
+        prompt: String,
+        onStateChange: (AutomationUiState) -> Unit,
+        onDone: () -> Unit,
+        startDelayMillis: Long
+    ) {
         handler.postDelayed(
             {
                 clickSidebar(
@@ -59,9 +73,7 @@ class GeminiAccessibilityService : AccessibilityService() {
                                                                     prompt = prompt,
                                                                     attempt = 1,
                                                                     onStateChange = onStateChange,
-                                                                    onDone = {
-                                                                        onStateChange(AutomationUiState.Success)
-                                                                    }
+                                                                    onDone = onDone
                                                                 )
                                                             },
                                                             AFTER_INPUT_WAIT_MS
@@ -79,8 +91,12 @@ class GeminiAccessibilityService : AccessibilityService() {
                     }
                 )
             },
-            APP_LAUNCH_WAIT_MS
+            startDelayMillis
         )
+    }
+
+    override fun cancelCurrentRun() {
+        handler.removeCallbacksAndMessages(null)
     }
 
     private fun clickSidebar(

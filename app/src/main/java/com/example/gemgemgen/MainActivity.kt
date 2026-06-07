@@ -46,6 +46,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,17 +75,31 @@ private fun GeminiAutoSenderApp() {
     var previewMessage by rememberSaveable { mutableStateOf("") }
     var previewError by rememberSaveable { mutableStateOf("") }
     var automationState by remember { mutableStateOf<AutomationUiState>(AutomationUiState.Idle) }
+    var showRecentLogs by rememberSaveable { mutableStateOf(false) }
     val previewReadiness = PreviewReadiness.check(
         promptTemplate = promptTemplate,
         isWildcardDirectoryAccessible = status.isWildcardDirectoryAccessible
     )
+    val runLogger = remember(context) {
+        RunLogger.android(context.applicationContext)
+    }
+    var recentLogs by remember { mutableStateOf(runLogger.loadRecent()) }
     val previewUseCase = remember(context) {
         PromptPreviewUseCase(
             loadWildcards = { WildcardRepository(context).load() }
         )
     }
-    val oneShotAutomation = remember(context) {
-        GeminiOneShotAutomation(context.applicationContext)
+    val oneShotAutomation = remember(context, runLogger) {
+        GeminiOneShotAutomation(
+            context = context.applicationContext,
+            runLogger = runLogger
+        )
+    }
+    val mvpAutomation = remember(context, runLogger) {
+        GeminiMvpAutomation(
+            context = context.applicationContext,
+            runLogger = runLogger
+        )
     }
 
     fun refreshStatus() {
@@ -97,6 +114,17 @@ private fun GeminiAutoSenderApp() {
         generatedPrompts = result.generatedPrompts
         previewMessage = result.message
         previewError = result.error
+    }
+
+    fun refreshLogs() {
+        recentLogs = runLogger.loadRecent()
+    }
+
+    fun handleAutomationState(state: AutomationUiState) {
+        automationState = state
+        if (state.isTerminal()) {
+            refreshLogs()
+        }
     }
 
     val wildcardFolderLauncher = rememberLauncherForActivityResult(
@@ -198,9 +226,24 @@ private fun GeminiAutoSenderApp() {
                 status = status,
                 automationState = automationState,
                 onRunOneShot = {
-                    oneShotAutomation.run { state ->
-                        automationState = state
-                    }
+                    oneShotAutomation.run(::handleAutomationState)
+                },
+                onRunMvp = {
+                    mvpAutomation.run(
+                        promptTemplate = promptTemplate,
+                        repeatCountText = repeatCount,
+                        onStateChange = ::handleAutomationState
+                    )
+                },
+                onCancelAutomation = {
+                    oneShotAutomation.cancel(::handleAutomationState)
+                    mvpAutomation.cancel(::handleAutomationState)
+                },
+                recentLogs = recentLogs,
+                showRecentLogs = showRecentLogs,
+                onToggleRecentLogs = {
+                    refreshLogs()
+                    showRecentLogs = !showRecentLogs
                 }
             )
         }
@@ -408,15 +451,29 @@ private fun GeneratedPromptRow(generatedPrompt: GeneratedPrompt) {
 private fun ActionSection(
     status: EnvironmentStatus,
     automationState: AutomationUiState,
-    onRunOneShot: () -> Unit
+    onRunOneShot: () -> Unit,
+    onRunMvp: () -> Unit,
+    onCancelAutomation: () -> Unit,
+    recentLogs: List<AutomationRunLog>,
+    showRecentLogs: Boolean,
+    onToggleRecentLogs: () -> Unit
 ) {
     val isRunning = automationState is AutomationUiState.Running
     val canRunOneShot = status.isGeminiInstalled &&
         status.isAccessibilityServiceEnabled &&
         status.hasWriteSecureSettingsPermission &&
         !isRunning
+    val canRunMvp = status.isReadyToStart && !isRunning
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            onClick = onRunMvp,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = canRunMvp
+        ) {
+            Text("실행 시작")
+        }
+
         Button(
             onClick = onRunOneShot,
             modifier = Modifier.fillMaxWidth(),
@@ -434,20 +491,27 @@ private fun ActionSection(
 
         AutomationStateText(automationState)
 
-        Button(
-            onClick = {},
-            modifier = Modifier.fillMaxWidth(),
-            enabled = false
-        ) {
-            Text("실행 시작")
+        if (isRunning) {
+            OutlinedButton(
+                onClick = onCancelAutomation,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("중지")
+            }
         }
+
         OutlinedButton(
-            onClick = {},
+            onClick = onToggleRecentLogs,
             modifier = Modifier.fillMaxWidth(),
-            enabled = false
+            enabled = true
         ) {
-            Text("최근 로그")
+            Text(if (showRecentLogs) "최근 로그 닫기" else "최근 로그")
         }
+
+        if (showRecentLogs) {
+            RecentLogsSection(recentLogs)
+        }
+
         Text(
             text = if (status.isReadyToStart) {
                 "M2 미리보기 준비 상태가 충족되었습니다."
@@ -470,12 +534,7 @@ private fun oneShotDisabledReason(status: EnvironmentStatus): String {
 
 @Composable
 private fun AutomationStateText(automationState: AutomationUiState) {
-    val text = when (automationState) {
-        AutomationUiState.Idle -> "M3 테스트 전송은 고정 프롬프트를 Gemini에 1회 보냅니다."
-        is AutomationUiState.Running -> "진행 중: ${automationState.step}"
-        AutomationUiState.Success -> "M3 테스트 전송 성공"
-        is AutomationUiState.Failure -> "M3 테스트 전송 실패: ${automationState.message}"
-    }
+    val text = AutomationUiText.statusText(automationState)
     val color = when (automationState) {
         is AutomationUiState.Failure -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurface
@@ -486,4 +545,95 @@ private fun AutomationStateText(automationState: AutomationUiState) {
         color = color,
         style = MaterialTheme.typography.bodySmall
     )
+
+    if (automationState is AutomationUiState.Running &&
+        automationState.lastPrompt.isNotBlank()
+    ) {
+        Text(
+            text = "마지막 생성 프롬프트:\n${automationState.lastPrompt}",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun RecentLogsSection(recentLogs: List<AutomationRunLog>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "최근 로그",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        if (recentLogs.isEmpty()) {
+            Text(
+                text = "저장된 로그가 없습니다.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        } else {
+            recentLogs.forEach { log ->
+                RunLogRow(log)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RunLogRow(log: AutomationRunLog) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "${formatLogTime(log.finishedAtMillis)} · ${log.statusLabel()}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "마지막 단계: ${log.lastStep.ifBlank { "기록 없음" }}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (log.message.isNotBlank()) {
+                Text(
+                    text = "메시지: ${log.message}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Text(
+                text = "입력기 복구: ${log.imeRestoreMessage.ifBlank { "기록 없음" }}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (log.repeatCount > 0) {
+                Text(
+                    text = "반복: ${log.completedCount}/${log.repeatCount}, 성공 ${log.successCount}, 실패 ${log.failureCount}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (log.markerStatus.isNotBlank()) {
+                Text(
+                    text = "세션 마커: ${log.markerStatus}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+private fun AutomationRunLog.statusLabel(): String {
+    return when (status) {
+        AutomationRunLogStatus.SUCCESS -> "성공"
+        AutomationRunLogStatus.STOPPED -> "중지"
+        AutomationRunLogStatus.FAILURE -> "실패"
+        else -> status
+    }
+}
+
+private fun formatLogTime(timeMillis: Long): String {
+    return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        .format(Date(timeMillis))
 }
