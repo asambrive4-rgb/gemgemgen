@@ -66,15 +66,16 @@ class MainViewModel(
         }
     }
 
-    fun runAutomation() {
+    fun runAutomation(): Boolean {
         val state = uiState.value
-        if (!state.canRun) return
+        if (!state.canRun) return false
 
         automation.run(
             promptTemplate = state.promptTemplate,
             repeatCountText = state.repeatCountText,
             onStateChange = ::handleAutomationState
         )
+        return true
     }
 
     fun cancelAutomation() {

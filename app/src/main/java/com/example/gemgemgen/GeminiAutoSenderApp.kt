@@ -1,14 +1,20 @@
 package com.example.gemgemgen
 
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.lifecycle.Lifecycle
@@ -19,12 +25,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 internal fun GeminiAutoSenderApp() {
     val context = LocalContext.current
+    val activity = context as? ComponentActivity
     val viewModel: MainViewModel = viewModel(
         factory = remember(context) { MainViewModelFactory(context) }
     )
     val uiState by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val floatingBarController = remember(activity) {
+        activity?.let { FloatingAutomationBarController(it) }
+    }
+    var wasFloatingBarShown by remember { mutableStateOf(false) }
 
     val wildcardFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -57,6 +68,33 @@ internal fun GeminiAutoSenderApp() {
         }
     }
 
+    DisposableEffect(floatingBarController) {
+        onDispose {
+            floatingBarController?.hide()
+        }
+    }
+
+    SideEffect {
+        if (uiState.isRunning) {
+            floatingBarController?.showOrUpdate(
+                uiState = uiState,
+                onCancelAutomation = viewModel::cancelAutomation
+            )
+            wasFloatingBarShown = true
+        } else {
+            floatingBarController?.hide()
+            if (wasFloatingBarShown && uiState.automationState.isTerminal()) {
+                wasFloatingBarShown = false
+                context.startActivity(
+                    Intent(context, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                )
+            }
+        }
+    }
+
     GeminiAutoSenderScreen(
         uiState = uiState,
         onClearFocus = { focusManager.clearFocus() },
@@ -70,7 +108,31 @@ internal fun GeminiAutoSenderApp() {
         onPromptTemplateChange = viewModel::onPromptTemplateChange,
         onImportFromClipboard = viewModel::importPromptFromClipboard,
         onRepeatCountChange = viewModel::onRepeatCountChange,
-        onRunMvp = viewModel::runAutomation,
+        onRunMvp = {
+            if (!Settings.canDrawOverlays(context)) {
+                Toast.makeText(
+                    context,
+                    "플로팅 바를 쓰려면 다른 앱 위에 표시 권한이 필요합니다.",
+                    Toast.LENGTH_LONG
+                ).show()
+                context.startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                )
+                return@GeminiAutoSenderScreen
+            }
+
+            val accepted = viewModel.runAutomation()
+            if (accepted && viewModel.uiState.value.isRunning) {
+                floatingBarController?.showOrUpdate(
+                    uiState = viewModel.uiState.value,
+                    onCancelAutomation = viewModel::cancelAutomation
+                )
+                activity?.moveTaskToBack(true)
+            }
+        },
         onCancelAutomation = viewModel::cancelAutomation,
         onToggleRecentLogs = viewModel::toggleRecentLogs
     )
