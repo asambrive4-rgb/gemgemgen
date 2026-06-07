@@ -36,6 +36,19 @@ internal fun GeminiAutoSenderApp() {
         activity?.let { FloatingAutomationBarController(it) }
     }
     var wasFloatingBarShown by remember { mutableStateOf(false) }
+    val bringMainActivityToFront = {
+        val appContext = context.applicationContext
+        val launchIntent = appContext.packageManager.getLaunchIntentForPackage(appContext.packageName)
+            ?: Intent(appContext, MainActivity::class.java)
+
+        appContext.startActivity(
+            launchIntent
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        )
+    }
+    val cancelFromFloatingBar = viewModel::cancelAutomation
 
     val wildcardFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -79,19 +92,16 @@ internal fun GeminiAutoSenderApp() {
         if (uiState.isRunning) {
             floatingBarController?.showOrUpdate(
                 uiState = uiState,
-                onCancelAutomation = viewModel::cancelAutomation
+                onCancelAutomation = cancelFromFloatingBar
             )
             wasFloatingBarShown = true
         } else {
-            floatingBarController?.hide()
             if (wasFloatingBarShown && uiState.automationState.isTerminal()) {
                 wasFloatingBarShown = false
-                context.startActivity(
-                    Intent(context, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                )
+                floatingBarController?.hide()
+                bringMainActivityToFront()
+            } else {
+                floatingBarController?.hide()
             }
         }
     }
@@ -129,7 +139,7 @@ internal fun GeminiAutoSenderApp() {
             if (accepted && viewModel.uiState.value.isRunning) {
                 floatingBarController?.showOrUpdate(
                     uiState = viewModel.uiState.value,
-                    onCancelAutomation = viewModel::cancelAutomation
+                    onCancelAutomation = cancelFromFloatingBar
                 )
                 activity?.moveTaskToBack(true)
             }
