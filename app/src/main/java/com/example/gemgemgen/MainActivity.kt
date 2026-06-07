@@ -9,7 +9,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +41,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
@@ -65,6 +72,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun GeminiAutoSenderApp() {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var promptTemplate by rememberSaveable { mutableStateOf("") }
     var repeatCount by rememberSaveable {
@@ -159,83 +167,97 @@ private fun GeminiAutoSenderApp() {
     }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(pass = PointerEventPass.Final)
+                        val up = waitForUpOrCancellation(pass = PointerEventPass.Final)
+                        if (up != null && !down.isConsumed && !up.isConsumed) {
+                            focusManager.clearFocus()
+                        }
+                    }
+                }
         ) {
-            Text(
-                text = "Gemini Auto Sender",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Gemini Auto Sender",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
-            StatusSection(
-                status = status,
-                onRefresh = ::refreshStatus,
-                onSelectWildcardFolder = {
-                    wildcardFolderLauncher.launch(null)
-                },
-                onOpenAccessibilitySettings = {
-                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                }
-            )
+                StatusSection(
+                    status = status,
+                    onRefresh = ::refreshStatus,
+                    onSelectWildcardFolder = {
+                        wildcardFolderLauncher.launch(null)
+                    },
+                    onOpenAccessibilitySettings = {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }
+                )
 
-            PromptSection(
-                promptTemplate = promptTemplate,
-                onPromptTemplateChange = { promptTemplate = it },
-                onImportFromClipboard = {
-                    val clipboardManager = context.getSystemService(ClipboardManager::class.java)
-                    promptTemplate = clipboardManager.primaryClip
-                        ?.getItemAt(0)
-                        ?.coerceToText(context)
-                        ?.toString()
-                        .orEmpty()
-                }
-            )
+                PromptSection(
+                    promptTemplate = promptTemplate,
+                    onPromptTemplateChange = { promptTemplate = it },
+                    onImportFromClipboard = {
+                        val clipboardManager = context.getSystemService(ClipboardManager::class.java)
+                        promptTemplate = clipboardManager.primaryClip
+                            ?.getItemAt(0)
+                            ?.coerceToText(context)
+                            ?.toString()
+                            .orEmpty()
+                    }
+                )
 
-            OutlinedTextField(
-                value = repeatCount,
-                onValueChange = { value ->
-                    repeatCount = value.filter { it.isDigit() }.take(3)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("반복 횟수") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
+                OutlinedTextField(
+                    value = repeatCount,
+                    onValueChange = { value ->
+                        repeatCount = value.filter { it.isDigit() }.take(3)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("반복 횟수") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
 
-            PreviewSection(
-                generatedPrompts = generatedPrompts,
-                message = previewMessage,
-                error = previewError,
-                onGeneratePreview = ::generatePreview,
-                readiness = previewReadiness
-            )
+                PreviewSection(
+                    generatedPrompts = generatedPrompts,
+                    message = previewMessage,
+                    error = previewError,
+                    onGeneratePreview = ::generatePreview,
+                    readiness = previewReadiness
+                )
 
-            ActionSection(
-                status = status,
-                automationState = automationState,
-                onRunMvp = {
-                    mvpAutomation.run(
-                        promptTemplate = promptTemplate,
-                        repeatCountText = repeatCount,
-                        onStateChange = ::handleAutomationState
-                    )
-                },
-                onCancelAutomation = {
-                    mvpAutomation.cancel(::handleAutomationState)
-                },
-                recentLogs = recentLogs,
-                showRecentLogs = showRecentLogs,
-                onToggleRecentLogs = {
-                    refreshLogs()
-                    showRecentLogs = !showRecentLogs
-                }
-            )
+                ActionSection(
+                    status = status,
+                    automationState = automationState,
+                    onRunMvp = {
+                        mvpAutomation.run(
+                            promptTemplate = promptTemplate,
+                            repeatCountText = repeatCount,
+                            onStateChange = ::handleAutomationState
+                        )
+                    },
+                    onCancelAutomation = {
+                        mvpAutomation.cancel(::handleAutomationState)
+                    },
+                    recentLogs = recentLogs,
+                    showRecentLogs = showRecentLogs,
+                    onToggleRecentLogs = {
+                        refreshLogs()
+                        showRecentLogs = !showRecentLogs
+                    }
+                )
+            }
         }
     }
 }

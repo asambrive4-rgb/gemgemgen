@@ -32,10 +32,9 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     override fun sendPrompt(
         prompt: String,
         onStateChange: (AutomationUiState) -> Unit,
-        onDone: () -> Unit,
-        startDelayMillis: Long
+        onDone: () -> Unit
     ) {
-        handler.postDelayed(
+        handler.post(
             {
                 clickSidebar(
                     attempt = 1,
@@ -77,8 +76,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
                         )
                     }
                 )
-            },
-            startDelayMillis
+            }
         )
     }
 
@@ -357,9 +355,9 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         private const val AFTER_INPUT_WAIT_MS = 500L
         private const val SEND_CONFIRM_WAIT_MS = 1000L
         private const val RETRY_WAIT_MS = 1000L
-        private const val SIDEBAR_MAX_ATTEMPTS = 3
-        private const val NEW_CHAT_MAX_ATTEMPTS = 3
-        private const val INPUT_MAX_ATTEMPTS = 5
+        private const val SIDEBAR_MAX_ATTEMPTS = 10
+        private const val NEW_CHAT_MAX_ATTEMPTS = 10
+        private const val INPUT_MAX_ATTEMPTS = 10
         private const val SEND_MAX_ATTEMPTS = 10
     }
 

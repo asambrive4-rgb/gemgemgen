@@ -4,8 +4,7 @@ interface GeminiPromptSender {
     fun sendPrompt(
         prompt: String,
         onStateChange: (AutomationUiState) -> Unit,
-        onDone: () -> Unit,
-        startDelayMillis: Long = 0L
+        onDone: () -> Unit
     )
 
     fun cancelCurrentRun()

@@ -146,8 +146,7 @@ class GeminiMvpAutomationTest {
         override fun sendPrompt(
             prompt: String,
             onStateChange: (AutomationUiState) -> Unit,
-            onDone: () -> Unit,
-            startDelayMillis: Long
+            onDone: () -> Unit
         ) {
             sentPrompts += prompt
             failOnPrompt?.let { failedPrompt ->

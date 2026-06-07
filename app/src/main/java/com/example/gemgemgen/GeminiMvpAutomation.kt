@@ -154,8 +154,7 @@ class GeminiMvpAutomation(
             onDone = {
                 run.markerStatus = "성공"
                 sendNextPrompt(run, onStateChange)
-            },
-            startDelayMillis = APP_LAUNCH_WAIT_MS
+            }
         )
     }
 
@@ -323,6 +322,5 @@ class GeminiMvpAutomation(
 
     companion object {
         const val MARKER_PROMPT = "자연수의 가장 첫 번째 숫자는? 숫자 하나로만 답변해."
-        private const val APP_LAUNCH_WAIT_MS = 1500L
     }
 }
