@@ -8,7 +8,7 @@ import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
-class GeminiAccessibilityService : AccessibilityService(), OneShotAutomationService {
+class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onServiceConnected() {
@@ -27,19 +27,6 @@ class GeminiAccessibilityService : AccessibilityService(), OneShotAutomationServ
         }
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
-    }
-
-    override fun runOneShot(
-        prompt: String,
-        onStateChange: (AutomationUiState) -> Unit
-    ) {
-        handler.removeCallbacksAndMessages(null)
-        sendPrompt(
-            prompt = prompt,
-            onStateChange = onStateChange,
-            onDone = { onStateChange(AutomationUiState.Success) },
-            startDelayMillis = APP_LAUNCH_WAIT_MS
-        )
     }
 
     override fun sendPrompt(
@@ -365,7 +352,6 @@ class GeminiAccessibilityService : AccessibilityService(), OneShotAutomationServ
 
         private const val INPUT_RESOURCE_ID =
             "com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_half_sheet"
-        private const val APP_LAUNCH_WAIT_MS = 1500L
         private const val AFTER_SIDEBAR_WAIT_MS = 300L
         private const val AFTER_NEW_CHAT_WAIT_MS = 1500L
         private const val AFTER_INPUT_WAIT_MS = 500L

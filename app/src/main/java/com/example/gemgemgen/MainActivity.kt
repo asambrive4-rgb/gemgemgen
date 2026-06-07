@@ -89,12 +89,6 @@ private fun GeminiAutoSenderApp() {
             loadWildcards = { WildcardRepository(context).load() }
         )
     }
-    val oneShotAutomation = remember(context, runLogger) {
-        GeminiOneShotAutomation(
-            context = context.applicationContext,
-            runLogger = runLogger
-        )
-    }
     val mvpAutomation = remember(context, runLogger) {
         GeminiMvpAutomation(
             context = context.applicationContext,
@@ -225,9 +219,6 @@ private fun GeminiAutoSenderApp() {
             ActionSection(
                 status = status,
                 automationState = automationState,
-                onRunOneShot = {
-                    oneShotAutomation.run(::handleAutomationState)
-                },
                 onRunMvp = {
                     mvpAutomation.run(
                         promptTemplate = promptTemplate,
@@ -236,7 +227,6 @@ private fun GeminiAutoSenderApp() {
                     )
                 },
                 onCancelAutomation = {
-                    oneShotAutomation.cancel(::handleAutomationState)
                     mvpAutomation.cancel(::handleAutomationState)
                 },
                 recentLogs = recentLogs,
@@ -451,7 +441,6 @@ private fun GeneratedPromptRow(generatedPrompt: GeneratedPrompt) {
 private fun ActionSection(
     status: EnvironmentStatus,
     automationState: AutomationUiState,
-    onRunOneShot: () -> Unit,
     onRunMvp: () -> Unit,
     onCancelAutomation: () -> Unit,
     recentLogs: List<AutomationRunLog>,
@@ -459,10 +448,6 @@ private fun ActionSection(
     onToggleRecentLogs: () -> Unit
 ) {
     val isRunning = automationState is AutomationUiState.Running
-    val canRunOneShot = status.isGeminiInstalled &&
-        status.isAccessibilityServiceEnabled &&
-        status.hasWriteSecureSettingsPermission &&
-        !isRunning
     val canRunMvp = status.isReadyToStart && !isRunning
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -472,21 +457,6 @@ private fun ActionSection(
             enabled = canRunMvp
         ) {
             Text("실행 시작")
-        }
-
-        Button(
-            onClick = onRunOneShot,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = canRunOneShot
-        ) {
-            Text("M3 테스트 전송")
-        }
-
-        if (!canRunOneShot && !isRunning) {
-            Text(
-                text = oneShotDisabledReason(status),
-                style = MaterialTheme.typography.bodySmall
-            )
         }
 
         AutomationStateText(automationState)
@@ -514,21 +484,12 @@ private fun ActionSection(
 
         Text(
             text = if (status.isReadyToStart) {
-                "M2 미리보기 준비 상태가 충족되었습니다."
+                "실행 준비 상태가 충족되었습니다."
             } else {
                 "실행 전 필요한 상태를 먼저 채워주세요."
             },
             style = MaterialTheme.typography.bodySmall
         )
-    }
-}
-
-private fun oneShotDisabledReason(status: EnvironmentStatus): String {
-    return when {
-        !status.isGeminiInstalled -> "Gemini 앱 설치 상태를 확인하지 못했습니다."
-        !status.isAccessibilityServiceEnabled -> "접근성 서비스를 켠 뒤 앱으로 돌아와주세요."
-        !status.hasWriteSecureSettingsPermission -> "WRITE_SECURE_SETTINGS 권한을 ADB로 부여해주세요."
-        else -> "M3 테스트 전송을 시작할 수 없습니다."
     }
 }
 

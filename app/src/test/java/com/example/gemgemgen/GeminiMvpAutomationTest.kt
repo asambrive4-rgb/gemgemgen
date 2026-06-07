@@ -7,7 +7,7 @@ import org.junit.Test
 class GeminiMvpAutomationTest {
     @Test
     fun run_loadsWildcardsOnceSendsMarkerFirstAndGeneratesOnePromptPerRepeat() {
-        val service = FakeOneShotAutomationService(autoComplete = true)
+        val service = FakeGeminiPromptSender(autoComplete = true)
         val logger = RunLogger(FakeRunLogStorage())
         var loadCount = 0
         val generatedIndexes = mutableListOf<Int>()
@@ -59,7 +59,7 @@ class GeminiMvpAutomationTest {
 
     @Test
     fun cancel_cancelsServiceRestoresImeAndWritesStoppedLog() {
-        val service = FakeOneShotAutomationService(autoComplete = false)
+        val service = FakeGeminiPromptSender(autoComplete = false)
         val logger = RunLogger(FakeRunLogStorage())
         val automation = automation(
             service = service,
@@ -85,7 +85,7 @@ class GeminiMvpAutomationTest {
 
     @Test
     fun run_stopsAfterFirstPromptFailureAndWritesFailureLog() {
-        val service = FakeOneShotAutomationService(autoComplete = true)
+        val service = FakeGeminiPromptSender(autoComplete = true)
         val logger = RunLogger(FakeRunLogStorage())
         val automation = automation(
             service = service,
@@ -109,7 +109,7 @@ class GeminiMvpAutomationTest {
     private var defaultImeId = ORIGINAL_IME_ID
 
     private fun automation(
-        service: FakeOneShotAutomationService,
+        service: FakeGeminiPromptSender,
         logger: RunLogger,
         loadWildcards: () -> List<WildcardSet> = { emptyList() },
         generatePrompt: (String, List<WildcardSet>, Int) -> GeneratedPrompt
@@ -136,9 +136,9 @@ class GeminiMvpAutomationTest {
         )
     }
 
-    private class FakeOneShotAutomationService(
+    private class FakeGeminiPromptSender(
         private val autoComplete: Boolean
-    ) : OneShotAutomationService {
+    ) : GeminiPromptSender {
         val sentPrompts = mutableListOf<String>()
         var failOnPrompt: String? = null
         var wasCancelled = false
@@ -160,11 +160,6 @@ class GeminiMvpAutomationTest {
                 onDone()
             }
         }
-
-        override fun runOneShot(
-            prompt: String,
-            onStateChange: (AutomationUiState) -> Unit
-        ) = Unit
 
         override fun cancelCurrentRun() {
             wasCancelled = true

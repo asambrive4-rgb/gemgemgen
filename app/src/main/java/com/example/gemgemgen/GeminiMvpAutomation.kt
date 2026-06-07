@@ -7,7 +7,7 @@ class GeminiMvpAutomation(
     private val imeManager: ImeManager,
     private val runLogger: RunLogger,
     private val clock: () -> Long,
-    private val serviceProvider: () -> OneShotAutomationService?,
+    private val serviceProvider: () -> GeminiPromptSender?,
     private val launchGeminiApp: () -> Boolean,
     private val loadWildcards: () -> List<WildcardSet>,
     private val promptGenerator: PromptGenerator = PromptGenerator(),
@@ -307,7 +307,7 @@ class GeminiMvpAutomation(
     private data class CurrentRun(
         val startedAtMillis: Long,
         val imeSession: ImeSwitchSession,
-        val service: OneShotAutomationService,
+        val service: GeminiPromptSender,
         val promptTemplate: String,
         val repeatCount: Int,
         val wildcards: List<WildcardSet>,
