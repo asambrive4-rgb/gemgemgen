@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">gemgemgen</string>
+    <string name="app_name">Gemini Auto Sender</string>
+    <string name="gemini_accessibility_service_label">Gemini Auto Sender</string>
+    <string name="gemini_accessibility_service_description">Gemini 앱 UI 자동 조작을 위한 접근성 서비스</string>
 </resources>

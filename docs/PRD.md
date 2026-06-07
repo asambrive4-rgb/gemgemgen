@@ -1,6 +1,6 @@
 # PRD: Gemini Prompt Auto Sender for Android/Kotlin
 
-- 문서 버전: v0.1 Draft
+- 문서 버전: v0.2 Draft
 - 작성일: 2026-06-07
 - 제품 형태: 개인용 Android/Kotlin 자동화 앱
 - 대상 앱: Google Gemini Android 앱
@@ -48,6 +48,26 @@ MVP의 목적은 새로운 프롬프트 관리 앱을 만드는 것이 아니라
 9. 실행 로그와 중지 기능
 
 와일드카드 편집 UI, 프롬프트 미리보기 고도화, 다중 AI 앱 지원은 후순위다.
+
+### 1.4 구현 판단과 MVP 원칙
+
+현재 목표가 Gemini API 연동이 아니라 Gemini Android 앱 UI 자동 조작이므로, Android/Kotlin 네이티브 앱과 AccessibilityService 기반 구현은 MVP에 적합하다.
+
+다만 UI 자동 조작은 Gemini 앱 화면 변경에 취약하므로, MVP의 품질 기준은 화면 기능의 수보다 다음 항목에 둔다.
+
+1. 단계별 상태가 명확한 실행 흐름
+2. 실패 지점을 알 수 있는 최소 로그
+3. 실패, 완료, 중지 시 입력기와 클립보드 복구
+4. 지나치게 무겁지 않은 앱 구조
+
+MVP에서는 다음 방향을 따른다.
+
+- `Room`, `Hilt`, 복잡한 클린 아키텍처, 다중 앱 추상화는 도입하지 않는다.
+- 설정은 `DataStore` 또는 `SharedPreferences` 수준으로 가볍게 저장한다.
+- 로그는 앱 내부의 간단한 저장 방식으로 시작한다.
+- 좌표 기반 fallback은 당장 MVP에 포함하지 않고, selector 기반 탐지가 충분하지 않을 때를 위한 후순위 보험으로 남긴다.
+- Null Keyboard는 이미 설치되어 있다고 전제한다.
+- Gemini UI 탐지는 한국어 Gemini 앱 UI를 기준으로 한다.
 
 ---
 
@@ -155,8 +175,10 @@ MVP에서 다음은 목표가 아니다.
 - Android 기기
 - Kotlin 기반 네이티브 앱
 - Gemini 앱 설치 필요
+- Gemini 앱 UI 언어는 한국어 기준
 - 접근성 서비스 활성화 필요
 - ADB를 통한 `WRITE_SECURE_SETTINGS` 권한 부여 허용
+- Null Keyboard 설치 전제
 - 기존 와일드카드 txt 파일 사용
 
 ### 4.3 권한 전제
@@ -170,9 +192,11 @@ adb shell pm grant <package_name> android.permission.WRITE_SECURE_SETTINGS
 이 권한은 다음 목적으로 사용한다.
 
 - 현재 기본 입력기 저장
-- Null Keyboard 또는 지정 입력기로 전환
+- 설치되어 있는 Null Keyboard 또는 지정 입력기로 전환
 - 자동화 종료 후 원래 입력기로 복구
 - Gemini 자동 입력 중 키보드가 UI를 가리는 문제 최소화
+
+Null Keyboard는 MVP에서 앱이 설치하거나 동봉하지 않는다. 이미 설치되어 있는 환경을 전제로 상태를 확인하고 사용한다.
 
 ---
 
@@ -274,6 +298,61 @@ for i in 1..repeatCount:
 | 목적 | Gemini 채팅 목록에서 이번 자동화 세션의 시작점 식별 |
 | MVP 수정 가능 여부 | 기본값 고정, 설정 변경은 후순위 |
 
+### 6.4 실행 상태 머신
+
+자동화는 단순 반복문이 아니라 명확한 상태 전이로 구현한다.
+
+기본 상태:
+
+```text
+READY
+CHECKING_ENVIRONMENT
+SAVING_ORIGINAL_STATE
+SWITCHING_IME
+OPENING_GEMINI
+OPENING_MARKER_CHAT
+SENDING_MARKER
+GENERATING_PROMPT
+OPENING_PROMPT_CHAT
+FOCUSING_INPUT
+ENTERING_PROMPT
+TAPPING_SEND
+RESTORING_STATE
+COMPLETED
+FAILED
+CANCELLED
+```
+
+각 상태는 다음 정보를 갱신해야 한다.
+
+- 현재 단계
+- 현재 반복 번호
+- 전체 반복 횟수
+- 마지막 생성 프롬프트
+- 마지막 성공/실패 상태
+
+### 6.5 재시도와 복구 원칙
+
+MVP는 자동화 성공률을 높이기 위해 단계별 wait/retry를 둔다. 정확한 대기 시간은 개발 중 조정하되, 모든 재시도는 로그와 상태 화면에서 현재 단계를 알 수 있어야 한다.
+
+권장 초안:
+
+| 단계 | 재시도 정책 |
+|---|---|
+| Gemini 앱 실행 | 실행 후 패키지 전환 확인 |
+| 새 채팅 탐지 | 최대 3회 재시도 |
+| 입력창 탐지 | 최대 5회 재시도 |
+| 프롬프트 입력 | paste 실패 시 `ACTION_SET_TEXT` 시도 |
+| 보내기 버튼 탐지 | 최대 3회 재시도 |
+
+오류 또는 중지 시에는 다음 순서로 복구한다.
+
+1. 자동화 루프 중단
+2. 입력기 복구 시도
+3. 클립보드 복구 시도
+4. 로그 저장
+5. 사용자에게 실패 또는 중지 지점 표시
+
 ---
 
 ## 7. 기능 요구사항
@@ -332,21 +411,21 @@ for i in 1..repeatCount:
 Download/wildcard/
 ```
 
-### FR-021. 기본 토큰 매핑
+### FR-021. 파일명 기반 자동 토큰 매핑
 
-앱은 다음 토큰과 파일명을 기본 매핑으로 사용한다.
+앱은 `Download/wildcard/` 경로 안의 모든 txt 파일을 별도 설정 없이 와일드카드 후보 파일로 사용한다.
 
-| 토큰 | 파일명 |
+토큰 이름은 txt 파일의 확장자를 제외한 파일명으로 만든다.
+
+예:
+
+| 파일명 | 토큰 |
 |---|---|
-| `__all__` | `all.txt` |
-| `__ooo__` | `ooo.txt` |
-| `__null__` | `null.txt` |
-| `__pose__` | `pose.txt` |
-| `__top__` | `top.txt` |
-| `__bottom__` | `bottom.txt` |
-| `__color__` | `color.txt` |
-| `__hair__` | `hair.txt` |
-| `__qqq__` | `qqq.txt` |
+| `all.txt` | `__all__` |
+| `hair.txt` | `__hair__` |
+| `예시.txt` | `__예시__` |
+
+특정 파일명을 코드에 하드코딩하지 않는다.
 
 ### FR-022. 파일 포맷
 
@@ -374,9 +453,14 @@ silver twin tails
 
 - 프롬프트에 `__hair__`가 없으면 `hair.txt`가 없어도 오류가 아니다.
 
-### FR-024. 필요한 토큰의 후보 없음 처리
+### FR-024. 토큰 또는 후보가 없어도 실행 허용
 
-프롬프트에 포함된 토큰에 대응하는 파일이 없거나 후보가 0개이면 실행 전에 오류로 표시해야 한다.
+프롬프트에 와일드카드 토큰이 하나도 없어도 오류로 처리하지 않는다.
+
+이 경우 앱은 원본 프롬프트를 반복 횟수만큼 그대로 생성하고 전송한다.
+
+프롬프트에 포함된 토큰에 대응하는 파일이 없거나 후보가 0개인 경우에도 실행을 막지 않는다.
+해당 토큰은 치환하지 않고 원문 그대로 둔다.
 
 ---
 
@@ -411,15 +495,11 @@ MVP에서는 Kotlin의 보안 랜덤 또는 시스템 랜덤 기반 구현을 �
 - `SecureRandom`
 - 각 토큰마다 후보 목록에서 균등 랜덤 선택
 
-### FR-033. 디버그 정보 기록
+### FR-033. 디버그 정보 기록 제외
 
-각 반복마다 다음 정보를 로그에 남긴다.
+MVP에서는 반복별 치환 상세 정보 같은 디버그 로그를 저장하지 않는다.
 
-- 반복 번호
-- 최종 프롬프트
-- 치환된 토큰
-- 각 토큰의 선택값
-- 성공/실패 여부
+개인용 앱이며 가벼운 실행이 중요한 목표이므로, 로그는 실행 결과 확인과 오류 파악에 필요한 최소 정보만 남긴다.
 
 ---
 
@@ -444,7 +524,8 @@ com.google.android.apps.bard
 1. 접근성 노드 텍스트 기반: `새 채팅`
 2. 접근성 노드 텍스트 기반: `채팅 검색`과 결합된 UI 상태
 3. 리소스 ID 기반 탐지
-4. 좌표 fallback
+
+좌표 기반 클릭은 MVP에 포함하지 않는다. Gemini UI 변경 등으로 selector 기반 탐지가 충분하지 않을 때를 위한 후순위 보험으로 남긴다.
 
 ### FR-042. 입력창 찾기
 
@@ -461,7 +542,8 @@ com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_
 1. 리소스 ID 기반 탐지
 2. 입력 가능한 EditText 노드 탐지
 3. 텍스트 힌트 기반 탐지
-4. 좌표 fallback
+
+좌표 기반 입력창 클릭은 MVP에 포함하지 않는다.
 
 ### FR-043. 프롬프트 입력
 
@@ -469,7 +551,8 @@ com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_
 
 1. 클립보드에 최종 프롬프트 설정 후 paste 액션
 2. 접근성 `ACTION_SET_TEXT`
-3. 좌표 클릭 후 paste fallback
+
+좌표 클릭 후 paste는 MVP에 포함하지 않는다.
 
 ### FR-044. 보내기 버튼 클릭
 
@@ -480,7 +563,8 @@ com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_
 1. 텍스트 기반: `보내기`
 2. contentDescription 기반: `보내기`
 3. 리소스 ID 기반
-4. 좌표 fallback
+
+좌표 기반 보내기 클릭은 MVP에 포함하지 않는다.
 
 ### FR-045. 각 프롬프트마다 새 채팅 생성
 
@@ -509,6 +593,8 @@ com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_
 ```text
 com.wparam.nullkeyboard/.NullInputMethod
 ```
+
+MVP에서는 Null Keyboard가 이미 설치되어 있다고 전제한다. 설치 유도나 동봉 기능은 만들지 않는다.
 
 ### FR-052. 원래 입력기 복구
 
@@ -575,8 +661,6 @@ com.wparam.nullkeyboard/.NullInputMethod
 - 반복 횟수
 - 성공 횟수
 - 실패 횟수
-- 각 반복의 최종 프롬프트
-- 각 반복의 치환값
 - 오류 메시지
 
 ### FR-072. 중지 기능
@@ -605,7 +689,6 @@ com.wparam.nullkeyboard/.NullInputMethod
 | ERR_ACCESSIBILITY_OFF | 접근성 서비스 꺼짐 | 접근성 서비스를 활성화해야 합니다. |
 | ERR_NO_SECURE_SETTINGS | 권한 없음 | ADB로 WRITE_SECURE_SETTINGS 권한을 부여해야 합니다. |
 | ERR_NO_PROMPT | 프롬프트 없음 | 원본 프롬프트를 입력하거나 클립보드에서 가져오세요. |
-| ERR_TOKEN_EMPTY | 토큰 후보 없음 | 사용된 토큰의 후보 파일이 비어 있습니다. |
 | ERR_NEW_CHAT_NOT_FOUND | 새 채팅 버튼 탐지 실패 | Gemini 새 채팅 버튼을 찾지 못했습니다. |
 | ERR_INPUT_NOT_FOUND | 입력창 탐지 실패 | Gemini 입력창을 찾지 못했습니다. |
 | ERR_SEND_NOT_FOUND | 보내기 버튼 탐지 실패 | Gemini 보내기 버튼을 찾지 못했습니다. |
@@ -763,6 +846,8 @@ data class GeneratedPrompt(
 )
 ```
 
+`replacements`는 실행 중 생성 결과 확인용이며, MVP의 저장 로그에는 치환 상세값을 남기지 않는다.
+
 ### 9.4 RunConfig
 
 ```kotlin
@@ -797,7 +882,6 @@ data class RunLogEntry(
     val index: Int,
     val type: EntryType,
     val prompt: String,
-    val replacements: Map<String, String>,
     val status: EntryStatus,
     val errorCode: String? = null,
     val errorMessage: String? = null,
@@ -814,7 +898,7 @@ data class RunLogEntry(
 | 컴포넌트 | 역할 |
 |---|---|
 | MainActivity | 설정, 상태 확인, 실행 시작 |
-| AutomationService | 실행 플로우 오케스트레이션 |
+| AutomationService | Foreground Service 기반 실행 플로우 오케스트레이션 |
 | GeminiAccessibilityService | Gemini UI 탐지/클릭/입력 |
 | WildcardRepository | txt 파일 로드 |
 | PromptGenerator | 토큰 탐지 및 랜덤 치환 |
@@ -833,11 +917,11 @@ AccessibilityService는 다음 작업을 수행한다.
 - 입력창 포커스
 - 텍스트 입력 또는 paste 수행
 - 보내기 버튼 클릭
-- fallback 좌표 제스처 수행
 
 ## 10.3 Gemini UI 탐지 전략
 
 UI 탐지는 단일 selector에만 의존하지 않는다.
+MVP의 기본 기준은 한국어 Gemini UI이며, 좌표 fallback은 MVP에 포함하지 않는다.
 
 ### 새 채팅 탐지
 
@@ -845,7 +929,6 @@ UI 탐지는 단일 selector에만 의존하지 않는다.
 2. contentDescription `새 채팅`
 3. Gemini sidebar 상태에서 후보 노드 탐색
 4. 사용자 설정 selector
-5. 좌표 fallback
 
 ### 입력창 탐지
 
@@ -853,14 +936,12 @@ UI 탐지는 단일 selector에만 의존하지 않는다.
 2. EditText class 탐색
 3. focusable + editable 노드 탐색
 4. 화면 하단 근처 입력 가능 노드 탐색
-5. 좌표 fallback
 
 ### 보내기 탐지
 
 1. 텍스트 `보내기`
 2. contentDescription `보내기`
 3. 입력창 우측 버튼 탐색
-4. 좌표 fallback
 
 ---
 
@@ -886,7 +967,7 @@ UI 탐지는 단일 selector에만 의존하지 않는다.
 |---|---|
 | 사용자 정의 토큰 매핑 | 새 토큰과 txt 파일 연결 |
 | selector 편집 | Gemini UI 변경 시 직접 selector 수정 |
-| 좌표 fallback 설정 | 기기 해상도별 클릭 좌표 설정 |
+| 좌표 fallback 설정 | MVP 제외. selector 기반 탐지가 부족할 때 후순위 보험으로 검토 |
 | 랜덤 seed 설정 | 재현 가능한 랜덤 생성 |
 | 프롬프트 미리보기 개수 | 실행 전 샘플 생성 수 |
 
@@ -944,7 +1025,7 @@ MVP 성공 여부는 UI 완성도보다 자동화 성공률로 판단한다.
 
 - 프롬프트에 `__hair__` 포함
 - `hair.txt` 없음
-- 기대 결과: 실행 전 오류 표시
+- 기대 결과: 실행을 막지 않고 경고 또는 로그를 남긴 뒤, `__hair__` 토큰은 원문 그대로 둔 채 전송 가능
 
 ### 14.3 사용하지 않는 파일 없음
 
@@ -1018,10 +1099,10 @@ MVP 성공 여부는 UI 완성도보다 자동화 성공률로 판단한다.
 ### M2. 와일드카드 로더와 프롬프트 생성기
 
 - `Download/wildcard` txt 로드
-- 기본 토큰 매핑 구현
+- 파일명 기반 자동 토큰 매핑 구현
 - 후보 파싱
 - 랜덤 치환 구현
-- 생성 로그 출력
+- 최소 실행 결과 표시
 
 ### M3. Gemini 자동 조작 1회 성공
 
@@ -1060,12 +1141,12 @@ MVP 성공 여부는 UI 완성도보다 자동화 성공률로 판단한다.
 
 | 리스크 | 설명 | 대응 |
 |---|---|---|
-| Gemini UI 변경 | 버튼 텍스트/리소스 ID 변경 가능 | selector 다중화, 좌표 fallback, 사용자 설정 selector |
+| Gemini UI 변경 | 버튼 텍스트/리소스 ID 변경 가능 | selector 다중화, wait/retry, 사용자 설정 selector |
 | 접근성 노드 탐지 실패 | 화면 상태에 따라 노드가 안 보일 수 있음 | wait/retry, 화면 상태 검증 |
 | 입력기 전환 실패 | 권한 또는 IME ID 문제 | 권한 체크, 원래 입력기 저장, 수동 복구 안내 |
 | 클립보드 접근 제한 | Android 버전별 제약 | 앱 포그라운드에서 처리, ACTION_SET_TEXT fallback |
 | 반복 중 Gemini 응답 지연 | UI가 다음 동작을 받을 준비가 안 됨 | 단계별 대기 시간 설정 |
-| 기기 해상도 차이 | 좌표 fallback 실패 가능 | 좌표 fallback은 최후 수단, 사용자 조정 가능화 |
+| 기기 해상도 차이 | 좌표 fallback은 해상도별로 실패 가능 | MVP에서는 좌표 fallback 미사용, 후순위 보험으로만 검토 |
 | 과도한 자동 전송 | Gemini 사용 제한 또는 UI 지연 | 반복 간 delay 설정, 기본 10회 유지 |
 
 ---
@@ -1074,13 +1155,17 @@ MVP 성공 여부는 UI 완성도보다 자동화 성공률로 판단한다.
 
 MVP 개발 전 또는 개발 중 결정해야 할 항목이다.
 
-1. Null Keyboard를 앱과 함께 설치/안내할 것인가, 기존 설치를 전제로 할 것인가?
-2. Gemini 새 채팅 열기에서 sidebar를 반드시 열어야 하는가, 현재 화면 상태별 shortcut이 가능한가?
-3. 프롬프트 입력은 paste를 1순위로 할 것인가, `ACTION_SET_TEXT`를 1순위로 할 것인가?
-4. 각 단계별 기본 wait 시간은 몇 ms로 둘 것인가?
-5. 실행 로그에 전체 프롬프트를 저장할 것인가, 민감성 고려로 옵션화할 것인가?
-6. selector fallback 설정 UI를 MVP에 최소 포함할 것인가?
-7. Android 최소 지원 버전은 어디까지로 할 것인가?
+1. Gemini 새 채팅 열기에서 sidebar를 반드시 열어야 하는가, 현재 화면 상태별 shortcut이 가능한가?
+2. 각 단계별 기본 wait 시간은 몇 ms로 둘 것인가?
+3. selector fallback 설정 UI를 MVP에 최소 포함할 것인가?
+4. Android 최소 지원 버전은 어디까지로 할 것인가?
+
+다음 항목은 결정 완료로 본다.
+
+- 필요한 토큰 후보 파일이 없어도 실행을 막지 않는다.
+- 좌표 fallback은 MVP에 포함하지 않고 후순위 보험으로 둔다.
+- Null Keyboard는 이미 설치된 환경을 전제로 한다.
+- Gemini UI 탐지는 한국어 UI 기준으로 시작한다.
 
 ---
 
@@ -1088,4 +1173,4 @@ MVP 개발 전 또는 개발 중 결정해야 할 항목이다.
 
 MVP는 다음 조건을 만족하면 성공으로 본다.
 
-> 사용자가 앱에 원본 프롬프트를 입력하거나 클립보드에서 가져오고, 기존 `Download/wildcard/*.txt` 파일을 준비한 상태에서 실행 버튼을 누르면, 앱이 Gemini를 열어 세션 시작 마커를 먼저 보낸 뒤, 기본 10개의 랜덤 치환 프롬프트를 각각 새 채팅에 자동 전송한다. 실행 완료 또는 실패 시 입력기와 클립보드를 가능한 원래 상태로 복구하고, 성공/실패 로그를 보여준다.
+> 사용자가 앱에 원본 프롬프트를 입력하거나 클립보드에서 가져오고, 기존 `Download/wildcard/*.txt` 파일을 준비한 상태에서 실행 버튼을 누르면, 앱이 Gemini를 열어 세션 시작 마커를 먼저 보낸 뒤, 기본 10개의 랜덤 치환 프롬프트를 각각 새 채팅에 자동 전송한다. 필요한 토큰 후보 파일이 없거나 비어 있으면 해당 토큰은 원문 그대로 두고 실행을 막지 않는다. 실행 완료, 실패, 중지 시 입력기와 클립보드를 가능한 원래 상태로 복구하고, 성공/실패 로그를 보여준다.
