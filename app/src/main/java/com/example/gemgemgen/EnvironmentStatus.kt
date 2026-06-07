@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat
 object AppDefaults {
     const val TARGET_PACKAGE_NAME = "com.google.android.apps.bard"
     const val WILDCARD_DIRECTORY = "Download/wildcard"
+    const val NULL_KEYBOARD_IME_ID = "com.wparam.nullkeyboard/.NullInputMethod"
     const val DEFAULT_REPEAT_COUNT = 10
 }
 
@@ -20,6 +21,7 @@ data class EnvironmentStatus(
     val isWildcardDirectoryAccessible: Boolean = false,
     val hasPromptTemplate: Boolean = false,
     val wildcardDirectoryPath: String = "",
+    val nullKeyboardTargetImeId: String = AppDefaults.NULL_KEYBOARD_IME_ID,
     val adbGrantCommand: String = ""
 ) {
     val isReadyToStart: Boolean
@@ -42,6 +44,7 @@ object EnvironmentStatusChecker {
                 WildcardRepository.canReadFolder(context, wildcardFolderUri),
             hasPromptTemplate = promptTemplate.isNotBlank(),
             wildcardDirectoryPath = wildcardFolderUri?.toString().orEmpty(),
+            nullKeyboardTargetImeId = AppDefaults.NULL_KEYBOARD_IME_ID,
             adbGrantCommand = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
         )
     }

@@ -272,6 +272,10 @@ private fun StatusSection(
                 text = "wildcard 폴더: ${status.wildcardDirectoryPath.ifBlank { "선택 안 됨" }}",
                 style = MaterialTheme.typography.bodySmall
             )
+            Text(
+                text = "Null Keyboard 전환 대상: ${status.nullKeyboardTargetImeId}",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
@@ -409,6 +413,7 @@ private fun ActionSection(
     val isRunning = automationState is AutomationUiState.Running
     val canRunOneShot = status.isGeminiInstalled &&
         status.isAccessibilityServiceEnabled &&
+        status.hasWriteSecureSettingsPermission &&
         !isRunning
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -458,6 +463,7 @@ private fun oneShotDisabledReason(status: EnvironmentStatus): String {
     return when {
         !status.isGeminiInstalled -> "Gemini 앱 설치 상태를 확인하지 못했습니다."
         !status.isAccessibilityServiceEnabled -> "접근성 서비스를 켠 뒤 앱으로 돌아와주세요."
+        !status.hasWriteSecureSettingsPermission -> "WRITE_SECURE_SETTINGS 권한을 ADB로 부여해주세요."
         else -> "M3 테스트 전송을 시작할 수 없습니다."
     }
 }
