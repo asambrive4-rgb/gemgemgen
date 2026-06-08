@@ -63,6 +63,7 @@ internal fun StatusSettingsDialog(
                 StatusRow("접근성 서비스", status.isAccessibilityServiceEnabled)
                 StatusRow("WRITE_SECURE_SETTINGS", status.hasWriteSecureSettingsPermission)
                 StatusRow("wildcard 폴더", status.isWildcardDirectoryAccessible)
+                StatusRow("wildcard 편집 권한", status.isWildcardDirectoryWritable)
                 StatusRow("프롬프트", hasPromptTemplate)
 
                 if (!status.isAccessibilityServiceEnabled) {

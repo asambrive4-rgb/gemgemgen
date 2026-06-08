@@ -19,6 +19,7 @@ data class EnvironmentStatus(
     val isAccessibilityServiceEnabled: Boolean = false,
     val hasWriteSecureSettingsPermission: Boolean = false,
     val isWildcardDirectoryAccessible: Boolean = false,
+    val isWildcardDirectoryWritable: Boolean = false,
     val wildcardDirectoryPath: String = "",
     val nullKeyboardTargetImeId: String = AppDefaults.NULL_KEYBOARD_IME_ID,
     val adbGrantCommand: String = ""
@@ -28,6 +29,9 @@ data class EnvironmentStatus(
             isAccessibilityServiceEnabled &&
             hasWriteSecureSettingsPermission &&
             isWildcardDirectoryAccessible
+
+    val canEditWildcardFiles: Boolean
+        get() = isWildcardDirectoryAccessible && isWildcardDirectoryWritable
 }
 
 object EnvironmentStatusChecker {
@@ -40,6 +44,8 @@ object EnvironmentStatusChecker {
             hasWriteSecureSettingsPermission = hasWriteSecureSettingsPermission(context),
             isWildcardDirectoryAccessible = wildcardFolderUri != null &&
                 WildcardRepository.canReadFolder(context, wildcardFolderUri),
+            isWildcardDirectoryWritable = wildcardFolderUri != null &&
+                WildcardFolderAccessChecker.canWriteFolder(context, wildcardFolderUri),
             wildcardDirectoryPath = wildcardFolderUri?.toString().orEmpty(),
             nullKeyboardTargetImeId = AppDefaults.NULL_KEYBOARD_IME_ID,
             adbGrantCommand = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"

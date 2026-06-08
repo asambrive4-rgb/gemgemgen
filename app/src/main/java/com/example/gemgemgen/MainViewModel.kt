@@ -121,6 +121,10 @@ interface ClipboardTextProvider {
     fun readText(): String
 }
 
+interface ClipboardTextWriter {
+    fun writeText(text: String)
+}
+
 data class FolderSelectionResult(
     val message: String = "",
     val error: String = ""

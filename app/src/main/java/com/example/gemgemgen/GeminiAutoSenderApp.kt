@@ -1,5 +1,6 @@
 package com.example.gemgemgen
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -32,6 +33,23 @@ internal fun GeminiAutoSenderApp() {
     val uiState by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    var selectedTab by remember { mutableStateOf(MainTab.AUTOMATION) }
+    var shouldLoadWildcard by remember { mutableStateOf(false) }
+    val wildcardViewModel: WildcardManagerViewModel? = if (shouldLoadWildcard) {
+        viewModel(
+            factory = remember(context) {
+                val appContext = context.applicationContext
+                WildcardManagerViewModelFactory(
+                    fileManager = AndroidWildcardFileManager(appContext),
+                    clipboardTextProvider = AndroidClipboardTextProvider(appContext),
+                    clipboardTextWriter = AndroidClipboardTextWriter(appContext)
+                )
+            }
+        )
+    } else {
+        null
+    }
+    val wildcardUiState = wildcardViewModel?.uiState?.collectAsState()?.value
     val floatingBarController = remember(activity) {
         activity?.let { FloatingAutomationBarController(it) }
     }
@@ -54,17 +72,20 @@ internal fun GeminiAutoSenderApp() {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-
-        try {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-            viewModel.saveWildcardFolder(uri.toString())
-        } catch (error: SecurityException) {
-            viewModel.showWildcardFolderSaveError(
-                "폴더 권한 저장 실패: ${error.message ?: "다시 선택해주세요."}"
-            )
+        handleWildcardFolderSelected(
+            context = context,
+            uri = uri,
+            viewModel = viewModel,
+            wildcardViewModel = wildcardViewModel
+        )
+    }
+    val selectWildcardFolder = {
+        val currentWildcardViewModel = wildcardViewModel
+        if (currentWildcardViewModel == null || currentWildcardViewModel.requestFolderSelection()) {
+            wildcardFolderLauncher.launch(null)
+        } else {
+            shouldLoadWildcard = true
+            selectedTab = MainTab.WILDCARD
         }
     }
 
@@ -89,6 +110,8 @@ internal fun GeminiAutoSenderApp() {
     }
 
     SideEffect {
+        wildcardViewModel?.onFolderAccessChanged(uiState.environmentStatus.canEditWildcardFiles)
+
         if (uiState.isRunning) {
             floatingBarController?.showOrUpdate(
                 uiState = uiState,
@@ -106,45 +129,127 @@ internal fun GeminiAutoSenderApp() {
         }
     }
 
-    GeminiAutoSenderScreen(
-        uiState = uiState,
-        onClearFocus = { focusManager.clearFocus() },
-        onShowSettings = viewModel::showSettings,
-        onHideSettings = viewModel::hideSettings,
-        onRefreshStatus = viewModel::refreshStatus,
-        onSelectWildcardFolder = { wildcardFolderLauncher.launch(null) },
-        onOpenAccessibilitySettings = {
-            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    MainTabbedScreen(
+        selectedTab = selectedTab,
+        onSelectTab = {
+            if (it == MainTab.WILDCARD) shouldLoadWildcard = true
+            selectedTab = it
         },
-        onPromptTemplateChange = viewModel::onPromptTemplateChange,
-        onImportFromClipboard = viewModel::importPromptFromClipboard,
-        onRepeatCountChange = viewModel::onRepeatCountChange,
-        onRunMvp = {
-            if (!Settings.canDrawOverlays(context)) {
-                Toast.makeText(
-                    context,
-                    "플로팅 바를 쓰려면 다른 앱 위에 표시 권한이 필요합니다.",
-                    Toast.LENGTH_LONG
-                ).show()
-                context.startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
+        automationContent = {
+            GeminiAutoSenderScreen(
+                uiState = uiState,
+                onClearFocus = { focusManager.clearFocus() },
+                onShowSettings = viewModel::showSettings,
+                onHideSettings = viewModel::hideSettings,
+                onRefreshStatus = viewModel::refreshStatus,
+                onSelectWildcardFolder = selectWildcardFolder,
+                onOpenAccessibilitySettings = {
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                },
+                onPromptTemplateChange = viewModel::onPromptTemplateChange,
+                onImportFromClipboard = viewModel::importPromptFromClipboard,
+                onRepeatCountChange = viewModel::onRepeatCountChange,
+                onRunMvp = {
+                    runAutomationWithOverlayCheck(
+                        context = context,
+                        activity = activity,
+                        viewModel = viewModel,
+                        floatingBarController = floatingBarController,
+                        onCancelAutomation = cancelFromFloatingBar
                     )
-                )
-                return@GeminiAutoSenderScreen
-            }
-
-            val accepted = viewModel.runAutomation()
-            if (accepted && viewModel.uiState.value.isRunning) {
-                floatingBarController?.showOrUpdate(
-                    uiState = viewModel.uiState.value,
-                    onCancelAutomation = cancelFromFloatingBar
-                )
-                activity?.moveTaskToBack(true)
-            }
+                },
+                onCancelAutomation = viewModel::cancelAutomation,
+                onToggleRecentLogs = viewModel::toggleRecentLogs
+            )
         },
-        onCancelAutomation = viewModel::cancelAutomation,
-        onToggleRecentLogs = viewModel::toggleRecentLogs
+        wildcardContent = {
+            val currentWildcardViewModel = wildcardViewModel
+            val currentWildcardUiState = wildcardUiState
+            if (currentWildcardViewModel != null && currentWildcardUiState != null) {
+                WildcardManagerScreen(
+                    uiState = currentWildcardUiState,
+                    environmentStatus = uiState.environmentStatus,
+                    onClearFocus = { focusManager.clearFocus() },
+                    onRefresh = { currentWildcardViewModel.refreshFiles(openFirstFile = true) },
+                    onSelectFolder = selectWildcardFolder,
+                    onFileClick = currentWildcardViewModel::selectFile,
+                    onTextChange = currentWildcardViewModel::onTextChange,
+                    onSave = { currentWildcardViewModel.saveCurrent() },
+                    onRequestNewFile = currentWildcardViewModel::requestNewFile,
+                    onNewFileNameChange = currentWildcardViewModel::onNewFileNameChange,
+                    onCreateNewFile = currentWildcardViewModel::createNewFile,
+                    onDismissNewFile = currentWildcardViewModel::dismissNewFileDialog,
+                    onRequestDelete = currentWildcardViewModel::requestDeleteSelectedFile,
+                    onConfirmDelete = currentWildcardViewModel::confirmDeleteSelectedFile,
+                    onDismissDelete = currentWildcardViewModel::dismissDeleteConfirm,
+                    onPaste = currentWildcardViewModel::pasteFromClipboard,
+                    onPasteBelow = currentWildcardViewModel::pasteBelowFromClipboard,
+                    onCopy = currentWildcardViewModel::copyToClipboard,
+                    onUndo = currentWildcardViewModel::undoClipboardEdit,
+                    onConfirmPendingSave = {
+                        if (currentWildcardViewModel.confirmPendingWithSave()) {
+                            wildcardFolderLauncher.launch(null)
+                        }
+                    },
+                    onConfirmPendingDiscard = {
+                        if (currentWildcardViewModel.confirmPendingWithDiscard()) {
+                            wildcardFolderLauncher.launch(null)
+                        }
+                    },
+                    onCancelPending = currentWildcardViewModel::cancelPendingAction
+                )
+            }
+        }
     )
+}
+
+private fun runAutomationWithOverlayCheck(
+    context: Context,
+    activity: ComponentActivity?,
+    viewModel: MainViewModel,
+    floatingBarController: FloatingAutomationBarController?,
+    onCancelAutomation: () -> Unit
+) {
+    if (!Settings.canDrawOverlays(context)) {
+        Toast.makeText(
+            context,
+            "플로팅 바를 쓰려면 다른 앱 위에 표시 권한이 필요합니다.",
+            Toast.LENGTH_LONG
+        ).show()
+        context.startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            )
+        )
+        return
+    }
+
+    val accepted = viewModel.runAutomation()
+    if (accepted && viewModel.uiState.value.isRunning) {
+        floatingBarController?.showOrUpdate(
+            uiState = viewModel.uiState.value,
+            onCancelAutomation = onCancelAutomation
+        )
+        activity?.moveTaskToBack(true)
+    }
+}
+
+private fun handleWildcardFolderSelected(
+    context: Context,
+    uri: Uri,
+    viewModel: MainViewModel,
+    wildcardViewModel: WildcardManagerViewModel?
+) {
+    try {
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        context.contentResolver.takePersistableUriPermission(uri, flags)
+        viewModel.saveWildcardFolder(uri.toString())
+        wildcardViewModel?.onFolderChanged()
+    } catch (error: SecurityException) {
+        viewModel.showWildcardFolderSaveError(
+            "폴더 권한 저장 실패: ${error.message ?: "다시 선택해주세요."}"
+        )
+    }
 }

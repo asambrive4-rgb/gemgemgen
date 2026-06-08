@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -48,12 +47,11 @@ internal fun PromptSection(
                 )
             }
         }
-        OutlinedTextField(
+        AppMultilineTextField(
             value = promptTemplate,
             onValueChange = onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
-            minLines = 6,
-            maxLines = 10
+            minLines = 6
         )
     }
 }

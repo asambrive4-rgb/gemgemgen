@@ -25,4 +25,20 @@ class EnvironmentStatusTest {
             ).isReady
         )
     }
+
+    @Test
+    fun wildcardEditPermission_isSeparateFromAutomationReadPermission() {
+        val readOnlyStatus = EnvironmentStatus(
+            isWildcardDirectoryAccessible = true,
+            isWildcardDirectoryWritable = false
+        )
+        val editableStatus = EnvironmentStatus(
+            isWildcardDirectoryAccessible = true,
+            isWildcardDirectoryWritable = true
+        )
+
+        assertTrue(readOnlyStatus.isWildcardDirectoryAccessible)
+        assertFalse(readOnlyStatus.canEditWildcardFiles)
+        assertTrue(editableStatus.canEditWildcardFiles)
+    }
 }

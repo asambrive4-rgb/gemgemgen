@@ -1,5 +1,6 @@
 package com.example.gemgemgen
 
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
@@ -24,6 +25,15 @@ class AndroidClipboardTextProvider(
             ?.coerceToText(context)
             ?.toString()
             .orEmpty()
+    }
+}
+
+class AndroidClipboardTextWriter(
+    private val context: Context
+) : ClipboardTextWriter {
+    override fun writeText(text: String) {
+        val clipboardManager = context.getSystemService(ClipboardManager::class.java)
+        clipboardManager.setPrimaryClip(ClipData.newPlainText("wildcard", text))
     }
 }
 
