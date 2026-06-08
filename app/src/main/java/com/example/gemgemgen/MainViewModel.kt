@@ -11,10 +11,18 @@ class MainViewModel(
     private val clipboardTextProvider: ClipboardTextProvider,
     private val wildcardFolderSaver: WildcardFolderSaver,
     private val runLogger: RunLogger,
+    private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: GeminiMvpAutomation
 ) : ViewModel() {
+    private val lastRunSnapshot = lastRunSnapshotStore.load()
     private val _uiState = MutableStateFlow(
-        MainUiState(recentLogs = runLogger.loadRecent())
+        MainUiState(
+            promptTemplate = lastRunSnapshot?.promptTemplate.orEmpty(),
+            repeatCountText = lastRunSnapshot?.repeatCountText
+                ?.ifBlank { AppDefaults.DEFAULT_REPEAT_COUNT.toString() }
+                ?: AppDefaults.DEFAULT_REPEAT_COUNT.toString(),
+            recentLogs = runLogger.loadRecent()
+        )
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
@@ -70,6 +78,12 @@ class MainViewModel(
         val state = uiState.value
         if (!state.canRun) return false
 
+        lastRunSnapshotStore.save(
+            LastRunSnapshot(
+                promptTemplate = state.promptTemplate,
+                repeatCountText = state.repeatCountText
+            )
+        )
         automation.run(
             promptTemplate = state.promptTemplate,
             repeatCountText = state.repeatCountText,

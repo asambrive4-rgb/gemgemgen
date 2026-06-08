@@ -56,6 +56,7 @@ class MainViewModelFactory(
             clipboardTextProvider = AndroidClipboardTextProvider(appContext),
             wildcardFolderSaver = AndroidWildcardFolderSaver(appContext),
             runLogger = runLogger,
+            lastRunSnapshotStore = LastRunSnapshotStore.android(appContext),
             automation = GeminiMvpAutomation(
                 context = appContext,
                 runLogger = runLogger

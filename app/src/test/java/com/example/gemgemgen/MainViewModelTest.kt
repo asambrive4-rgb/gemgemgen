@@ -35,6 +35,21 @@ class MainViewModelTest {
     }
 
     @Test
+    fun init_restoresLastRunSnapshot() {
+        val snapshotStorage = FakeLastRunSnapshotStorage(
+            promptTemplate = "saved prompt",
+            repeatCountText = "12"
+        )
+
+        val viewModel = viewModel(
+            lastRunSnapshotStore = LastRunSnapshotStore(snapshotStorage)
+        )
+
+        assertEquals("saved prompt", viewModel.uiState.value.promptTemplate)
+        assertEquals("12", viewModel.uiState.value.repeatCountText)
+    }
+
+    @Test
     fun saveWildcardFolder_updatesSettingsMessageAndRefreshesStatus() {
         val environment = FakeEnvironmentStatusProvider(readyEnvironment())
         val folderSaver = FakeWildcardFolderSaver(
@@ -51,6 +66,21 @@ class MainViewModelTest {
         assertEquals("폴더 선택 완료", viewModel.uiState.value.settingsMessage)
         assertEquals("", viewModel.uiState.value.settingsError)
         assertEquals(2, environment.checkCount)
+    }
+
+    @Test
+    fun runAutomation_savesLastRunSnapshotWhenRunStarts() {
+        val snapshotStorage = FakeLastRunSnapshotStorage()
+        val viewModel = viewModel(
+            lastRunSnapshotStore = LastRunSnapshotStore(snapshotStorage)
+        )
+
+        viewModel.onPromptTemplateChange("prompt to resume")
+        viewModel.onRepeatCountChange("7")
+        viewModel.runAutomation()
+
+        assertEquals("prompt to resume", snapshotStorage.promptTemplate)
+        assertEquals("7", snapshotStorage.repeatCountText)
     }
 
     @Test
@@ -74,6 +104,7 @@ class MainViewModelTest {
         clipboardText: String = "",
         wildcardFolderSaver: FakeWildcardFolderSaver = FakeWildcardFolderSaver(),
         runLogger: RunLogger = RunLogger(FakeRunLogStorage()),
+        lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         automation: GeminiMvpAutomation = automation(runLogger)
     ): MainViewModel {
         return MainViewModel(
@@ -81,6 +112,7 @@ class MainViewModelTest {
             clipboardTextProvider = FakeClipboardTextProvider(clipboardText),
             wildcardFolderSaver = wildcardFolderSaver,
             runLogger = runLogger,
+            lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automation
         )
     }
@@ -157,6 +189,20 @@ class MainViewModelTest {
 
         override fun write(value: String) {
             this.value = value
+        }
+    }
+
+    private class FakeLastRunSnapshotStorage(
+        var promptTemplate: String = "",
+        var repeatCountText: String = ""
+    ) : LastRunSnapshotStorage {
+        override fun readPromptTemplate(): String = promptTemplate
+
+        override fun readRepeatCountText(): String = repeatCountText
+
+        override fun write(promptTemplate: String, repeatCountText: String) {
+            this.promptTemplate = promptTemplate
+            this.repeatCountText = repeatCountText
         }
     }
 
