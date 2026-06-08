@@ -5,6 +5,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
@@ -71,6 +72,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
 
     private fun clickSidebar(
         attempt: Int,
+        startedAtMillis: Long = SystemClock.uptimeMillis(),
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
@@ -84,17 +86,17 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         }
 
         retryOrFail(
-            attempt = attempt,
-            maxAttempts = SIDEBAR_MAX_ATTEMPTS,
+            startedAtMillis = startedAtMillis,
             failureMessage = "사이드바 열기 못 찾음",
             onStateChange = onStateChange
         ) {
-            clickSidebar(attempt + 1, onStateChange, onDone)
+            clickSidebar(attempt + 1, startedAtMillis, onStateChange, onDone)
         }
     }
 
     private fun clickNewChatNearSearch(
         attempt: Int,
+        startedAtMillis: Long = SystemClock.uptimeMillis(),
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
@@ -108,18 +110,18 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         }
 
         retryOrFail(
-            attempt = attempt,
-            maxAttempts = NEW_CHAT_MAX_ATTEMPTS,
+            startedAtMillis = startedAtMillis,
             failureMessage = "채팅 검색 근처 새 채팅 못 찾음",
             onStateChange = onStateChange
         ) {
-            clickNewChatNearSearch(attempt + 1, onStateChange, onDone)
+            clickNewChatNearSearch(attempt + 1, startedAtMillis, onStateChange, onDone)
         }
     }
 
     private fun setPromptText(
         prompt: String,
         attempt: Int,
+        startedAtMillis: Long = SystemClock.uptimeMillis(),
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
@@ -143,12 +145,17 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
                             onDone()
                         } else {
                             retryOrFail(
-                                attempt = attempt,
-                                maxAttempts = INPUT_MAX_ATTEMPTS,
+                                startedAtMillis = startedAtMillis,
                                 failureMessage = "프롬프트 입력 반영 실패",
                                 onStateChange = onStateChange
                             ) {
-                                setPromptText(prompt, attempt + 1, onStateChange, onDone)
+                                setPromptText(
+                                    prompt,
+                                    attempt + 1,
+                                    startedAtMillis,
+                                    onStateChange,
+                                    onDone
+                                )
                             }
                         }
                     },
@@ -159,18 +166,18 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         }
 
         retryOrFail(
-            attempt = attempt,
-            maxAttempts = INPUT_MAX_ATTEMPTS,
+            startedAtMillis = startedAtMillis,
             failureMessage = "입력창 못 찾음",
             onStateChange = onStateChange
         ) {
-            setPromptText(prompt, attempt + 1, onStateChange, onDone)
+            setPromptText(prompt, attempt + 1, startedAtMillis, onStateChange, onDone)
         }
     }
 
     private fun clickSendWhenReady(
         prompt: String,
         attempt: Int,
+        startedAtMillis: Long = SystemClock.uptimeMillis(),
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
@@ -189,12 +196,17 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
                         PromptInputAfterSend.StillPresent,
                         PromptInputAfterSend.Unknown -> {
                             retryOrFail(
-                                attempt = attempt,
-                                maxAttempts = SEND_MAX_ATTEMPTS,
+                                startedAtMillis = startedAtMillis,
                                 failureMessage = "보내기 클릭 후 전송 완료를 확인하지 못함",
                                 onStateChange = onStateChange
                             ) {
-                                clickSendWhenReady(prompt, attempt + 1, onStateChange, onDone)
+                                clickSendWhenReady(
+                                    prompt,
+                                    attempt + 1,
+                                    startedAtMillis,
+                                    onStateChange,
+                                    onDone
+                                )
                             }
                         }
                     }
@@ -205,8 +217,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         }
 
         retryOrFail(
-            attempt = attempt,
-            maxAttempts = SEND_MAX_ATTEMPTS,
+            startedAtMillis = startedAtMillis,
             failureMessage = if (node == null) {
                 "보내기 못 찾음"
             } else {
@@ -214,21 +225,23 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
             },
             onStateChange = onStateChange
         ) {
-            clickSendWhenReady(prompt, attempt + 1, onStateChange, onDone)
+            clickSendWhenReady(prompt, attempt + 1, startedAtMillis, onStateChange, onDone)
         }
     }
 
     private fun retryOrFail(
-        attempt: Int,
-        maxAttempts: Int,
+        startedAtMillis: Long,
         failureMessage: String,
         onStateChange: (AutomationUiState) -> Unit,
         retry: () -> Unit
     ) {
-        if (attempt >= maxAttempts) {
+        val elapsedMillis = SystemClock.uptimeMillis() - startedAtMillis
+        val retryWaitMillis = AutomationRetryWaitPolicy.nextDelayMillis(elapsedMillis)
+
+        if (retryWaitMillis == null) {
             onStateChange(AutomationUiState.Failure(failureMessage))
         } else {
-            handler.postDelayed(retry, RETRY_WAIT_MS)
+            handler.postDelayed(retry, retryWaitMillis)
         }
     }
 
@@ -358,11 +371,6 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
             "com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_half_sheet"
         private const val INPUT_CONFIRM_WAIT_MS = 500L
         private const val SEND_CONFIRM_WAIT_MS = 1000L
-        private const val RETRY_WAIT_MS = 1000L
-        private const val SIDEBAR_MAX_ATTEMPTS = 10
-        private const val NEW_CHAT_MAX_ATTEMPTS = 10
-        private const val INPUT_MAX_ATTEMPTS = 10
-        private const val SEND_MAX_ATTEMPTS = 10
     }
 
     private enum class PromptInputAfterSend {
