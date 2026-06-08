@@ -24,7 +24,9 @@ data class WildcardManagerUiState(
     val pendingAction: WildcardPendingAction? = null,
     val showNewFileDialog: Boolean = false,
     val newFileName: String = "",
-    val showDeleteConfirm: Boolean = false
+    val showDeleteConfirm: Boolean = false,
+    val showRenameDialog: Boolean = false,
+    val renameFileName: String = ""
 ) {
     val hasUnsavedChanges: Boolean
         get() = selectedFile != null && savedText != editingText

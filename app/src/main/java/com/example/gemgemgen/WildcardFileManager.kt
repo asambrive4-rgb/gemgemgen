@@ -8,6 +8,7 @@ interface WildcardFileManager {
     fun listFiles(): List<WildcardTextFile>
     fun readFile(file: WildcardTextFile): String
     fun createFile(fileName: String): WildcardTextFile
+    fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile
     fun writeFile(file: WildcardTextFile, text: String)
     fun deleteFile(file: WildcardTextFile)
 }
@@ -109,6 +110,24 @@ class AndroidWildcardFileManager(
         val uri = Uri.parse(file.documentUri)
         val deleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
         if (!deleted) throw WildcardFileException("${file.fileName} 파일을 삭제하지 못했습니다.")
+    }
+
+    override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile {
+        val normalizedFileName = WildcardFileName.normalize(newName)
+            ?: throw WildcardFileException("파일 이름을 입력해주세요.")
+
+        val exists = listFiles().any { it.id != file.id && it.fileName.equals(normalizedFileName, ignoreCase = true) }
+        if (exists) throw WildcardFileException("이미 같은 이름의 파일이 있습니다.")
+
+        val uri = Uri.parse(file.documentUri)
+        val newUri = DocumentsContract.renameDocument(context.contentResolver, uri, normalizedFileName)
+            ?: throw WildcardFileException("${file.fileName} 파일 이름을 수정하지 못했습니다.")
+
+        return WildcardTextFile(
+            id = DocumentsContract.getDocumentId(newUri),
+            fileName = normalizedFileName,
+            documentUri = newUri.toString()
+        )
     }
 
     private fun currentFolderUri(): Uri {

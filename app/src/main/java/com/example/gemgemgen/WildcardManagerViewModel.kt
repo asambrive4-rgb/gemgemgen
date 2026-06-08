@@ -197,6 +197,77 @@ class WildcardManagerViewModel(
         }
     }
 
+    fun requestRenameSelectedFile() {
+        val state = uiState.value
+        if (!state.canModifyFiles) {
+            showError("파일 이름을 수정하려면 wildcard 폴더를 다시 선택해주세요.")
+            return
+        }
+        val file = state.selectedFile ?: run {
+            showError("수정할 파일을 선택해주세요.")
+            return
+        }
+
+        val baseName = if (file.fileName.endsWith(".txt")) {
+            file.fileName.dropLast(4)
+        } else {
+            file.fileName
+        }
+
+        _uiState.update {
+            it.copy(
+                showRenameDialog = true,
+                renameFileName = baseName,
+                message = "",
+                error = ""
+            )
+        }
+    }
+
+    fun onRenameFileNameChange(value: String) {
+        _uiState.update { it.copy(renameFileName = value, error = "") }
+    }
+
+    fun dismissRenameDialog() {
+        _uiState.update {
+            it.copy(
+                showRenameDialog = false,
+                renameFileName = "",
+                error = ""
+            )
+        }
+    }
+
+    fun renameSelectedFile() {
+        val state = uiState.value
+        val file = state.selectedFile ?: run {
+            showError("수정할 파일을 선택해주세요.")
+            return
+        }
+        val newName = state.renameFileName
+        if (newName.isBlank()) {
+            showError("파일 이름을 입력해주세요.")
+            return
+        }
+
+        try {
+            val updatedFile = fileManager.renameFile(file, newName)
+            val files = fileManager.listFiles()
+            _uiState.update {
+                it.copy(
+                    files = files,
+                    selectedFile = updatedFile,
+                    showRenameDialog = false,
+                    renameFileName = "",
+                    message = "${updatedFile.fileName}으로 이름 수정 완료",
+                    error = ""
+                )
+            }
+        } catch (error: RuntimeException) {
+            showError(error.message ?: "파일 이름을 수정하지 못했습니다.")
+        }
+    }
+
     fun requestDeleteSelectedFile() {
         val state = uiState.value
         if (!state.canModifyFiles) {

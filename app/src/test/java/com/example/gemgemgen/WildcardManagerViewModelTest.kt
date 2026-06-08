@@ -124,6 +124,54 @@ class WildcardManagerViewModelTest {
     }
 
     @Test
+    fun renameSelectedFile_updatesFileNameAndKeepsContent() {
+        val fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
+        val viewModel = viewModel(fileManager = fileManager)
+
+        viewModel.requestRenameSelectedFile()
+        assertEquals("hair", viewModel.uiState.value.renameFileName)
+        assertTrue(viewModel.uiState.value.showRenameDialog)
+
+        viewModel.onRenameFileNameChange("new_hair")
+        viewModel.renameSelectedFile()
+
+        assertFalse(viewModel.uiState.value.showRenameDialog)
+        assertEquals("new_hair.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals("black hair", viewModel.uiState.value.editingText)
+        assertEquals("black hair", fileManager.contentOf("new_hair.txt"))
+        assertEquals("", fileManager.contentOf("hair.txt"))
+    }
+
+    @Test
+    fun renameSelectedFile_rejectsDuplicateFileName() {
+        val fileManager = FakeWildcardFileManager(
+            "hair.txt" to "black hair",
+            "color.txt" to "blue"
+        )
+        val viewModel = viewModel(fileManager = fileManager)
+
+        viewModel.requestRenameSelectedFile()
+        viewModel.onRenameFileNameChange("hair")
+        viewModel.renameSelectedFile()
+
+        assertTrue(viewModel.uiState.value.showRenameDialog)
+        assertEquals("이미 같은 이름의 파일이 있습니다.", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun renameSelectedFile_rejectsEmptyName() {
+        val fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
+        val viewModel = viewModel(fileManager = fileManager)
+
+        viewModel.requestRenameSelectedFile()
+        viewModel.onRenameFileNameChange("")
+        viewModel.renameSelectedFile()
+
+        assertTrue(viewModel.uiState.value.showRenameDialog)
+        assertEquals("파일 이름을 입력해주세요.", viewModel.uiState.value.error)
+    }
+
+    @Test
     fun uiState_exposesDisplayValuesForScreen() {
         val viewModel = viewModel(
             fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
@@ -192,6 +240,18 @@ class WildcardManagerViewModelTest {
 
         override fun deleteFile(file: WildcardTextFile) {
             files.remove(file.fileName)
+        }
+
+        override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile {
+            val normalizedName = WildcardFileName.normalize(newName)
+                ?: throw WildcardFileException("파일 이름을 입력해주세요.")
+            if (files.keys.any { it != file.fileName && it.equals(normalizedName, ignoreCase = true) }) {
+                throw WildcardFileException("이미 같은 이름의 파일이 있습니다.")
+            }
+
+            val content = files.remove(file.fileName) ?: ""
+            files[normalizedName] = content
+            return file(normalizedName)
         }
 
         fun contentOf(fileName: String): String = files[fileName].orEmpty()

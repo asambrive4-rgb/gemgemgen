@@ -9,22 +9,31 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
+internal class MainTabPage(
+    val tab: MainTab,
+    val content: @Composable () -> Unit
+)
+
 @Composable
 internal fun MainTabbedScreen(
     selectedTab: MainTab,
     onSelectTab: (MainTab) -> Unit,
-    automationContent: @Composable () -> Unit,
-    wildcardContent: @Composable () -> Unit
+    tabs: List<MainTabPage>
 ) {
-    val tabs = MainTab.values()
+    if (tabs.isEmpty()) return
+
+    val selectedTabIndex = tabs.indexOfFirst { it.tab == selectedTab }
+        .takeIf { it >= 0 }
+        ?: 0
+    val selectedPage = tabs[selectedTabIndex]
 
     Column(modifier = Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = tabs.indexOf(selectedTab)) {
-            tabs.forEach { tab ->
+        PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
+            tabs.forEach { page ->
                 Tab(
-                    selected = selectedTab == tab,
-                    onClick = { onSelectTab(tab) },
-                    text = { Text(tab.label) }
+                    selected = selectedTab == page.tab,
+                    onClick = { onSelectTab(page.tab) },
+                    text = { Text(page.tab.label) }
                 )
             }
         }
@@ -34,10 +43,7 @@ internal fun MainTabbedScreen(
                 .weight(1f)
                 .fillMaxSize()
         ) {
-            when (selectedTab) {
-                MainTab.AUTOMATION -> automationContent()
-                MainTab.WILDCARD -> wildcardContent()
-            }
+            selectedPage.content()
         }
     }
 }

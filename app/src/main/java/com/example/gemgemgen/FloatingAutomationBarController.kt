@@ -10,16 +10,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
+import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -32,29 +39,34 @@ internal class FloatingAutomationBarController(
     private val positionStore = FloatingBarPositionStore(appContext)
     private var overlayView: ComposeView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
+    private var overlayLifecycleOwner: FloatingBarLifecycleOwner? = null
     private var currentPosition = positionStore.load()
 
     fun showOrUpdate(
-        uiState: MainUiState,
-        onCancelAutomation: () -> Unit
+        uiStateFlow: StateFlow<MainUiState>,
+        onCancelAutomation: () -> Unit,
+        onAutomationFinished: () -> Unit
     ) {
-        if (overlayView == null) {
-            val params = createLayoutParams()
-            val view = ComposeView(activity).apply {
-                setViewTreeLifecycleOwner(activity)
-                setViewTreeViewModelStoreOwner(activity)
-                setViewTreeSavedStateRegistryOwner(activity)
-            }
+        if (overlayView != null) return
 
-            overlayView = view
-            layoutParams = params
-            windowManager.addView(view, params)
+        val params = createLayoutParams()
+        val lifecycleOwner = FloatingBarLifecycleOwner().also { it.start() }
+        val view = ComposeView(activity).apply {
+            setViewTreeLifecycleOwner(lifecycleOwner)
+            setViewTreeViewModelStoreOwner(activity)
+            setViewTreeSavedStateRegistryOwner(activity)
         }
 
-        overlayView?.setContent {
-            FloatingAutomationBar(
-                uiState = uiState,
+        overlayView = view
+        overlayLifecycleOwner = lifecycleOwner
+        layoutParams = params
+        windowManager.addView(view, params)
+
+        view.setContent {
+            FloatingAutomationBarOverlay(
+                uiStateFlow = uiStateFlow,
                 onCancelAutomation = onCancelAutomation,
+                onAutomationFinished = onAutomationFinished,
                 onDrag = ::moveBy,
                 onDragEnd = ::savePosition
             )
@@ -66,6 +78,8 @@ internal class FloatingAutomationBarController(
         windowManager.removeView(view)
         overlayView = null
         layoutParams = null
+        overlayLifecycleOwner?.destroy()
+        overlayLifecycleOwner = null
     }
 
     private fun createLayoutParams(): WindowManager.LayoutParams {
@@ -114,6 +128,32 @@ internal class FloatingAutomationBarController(
 }
 
 @Composable
+private fun FloatingAutomationBarOverlay(
+    uiStateFlow: StateFlow<MainUiState>,
+    onCancelAutomation: () -> Unit,
+    onAutomationFinished: () -> Unit,
+    onDrag: (Float, Float) -> Unit,
+    onDragEnd: () -> Unit
+) {
+    val uiState by uiStateFlow.collectAsState()
+
+    LaunchedEffect(uiState.automationState) {
+        if (uiState.automationState.isTerminal()) {
+            onAutomationFinished()
+        }
+    }
+
+    if (uiState.isRunning) {
+        FloatingAutomationBar(
+            uiState = uiState,
+            onCancelAutomation = onCancelAutomation,
+            onDrag = onDrag,
+            onDragEnd = onDragEnd
+        )
+    }
+}
+
+@Composable
 private fun FloatingAutomationBar(
     uiState: MainUiState,
     onCancelAutomation: () -> Unit,
@@ -153,6 +193,27 @@ private fun FloatingAutomationBar(
                 automationState = uiState.automationState
             )
         }
+    }
+}
+
+private class FloatingBarLifecycleOwner : LifecycleOwner {
+    private val registry = LifecycleRegistry(this)
+
+    override val lifecycle: Lifecycle
+        get() = registry
+
+    fun start() {
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+    }
+
+    fun destroy() {
+        if (registry.currentState == Lifecycle.State.DESTROYED) return
+
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     }
 }
 
