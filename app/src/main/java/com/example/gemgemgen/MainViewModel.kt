@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.update
 class MainViewModel(
     private val environmentStatusProvider: EnvironmentStatusProvider,
     private val clipboardTextProvider: ClipboardTextProvider,
+    private val clipboardTextWriter: ClipboardTextWriter,
     private val wildcardFolderSaver: WildcardFolderSaver,
     private val runLogger: RunLogger,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
@@ -84,6 +85,7 @@ class MainViewModel(
                 repeatCountText = state.repeatCountText
             )
         )
+        clipboardTextWriter.writeText(state.promptTemplate)
         automation.run(
             promptTemplate = state.promptTemplate,
             repeatCountText = state.repeatCountText,

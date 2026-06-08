@@ -64,6 +64,7 @@ class MainViewModelFactory(
         return MainViewModel(
             environmentStatusProvider = AndroidEnvironmentStatusProvider(appContext),
             clipboardTextProvider = AndroidClipboardTextProvider(appContext),
+            clipboardTextWriter = AndroidClipboardTextWriter(appContext),
             wildcardFolderSaver = AndroidWildcardFolderSaver(appContext),
             runLogger = runLogger,
             lastRunSnapshotStore = LastRunSnapshotStore.android(appContext),

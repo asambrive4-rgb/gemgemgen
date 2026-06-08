@@ -84,6 +84,19 @@ class MainViewModelTest {
     }
 
     @Test
+    fun runAutomation_copiesPromptTemplateToClipboardWhenRunStarts() {
+        val clipboardTextWriter = FakeClipboardTextWriter()
+        val viewModel = viewModel(
+            clipboardTextWriter = clipboardTextWriter
+        )
+
+        viewModel.onPromptTemplateChange("base __hair__ prompt")
+        viewModel.runAutomation()
+
+        assertEquals("base __hair__ prompt", clipboardTextWriter.text)
+    }
+
+    @Test
     fun runAutomation_refreshesRecentLogsWhenRunFinishes() {
         val runLogger = RunLogger(FakeRunLogStorage())
         val viewModel = viewModel(
@@ -102,6 +115,7 @@ class MainViewModelTest {
     private fun viewModel(
         environmentStatusProvider: FakeEnvironmentStatusProvider = FakeEnvironmentStatusProvider(readyEnvironment()),
         clipboardText: String = "",
+        clipboardTextWriter: FakeClipboardTextWriter = FakeClipboardTextWriter(),
         wildcardFolderSaver: FakeWildcardFolderSaver = FakeWildcardFolderSaver(),
         runLogger: RunLogger = RunLogger(FakeRunLogStorage()),
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
@@ -110,6 +124,7 @@ class MainViewModelTest {
         return MainViewModel(
             environmentStatusProvider = environmentStatusProvider,
             clipboardTextProvider = FakeClipboardTextProvider(clipboardText),
+            clipboardTextWriter = clipboardTextWriter,
             wildcardFolderSaver = wildcardFolderSaver,
             runLogger = runLogger,
             lastRunSnapshotStore = lastRunSnapshotStore,
@@ -157,6 +172,14 @@ class MainViewModelTest {
         private val text: String
     ) : ClipboardTextProvider {
         override fun readText(): String = text
+    }
+
+    private class FakeClipboardTextWriter : ClipboardTextWriter {
+        var text: String = ""
+
+        override fun writeText(text: String) {
+            this.text = text
+        }
     }
 
     private class FakeWildcardFolderSaver(

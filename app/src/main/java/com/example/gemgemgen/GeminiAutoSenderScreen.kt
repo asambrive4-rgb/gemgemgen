@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,7 +26,6 @@ import com.example.gemgemgen.ui.theme.GemgemgenTheme
 internal fun GeminiAutoSenderScreen(
     uiState: MainUiState,
     onClearFocus: () -> Unit,
-    onShowSettings: () -> Unit,
     onHideSettings: () -> Unit,
     onRefreshStatus: () -> Unit,
     onSelectWildcardFolder: () -> Unit,
@@ -42,6 +42,7 @@ internal fun GeminiAutoSenderScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
+                .imePadding()
                 .clearFocusOnOutsideTap(onClearFocus)
         ) {
             Column(
@@ -51,23 +52,6 @@ internal fun GeminiAutoSenderScreen(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Gemini Auto Sender",
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 12.dp),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    OutlinedButton(onClick = onShowSettings) {
-                        Text("설정")
-                    }
-                }
 
                 PromptSection(
                     promptTemplate = uiState.promptTemplate,
@@ -115,7 +99,6 @@ private fun GeminiAutoSenderAppPreview() {
         GeminiAutoSenderScreen(
             uiState = MainUiState(),
             onClearFocus = {},
-            onShowSettings = {},
             onHideSettings = {},
             onRefreshStatus = {},
             onSelectWildcardFolder = {},

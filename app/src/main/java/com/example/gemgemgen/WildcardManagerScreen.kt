@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -49,6 +51,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -102,6 +105,7 @@ internal fun WildcardManagerScreen(
             selection = TextRange(uiState.editingText.length)
         )
     }
+    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     Box(
         modifier = Modifier
@@ -214,12 +218,14 @@ internal fun WildcardManagerScreen(
                 onUndo = onUndo
             )
 
-            // 4구역: 폴더 정보 스트립 (화면 최하단)
-            FolderInfoSection(
-                environmentStatus = environmentStatus,
-                onRefresh = onRefresh,
-                onSelectFolder = onSelectFolder
-            )
+            if (!isKeyboardVisible) {
+                // 4구역: 폴더 정보 스트립 (화면 최하단)
+                FolderInfoSection(
+                    environmentStatus = environmentStatus,
+                    onRefresh = onRefresh,
+                    onSelectFolder = onSelectFolder
+                )
+            }
 
             if (uiState.message.isNotBlank()) {
                 Text(
@@ -858,4 +864,3 @@ private fun WildcardManagerScreenPreview() {
         )
     }
 }
-

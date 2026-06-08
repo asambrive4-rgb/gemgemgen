@@ -123,12 +123,12 @@ internal fun GeminiAutoSenderApp() {
             if (it == MainTab.WILDCARD) shouldLoadWildcard = true
             selectedTab = it
         },
+        onShowSettings = viewModel::showSettings,
         tabs = listOf(
             MainTabPage(MainTab.AUTOMATION) {
                 GeminiAutoSenderScreen(
                     uiState = uiState,
                     onClearFocus = { focusManager.clearFocus() },
-                    onShowSettings = viewModel::showSettings,
                     onHideSettings = viewModel::hideSettings,
                     onRefreshStatus = viewModel::refreshStatus,
                     onSelectWildcardFolder = selectWildcardFolder,
