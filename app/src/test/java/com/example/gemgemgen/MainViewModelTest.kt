@@ -196,6 +196,7 @@ class MainViewModelTest {
     private class FakeGeminiPromptSender : GeminiPromptSender {
         override fun sendPrompt(
             prompt: String,
+            newChatMode: GeminiNewChatMode,
             onStateChange: (AutomationUiState) -> Unit,
             onDone: () -> Unit
         ) {

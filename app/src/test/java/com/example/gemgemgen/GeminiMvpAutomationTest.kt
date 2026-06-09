@@ -45,6 +45,15 @@ class GeminiMvpAutomationTest {
             ),
             service.sentPrompts
         )
+        assertEquals(
+            listOf(
+                GeminiNewChatMode.SidebarThenNearestToSearch,
+                GeminiNewChatMode.DirectVisibleButton,
+                GeminiNewChatMode.DirectVisibleButton,
+                GeminiNewChatMode.DirectVisibleButton
+            ),
+            service.newChatModes
+        )
         assertEquals(listOf(1, 2, 3), generatedIndexes)
 
         val log = logger.loadRecent().single()
@@ -140,15 +149,18 @@ class GeminiMvpAutomationTest {
         private val autoComplete: Boolean
     ) : GeminiPromptSender {
         val sentPrompts = mutableListOf<String>()
+        val newChatModes = mutableListOf<GeminiNewChatMode>()
         var failOnPrompt: String? = null
         var wasCancelled = false
 
         override fun sendPrompt(
             prompt: String,
+            newChatMode: GeminiNewChatMode,
             onStateChange: (AutomationUiState) -> Unit,
             onDone: () -> Unit
         ) {
             sentPrompts += prompt
+            newChatModes += newChatMode
             failOnPrompt?.let { failedPrompt ->
                 if (prompt == failedPrompt) {
                     onStateChange(AutomationUiState.Failure("전송 실패"))

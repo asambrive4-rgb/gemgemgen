@@ -32,31 +32,26 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
 
     override fun sendPrompt(
         prompt: String,
+        newChatMode: GeminiNewChatMode,
         onStateChange: (AutomationUiState) -> Unit,
         onDone: () -> Unit
     ) {
         handler.post(
             {
-                clickSidebar(
-                    attempt = 1,
+                openNewChat(
+                    newChatMode = newChatMode,
                     onStateChange = onStateChange,
                     onDone = {
-                        clickNewChatNearSearch(
+                        setPromptText(
+                            prompt = prompt,
                             attempt = 1,
                             onStateChange = onStateChange,
                             onDone = {
-                                setPromptText(
+                                clickSendWhenReady(
                                     prompt = prompt,
                                     attempt = 1,
                                     onStateChange = onStateChange,
-                                    onDone = {
-                                        clickSendWhenReady(
-                                            prompt = prompt,
-                                            attempt = 1,
-                                            onStateChange = onStateChange,
-                                            onDone = onDone
-                                        )
-                                    }
+                                    onDone = onDone
                                 )
                             }
                         )
@@ -64,6 +59,35 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
                 )
             }
         )
+    }
+
+    private fun openNewChat(
+        newChatMode: GeminiNewChatMode,
+        onStateChange: (AutomationUiState) -> Unit,
+        onDone: () -> Unit
+    ) {
+        when (newChatMode) {
+            GeminiNewChatMode.SidebarThenNearestToSearch -> {
+                clickSidebar(
+                    attempt = 1,
+                    onStateChange = onStateChange,
+                    onDone = {
+                        clickNewChatNearSearch(
+                            attempt = 1,
+                            onStateChange = onStateChange,
+                            onDone = onDone
+                        )
+                    }
+                )
+            }
+            GeminiNewChatMode.DirectVisibleButton -> {
+                clickDirectNewChat(
+                    attempt = 1,
+                    onStateChange = onStateChange,
+                    onDone = onDone
+                )
+            }
+        }
     }
 
     override fun cancelCurrentRun() {
@@ -91,6 +115,30 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
             onStateChange = onStateChange
         ) {
             clickSidebar(attempt + 1, startedAtMillis, onStateChange, onDone)
+        }
+    }
+
+    private fun clickDirectNewChat(
+        attempt: Int,
+        startedAtMillis: Long = SystemClock.uptimeMillis(),
+        onStateChange: (AutomationUiState) -> Unit,
+        onDone: () -> Unit
+    ) {
+        onStateChange(AutomationUiState.Running("새 채팅 찾는 중 (#$attempt)"))
+
+        val node = findNodeByTextOrDescription("새 채팅")
+        if (node != null && clickNodeOrParent(node)) {
+            onStateChange(AutomationUiState.Running("새 채팅 클릭 완료"))
+            onDone()
+            return
+        }
+
+        retryOrFail(
+            startedAtMillis = startedAtMillis,
+            failureMessage = "새 채팅 못 찾음",
+            onStateChange = onStateChange
+        ) {
+            clickDirectNewChat(attempt + 1, startedAtMillis, onStateChange, onDone)
         }
     }
 

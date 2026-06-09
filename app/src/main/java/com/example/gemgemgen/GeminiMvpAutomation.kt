@@ -150,6 +150,7 @@ class GeminiMvpAutomation(
         updateRunState(run, "세션 마커 전송 중", onStateChange)
         run.service.sendPrompt(
             prompt = MARKER_PROMPT,
+            newChatMode = GeminiNewChatMode.SidebarThenNearestToSearch,
             onStateChange = childStateCallback(run, onStateChange),
             onDone = {
                 run.markerStatus = "성공"
@@ -176,6 +177,7 @@ class GeminiMvpAutomation(
 
         run.service.sendPrompt(
             prompt = generatedPrompt.finalPrompt,
+            newChatMode = GeminiNewChatMode.DirectVisibleButton,
             onStateChange = childStateCallback(run, onStateChange),
             onDone = {
                 run.successCount += 1
