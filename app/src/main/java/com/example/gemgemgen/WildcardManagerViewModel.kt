@@ -339,7 +339,14 @@ class WildcardManagerViewModel(
         }
         if (!ensureFileSelected()) return
 
-        replaceEditingText(text)
+        val state = uiState.value
+        applyTextEditResult(
+            WildcardTextEditPolicy.paste(
+                currentText = state.editingText,
+                undoStack = state.undoStack,
+                pastedText = text
+            )
+        )
     }
 
     fun pasteBelowFromClipboard() {
@@ -352,12 +359,13 @@ class WildcardManagerViewModel(
         if (!ensureFileSelected()) return
 
         val state = uiState.value
-        val baseText = when {
-            state.editingText.isEmpty() -> ""
-            state.editingText.endsWith("\n") -> state.editingText
-            else -> "${state.editingText}\n"
-        }
-        replaceEditingText(baseText + text)
+        applyTextEditResult(
+            WildcardTextEditPolicy.pasteBelow(
+                currentText = state.editingText,
+                undoStack = state.undoStack,
+                pastedText = text
+            )
+        )
     }
 
     fun copyToClipboard() {
@@ -378,15 +386,15 @@ class WildcardManagerViewModel(
 
     fun undoClipboardEdit() {
         val state = uiState.value
-        val previous = state.undoStack.firstOrNull() ?: run {
+        val result = WildcardTextEditPolicy.undo(state.undoStack) ?: run {
             showError("되돌릴 붙여넣기 기록이 없습니다.")
             return
         }
 
         _uiState.update {
             it.copy(
-                editingText = previous,
-                undoStack = state.undoStack.drop(1),
+                editingText = result.text,
+                undoStack = result.undoStack,
                 message = "붙여넣기 전 상태로 되돌렸습니다.",
                 error = ""
             )
@@ -471,12 +479,11 @@ class WildcardManagerViewModel(
         }
     }
 
-    private fun replaceEditingText(text: String) {
-        val state = uiState.value
+    private fun applyTextEditResult(result: WildcardTextEditResult) {
         _uiState.update {
             it.copy(
-                editingText = text,
-                undoStack = (listOf(state.editingText) + state.undoStack).take(MAX_UNDO_COUNT),
+                editingText = result.text,
+                undoStack = result.undoStack,
                 message = "클립보드 내용을 반영했습니다.",
                 error = ""
             )
@@ -527,9 +534,6 @@ class WildcardManagerViewModel(
         }
     }
 
-    private companion object {
-        const val MAX_UNDO_COUNT = 5
-    }
 }
 
 class WildcardManagerViewModelFactory(

@@ -24,48 +24,14 @@ object WildcardFolderAccessChecker {
 class AndroidWildcardFileManager(
     private val context: Context
 ) : WildcardFileManager {
+    private val documentReader = AndroidWildcardDocumentReader(context)
+
     override fun listFiles(): List<WildcardTextFile> {
-        val folderUri = currentFolderUri()
-        val resolver = context.contentResolver
-        val childUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-            folderUri,
-            DocumentsContract.getTreeDocumentId(folderUri)
-        )
-        val result = mutableListOf<WildcardTextFile>()
-        val projection = arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_MIME_TYPE
-        )
-
-        resolver.query(childUri, projection, null, null, null)?.use { cursor ->
-            val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val mimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-
-            while (cursor.moveToNext()) {
-                val fileName = cursor.getString(nameIndex) ?: continue
-                if (WildcardFileParser.tokenFromFileName(fileName) == null) continue
-                if (cursor.getString(mimeIndex) == DocumentsContract.Document.MIME_TYPE_DIR) continue
-
-                val documentId = cursor.getString(idIndex)
-                val documentUri = DocumentsContract.buildDocumentUriUsingTree(folderUri, documentId)
-                result += WildcardTextFile(
-                    id = documentId,
-                    fileName = fileName,
-                    documentUri = documentUri.toString()
-                )
-            }
-        } ?: throw WildcardFileException("wildcard 폴더를 읽지 못했습니다. 폴더를 다시 선택해주세요.")
-
-        return result.sortedBy { it.fileName.lowercase() }
+        return documentReader.listDocuments().map { it.toTextFile() }
     }
 
     override fun readFile(file: WildcardTextFile): String {
-        val uri = Uri.parse(file.documentUri)
-        return context.contentResolver.openInputStream(uri)?.use { input ->
-            input.bufferedReader(Charsets.UTF_8).use { it.readText() }
-        } ?: throw WildcardFileException("${file.fileName} 파일을 열지 못했습니다.")
+        return documentReader.readText(file.toDocument())
     }
 
     override fun createFile(fileName: String): WildcardTextFile {
@@ -133,5 +99,21 @@ class AndroidWildcardFileManager(
     private fun currentFolderUri(): Uri {
         return WildcardFolderStore.getFolderUri(context)
             ?: throw WildcardFileException("wildcard 폴더를 먼저 선택해주세요.")
+    }
+
+    private fun WildcardDocument.toTextFile(): WildcardTextFile {
+        return WildcardTextFile(
+            id = id,
+            fileName = fileName,
+            documentUri = documentUri.toString()
+        )
+    }
+
+    private fun WildcardTextFile.toDocument(): WildcardDocument {
+        return WildcardDocument(
+            id = id,
+            fileName = fileName,
+            documentUri = Uri.parse(documentUri)
+        )
     }
 }

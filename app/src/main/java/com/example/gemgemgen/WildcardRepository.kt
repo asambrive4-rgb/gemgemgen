@@ -5,52 +5,26 @@ import android.net.Uri
 import android.provider.DocumentsContract
 
 class WildcardRepository(private val context: Context) {
+    private val documentReader = AndroidWildcardDocumentReader(context)
+
     fun load(): List<WildcardSet> {
         val folderUri = WildcardFolderStore.getFolderUri(context) ?: return emptyList()
         return load(folderUri)
     }
 
     fun load(folderUri: Uri): List<WildcardSet> {
-        val resolver = context.contentResolver
-        val childUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-            folderUri,
-            DocumentsContract.getTreeDocumentId(folderUri)
-        )
-        val result = mutableListOf<WildcardSet>()
-        val projection = arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_MIME_TYPE
-        )
+        return documentReader.listDocumentsOrEmpty(folderUri)
+            .mapNotNull { document ->
+                val token = WildcardFileParser.tokenFromFileName(document.fileName)
+                    ?: return@mapNotNull null
+                val text = documentReader.readTextOrEmpty(document)
 
-        resolver.query(childUri, projection, null, null, null)?.use { cursor ->
-            val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-            val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-            val mimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-
-            while (cursor.moveToNext()) {
-                val fileName = cursor.getString(nameIndex) ?: continue
-                val token = WildcardFileParser.tokenFromFileName(fileName) ?: continue
-                val mimeType = cursor.getString(mimeIndex)
-                if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) continue
-
-                val documentUri = DocumentsContract.buildDocumentUriUsingTree(
-                    folderUri,
-                    cursor.getString(idIndex)
-                )
-                val text = resolver.openInputStream(documentUri)?.use { input ->
-                    input.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                }.orEmpty()
-
-                result += WildcardSet(
+                WildcardSet(
                     token = token,
-                    fileName = fileName,
+                    fileName = document.fileName,
                     items = WildcardFileParser.parseItems(text)
                 )
             }
-        }
-
-        return result.sortedBy { it.fileName.lowercase() }
     }
 
     companion object {

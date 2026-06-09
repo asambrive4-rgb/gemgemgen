@@ -1,7 +1,6 @@
 package com.example.gemgemgen
 
 import android.accessibilityservice.AccessibilityService
-import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -11,6 +10,10 @@ import android.view.accessibility.AccessibilityNodeInfo
 
 class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     private val handler = Handler(Looper.getMainLooper())
+    private val nodeFinder = GeminiAccessibilityNodeFinder(
+        rootProvider = { rootInActiveWindow },
+        inputResourceId = INPUT_RESOURCE_ID
+    )
 
     override fun onServiceConnected() {
         activeService = this
@@ -102,8 +105,8 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     ) {
         onStateChange(AutomationUiState.Running("사이드바 여는 중 (#$attempt)"))
 
-        val node = findNodeByTextOrDescription("사이드바 열기")
-        if (node != null && clickNodeOrParent(node)) {
+        val node = nodeFinder.findNodeByTextOrDescription("사이드바 열기")
+        if (node != null && nodeFinder.clickNodeOrParent(node)) {
             onStateChange(AutomationUiState.Running("사이드바 열기 완료"))
             onDone()
             return
@@ -126,8 +129,8 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     ) {
         onStateChange(AutomationUiState.Running("새 채팅 찾는 중 (#$attempt)"))
 
-        val node = findNodeByTextOrDescription("새 채팅")
-        if (node != null && clickNodeOrParent(node)) {
+        val node = nodeFinder.findNodeByTextOrDescription("새 채팅")
+        if (node != null && nodeFinder.clickNodeOrParent(node)) {
             onStateChange(AutomationUiState.Running("새 채팅 클릭 완료"))
             onDone()
             return
@@ -150,8 +153,8 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     ) {
         onStateChange(AutomationUiState.Running("채팅 검색 근처 새 채팅 찾는 중 (#$attempt)"))
 
-        val node = findNewChatNearestToSearch()
-        if (node != null && clickNodeOrParent(node)) {
+        val node = nodeFinder.findNewChatNearestToSearch()
+        if (node != null && nodeFinder.clickNodeOrParent(node)) {
             onStateChange(AutomationUiState.Running("새 채팅 클릭 완료"))
             onDone()
             return
@@ -175,7 +178,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     ) {
         onStateChange(AutomationUiState.Running("입력창 찾는 중 (#$attempt)"))
 
-        val inputNode = findInputNode()
+        val inputNode = nodeFinder.findInputNode()
         if (inputNode != null) {
             inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
             val arguments = Bundle().apply {
@@ -231,8 +234,8 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     ) {
         onStateChange(AutomationUiState.Running("보내기 버튼 활성화 대기 중 (#$attempt)"))
 
-        val node = findNodeByTextOrDescription("보내기")
-        val clickableNode = node?.let(::findClickableNodeOrParent)
+        val node = nodeFinder.findNodeByTextOrDescription("보내기")
+        val clickableNode = node?.let(nodeFinder::findClickableNodeOrParent)
         if (clickableNode != null && clickableNode.isEnabled &&
             clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         ) {
@@ -293,19 +296,8 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         }
     }
 
-    private fun findInputNode(): AccessibilityNodeInfo? {
-        findNodeByViewId(INPUT_RESOURCE_ID)?.let { return it }
-
-        return rootInActiveWindow
-            ?.let(::flattenNodes)
-            ?.firstOrNull { node ->
-                node.className?.toString()?.contains("EditText", ignoreCase = true) == true ||
-                    node.isEditable
-            }
-    }
-
     private fun checkPromptInputAfterSend(prompt: String): PromptInputAfterSend {
-        val inputText = findInputNode()?.text?.toString() ?: return PromptInputAfterSend.Unknown
+        val inputText = nodeFinder.findInputNode()?.text?.toString() ?: return PromptInputAfterSend.Unknown
 
         return if (inputText.contains(prompt)) {
             PromptInputAfterSend.StillPresent
@@ -315,100 +307,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     }
 
     private fun isPromptTextApplied(prompt: String): Boolean {
-        return findInputNode()?.text?.toString()?.contains(prompt) == true
-    }
-
-    private fun findNewChatNearestToSearch(): AccessibilityNodeInfo? {
-        val nodes = rootInActiveWindow?.let(::flattenNodes) ?: return null
-        val searchNode = nodes.firstOrNull { node ->
-            node.matchesTextOrDescription("채팅 검색")
-        } ?: return null
-        val candidates = nodes.filter { node ->
-            node.matchesTextOrDescription("새 채팅")
-        }.mapNotNull { node ->
-            val bounds = node.nodeBounds() ?: return@mapNotNull null
-            node to bounds
-        }
-        val searchBounds = searchNode.nodeBounds() ?: return null
-
-        return NearestNodeSelector.nearestTo(
-            anchor = searchBounds,
-            candidates = candidates
-        ) { it.second }?.first
-    }
-
-    private fun findNodeByViewId(viewId: String): AccessibilityNodeInfo? {
-        return try {
-            rootInActiveWindow
-                ?.findAccessibilityNodeInfosByViewId(viewId)
-                ?.firstOrNull()
-        } catch (_: RuntimeException) {
-            null
-        }
-    }
-
-    private fun findNodeByTextOrDescription(value: String): AccessibilityNodeInfo? {
-        return rootInActiveWindow
-            ?.let(::flattenNodes)
-            ?.firstOrNull { node -> node.matchesTextOrDescription(value) }
-    }
-
-    private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
-        var current: AccessibilityNodeInfo? = node
-
-        while (current != null) {
-            if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                return true
-            }
-            current = current.parent
-        }
-
-        return false
-    }
-
-    private fun findClickableNodeOrParent(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        var current: AccessibilityNodeInfo? = node
-
-        while (current != null) {
-            if (current.isClickable) {
-                return current
-            }
-            current = current.parent
-        }
-
-        return null
-    }
-
-    private fun flattenNodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-
-        fun visit(node: AccessibilityNodeInfo) {
-            nodes += node
-            for (index in 0 until node.childCount) {
-                node.getChild(index)?.let(::visit)
-            }
-        }
-
-        visit(root)
-        return nodes
-    }
-
-    private fun AccessibilityNodeInfo.matchesTextOrDescription(value: String): Boolean {
-        return text?.toString()?.contains(value, ignoreCase = true) == true ||
-            contentDescription?.toString()?.contains(value, ignoreCase = true) == true
-    }
-
-    private fun AccessibilityNodeInfo.nodeBounds(): NodeBounds? {
-        val rect = Rect()
-        getBoundsInScreen(rect)
-        if (rect.isEmpty) return null
-
-        return NodeBounds(
-            left = rect.left,
-            top = rect.top,
-            right = rect.right,
-            bottom = rect.bottom
-        )
+        return nodeFinder.findInputNode()?.text?.toString()?.contains(prompt) == true
     }
 
     companion object {
