@@ -21,6 +21,7 @@ data class WildcardManagerUiState(
     val message: String = "",
     val error: String = "",
     val undoStack: List<String> = emptyList(),
+    val isFileOperationInProgress: Boolean = false,
     val pendingAction: WildcardPendingAction? = null,
     val showNewFileDialog: Boolean = false,
     val newFileName: String = "",
@@ -51,25 +52,25 @@ data class WildcardManagerUiState(
         } ?: "No file selected"
 
     val canCreateFile: Boolean
-        get() = canModifyFiles
+        get() = canModifyFiles && !isFileOperationInProgress
 
     val canSave: Boolean
-        get() = canModifyFiles && selectedFile != null
+        get() = canModifyFiles && selectedFile != null && !isFileOperationInProgress
 
     val canDelete: Boolean
-        get() = canModifyFiles && selectedFile != null
+        get() = canModifyFiles && selectedFile != null && !isFileOperationInProgress
 
     val canPaste: Boolean
-        get() = canModifyFiles && selectedFile != null
+        get() = canModifyFiles && selectedFile != null && !isFileOperationInProgress
 
     val canCopy: Boolean
-        get() = selectedFile != null
+        get() = selectedFile != null && !isFileOperationInProgress
 
     val canEditText: Boolean
-        get() = canModifyFiles && selectedFile != null
+        get() = canModifyFiles && selectedFile != null && !isFileOperationInProgress
 
     val canUndo: Boolean
-        get() = canModifyFiles && undoStack.isNotEmpty()
+        get() = canModifyFiles && undoStack.isNotEmpty() && !isFileOperationInProgress
 }
 
 sealed interface WildcardPendingAction {

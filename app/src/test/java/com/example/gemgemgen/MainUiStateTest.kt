@@ -25,7 +25,7 @@ class MainUiStateTest {
             MainUiState(
                 promptTemplate = "base prompt",
                 environmentStatus = readyEnvironment(),
-                automationState = AutomationUiState.Running("실행 중")
+                automationState = AutomationRunState.Running("실행 중")
             ).canRun
         )
     }

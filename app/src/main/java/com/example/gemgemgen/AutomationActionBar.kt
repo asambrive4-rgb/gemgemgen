@@ -32,16 +32,16 @@ internal fun AutomationActionBar(
     onCancelAutomation: () -> Unit,
     canRun: Boolean,
     isRunning: Boolean,
-    automationState: AutomationUiState,
+    automationState: AutomationRunState,
     modifier: Modifier = Modifier
 ) {
     val statusText = AutomationUiText.statusText(automationState)
-    val isError = automationState is AutomationUiState.Failure
+    val isError = automationState is AutomationRunState.Failure
 
     val dotColor = when {
         isError -> MaterialTheme.colorScheme.error
-        automationState is AutomationUiState.Running -> MaterialTheme.colorScheme.primary
-        automationState is AutomationUiState.Success -> MaterialTheme.colorScheme.primary
+        automationState is AutomationRunState.Running -> MaterialTheme.colorScheme.primary
+        automationState is AutomationRunState.Success -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.outline
     }
 
@@ -59,48 +59,6 @@ internal fun AutomationActionBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 4.dp)
-            ) {
-                Surface(
-                    modifier = Modifier.size(8.dp),
-                    shape = RoundedCornerShape(50),
-                    color = dotColor
-                ) {}
-
-                if (automationState is AutomationUiState.Running &&
-                    automationState.currentIndex != null &&
-                    automationState.totalCount != null
-                ) {
-                    ProgressBadge(
-                        currentIndex = automationState.currentIndex,
-                        totalCount = automationState.totalCount
-                    )
-                }
-
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isError) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            }
-
-            RepeatCountStepper(
-                repeatCountText = repeatCountText,
-                onRepeatCountChange = onRepeatCountChange
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
             Box(
                 modifier = Modifier.width(68.dp),
                 contentAlignment = Alignment.Center
@@ -131,6 +89,48 @@ internal fun AutomationActionBar(
                         Text("중지", style = MaterialTheme.typography.labelMedium)
                     }
                 }
+            }
+
+            RepeatCountStepper(
+                repeatCountText = repeatCountText,
+                onRepeatCountChange = onRepeatCountChange
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 4.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.size(8.dp),
+                    shape = RoundedCornerShape(50),
+                    color = dotColor
+                ) {}
+
+                if (automationState is AutomationRunState.Running &&
+                    automationState.currentIndex != null &&
+                    automationState.totalCount != null
+                ) {
+                    ProgressBadge(
+                        currentIndex = automationState.currentIndex,
+                        totalCount = automationState.totalCount
+                    )
+                }
+
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isError) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
             }
         }
     }

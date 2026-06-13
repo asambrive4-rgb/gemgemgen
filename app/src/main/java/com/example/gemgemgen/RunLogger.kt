@@ -54,13 +54,13 @@ object AutomationRunLogStatus {
     const val FAILURE = "failure"
     const val STOPPED = "stopped"
 
-    fun fromState(state: AutomationUiState): String {
+    fun fromState(state: AutomationRunState): String {
         return when (state) {
-            AutomationUiState.Success -> SUCCESS
-            AutomationUiState.Stopped -> STOPPED
-            is AutomationUiState.Failure -> FAILURE
-            AutomationUiState.Idle,
-            is AutomationUiState.Running -> FAILURE
+            AutomationRunState.Success -> SUCCESS
+            AutomationRunState.Stopped -> STOPPED
+            is AutomationRunState.Failure -> FAILURE
+            AutomationRunState.Idle,
+            is AutomationRunState.Running -> FAILURE
         }
     }
 }

@@ -8,7 +8,7 @@ class AutomationUiTextTest {
     fun statusText_showsStoppedState() {
         assertEquals(
             "자동화 중지됨",
-            AutomationUiText.statusText(AutomationUiState.Stopped)
+            AutomationUiText.statusText(AutomationRunState.Stopped)
         )
     }
 }

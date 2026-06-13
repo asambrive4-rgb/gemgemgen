@@ -11,11 +11,40 @@ class PromptGenerator(
         wildcardSets: List<WildcardSet>,
         repeatCount: Int
     ): List<GeneratedPrompt> {
-        val wildcardsByToken = wildcardSets.associateBy { it.token }
+        val compiledPrompt = compile(
+            basePrompt = basePrompt,
+            wildcardSets = wildcardSets
+        )
 
         return (1..repeatCount.coerceAtLeast(0)).map { index ->
-            val replacements = chooseReplacements(basePrompt, wildcardsByToken)
-            GeneratedPrompt(
+            compiledPrompt.generate(index)
+        }
+    }
+
+    fun compile(
+        basePrompt: String,
+        wildcardSets: List<WildcardSet>
+    ): CompiledPrompt {
+        return CompiledPrompt(
+            basePrompt = basePrompt,
+            tokens = tokenRegex.findAll(basePrompt)
+                .map { it.value }
+                .distinct()
+                .toList(),
+            wildcardsByToken = wildcardSets.associateBy { it.token },
+            random = random
+        )
+    }
+
+    class CompiledPrompt internal constructor(
+        private val basePrompt: String,
+        private val tokens: List<String>,
+        private val wildcardsByToken: Map<String, WildcardSet>,
+        private val random: Random
+    ) {
+        fun generate(index: Int): GeneratedPrompt {
+            val replacements = chooseReplacements()
+            return GeneratedPrompt(
                 index = index,
                 basePrompt = basePrompt,
                 finalPrompt = tokenRegex.replace(basePrompt) { match ->
@@ -24,25 +53,17 @@ class PromptGenerator(
                 replacements = replacements
             )
         }
-    }
 
-    private fun chooseReplacements(
-        basePrompt: String,
-        wildcardsByToken: Map<String, WildcardSet>
-    ): Map<String, String> {
-        return tokenRegex
-            .findAll(basePrompt)
-            .map { it.value }
-            .distinct()
-            .mapNotNull { token ->
+        private fun chooseReplacements(): Map<String, String> {
+            return tokens.mapNotNull { token ->
                 val items = wildcardsByToken[token]?.items.orEmpty()
                 if (items.isEmpty()) {
                     null
                 } else {
                     token to items[random.nextInt(items.size)]
                 }
-            }
-            .toMap()
+            }.toMap()
+        }
     }
 
     companion object {

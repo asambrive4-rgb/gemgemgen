@@ -1,108 +1,126 @@
 package com.example.gemgemgen
 
-import android.content.Context
-import android.content.Intent
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
 
-class GeminiMvpAutomation(
+data class AutomationRunRequest(
+    val promptTemplate: String,
+    val repeatCountText: String
+)
+
+interface WildcardSetLoader {
+    fun load(): List<WildcardSet>
+}
+
+class RunGeminiAutomationUseCase(
     private val imeManager: ImeManager,
     private val runLogger: RunLogger,
+    private val lastRunSnapshotStore: LastRunSnapshotStore,
+    private val clipboardTextWriter: ClipboardTextWriter,
+    private val wildcardSetLoader: WildcardSetLoader,
     private val clock: () -> Long,
-    private val serviceProvider: () -> GeminiPromptSender?,
+    private val promptGatewayProvider: () -> GeminiPromptGateway?,
     private val launchGeminiApp: () -> Boolean,
-    private val loadWildcards: () -> List<WildcardSet>,
+    private val dispatchers: AppDispatchers = AppDispatchers(),
     private val promptGenerator: PromptGenerator = PromptGenerator(),
-    private val generatePrompt: (String, List<WildcardSet>, Int) -> GeneratedPrompt = { prompt, wildcards, index ->
-        promptGenerator.generate(
-            basePrompt = prompt,
-            wildcardSets = wildcards,
-            repeatCount = 1
-        ).single().copy(index = index)
-    }
+    private val generatePrompt: ((String, List<WildcardSet>, Int) -> GeneratedPrompt)? = null
 ) {
-    constructor(
-        context: Context,
-        imeManager: ImeManager = ImeManager.android(context),
-        runLogger: RunLogger = RunLogger.android(context),
-        clock: () -> Long = System::currentTimeMillis
-    ) : this(
-        imeManager = imeManager,
-        runLogger = runLogger,
-        clock = clock,
-        serviceProvider = { GeminiAccessibilityService.activeService },
-        launchGeminiApp = {
-            val launchIntent = context.packageManager
-                .getLaunchIntentForPackage(AppDefaults.TARGET_PACKAGE_NAME)
-            if (launchIntent == null) {
-                false
-            } else {
-                context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                true
-            }
-        },
-        loadWildcards = { WildcardRepository(context).load() }
-    )
-
     private var currentRun: CurrentRun? = null
+    private var isPreparingRun = false
 
-    fun run(
-        promptTemplate: String,
-        repeatCountText: String,
-        onStateChange: (AutomationUiState) -> Unit
+    suspend fun run(
+        request: AutomationRunRequest,
+        onStateChange: (AutomationRunState) -> Unit
     ) {
-        if (currentRun != null) {
-            onStateChange(AutomationUiState.Failure("이미 실행 중입니다."))
+        if (currentRun != null || isPreparingRun) {
+            onStateChange(AutomationRunState.Failure("이미 실행 중입니다."))
             return
         }
 
+        isPreparingRun = true
         val startedAtMillis = clock()
-        val repeatCount = RepeatCountParser.parse(repeatCountText)
-        val service = serviceProvider()
-        if (service == null) {
-            finishWithoutRun(
-                startedAtMillis = startedAtMillis,
-                repeatCount = repeatCount,
-                lastStep = "접근성 서비스 확인",
-                state = AutomationUiState.Failure("접근성 서비스가 켜져 있지 않습니다."),
-                onStateChange = onStateChange
-            )
-            return
-        }
-
-        if (promptTemplate.isBlank()) {
-            finishWithoutRun(
-                startedAtMillis = startedAtMillis,
-                repeatCount = repeatCount,
-                lastStep = "프롬프트 확인",
-                state = AutomationUiState.Failure("원본 프롬프트를 입력하거나 클립보드에서 가져오세요."),
-                onStateChange = onStateChange
-            )
-            return
-        }
-
-        onStateChange(AutomationUiState.Running("와일드카드 파일 로드 중"))
+        val repeatCount = RepeatCountParser.parse(request.repeatCountText)
         val wildcards = try {
-            loadWildcards()
+            withContext(dispatchers.io) {
+                lastRunSnapshotStore.save(
+                    LastRunSnapshot(
+                        promptTemplate = request.promptTemplate,
+                        repeatCountText = request.repeatCountText
+                    )
+                )
+                clipboardTextWriter.writeText(request.promptTemplate)
+                traceSection("automation.prepare") {
+                    wildcardSetLoader.load()
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             finishWithoutRun(
                 startedAtMillis = startedAtMillis,
                 repeatCount = repeatCount,
                 lastStep = "와일드카드 파일 로드 중",
-                state = AutomationUiState.Failure(
-                    "와일드카드 파일을 읽지 못했습니다: ${error.message ?: "폴더를 다시 선택해주세요."}"
+                state = AutomationRunState.Failure(
+                    "와일드카드 파일을 읽지 못했습니다: ${
+                        error.message ?: "폴더를 다시 선택해주세요."
+                    }"
                 ),
+                onStateChange = onStateChange
+            )
+            return
+        } finally {
+            isPreparingRun = false
+        }
+
+        startPreparedRun(
+            request = request,
+            startedAtMillis = startedAtMillis,
+            repeatCount = repeatCount,
+            wildcards = wildcards,
+            onStateChange = onStateChange
+        )
+    }
+
+    private fun startPreparedRun(
+        request: AutomationRunRequest,
+        startedAtMillis: Long,
+        repeatCount: Int,
+        wildcards: List<WildcardSet>,
+        onStateChange: (AutomationRunState) -> Unit
+    ) {
+        val promptGateway = promptGatewayProvider()
+        if (promptGateway == null) {
+            finishWithoutRun(
+                startedAtMillis = startedAtMillis,
+                repeatCount = repeatCount,
+                lastStep = "접근성 서비스 확인",
+                state = AutomationRunState.Failure("접근성 서비스가 켜져 있지 않습니다."),
                 onStateChange = onStateChange
             )
             return
         }
 
-        onStateChange(AutomationUiState.Running("Null Keyboard로 전환 중"))
+        if (request.promptTemplate.isBlank()) {
+            finishWithoutRun(
+                startedAtMillis = startedAtMillis,
+                repeatCount = repeatCount,
+                lastStep = "프롬프트 확인",
+                state = AutomationRunState.Failure("원본 프롬프트를 입력하거나 클립보드에서 가져오세요."),
+                onStateChange = onStateChange
+            )
+            return
+        }
+
+        val promptPlan = promptGenerator.compile(request.promptTemplate, wildcards)
+
+        onStateChange(AutomationRunState.Running("Null Keyboard로 전환 중"))
         val imeSwitchResult = imeManager.switchToNullKeyboard()
         if (imeSwitchResult is ImeSwitchResult.Failure) {
             finishWithoutRun(
                 startedAtMillis = startedAtMillis,
                 repeatCount = repeatCount,
                 lastStep = "Null Keyboard로 전환 중",
-                state = AutomationUiState.Failure(
+                state = AutomationRunState.Failure(
                     "${imeSwitchResult.message} WRITE_SECURE_SETTINGS 권한과 Null Keyboard 설치 상태를 확인해주세요."
                 ),
                 onStateChange = onStateChange
@@ -113,10 +131,11 @@ class GeminiMvpAutomation(
         val run = CurrentRun(
             startedAtMillis = startedAtMillis,
             imeSession = (imeSwitchResult as ImeSwitchResult.Success).session,
-            service = service,
-            promptTemplate = promptTemplate,
+            promptGateway = promptGateway,
+            promptTemplate = request.promptTemplate,
             repeatCount = repeatCount,
-            wildcards = wildcards
+            wildcards = wildcards,
+            promptPlan = promptPlan
         )
         currentRun = run
 
@@ -124,7 +143,7 @@ class GeminiMvpAutomation(
         if (!launchGeminiApp()) {
             finishRun(
                 run = run,
-                state = AutomationUiState.Failure("Gemini 앱을 찾지 못했습니다."),
+                state = AutomationRunState.Failure("Gemini 앱을 찾지 못했습니다."),
                 onStateChange = onStateChange
             )
             return
@@ -133,22 +152,22 @@ class GeminiMvpAutomation(
         sendMarker(run, onStateChange)
     }
 
-    fun cancel(onStateChange: (AutomationUiState) -> Unit) {
+    fun cancel(onStateChange: (AutomationRunState) -> Unit) {
         val run = currentRun ?: return
-        run.service.cancelCurrentRun()
+        run.promptGateway.cancelCurrentRun()
         finishRun(
             run = run,
-            state = AutomationUiState.Stopped,
+            state = AutomationRunState.Stopped,
             onStateChange = onStateChange
         )
     }
 
     private fun sendMarker(
         run: CurrentRun,
-        onStateChange: (AutomationUiState) -> Unit
+        onStateChange: (AutomationRunState) -> Unit
     ) {
         updateRunState(run, "세션 마커 전송 중", onStateChange)
-        run.service.sendPrompt(
+        run.promptGateway.sendPrompt(
             prompt = MARKER_PROMPT,
             newChatMode = GeminiNewChatMode.SidebarThenNearestToSearch,
             onStateChange = childStateCallback(run, onStateChange),
@@ -161,21 +180,24 @@ class GeminiMvpAutomation(
 
     private fun sendNextPrompt(
         run: CurrentRun,
-        onStateChange: (AutomationUiState) -> Unit
+        onStateChange: (AutomationRunState) -> Unit
     ) {
         if (run.successCount >= run.repeatCount) {
-            finishRun(run, AutomationUiState.Success, onStateChange)
+            finishRun(run, AutomationRunState.Success, onStateChange)
             return
         }
 
         val nextIndex = run.successCount + 1
         run.currentIndex = nextIndex
-        val generatedPrompt = generatePrompt(run.promptTemplate, run.wildcards, nextIndex)
+        val generatedPrompt = traceSection("prompt.generate") {
+            generatePrompt?.invoke(run.promptTemplate, run.wildcards, nextIndex)
+                ?: run.promptPlan.generate(nextIndex)
+        }
 
         run.lastPrompt = generatedPrompt.finalPrompt
         updateRunState(run, "프롬프트 생성 완료", onStateChange)
 
-        run.service.sendPrompt(
+        run.promptGateway.sendPrompt(
             prompt = generatedPrompt.finalPrompt,
             newChatMode = GeminiNewChatMode.DirectVisibleButton,
             onStateChange = childStateCallback(run, onStateChange),
@@ -189,18 +211,18 @@ class GeminiMvpAutomation(
 
     private fun childStateCallback(
         run: CurrentRun,
-        onStateChange: (AutomationUiState) -> Unit
-    ): (AutomationUiState) -> Unit {
+        onStateChange: (AutomationRunState) -> Unit
+    ): (AutomationRunState) -> Unit {
         return { state ->
             when (state) {
-                is AutomationUiState.Running -> updateRunState(run, state.step, onStateChange)
-                is AutomationUiState.Failure -> {
+                is AutomationRunState.Running -> updateRunState(run, state.step, onStateChange)
+                is AutomationRunState.Failure -> {
                     run.failureCount += 1
                     finishRun(run, state, onStateChange)
                 }
-                AutomationUiState.Success -> Unit
-                AutomationUiState.Stopped -> finishRun(run, state, onStateChange)
-                AutomationUiState.Idle -> onStateChange(state)
+                AutomationRunState.Success -> Unit
+                AutomationRunState.Stopped -> finishRun(run, state, onStateChange)
+                AutomationRunState.Idle -> onStateChange(state)
             }
         }
     }
@@ -208,11 +230,11 @@ class GeminiMvpAutomation(
     private fun updateRunState(
         run: CurrentRun,
         step: String,
-        onStateChange: (AutomationUiState) -> Unit
+        onStateChange: (AutomationRunState) -> Unit
     ) {
         run.lastStep = step
         onStateChange(
-            AutomationUiState.Running(
+            AutomationRunState.Running(
                 step = step,
                 currentIndex = run.currentIndex.coerceAtMost(run.repeatCount),
                 totalCount = run.repeatCount,
@@ -223,19 +245,19 @@ class GeminiMvpAutomation(
 
     private fun finishRun(
         run: CurrentRun,
-        state: AutomationUiState,
-        onStateChange: (AutomationUiState) -> Unit
+        state: AutomationRunState,
+        onStateChange: (AutomationRunState) -> Unit
     ) {
         if (run.finished) return
 
         run.finished = true
-        onStateChange(AutomationUiState.Running("원래 입력기로 복구 중"))
+        onStateChange(AutomationRunState.Running("원래 입력기로 복구 중"))
 
         val restoreResult = imeManager.restore(run.imeSession)
         val imeRestoreMessage = restoreResult.message()
         val finalState = when (restoreResult) {
             ImeRestoreResult.Success -> state
-            is ImeRestoreResult.Failure -> AutomationUiState.Failure(
+            is ImeRestoreResult.Failure -> AutomationRunState.Failure(
                 "입력기 복구 실패. 원래 입력기: " +
                     "${restoreResult.originalImeId}, 현재 입력기: " +
                     "${restoreResult.currentImeId ?: "확인 불가"}"
@@ -251,8 +273,8 @@ class GeminiMvpAutomation(
         startedAtMillis: Long,
         repeatCount: Int,
         lastStep: String,
-        state: AutomationUiState,
-        onStateChange: (AutomationUiState) -> Unit
+        state: AutomationRunState,
+        onStateChange: (AutomationRunState) -> Unit
     ) {
         runLogger.append(
             AutomationRunLog(
@@ -269,7 +291,7 @@ class GeminiMvpAutomation(
     }
 
     private fun CurrentRun.toLog(
-        state: AutomationUiState,
+        state: AutomationRunState,
         imeRestoreMessage: String,
         finishedAtMillis: Long
     ): AutomationRunLog {
@@ -295,23 +317,24 @@ class GeminiMvpAutomation(
         }
     }
 
-    private fun AutomationUiState.message(): String {
+    private fun AutomationRunState.message(): String {
         return when (this) {
-            AutomationUiState.Idle -> ""
-            is AutomationUiState.Running -> step
-            AutomationUiState.Success -> "성공"
-            AutomationUiState.Stopped -> "사용자 중지"
-            is AutomationUiState.Failure -> message
+            AutomationRunState.Idle -> ""
+            is AutomationRunState.Running -> step
+            AutomationRunState.Success -> "성공"
+            AutomationRunState.Stopped -> "사용자 중지"
+            is AutomationRunState.Failure -> message
         }
     }
 
     private data class CurrentRun(
         val startedAtMillis: Long,
         val imeSession: ImeSwitchSession,
-        val service: GeminiPromptSender,
+        val promptGateway: GeminiPromptGateway,
         val promptTemplate: String,
         val repeatCount: Int,
         val wildcards: List<WildcardSet>,
+        val promptPlan: PromptGenerator.CompiledPrompt,
         var markerStatus: String = "실패",
         var currentIndex: Int = 0,
         var completedCount: Int = 0,

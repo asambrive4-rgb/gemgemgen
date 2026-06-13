@@ -1,33 +1,34 @@
 package com.example.gemgemgen
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainViewModel(
-    private val environmentStatusProvider: EnvironmentStatusProvider,
+    private val environmentStatusReader: EnvironmentStatusReader,
     private val clipboardTextProvider: ClipboardTextProvider,
-    private val clipboardTextWriter: ClipboardTextWriter,
     private val wildcardFolderSaver: WildcardFolderSaver,
     private val runLogger: RunLogger,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
-    private val automation: GeminiMvpAutomation
+    private val automation: RunGeminiAutomationUseCase,
+    private val dispatchers: AppDispatchers = AppDispatchers(),
+    coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
-    private val lastRunSnapshot = lastRunSnapshotStore.load()
-    private val _uiState = MutableStateFlow(
-        MainUiState(
-            promptTemplate = lastRunSnapshot?.promptTemplate.orEmpty(),
-            repeatCountText = lastRunSnapshot?.repeatCountText
-                ?.ifBlank { AppDefaults.DEFAULT_REPEAT_COUNT.toString() }
-                ?: AppDefaults.DEFAULT_REPEAT_COUNT.toString(),
-            recentLogs = runLogger.loadRecent()
-        )
-    )
+    private val scope = coroutineScope ?: viewModelScope
+    private var automationPreparationJob: Job? = null
+    private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
     init {
+        loadInitialState()
         refreshStatus()
     }
 
@@ -40,11 +41,21 @@ class MainViewModel(
     }
 
     fun importPromptFromClipboard() {
-        onPromptTemplateChange(clipboardTextProvider.readText())
+        scope.launch {
+            val text = withContext(dispatchers.io) {
+                clipboardTextProvider.readText()
+            }
+            onPromptTemplateChange(text)
+        }
     }
 
     fun refreshStatus() {
-        _uiState.update { it.copy(environmentStatus = environmentStatusProvider.check()) }
+        scope.launch {
+            val status = withContext(dispatchers.io) {
+                environmentStatusReader.check()
+            }
+            _uiState.update { it.copy(environmentStatus = status) }
+        }
     }
 
     fun showSettings() {
@@ -56,14 +67,18 @@ class MainViewModel(
     }
 
     fun saveWildcardFolder(folderUri: String) {
-        val result = wildcardFolderSaver.save(folderUri)
-        _uiState.update {
-            it.copy(
-                settingsMessage = result.message,
-                settingsError = result.error
-            )
+        scope.launch {
+            val result = withContext(dispatchers.io) {
+                wildcardFolderSaver.save(folderUri)
+            }
+            _uiState.update {
+                it.copy(
+                    settingsMessage = result.message,
+                    settingsError = result.error
+                )
+            }
+            refreshStatus()
         }
-        refreshStatus()
     }
 
     fun showWildcardFolderSaveError(message: String) {
@@ -78,23 +93,42 @@ class MainViewModel(
     fun runAutomation(): Boolean {
         val state = uiState.value
         if (!state.canRun) return false
+        if (automationPreparationJob?.isActive == true) return false
 
-        lastRunSnapshotStore.save(
-            LastRunSnapshot(
-                promptTemplate = state.promptTemplate,
-                repeatCountText = state.repeatCountText
-            )
-        )
-        clipboardTextWriter.writeText(state.promptTemplate)
-        automation.run(
+        handleAutomationState(AutomationRunState.Running("자동화 준비 중"))
+        val request = AutomationRunRequest(
             promptTemplate = state.promptTemplate,
-            repeatCountText = state.repeatCountText,
-            onStateChange = ::handleAutomationState
+            repeatCountText = state.repeatCountText
         )
+        val job = scope.launch {
+            try {
+                automation.run(request, ::handleAutomationState)
+            } catch (error: CancellationException) {
+                handleAutomationState(AutomationRunState.Stopped)
+                throw error
+            } catch (error: Exception) {
+                handleAutomationState(
+                    AutomationRunState.Failure(error.message ?: "자동화 준비 중 오류가 발생했습니다.")
+                )
+            }
+        }
+        automationPreparationJob = job
+        job.invokeOnCompletion {
+            if (automationPreparationJob == job) {
+                automationPreparationJob = null
+            }
+        }
         return true
     }
 
     fun cancelAutomation() {
+        val preparationJob = automationPreparationJob
+        if (preparationJob?.isActive == true) {
+            preparationJob.cancel()
+            handleAutomationState(AutomationRunState.Stopped)
+            return
+        }
+
         automation.cancel(::handleAutomationState)
     }
 
@@ -103,19 +137,59 @@ class MainViewModel(
         _uiState.update { it.copy(showRecentLogs = !it.showRecentLogs) }
     }
 
-    private fun handleAutomationState(state: AutomationUiState) {
-        _uiState.update { it.copy(automationState = state) }
-        if (state.isTerminal()) {
+    private fun loadInitialState() {
+        scope.launch {
+            val snapshotAndLogs = withContext(dispatchers.io) {
+                lastRunSnapshotStore.load() to runLogger.loadRecent()
+            }
+            val lastRunSnapshot = snapshotAndLogs.first
+            _uiState.update {
+                val defaultRepeatCountText = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
+                it.copy(
+                    promptTemplate = if (it.promptTemplate.isBlank()) {
+                        lastRunSnapshot?.promptTemplate.orEmpty()
+                    } else {
+                        it.promptTemplate
+                    },
+                    repeatCountText = if (it.repeatCountText == defaultRepeatCountText) {
+                        lastRunSnapshot?.repeatCountText
+                            ?.ifBlank { defaultRepeatCountText }
+                            ?: defaultRepeatCountText
+                    } else {
+                        it.repeatCountText
+                    },
+                    recentLogs = snapshotAndLogs.second
+                )
+            }
+        }
+    }
+
+    private fun handleAutomationState(state: AutomationRunState) {
+        var stateChanged = false
+        _uiState.update {
+            if (it.automationState == state) {
+                it
+            } else {
+                stateChanged = true
+                it.copy(automationState = state)
+            }
+        }
+        if (stateChanged && state.isTerminal()) {
             refreshLogs()
         }
     }
 
     private fun refreshLogs() {
-        _uiState.update { it.copy(recentLogs = runLogger.loadRecent()) }
+        scope.launch {
+            val logs = withContext(dispatchers.io) {
+                runLogger.loadRecent()
+            }
+            _uiState.update { it.copy(recentLogs = logs) }
+        }
     }
 }
 
-interface EnvironmentStatusProvider {
+interface EnvironmentStatusReader {
     fun check(): EnvironmentStatus
 }
 

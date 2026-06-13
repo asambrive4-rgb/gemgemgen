@@ -41,6 +41,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +61,7 @@ import android.net.Uri
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.ui.theme.*
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun WildcardManagerScreen(
@@ -98,21 +100,65 @@ internal fun WildcardManagerScreen(
             )
         )
     }
+    var lastCommittedEditingText by remember { mutableStateOf(uiState.editingText) }
 
-    if (editingTextFieldValueState.text != uiState.editingText) {
+    if (uiState.editingText != lastCommittedEditingText) {
         editingTextFieldValueState = editingTextFieldValueState.copy(
             text = uiState.editingText,
             selection = TextRange(uiState.editingText.length)
         )
+        lastCommittedEditingText = uiState.editingText
+    }
+
+    LaunchedEffect(editingTextFieldValueState.text) {
+        val text = editingTextFieldValueState.text
+        if (text != lastCommittedEditingText) {
+            delay(TEXT_COMMIT_DEBOUNCE_MS)
+            if (text != lastCommittedEditingText) {
+                onTextChange(text)
+                lastCommittedEditingText = text
+            }
+        }
+    }
+
+    fun commitEditingText() {
+        val text = editingTextFieldValueState.text
+        if (text != lastCommittedEditingText) {
+            onTextChange(text)
+            lastCommittedEditingText = text
+        }
+    }
+
+    fun runWithCommittedText(action: () -> Unit) {
+        commitEditingText()
+        action()
     }
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val isDirty = uiState.selectedFile != null &&
+        editingTextFieldValueState.text != uiState.savedText
+    val fileItems = remember(uiState.files, uiState.selectedFile?.id, isDirty) {
+        uiState.files.map { file ->
+            val isSelected = uiState.selectedFile?.id == file.id
+            WildcardFileUiItem(
+                file = file,
+                displayName = if (isSelected && isDirty) {
+                    "${file.fileName} *"
+                } else {
+                    file.fileName
+                },
+                isSelected = isSelected
+            )
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MemoBackground)
             .imePadding()
-            .clearFocusOnOutsideTap(onClearFocus)
+            .clearFocusOnOutsideTap {
+                runWithCommittedText(onClearFocus)
+            }
     ) {
         Column(
             modifier = Modifier
@@ -122,16 +168,23 @@ internal fun WildcardManagerScreen(
         ) {
             // 1구역: Top Strip (파일 탭 목록 + 새 파일/삭제 버튼)
             FileTabsSection(
-                fileItems = uiState.fileItems,
-                onFileClick = onFileClick,
+                fileItems = fileItems,
+                onFileClick = { file ->
+                    runWithCommittedText {
+                        onFileClick(file)
+                    }
+                },
                 canCreateFile = uiState.canCreateFile,
                 canDelete = uiState.canDelete,
-                onRequestNewFile = onRequestNewFile,
-                onRequestDelete = onRequestDelete
+                onRequestNewFile = {
+                    runWithCommittedText(onRequestNewFile)
+                },
+                onRequestDelete = {
+                    runWithCommittedText(onRequestDelete)
+                }
             )
 
             // 2구역: 에디터 카드 (헤더 + 텍스트 입력창 일체화)
-            val isDirty = uiState.selectedFile != null && uiState.editingText != uiState.savedText
             val fileLabel = uiState.selectedFile?.fileName?.let {
                 if (it.endsWith(".txt")) it.dropLast(4) else it
             } ?: "No file selected"
@@ -161,7 +214,10 @@ internal fun WildcardManagerScreen(
                     )
                     if (uiState.selectedFile != null) {
                         IconButton(
-                            onClick = onRequestRename,
+                            onClick = {
+                                runWithCommittedText(onRequestRename)
+                            },
+                            enabled = !uiState.isFileOperationInProgress,
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
@@ -179,7 +235,6 @@ internal fun WildcardManagerScreen(
                     value = editingTextFieldValueState,
                     onValueChange = { newVal ->
                         editingTextFieldValueState = newVal
-                        onTextChange(newVal.text)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -211,19 +266,33 @@ internal fun WildcardManagerScreen(
             // 3구역: 고정형 하단 액션 버튼 바
             ActionButtonsBar(
                 uiState = uiState,
-                onSave = onSave,
-                onPaste = onPaste,
-                onPasteBelow = onPasteBelow,
-                onCopy = onCopy,
-                onUndo = onUndo
+                onSave = {
+                    runWithCommittedText(onSave)
+                },
+                onPaste = {
+                    runWithCommittedText(onPaste)
+                },
+                onPasteBelow = {
+                    runWithCommittedText(onPasteBelow)
+                },
+                onCopy = {
+                    runWithCommittedText(onCopy)
+                },
+                onUndo = {
+                    runWithCommittedText(onUndo)
+                }
             )
 
             if (!isKeyboardVisible) {
                 // 4구역: 폴더 정보 스트립 (화면 최하단)
                 FolderInfoSection(
                     environmentStatus = environmentStatus,
-                    onRefresh = onRefresh,
-                    onSelectFolder = onSelectFolder
+                    onRefresh = {
+                        runWithCommittedText(onRefresh)
+                    },
+                    onSelectFolder = {
+                        runWithCommittedText(onSelectFolder)
+                    }
                 )
             }
 
@@ -250,7 +319,9 @@ internal fun WildcardManagerScreen(
             fileName = uiState.newFileName,
             error = uiState.error,
             onFileNameChange = onNewFileNameChange,
-            onCreate = onCreateNewFile,
+            onCreate = {
+                runWithCommittedText(onCreateNewFile)
+            },
             onDismiss = onDismissNewFile
         )
     }
@@ -260,7 +331,9 @@ internal fun WildcardManagerScreen(
             fileName = uiState.renameFileName,
             error = uiState.error,
             onFileNameChange = onRenameFileNameChange,
-            onConfirm = onConfirmRename,
+            onConfirm = {
+                runWithCommittedText(onConfirmRename)
+            },
             onDismiss = onDismissRename
         )
     }
@@ -268,19 +341,25 @@ internal fun WildcardManagerScreen(
     if (uiState.showDeleteConfirm) {
         DeleteConfirmDialog(
             fileName = uiState.selectedFile?.fileName.orEmpty(),
-            onConfirm = onConfirmDelete,
+            onConfirm = {
+                runWithCommittedText(onConfirmDelete)
+            },
             onDismiss = onDismissDelete
         )
     }
 
     if (uiState.pendingAction != null) {
         UnsavedChangesDialog(
-            onSave = onConfirmPendingSave,
+            onSave = {
+                runWithCommittedText(onConfirmPendingSave)
+            },
             onDiscard = onConfirmPendingDiscard,
             onCancel = onCancelPending
         )
     }
 }
+
+private const val TEXT_COMMIT_DEBOUNCE_MS = 250L
 
 private fun getSummaryPath(uriString: String): String {
     if (uriString.isBlank()) return "선택된 폴더 없음"

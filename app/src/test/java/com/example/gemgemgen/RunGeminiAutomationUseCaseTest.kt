@@ -1,20 +1,22 @@
 package com.example.gemgemgen
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class GeminiMvpAutomationTest {
+class RunGeminiAutomationUseCaseTest {
     @Test
-    fun run_loadsWildcardsOnceSendsMarkerFirstAndGeneratesOnePromptPerRepeat() {
-        val service = FakeGeminiPromptSender(autoComplete = true)
+    fun run_loadsWildcardsOnceSendsMarkerFirstAndGeneratesOnePromptPerRepeat() = runBlocking {
+        val service = FakeGeminiPromptGateway(autoComplete = true)
         val logger = RunLogger(FakeRunLogStorage())
         var loadCount = 0
         val generatedIndexes = mutableListOf<Int>()
         val automation = automation(
             service = service,
             logger = logger,
-            loadWildcards = {
+            loadWildcardSets = {
                 loadCount += 1
                 listOf(WildcardSet("__hair__", "hair.txt", listOf("black hair")))
             },
@@ -30,15 +32,17 @@ class GeminiMvpAutomationTest {
         )
 
         automation.run(
-            promptTemplate = "base __hair__",
-            repeatCountText = "3",
+            request = AutomationRunRequest(
+                promptTemplate = "base __hair__",
+                repeatCountText = "3"
+            ),
             onStateChange = {}
         )
 
         assertEquals(1, loadCount)
         assertEquals(
             listOf(
-                GeminiMvpAutomation.MARKER_PROMPT,
+                RunGeminiAutomationUseCase.MARKER_PROMPT,
                 "prompt 1",
                 "prompt 2",
                 "prompt 3"
@@ -67,8 +71,8 @@ class GeminiMvpAutomationTest {
     }
 
     @Test
-    fun cancel_cancelsServiceRestoresImeAndWritesStoppedLog() {
-        val service = FakeGeminiPromptSender(autoComplete = false)
+    fun cancel_cancelsServiceRestoresImeAndWritesStoppedLog() = runBlocking {
+        val service = FakeGeminiPromptGateway(autoComplete = false)
         val logger = RunLogger(FakeRunLogStorage())
         val automation = automation(
             service = service,
@@ -77,14 +81,20 @@ class GeminiMvpAutomationTest {
                 GeneratedPrompt(index, "base", "prompt $index", emptyMap())
             }
         )
-        val states = mutableListOf<AutomationUiState>()
+        val states = mutableListOf<AutomationRunState>()
 
-        automation.run("base", "2", states::add)
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "2"
+            ),
+            states::add
+        )
         automation.cancel(states::add)
 
         assertTrue(service.wasCancelled)
         assertEquals(ORIGINAL_IME_ID, defaultImeId)
-        assertEquals(AutomationUiState.Stopped, states.last())
+        assertEquals(AutomationRunState.Stopped, states.last())
 
         val log = logger.loadRecent().single()
         assertEquals(AutomationRunLogStatus.STOPPED, log.status)
@@ -93,8 +103,8 @@ class GeminiMvpAutomationTest {
     }
 
     @Test
-    fun run_stopsAfterFirstPromptFailureAndWritesFailureLog() {
-        val service = FakeGeminiPromptSender(autoComplete = true)
+    fun run_stopsAfterFirstPromptFailureAndWritesFailureLog() = runBlocking {
+        val service = FakeGeminiPromptGateway(autoComplete = true)
         val logger = RunLogger(FakeRunLogStorage())
         val automation = automation(
             service = service,
@@ -105,7 +115,13 @@ class GeminiMvpAutomationTest {
         )
         service.failOnPrompt = "prompt 1"
 
-        automation.run("base", "2", {})
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "2"
+            ),
+            {}
+        )
 
         val log = logger.loadRecent().single()
         assertEquals(AutomationRunLogStatus.FAILURE, log.status)
@@ -118,13 +134,13 @@ class GeminiMvpAutomationTest {
     private var defaultImeId = ORIGINAL_IME_ID
 
     private fun automation(
-        service: FakeGeminiPromptSender,
+        service: FakeGeminiPromptGateway,
         logger: RunLogger,
-        loadWildcards: () -> List<WildcardSet> = { emptyList() },
+        loadWildcardSets: () -> List<WildcardSet> = { emptyList() },
         generatePrompt: (String, List<WildcardSet>, Int) -> GeneratedPrompt
-    ): GeminiMvpAutomation {
+    ): RunGeminiAutomationUseCase {
         defaultImeId = ORIGINAL_IME_ID
-        return GeminiMvpAutomation(
+        return RunGeminiAutomationUseCase(
             imeManager = ImeManager(
                 settings = object : ImeSettings {
                     override fun getDefaultInputMethod(): String? = defaultImeId
@@ -137,17 +153,20 @@ class GeminiMvpAutomationTest {
                 nullKeyboardImeId = NULL_IME_ID
             ),
             runLogger = logger,
+            lastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
+            clipboardTextWriter = FakeClipboardTextWriter(),
+            wildcardSetLoader = FakeWildcardSetLoader(loadWildcardSets),
             clock = { 1000L },
-            serviceProvider = { service },
+            promptGatewayProvider = { service },
             launchGeminiApp = { true },
-            loadWildcards = loadWildcards,
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
             generatePrompt = generatePrompt
         )
     }
 
-    private class FakeGeminiPromptSender(
+    private class FakeGeminiPromptGateway(
         private val autoComplete: Boolean
-    ) : GeminiPromptSender {
+    ) : GeminiPromptGateway {
         val sentPrompts = mutableListOf<String>()
         val newChatModes = mutableListOf<GeminiNewChatMode>()
         var failOnPrompt: String? = null
@@ -156,14 +175,14 @@ class GeminiMvpAutomationTest {
         override fun sendPrompt(
             prompt: String,
             newChatMode: GeminiNewChatMode,
-            onStateChange: (AutomationUiState) -> Unit,
+            onStateChange: (AutomationRunState) -> Unit,
             onDone: () -> Unit
         ) {
             sentPrompts += prompt
             newChatModes += newChatMode
             failOnPrompt?.let { failedPrompt ->
                 if (prompt == failedPrompt) {
-                    onStateChange(AutomationUiState.Failure("전송 실패"))
+                    onStateChange(AutomationRunState.Failure("전송 실패"))
                     return
                 }
             }
@@ -185,6 +204,24 @@ class GeminiMvpAutomationTest {
         override fun write(value: String) {
             this.value = value
         }
+    }
+
+    private class FakeLastRunSnapshotStorage : LastRunSnapshotStorage {
+        override fun readPromptTemplate(): String = ""
+
+        override fun readRepeatCountText(): String = ""
+
+        override fun write(promptTemplate: String, repeatCountText: String) = Unit
+    }
+
+    private class FakeClipboardTextWriter : ClipboardTextWriter {
+        override fun writeText(text: String) = Unit
+    }
+
+    private class FakeWildcardSetLoader(
+        private val loadWildcardSets: () -> List<WildcardSet>
+    ) : WildcardSetLoader {
+        override fun load(): List<WildcardSet> = loadWildcardSets()
     }
 
     private companion object {

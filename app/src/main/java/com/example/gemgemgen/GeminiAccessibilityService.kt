@@ -8,7 +8,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
-class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
+class GeminiAccessibilityService : AccessibilityService(), GeminiPromptGateway {
     private val handler = Handler(Looper.getMainLooper())
     private val nodeFinder = GeminiAccessibilityNodeFinder(
         rootProvider = { rootInActiveWindow },
@@ -36,7 +36,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     override fun sendPrompt(
         prompt: String,
         newChatMode: GeminiNewChatMode,
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
         handler.post(
@@ -66,7 +66,7 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
 
     private fun openNewChat(
         newChatMode: GeminiNewChatMode,
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
         when (newChatMode) {
@@ -100,14 +100,14 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     private fun clickSidebar(
         attempt: Int,
         startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("사이드바 여는 중 (#$attempt)"))
+        onStateChange(AutomationRunState.Running("사이드바 여는 중 (#$attempt)"))
 
         val node = nodeFinder.findNodeByTextOrDescription("사이드바 열기")
         if (node != null && nodeFinder.clickNodeOrParent(node)) {
-            onStateChange(AutomationUiState.Running("사이드바 열기 완료"))
+            onStateChange(AutomationRunState.Running("사이드바 열기 완료"))
             onDone()
             return
         }
@@ -124,14 +124,14 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     private fun clickDirectNewChat(
         attempt: Int,
         startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("새 채팅 찾는 중 (#$attempt)"))
+        onStateChange(AutomationRunState.Running("새 채팅 찾는 중 (#$attempt)"))
 
         val node = nodeFinder.findNodeByTextOrDescription("새 채팅")
         if (node != null && nodeFinder.clickNodeOrParent(node)) {
-            onStateChange(AutomationUiState.Running("새 채팅 클릭 완료"))
+            onStateChange(AutomationRunState.Running("새 채팅 클릭 완료"))
             onDone()
             return
         }
@@ -148,14 +148,14 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     private fun clickNewChatNearSearch(
         attempt: Int,
         startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("채팅 검색 근처 새 채팅 찾는 중 (#$attempt)"))
+        onStateChange(AutomationRunState.Running("채팅 검색 근처 새 채팅 찾는 중 (#$attempt)"))
 
         val node = nodeFinder.findNewChatNearestToSearch()
         if (node != null && nodeFinder.clickNodeOrParent(node)) {
-            onStateChange(AutomationUiState.Running("새 채팅 클릭 완료"))
+            onStateChange(AutomationRunState.Running("새 채팅 클릭 완료"))
             onDone()
             return
         }
@@ -173,10 +173,10 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         prompt: String,
         attempt: Int,
         startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("입력창 찾는 중 (#$attempt)"))
+        onStateChange(AutomationRunState.Running("입력창 찾는 중 (#$attempt)"))
 
         val inputNode = nodeFinder.findInputNode()
         if (inputNode != null) {
@@ -188,11 +188,11 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
                 )
             }
             if (inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
-                onStateChange(AutomationUiState.Running("프롬프트 입력 반영 확인 중"))
+                onStateChange(AutomationRunState.Running("프롬프트 입력 반영 확인 중"))
                 handler.postDelayed(
                     {
                         if (isPromptTextApplied(prompt)) {
-                            onStateChange(AutomationUiState.Running("프롬프트 입력 완료"))
+                            onStateChange(AutomationRunState.Running("프롬프트 입력 완료"))
                             onDone()
                         } else {
                             retryOrFail(
@@ -229,17 +229,17 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
         prompt: String,
         attempt: Int,
         startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
-        onStateChange(AutomationUiState.Running("보내기 버튼 활성화 대기 중 (#$attempt)"))
+        onStateChange(AutomationRunState.Running("보내기 버튼 활성화 대기 중 (#$attempt)"))
 
         val node = nodeFinder.findNodeByTextOrDescription("보내기")
         val clickableNode = node?.let(nodeFinder::findClickableNodeOrParent)
         if (clickableNode != null && clickableNode.isEnabled &&
             clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         ) {
-            onStateChange(AutomationUiState.Running("보내기 클릭 후 전송 확인 중"))
+            onStateChange(AutomationRunState.Running("보내기 클릭 후 전송 확인 중"))
             handler.postDelayed(
                 {
                     when (checkPromptInputAfterSend(prompt)) {
@@ -283,14 +283,14 @@ class GeminiAccessibilityService : AccessibilityService(), GeminiPromptSender {
     private fun retryOrFail(
         startedAtMillis: Long,
         failureMessage: String,
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         retry: () -> Unit
     ) {
         val elapsedMillis = SystemClock.uptimeMillis() - startedAtMillis
         val retryWaitMillis = AutomationRetryWaitPolicy.nextDelayMillis(elapsedMillis)
 
         if (retryWaitMillis == null) {
-            onStateChange(AutomationUiState.Failure(failureMessage))
+            onStateChange(AutomationRunState.Failure(failureMessage))
         } else {
             handler.postDelayed(retry, retryWaitMillis)
         }

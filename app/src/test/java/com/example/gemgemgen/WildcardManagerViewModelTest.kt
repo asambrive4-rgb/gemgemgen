@@ -5,6 +5,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 
 class WildcardManagerViewModelTest {
     @Test
@@ -193,7 +195,9 @@ class WildcardManagerViewModelTest {
         return WildcardManagerViewModel(
             fileManager = fileManager,
             clipboardTextProvider = FakeClipboardTextProvider(clipboardText),
-            clipboardTextWriter = clipboardTextWriter
+            clipboardTextWriter = clipboardTextWriter,
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
+            coroutineScope = CoroutineScope(Dispatchers.Unconfined)
         ).also {
             it.onFolderAccessChanged(canModifyFiles)
         }

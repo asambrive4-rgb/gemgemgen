@@ -32,15 +32,15 @@ class RunLoggerTest {
     fun fromState_mapsTerminalStatesToLogStatus() {
         assertEquals(
             AutomationRunLogStatus.SUCCESS,
-            AutomationRunLogStatus.fromState(AutomationUiState.Success)
+            AutomationRunLogStatus.fromState(AutomationRunState.Success)
         )
         assertEquals(
             AutomationRunLogStatus.STOPPED,
-            AutomationRunLogStatus.fromState(AutomationUiState.Stopped)
+            AutomationRunLogStatus.fromState(AutomationRunState.Stopped)
         )
         assertEquals(
             AutomationRunLogStatus.FAILURE,
-            AutomationRunLogStatus.fromState(AutomationUiState.Failure("실패"))
+            AutomationRunLogStatus.fromState(AutomationRunState.Failure("실패"))
         )
     }
 

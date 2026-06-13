@@ -5,11 +5,11 @@ enum class GeminiNewChatMode {
     DirectVisibleButton
 }
 
-interface GeminiPromptSender {
+interface GeminiPromptGateway {
     fun sendPrompt(
         prompt: String,
         newChatMode: GeminiNewChatMode,
-        onStateChange: (AutomationUiState) -> Unit,
+        onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     )
 

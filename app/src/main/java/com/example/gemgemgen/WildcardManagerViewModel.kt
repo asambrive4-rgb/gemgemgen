@@ -2,16 +2,23 @@ package com.example.gemgemgen
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class WildcardManagerViewModel(
     private val fileManager: WildcardFileManager,
     private val clipboardTextProvider: ClipboardTextProvider,
-    private val clipboardTextWriter: ClipboardTextWriter
+    private val clipboardTextWriter: ClipboardTextWriter,
+    private val dispatchers: AppDispatchers = AppDispatchers(),
+    coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
+    private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardManagerUiState())
     val uiState: StateFlow<WildcardManagerUiState> = _uiState.asStateFlow()
 
@@ -28,25 +35,35 @@ class WildcardManagerViewModel(
     }
 
     fun refreshFiles(openFirstFile: Boolean = false) {
-        val state = uiState.value
-        val files = loadFilesOrShowError() ?: return
-        val currentFile = state.selectedFile?.let { selected ->
-            files.firstOrNull { it.id == selected.id }
-        }
+        if (!beginFileOperation()) return
 
-        _uiState.update {
-            it.copy(
-                files = files,
-                selectedFile = currentFile ?: it.selectedFile,
-                error = ""
-            )
-        }
+        scope.launch {
+            try {
+                val state = uiState.value
+                val files = listFiles()
+                val currentFile = state.selectedFile?.let { selected ->
+                    files.firstOrNull { it.id == selected.id }
+                }
 
-        when {
-            currentFile != null -> Unit
-            openFirstFile && files.isNotEmpty() -> openFile(files.first())
-            state.selectedFile != null && files.isEmpty() -> clearSelectedFile("txt 파일이 없습니다.")
-            state.selectedFile != null -> clearSelectedFile("선택했던 파일을 찾지 못했습니다.")
+                _uiState.update {
+                    it.copy(
+                        files = files,
+                        selectedFile = currentFile ?: it.selectedFile,
+                        error = ""
+                    )
+                }
+
+                when {
+                    currentFile != null -> Unit
+                    openFirstFile && files.isNotEmpty() -> openFileInCurrentOperation(files.first())
+                    state.selectedFile != null && files.isEmpty() -> clearSelectedFile("txt 파일이 없습니다.")
+                    state.selectedFile != null -> clearSelectedFile("선택했던 파일을 찾지 못했습니다.")
+                }
+            } catch (error: RuntimeException) {
+                showFileListError(error)
+            } finally {
+                endFileOperation()
+            }
         }
     }
 
@@ -58,6 +75,7 @@ class WildcardManagerViewModel(
                 savedText = "",
                 editingText = "",
                 undoStack = emptyList(),
+                isFileOperationInProgress = false,
                 pendingAction = null,
                 message = "wildcard 폴더를 선택했습니다.",
                 error = ""
@@ -68,6 +86,7 @@ class WildcardManagerViewModel(
 
     fun requestFolderSelection(): Boolean {
         val state = uiState.value
+        if (state.isFileOperationInProgress) return false
         if (!state.hasUnsavedChanges) return true
 
         _uiState.update {
@@ -82,6 +101,7 @@ class WildcardManagerViewModel(
 
     fun selectFile(file: WildcardTextFile) {
         val state = uiState.value
+        if (state.isFileOperationInProgress) return
         if (state.selectedFile?.id == file.id) return
 
         if (state.hasUnsavedChanges) {
@@ -109,34 +129,12 @@ class WildcardManagerViewModel(
     }
 
     fun saveCurrent(): Boolean {
-        val state = uiState.value
-        if (!state.canModifyFiles) {
-            showError("파일을 편집하려면 wildcard 폴더를 다시 선택해주세요.")
-            return false
-        }
-        val file = state.selectedFile ?: run {
-            showError("저장할 파일을 선택해주세요.")
-            return false
-        }
-
-        return try {
-            fileManager.writeFile(file, state.editingText)
-            _uiState.update {
-                it.copy(
-                    savedText = state.editingText,
-                    message = "${file.fileName} 저장 완료",
-                    error = ""
-                )
-            }
-            true
-        } catch (error: RuntimeException) {
-            showError(error.message ?: "파일을 저장하지 못했습니다.")
-            false
-        }
+        return saveCurrent(afterSave = null)
     }
 
     fun requestNewFile() {
         val state = uiState.value
+        if (state.isFileOperationInProgress) return
         if (!state.canModifyFiles) {
             showError("새 파일을 만들려면 wildcard 폴더를 다시 선택해주세요.")
             return
@@ -175,30 +173,36 @@ class WildcardManagerViewModel(
             showError("파일명을 입력해주세요.")
             return
         }
+        if (!beginFileOperation()) return
 
-        try {
-            val createdFile = fileManager.createFile(input)
-            val files = fileManager.listFiles()
-            _uiState.update {
-                it.copy(
-                    files = files,
-                    selectedFile = createdFile,
-                    savedText = "",
-                    editingText = "",
-                    undoStack = emptyList(),
-                    showNewFileDialog = false,
-                    newFileName = "",
-                    message = "${createdFile.fileName} 생성 완료",
-                    error = ""
-                )
+        scope.launch {
+            try {
+                val createdFile = createFile(input)
+                val files = listFiles()
+                _uiState.update {
+                    it.copy(
+                        files = files,
+                        selectedFile = createdFile,
+                        savedText = "",
+                        editingText = "",
+                        undoStack = emptyList(),
+                        showNewFileDialog = false,
+                        newFileName = "",
+                        message = "${createdFile.fileName} 생성 완료",
+                        error = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "새 파일을 만들지 못했습니다.")
+            } finally {
+                endFileOperation()
             }
-        } catch (error: RuntimeException) {
-            showError(error.message ?: "새 파일을 만들지 못했습니다.")
         }
     }
 
     fun requestRenameSelectedFile() {
         val state = uiState.value
+        if (state.isFileOperationInProgress) return
         if (!state.canModifyFiles) {
             showError("파일 이름을 수정하려면 wildcard 폴더를 다시 선택해주세요.")
             return
@@ -249,27 +253,33 @@ class WildcardManagerViewModel(
             showError("파일 이름을 입력해주세요.")
             return
         }
+        if (!beginFileOperation()) return
 
-        try {
-            val updatedFile = fileManager.renameFile(file, newName)
-            val files = fileManager.listFiles()
-            _uiState.update {
-                it.copy(
-                    files = files,
-                    selectedFile = updatedFile,
-                    showRenameDialog = false,
-                    renameFileName = "",
-                    message = "${updatedFile.fileName}으로 이름 수정 완료",
-                    error = ""
-                )
+        scope.launch {
+            try {
+                val updatedFile = renameFile(file, newName)
+                val files = listFiles()
+                _uiState.update {
+                    it.copy(
+                        files = files,
+                        selectedFile = updatedFile,
+                        showRenameDialog = false,
+                        renameFileName = "",
+                        message = "${updatedFile.fileName}으로 이름 수정 완료",
+                        error = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "파일 이름을 수정하지 못했습니다.")
+            } finally {
+                endFileOperation()
             }
-        } catch (error: RuntimeException) {
-            showError(error.message ?: "파일 이름을 수정하지 못했습니다.")
         }
     }
 
     fun requestDeleteSelectedFile() {
         val state = uiState.value
+        if (state.isFileOperationInProgress) return
         if (!state.canModifyFiles) {
             showError("파일을 삭제하려면 wildcard 폴더를 다시 선택해주세요.")
             return
@@ -298,39 +308,45 @@ class WildcardManagerViewModel(
             showError("삭제할 파일을 선택해주세요.")
             return
         }
+        if (!beginFileOperation()) return
 
-        try {
-            fileManager.deleteFile(file)
-            val files = fileManager.listFiles()
-            val oldIndex = state.files.indexOfFirst { it.id == file.id }.coerceAtLeast(0)
-            val nextFile = files.getOrNull(oldIndex) ?: files.lastOrNull()
+        scope.launch {
+            try {
+                deleteFile(file)
+                val files = listFiles()
+                val oldIndex = state.files.indexOfFirst { it.id == file.id }.coerceAtLeast(0)
+                val nextFile = files.getOrNull(oldIndex) ?: files.lastOrNull()
 
-            _uiState.update {
-                it.copy(
-                    files = files,
-                    showDeleteConfirm = false,
-                    message = "${file.fileName} 삭제 완료",
-                    error = ""
-                )
-            }
+                _uiState.update {
+                    it.copy(
+                        files = files,
+                        showDeleteConfirm = false,
+                        message = "${file.fileName} 삭제 완료",
+                        error = ""
+                    )
+                }
 
-            if (nextFile == null) {
-                clearSelectedFile("txt 파일이 없습니다.")
-            } else {
-                openFile(nextFile, keepMessage = true)
-            }
-        } catch (error: RuntimeException) {
-            _uiState.update {
-                it.copy(
-                    showDeleteConfirm = false,
-                    message = "",
-                    error = error.message ?: "파일을 삭제하지 못했습니다."
-                )
+                if (nextFile == null) {
+                    clearSelectedFile("txt 파일이 없습니다.")
+                } else {
+                    openFileInCurrentOperation(nextFile, keepMessage = true)
+                }
+            } catch (error: RuntimeException) {
+                _uiState.update {
+                    it.copy(
+                        showDeleteConfirm = false,
+                        message = "",
+                        error = error.message ?: "파일을 삭제하지 못했습니다."
+                    )
+                }
+            } finally {
+                endFileOperation()
             }
         }
     }
 
     fun pasteFromClipboard() {
+        if (uiState.value.isFileOperationInProgress) return
         if (!ensureCanModifyFiles()) return
         val text = clipboardTextProvider.readText()
         if (text.isEmpty()) {
@@ -350,6 +366,7 @@ class WildcardManagerViewModel(
     }
 
     fun pasteBelowFromClipboard() {
+        if (uiState.value.isFileOperationInProgress) return
         if (!ensureCanModifyFiles()) return
         val text = clipboardTextProvider.readText()
         if (text.isEmpty()) {
@@ -369,6 +386,7 @@ class WildcardManagerViewModel(
     }
 
     fun copyToClipboard() {
+        if (uiState.value.isFileOperationInProgress) return
         val text = uiState.value.editingText
         if (text.isEmpty()) {
             showError("복사할 내용이 없습니다.")
@@ -385,6 +403,7 @@ class WildcardManagerViewModel(
     }
 
     fun undoClipboardEdit() {
+        if (uiState.value.isFileOperationInProgress) return
         val state = uiState.value
         val result = WildcardTextEditPolicy.undo(state.undoStack) ?: run {
             showError("되돌릴 붙여넣기 기록이 없습니다.")
@@ -401,26 +420,78 @@ class WildcardManagerViewModel(
         }
     }
 
-    fun confirmPendingWithSave(): Boolean {
+    fun confirmPendingWithSave(onSelectFolder: () -> Unit = {}): Boolean {
         val action = uiState.value.pendingAction ?: return false
-        if (!saveCurrent()) return false
-        clearPendingAction()
-        return runPendingAction(action)
+        return saveCurrent(
+            afterSave = {
+                clearPendingAction()
+                runPendingActionInCurrentOperation(action, onSelectFolder)
+            }
+        )
     }
 
-    fun confirmPendingWithDiscard(): Boolean {
+    fun confirmPendingWithDiscard(onSelectFolder: () -> Unit = {}): Boolean {
         val action = uiState.value.pendingAction ?: return false
         clearPendingAction()
-        return runPendingAction(action)
+        return runPendingAction(action, onSelectFolder)
     }
 
     fun cancelPendingAction() {
         clearPendingAction()
     }
 
+    private fun saveCurrent(afterSave: (suspend () -> Unit)?): Boolean {
+        val state = uiState.value
+        if (state.isFileOperationInProgress) return false
+        if (!state.canModifyFiles) {
+            showError("파일을 편집하려면 wildcard 폴더를 다시 선택해주세요.")
+            return false
+        }
+        val file = state.selectedFile ?: run {
+            showError("저장할 파일을 선택해주세요.")
+            return false
+        }
+        if (!beginFileOperation()) return false
+
+        scope.launch {
+            try {
+                val textToSave = state.editingText
+                writeFile(file, textToSave)
+                _uiState.update {
+                    it.copy(
+                        savedText = textToSave,
+                        message = "${file.fileName} 저장 완료",
+                        error = ""
+                    )
+                }
+                afterSave?.invoke()
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "파일을 저장하지 못했습니다.")
+            } finally {
+                endFileOperation()
+            }
+        }
+        return true
+    }
+
     private fun openFile(file: WildcardTextFile, keepMessage: Boolean = false) {
+        if (!beginFileOperation()) return
+
+        scope.launch {
+            try {
+                openFileInCurrentOperation(file, keepMessage)
+            } finally {
+                endFileOperation()
+            }
+        }
+    }
+
+    private suspend fun openFileInCurrentOperation(
+        file: WildcardTextFile,
+        keepMessage: Boolean = false
+    ) {
         try {
-            val text = fileManager.readFile(file)
+            val text = readFile(file)
             _uiState.update {
                 it.copy(
                     selectedFile = file,
@@ -436,25 +507,61 @@ class WildcardManagerViewModel(
         }
     }
 
-    private fun loadFilesOrShowError(): List<WildcardTextFile>? {
-        return try {
-            fileManager.listFiles()
-        } catch (error: RuntimeException) {
-            _uiState.update {
-                it.copy(
-                    files = emptyList(),
-                    selectedFile = null,
-                    savedText = "",
-                    editingText = "",
-                    undoStack = emptyList(),
-                    error = error.message ?: "파일 목록을 불러오지 못했습니다."
-                )
+    private suspend fun listFiles(): List<WildcardTextFile> {
+        return withContext(dispatchers.io) {
+            traceSection("wildcard.list") {
+                fileManager.listFiles()
             }
-            null
         }
     }
 
-    private fun runPendingAction(action: WildcardPendingAction): Boolean {
+    private suspend fun readFile(file: WildcardTextFile): String {
+        return withContext(dispatchers.io) {
+            traceSection("wildcard.read") {
+                fileManager.readFile(file)
+            }
+        }
+    }
+
+    private suspend fun writeFile(file: WildcardTextFile, text: String) {
+        withContext(dispatchers.io) {
+            traceSection("wildcard.write") {
+                fileManager.writeFile(file, text)
+            }
+        }
+    }
+
+    private suspend fun createFile(fileName: String): WildcardTextFile {
+        return withContext(dispatchers.io) {
+            traceSection("wildcard.write") {
+                fileManager.createFile(fileName)
+            }
+        }
+    }
+
+    private suspend fun renameFile(
+        file: WildcardTextFile,
+        newName: String
+    ): WildcardTextFile {
+        return withContext(dispatchers.io) {
+            traceSection("wildcard.write") {
+                fileManager.renameFile(file, newName)
+            }
+        }
+    }
+
+    private suspend fun deleteFile(file: WildcardTextFile) {
+        withContext(dispatchers.io) {
+            traceSection("wildcard.write") {
+                fileManager.deleteFile(file)
+            }
+        }
+    }
+
+    private fun runPendingAction(
+        action: WildcardPendingAction,
+        onSelectFolder: () -> Unit
+    ): Boolean {
         return when (action) {
             is WildcardPendingAction.OpenFile -> {
                 openFile(action.file)
@@ -464,7 +571,21 @@ class WildcardManagerViewModel(
                 showNewFileDialog()
                 false
             }
-            WildcardPendingAction.SelectFolder -> true
+            WildcardPendingAction.SelectFolder -> {
+                onSelectFolder()
+                true
+            }
+        }
+    }
+
+    private suspend fun runPendingActionInCurrentOperation(
+        action: WildcardPendingAction,
+        onSelectFolder: () -> Unit
+    ) {
+        when (action) {
+            is WildcardPendingAction.OpenFile -> openFileInCurrentOperation(action.file)
+            WildcardPendingAction.CreateFile -> showNewFileDialog()
+            WildcardPendingAction.SelectFolder -> onSelectFolder()
         }
     }
 
@@ -515,6 +636,33 @@ class WildcardManagerViewModel(
         return false
     }
 
+    private fun beginFileOperation(): Boolean {
+        if (uiState.value.isFileOperationInProgress) return false
+        _uiState.update {
+            it.copy(isFileOperationInProgress = true)
+        }
+        return true
+    }
+
+    private fun endFileOperation() {
+        _uiState.update {
+            it.copy(isFileOperationInProgress = false)
+        }
+    }
+
+    private fun showFileListError(error: RuntimeException) {
+        _uiState.update {
+            it.copy(
+                files = emptyList(),
+                selectedFile = null,
+                savedText = "",
+                editingText = "",
+                undoStack = emptyList(),
+                error = error.message ?: "파일 목록을 불러오지 못했습니다."
+            )
+        }
+    }
+
     private fun showError(message: String) {
         _uiState.update {
             it.copy(
@@ -533,7 +681,6 @@ class WildcardManagerViewModel(
             )
         }
     }
-
 }
 
 class WildcardManagerViewModelFactory(

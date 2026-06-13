@@ -64,4 +64,33 @@ class PromptGeneratorTest {
         assertEquals("portrait with __hair__", generated.finalPrompt)
         assertEquals(emptyMap<String, String>(), generated.replacements)
     }
+
+    @Test
+    fun compiledPrompt_reusesTokenPlanForRepeatedGeneration() {
+        val compiledPrompt = PromptGenerator(Random(0)).compile(
+            basePrompt = "__color__ dress with __color__ ribbon",
+            wildcardSets = listOf(
+                WildcardSet(
+                    token = "__color__",
+                    fileName = "color.txt",
+                    items = listOf("red")
+                )
+            )
+        )
+
+        val generated = listOf(
+            compiledPrompt.generate(index = 1),
+            compiledPrompt.generate(index = 2)
+        )
+
+        assertEquals(listOf(1, 2), generated.map { it.index })
+        assertEquals(
+            listOf("red dress with red ribbon", "red dress with red ribbon"),
+            generated.map { it.finalPrompt }
+        )
+        assertEquals(
+            listOf(mapOf("__color__" to "red"), mapOf("__color__" to "red")),
+            generated.map { it.replacements }
+        )
+    }
 }

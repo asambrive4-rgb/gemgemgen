@@ -181,7 +181,7 @@ internal fun GeminiAutoSenderApp() {
                         onCopy = currentWildcardViewModel::copyToClipboard,
                         onUndo = currentWildcardViewModel::undoClipboardEdit,
                         onConfirmPendingSave = {
-                            if (currentWildcardViewModel.confirmPendingWithSave()) {
+                            currentWildcardViewModel.confirmPendingWithSave {
                                 wildcardFolderLauncher.launch(null)
                             }
                         },

@@ -3,6 +3,10 @@ package com.example.gemgemgen
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class MainViewModelTest {
     @Test
@@ -25,8 +29,8 @@ class MainViewModelTest {
 
     @Test
     fun refreshStatus_updatesEnvironmentStatus() {
-        val environment = FakeEnvironmentStatusProvider(EnvironmentStatus())
-        val viewModel = viewModel(environmentStatusProvider = environment)
+        val environment = FakeEnvironmentStatusReader(EnvironmentStatus())
+        val viewModel = viewModel(environmentStatusReader = environment)
 
         environment.status = readyEnvironment()
         viewModel.refreshStatus()
@@ -51,12 +55,12 @@ class MainViewModelTest {
 
     @Test
     fun saveWildcardFolder_updatesSettingsMessageAndRefreshesStatus() {
-        val environment = FakeEnvironmentStatusProvider(readyEnvironment())
+        val environment = FakeEnvironmentStatusReader(readyEnvironment())
         val folderSaver = FakeWildcardFolderSaver(
             FolderSelectionResult(message = "폴더 선택 완료")
         )
         val viewModel = viewModel(
-            environmentStatusProvider = environment,
+            environmentStatusReader = environment,
             wildcardFolderSaver = folderSaver
         )
 
@@ -101,40 +105,108 @@ class MainViewModelTest {
         val runLogger = RunLogger(FakeRunLogStorage())
         val viewModel = viewModel(
             runLogger = runLogger,
-            automation = automation(runLogger)
+            automationRunner = automation(runLogger)
         )
 
         viewModel.onPromptTemplateChange("base")
         viewModel.runAutomation()
 
-        assertEquals(AutomationUiState.Success, viewModel.uiState.value.automationState)
+        assertEquals(AutomationRunState.Success, viewModel.uiState.value.automationState)
         assertEquals(1, viewModel.uiState.value.recentLogs.size)
         assertEquals(AutomationRunLogStatus.SUCCESS, viewModel.uiState.value.recentLogs.single().status)
     }
 
+    @Test
+    fun runAutomation_showsPreparingStateUntilWildcardPreparationFinishes() {
+        val runLogger = RunLogger(FakeRunLogStorage())
+        val prepareStarted = CountDownLatch(1)
+        val allowPrepareToFinish = CountDownLatch(1)
+        val service = FakeGeminiPromptGateway()
+        val viewModel = viewModel(
+            runLogger = runLogger,
+            lastRunSnapshotStore = LastRunSnapshotStore(
+                FakeLastRunSnapshotStorage(
+                    promptTemplate = "base",
+                    repeatCountText = "1"
+                )
+            ),
+            automationRunner = automation(
+                runLogger = runLogger,
+                lastRunSnapshotStore = LastRunSnapshotStore(
+                    FakeLastRunSnapshotStorage(
+                        promptTemplate = "base",
+                        repeatCountText = "1"
+                    )
+                ),
+                service = service,
+                loadWildcards = {
+                    prepareStarted.countDown()
+                    assertTrue(allowPrepareToFinish.await(2, TimeUnit.SECONDS))
+                    emptyList()
+                },
+                dispatchers = AppDispatchers(io = Dispatchers.Default)
+            ),
+            dispatchers = AppDispatchers(io = Dispatchers.Default),
+            coroutineScope = CoroutineScope(Dispatchers.Unconfined)
+        )
+        waitUntil {
+            viewModel.uiState.value.environmentStatus.isReady &&
+                viewModel.uiState.value.promptTemplate == "base"
+        }
+
+        assertTrue(viewModel.runAutomation())
+
+        assertEquals(
+            AutomationRunState.Running("자동화 준비 중"),
+            viewModel.uiState.value.automationState
+        )
+        assertTrue(prepareStarted.await(2, TimeUnit.SECONDS))
+        assertEquals(emptyList<String>(), service.sentPrompts)
+
+        allowPrepareToFinish.countDown()
+
+        waitUntil { service.sentPrompts.isNotEmpty() }
+        assertEquals(RunGeminiAutomationUseCase.MARKER_PROMPT, service.sentPrompts.first())
+    }
+
     private fun viewModel(
-        environmentStatusProvider: FakeEnvironmentStatusProvider = FakeEnvironmentStatusProvider(readyEnvironment()),
+        environmentStatusReader: FakeEnvironmentStatusReader = FakeEnvironmentStatusReader(readyEnvironment()),
         clipboardText: String = "",
         clipboardTextWriter: FakeClipboardTextWriter = FakeClipboardTextWriter(),
         wildcardFolderSaver: FakeWildcardFolderSaver = FakeWildcardFolderSaver(),
         runLogger: RunLogger = RunLogger(FakeRunLogStorage()),
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
-        automation: GeminiMvpAutomation = automation(runLogger)
+        automationRunner: RunGeminiAutomationUseCase? = null,
+        dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
+        coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
         return MainViewModel(
-            environmentStatusProvider = environmentStatusProvider,
+            environmentStatusReader = environmentStatusReader,
             clipboardTextProvider = FakeClipboardTextProvider(clipboardText),
-            clipboardTextWriter = clipboardTextWriter,
             wildcardFolderSaver = wildcardFolderSaver,
             runLogger = runLogger,
             lastRunSnapshotStore = lastRunSnapshotStore,
-            automation = automation
+            automation = automationRunner ?: automation(
+                runLogger = runLogger,
+                lastRunSnapshotStore = lastRunSnapshotStore,
+                clipboardTextWriter = clipboardTextWriter,
+                dispatchers = dispatchers
+            ),
+            dispatchers = dispatchers,
+            coroutineScope = coroutineScope
         )
     }
 
-    private fun automation(runLogger: RunLogger): GeminiMvpAutomation {
+    private fun automation(
+        runLogger: RunLogger,
+        lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
+        clipboardTextWriter: FakeClipboardTextWriter = FakeClipboardTextWriter(),
+        service: FakeGeminiPromptGateway = FakeGeminiPromptGateway(),
+        loadWildcards: () -> List<WildcardSet> = { emptyList() },
+        dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+    ): RunGeminiAutomationUseCase {
         var defaultImeId = ORIGINAL_IME_ID
-        return GeminiMvpAutomation(
+        return RunGeminiAutomationUseCase(
             imeManager = ImeManager(
                 settings = object : ImeSettings {
                     override fun getDefaultInputMethod(): String? = defaultImeId
@@ -147,19 +219,22 @@ class MainViewModelTest {
                 nullKeyboardImeId = NULL_IME_ID
             ),
             runLogger = runLogger,
+            lastRunSnapshotStore = lastRunSnapshotStore,
+            clipboardTextWriter = clipboardTextWriter,
+            wildcardSetLoader = FakeWildcardSetLoader(loadWildcards),
             clock = { 1000L },
-            serviceProvider = { FakeGeminiPromptSender() },
+            promptGatewayProvider = { service },
             launchGeminiApp = { true },
-            loadWildcards = { emptyList() },
+            dispatchers = dispatchers,
             generatePrompt = { _, _, index ->
                 GeneratedPrompt(index, "base", "prompt $index", emptyMap())
             }
         )
     }
 
-    private class FakeEnvironmentStatusProvider(
+    private class FakeEnvironmentStatusReader(
         var status: EnvironmentStatus
-    ) : EnvironmentStatusProvider {
+    ) : EnvironmentStatusReader {
         var checkCount = 0
 
         override fun check(): EnvironmentStatus {
@@ -182,6 +257,12 @@ class MainViewModelTest {
         }
     }
 
+    private class FakeWildcardSetLoader(
+        private val loadWildcards: () -> List<WildcardSet>
+    ) : WildcardSetLoader {
+        override fun load(): List<WildcardSet> = loadWildcards()
+    }
+
     private class FakeWildcardFolderSaver(
         private val result: FolderSelectionResult = FolderSelectionResult()
     ) : WildcardFolderSaver {
@@ -193,17 +274,32 @@ class MainViewModelTest {
         }
     }
 
-    private class FakeGeminiPromptSender : GeminiPromptSender {
+    private class FakeGeminiPromptGateway : GeminiPromptGateway {
+        val sentPrompts = mutableListOf<String>()
+
         override fun sendPrompt(
             prompt: String,
             newChatMode: GeminiNewChatMode,
-            onStateChange: (AutomationUiState) -> Unit,
+            onStateChange: (AutomationRunState) -> Unit,
             onDone: () -> Unit
         ) {
+            sentPrompts += prompt
             onDone()
         }
 
         override fun cancelCurrentRun() = Unit
+    }
+
+    private fun waitUntil(
+        timeoutMillis: Long = 2000,
+        condition: () -> Boolean
+    ) {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return
+            Thread.sleep(10)
+        }
+        assertTrue("Condition was not met within $timeoutMillis ms", condition())
     }
 
     private class FakeRunLogStorage : RunLogStorage {
