@@ -3,14 +3,14 @@ package com.example.gemgemgen.ui.android
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.example.gemgemgen.automation.android.ActiveGeminiPromptGatewayProvider
-import com.example.gemgemgen.automation.android.AndroidGeminiAppLauncher
+import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
+import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
 import com.example.gemgemgen.automation.android.AndroidImeSettings
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotStorage
 import com.example.gemgemgen.automation.android.SharedPreferencesRunLogStorage
 import com.example.gemgemgen.automation.usecase.ImeManager
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
-import com.example.gemgemgen.automation.usecase.RunGeminiAutomationUseCase
+import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.usecase.RunLogger
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
@@ -45,15 +45,15 @@ class MainViewModelFactory(
             ),
             runLogger = runLogger,
             lastRunSnapshotStore = lastRunSnapshotStore,
-            automation = RunGeminiAutomationUseCase(
+            automation = RunAutomationUseCase(
                 imeManager = ImeManager(AndroidImeSettings(appContext)),
                 runLogger = runLogger,
                 lastRunSnapshotStore = lastRunSnapshotStore,
                 clipboardGateway = clipboardGateway,
                 wildcardSetRepository = AndroidWildcardSetRepository(appContext),
                 clock = System::currentTimeMillis,
-                promptGatewayProvider = ActiveGeminiPromptGatewayProvider,
-                geminiAppLauncher = AndroidGeminiAppLauncher(appContext)
+                promptGatewayProvider = ActivePromptAutomationGatewayProvider,
+                targetAppLauncher = AndroidTargetAppLauncher(appContext)
             )
         ) as T
     }

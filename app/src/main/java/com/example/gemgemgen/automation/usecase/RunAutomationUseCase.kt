@@ -3,6 +3,7 @@ package com.example.gemgemgen.automation.usecase
 import com.example.gemgemgen.automation.domain.AutomationRunLog
 import com.example.gemgemgen.automation.domain.AutomationRunLogStatus
 import com.example.gemgemgen.automation.domain.AutomationRunState
+import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeneratedPrompt
 import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.domain.RepeatCountParser
@@ -15,18 +16,19 @@ import kotlinx.coroutines.withContext
 
 data class AutomationRunRequest(
     val promptTemplate: String,
-    val repeatCountText: String
+    val repeatCountText: String,
+    val targetApp: AutomationTargetApp
 )
 
-class RunGeminiAutomationUseCase(
+class RunAutomationUseCase(
     private val imeManager: ImeManager,
     private val runLogger: RunLogger,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val clipboardGateway: ClipboardGateway,
     private val wildcardSetRepository: WildcardSetRepository,
     private val clock: () -> Long,
-    private val promptGatewayProvider: GeminiPromptGatewayProvider,
-    private val geminiAppLauncher: GeminiAppLauncher,
+    private val promptGatewayProvider: PromptAutomationGatewayProvider,
+    private val targetAppLauncher: TargetAppLauncher,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val promptGenerator: PromptGenerator = PromptGenerator(),
     private val generatePrompt: ((String, List<WildcardSet>, Int) -> GeneratedPrompt)? = null
@@ -51,7 +53,8 @@ class RunGeminiAutomationUseCase(
                 lastRunSnapshotStore.save(
                     LastRunSnapshot(
                         promptTemplate = request.promptTemplate,
-                        repeatCountText = request.repeatCountText
+                        repeatCountText = request.repeatCountText,
+                        targetApp = request.targetApp
                     )
                 )
                 clipboardGateway.writeText(request.promptTemplate)
@@ -63,6 +66,7 @@ class RunGeminiAutomationUseCase(
             finishWithoutRun(
                 startedAtMillis = startedAtMillis,
                 repeatCount = repeatCount,
+                targetApp = request.targetApp,
                 lastStep = "와일드카드 파일 로드 중",
                 state = AutomationRunState.Failure(
                     "와일드카드 파일을 읽지 못했습니다: ${
@@ -92,11 +96,12 @@ class RunGeminiAutomationUseCase(
         wildcards: List<WildcardSet>,
         onStateChange: (AutomationRunState) -> Unit
     ) {
-        val promptGateway = promptGatewayProvider.current()
+        val promptGateway = promptGatewayProvider.current(request.targetApp)
         if (promptGateway == null) {
             finishWithoutRun(
                 startedAtMillis = startedAtMillis,
                 repeatCount = repeatCount,
+                targetApp = request.targetApp,
                 lastStep = "접근성 서비스 확인",
                 state = AutomationRunState.Failure("접근성 서비스가 켜져 있지 않습니다."),
                 onStateChange = onStateChange
@@ -108,6 +113,7 @@ class RunGeminiAutomationUseCase(
             finishWithoutRun(
                 startedAtMillis = startedAtMillis,
                 repeatCount = repeatCount,
+                targetApp = request.targetApp,
                 lastStep = "프롬프트 확인",
                 state = AutomationRunState.Failure("원본 프롬프트를 입력하거나 클립보드에서 가져오세요."),
                 onStateChange = onStateChange
@@ -123,6 +129,7 @@ class RunGeminiAutomationUseCase(
             finishWithoutRun(
                 startedAtMillis = startedAtMillis,
                 repeatCount = repeatCount,
+                targetApp = request.targetApp,
                 lastStep = "Null Keyboard로 전환 중",
                 state = AutomationRunState.Failure(
                     "${imeSwitchResult.message} WRITE_SECURE_SETTINGS 권한과 Null Keyboard 설치 상태를 확인해주세요."
@@ -139,15 +146,18 @@ class RunGeminiAutomationUseCase(
             promptTemplate = request.promptTemplate,
             repeatCount = repeatCount,
             wildcards = wildcards,
-            promptPlan = promptPlan
+            promptPlan = promptPlan,
+            targetApp = request.targetApp
         )
         currentRun = run
 
-        updateRunState(run, "Gemini 앱 실행 중", onStateChange)
-        if (!geminiAppLauncher.launch()) {
+        updateRunState(run, "${request.targetApp.displayName} 앱 실행 중", onStateChange)
+        if (!targetAppLauncher.launch(request.targetApp)) {
             finishRun(
                 run = run,
-                state = AutomationRunState.Failure("Gemini 앱을 찾지 못했습니다."),
+                state = AutomationRunState.Failure(
+                    "${request.targetApp.displayName} 앱을 찾지 못했습니다."
+                ),
                 onStateChange = onStateChange
             )
             return
@@ -173,7 +183,7 @@ class RunGeminiAutomationUseCase(
         updateRunState(run, "세션 마커 전송 중", onStateChange)
         run.promptGateway.sendPrompt(
             prompt = MARKER_PROMPT,
-            newChatMode = GeminiNewChatMode.SidebarThenNearestToSearch,
+            newChatMode = NewChatMode.Initial,
             onStateChange = childStateCallback(run, onStateChange),
             onDone = {
                 run.markerStatus = "성공"
@@ -201,7 +211,7 @@ class RunGeminiAutomationUseCase(
 
         run.promptGateway.sendPrompt(
             prompt = generatedPrompt.finalPrompt,
-            newChatMode = GeminiNewChatMode.DirectVisibleButton,
+            newChatMode = NewChatMode.Subsequent,
             onStateChange = childStateCallback(run, onStateChange),
             onDone = {
                 run.successCount += 1
@@ -274,6 +284,7 @@ class RunGeminiAutomationUseCase(
     private fun finishWithoutRun(
         startedAtMillis: Long,
         repeatCount: Int,
+        targetApp: AutomationTargetApp,
         lastStep: String,
         state: AutomationRunState,
         onStateChange: (AutomationRunState) -> Unit
@@ -286,7 +297,8 @@ class RunGeminiAutomationUseCase(
                 lastStep = lastStep,
                 message = state.message(),
                 imeRestoreMessage = "해당 없음",
-                repeatCount = repeatCount
+                repeatCount = repeatCount,
+                targetApp = targetApp.storageValue
             )
         )
         onStateChange(state)
@@ -308,7 +320,8 @@ class RunGeminiAutomationUseCase(
             completedCount = completedCount,
             successCount = successCount,
             failureCount = failureCount,
-            markerStatus = markerStatus
+            markerStatus = markerStatus,
+            targetApp = targetApp.storageValue
         )
     }
 
@@ -334,11 +347,12 @@ class RunGeminiAutomationUseCase(
     private data class CurrentRun(
         val startedAtMillis: Long,
         val imeSession: ImeSwitchSession,
-        val promptGateway: GeminiPromptGateway,
+        val promptGateway: PromptAutomationGateway,
         val promptTemplate: String,
         val repeatCount: Int,
         val wildcards: List<WildcardSet>,
         val promptPlan: PromptGenerator.CompiledPrompt,
+        val targetApp: AutomationTargetApp,
         var markerStatus: String = "실패",
         var currentIndex: Int = 0,
         var completedCount: Int = 0,

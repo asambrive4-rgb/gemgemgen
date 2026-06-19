@@ -20,20 +20,36 @@ class EnvironmentStatusTest {
         assertTrue(
             EnvironmentStatus(
                 isGeminiInstalled = true,
+                isChatGptInstalled = true,
                 isAccessibilityServiceEnabled = true,
                 hasWriteSecureSettingsPermission = true,
                 isWildcardDirectoryAccessible = true
-            ).isReady
+            ).isReadyFor(AutomationTargetApp.GEMINI)
         )
 
         assertFalse(
             EnvironmentStatus(
                 isGeminiInstalled = true,
+                isChatGptInstalled = true,
                 isAccessibilityServiceEnabled = true,
                 hasWriteSecureSettingsPermission = true,
                 isWildcardDirectoryAccessible = false
-            ).isReady
+            ).isReadyFor(AutomationTargetApp.GEMINI)
         )
+    }
+
+    @Test
+    fun isReadyFor_usesSelectedTargetAppInstallation() {
+        val status = EnvironmentStatus(
+            isGeminiInstalled = true,
+            isChatGptInstalled = false,
+            isAccessibilityServiceEnabled = true,
+            hasWriteSecureSettingsPermission = true,
+            isWildcardDirectoryAccessible = true
+        )
+
+        assertTrue(status.isReadyFor(AutomationTargetApp.GEMINI))
+        assertFalse(status.isReadyFor(AutomationTargetApp.CHATGPT))
     }
 
     @Test

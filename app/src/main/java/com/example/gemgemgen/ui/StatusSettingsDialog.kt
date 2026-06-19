@@ -61,6 +61,7 @@ internal fun StatusSettingsDialog(
                 }
 
                 StatusRow("Gemini 앱", status.isGeminiInstalled)
+                StatusRow("ChatGPT 앱", status.isChatGptInstalled)
                 StatusRow("접근성 서비스", status.isAccessibilityServiceEnabled)
                 StatusRow("WRITE_SECURE_SETTINGS", status.hasWriteSecureSettingsPermission)
                 StatusRow("wildcard 폴더", status.isWildcardDirectoryAccessible)

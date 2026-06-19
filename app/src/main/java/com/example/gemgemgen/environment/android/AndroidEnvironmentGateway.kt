@@ -20,7 +20,8 @@ class AndroidEnvironmentGateway(
         val wildcardFolderUri = WildcardFolderStore.getFolderUri(context)
 
         return EnvironmentStatus(
-            isGeminiInstalled = isPackageInstalled(AppDefaults.TARGET_PACKAGE_NAME),
+            isGeminiInstalled = isPackageInstalled(AppDefaults.GEMINI_PACKAGE_NAME),
+            isChatGptInstalled = isPackageInstalled(AppDefaults.CHATGPT_PACKAGE_NAME),
             isAccessibilityServiceEnabled = isAccessibilityServiceEnabled(),
             hasWriteSecureSettingsPermission = hasWriteSecureSettingsPermission(),
             isWildcardDirectoryAccessible = wildcardFolderUri != null &&

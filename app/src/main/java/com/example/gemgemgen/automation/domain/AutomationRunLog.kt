@@ -11,7 +11,8 @@ data class AutomationRunLog(
     val completedCount: Int = 0,
     val successCount: Int = 0,
     val failureCount: Int = 0,
-    val markerStatus: String = ""
+    val markerStatus: String = "",
+    val targetApp: String = ""
 )
 
 object AutomationRunLogStatus {

@@ -45,14 +45,17 @@ class MainViewModelTest {
         environment.status = readyEnvironment()
         viewModel.refreshStatus()
 
-        assertTrue(viewModel.uiState.value.environmentStatus.isReady)
+        assertTrue(
+            viewModel.uiState.value.environmentStatus.isReadyFor(AutomationTargetApp.GEMINI)
+        )
     }
 
     @Test
     fun init_restoresLastRunSnapshot() {
         val snapshotStorage = FakeLastRunSnapshotStorage(
             promptTemplate = "saved prompt",
-            repeatCountText = "12"
+            repeatCountText = "12",
+            targetApp = AutomationTargetApp.CHATGPT.storageValue
         )
 
         val viewModel = viewModel(
@@ -61,6 +64,22 @@ class MainViewModelTest {
 
         assertEquals("saved prompt", viewModel.uiState.value.promptTemplate)
         assertEquals("12", viewModel.uiState.value.repeatCountText)
+        assertEquals(AutomationTargetApp.CHATGPT, viewModel.uiState.value.selectedTargetApp)
+    }
+
+    @Test
+    fun init_missingTargetAppInOldSnapshotDefaultsToGemini() {
+        val viewModel = viewModel(
+            lastRunSnapshotStore = LastRunSnapshotStore(
+                FakeLastRunSnapshotStorage(
+                    promptTemplate = "saved prompt",
+                    repeatCountText = "3",
+                    targetApp = ""
+                )
+            )
+        )
+
+        assertEquals(AutomationTargetApp.GEMINI, viewModel.uiState.value.selectedTargetApp)
     }
 
     @Test
@@ -104,10 +123,12 @@ class MainViewModelTest {
 
         viewModel.onPromptTemplateChange("prompt to resume")
         viewModel.onRepeatCountChange("7")
+        viewModel.onTargetAppSelected(AutomationTargetApp.CHATGPT)
         viewModel.runAutomation()
 
         assertEquals("prompt to resume", snapshotStorage.promptTemplate)
         assertEquals("7", snapshotStorage.repeatCountText)
+        assertEquals(AutomationTargetApp.CHATGPT.storageValue, snapshotStorage.targetApp)
     }
 
     @Test
@@ -144,7 +165,7 @@ class MainViewModelTest {
         val runLogger = RunLogger(FakeRunLogStorage())
         val prepareStarted = CountDownLatch(1)
         val allowPrepareToFinish = CountDownLatch(1)
-        val service = FakeGeminiPromptGateway()
+        val service = FakePromptAutomationGateway()
         val viewModel = viewModel(
             runLogger = runLogger,
             lastRunSnapshotStore = LastRunSnapshotStore(
@@ -173,7 +194,7 @@ class MainViewModelTest {
             coroutineScope = CoroutineScope(Dispatchers.Unconfined)
         )
         waitUntil {
-            viewModel.uiState.value.environmentStatus.isReady &&
+            viewModel.uiState.value.environmentStatus.isReadyFor(AutomationTargetApp.GEMINI) &&
                 viewModel.uiState.value.promptTemplate == "base"
         }
 
@@ -189,7 +210,7 @@ class MainViewModelTest {
         allowPrepareToFinish.countDown()
 
         waitUntil { service.sentPrompts.isNotEmpty() }
-        assertEquals(RunGeminiAutomationUseCase.MARKER_PROMPT, service.sentPrompts.first())
+        assertEquals(RunAutomationUseCase.MARKER_PROMPT, service.sentPrompts.first())
     }
 
     private fun viewModel(
@@ -199,7 +220,7 @@ class MainViewModelTest {
         wildcardFolderSaver: FakeWildcardFolderSaver = FakeWildcardFolderSaver(),
         runLogger: RunLogger = RunLogger(FakeRunLogStorage()),
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
-        automationRunner: RunGeminiAutomationUseCase? = null,
+        automationRunner: RunAutomationUseCase? = null,
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
@@ -224,12 +245,12 @@ class MainViewModelTest {
         runLogger: RunLogger,
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         clipboardGateway: ClipboardGateway = FakeClipboardGateway(),
-        service: FakeGeminiPromptGateway = FakeGeminiPromptGateway(),
+        service: FakePromptAutomationGateway = FakePromptAutomationGateway(),
         loadWildcards: () -> List<WildcardSet> = { emptyList() },
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined)
-    ): RunGeminiAutomationUseCase {
+    ): RunAutomationUseCase {
         var defaultImeId = ORIGINAL_IME_ID
-        return RunGeminiAutomationUseCase(
+        return RunAutomationUseCase(
             imeManager = ImeManager(
                 settings = object : ImeSettings {
                     override fun getDefaultInputMethod(): String? = defaultImeId
@@ -246,8 +267,8 @@ class MainViewModelTest {
             clipboardGateway = clipboardGateway,
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcards),
             clock = { 1000L },
-            promptGatewayProvider = GeminiPromptGatewayProvider { service },
-            geminiAppLauncher = GeminiAppLauncher { true },
+            promptGatewayProvider = PromptAutomationGatewayProvider { service },
+            targetAppLauncher = TargetAppLauncher { true },
             dispatchers = dispatchers,
             generatePrompt = { _, _, index ->
                 GeneratedPrompt(index, "base", "prompt $index", emptyMap())
@@ -295,12 +316,12 @@ class MainViewModelTest {
         }
     }
 
-    private class FakeGeminiPromptGateway : GeminiPromptGateway {
+    private class FakePromptAutomationGateway : PromptAutomationGateway {
         val sentPrompts = mutableListOf<String>()
 
         override fun sendPrompt(
             prompt: String,
-            newChatMode: GeminiNewChatMode,
+            newChatMode: NewChatMode,
             onStateChange: (AutomationRunState) -> Unit,
             onDone: () -> Unit
         ) {
@@ -335,15 +356,23 @@ class MainViewModelTest {
 
     private class FakeLastRunSnapshotStorage(
         var promptTemplate: String = "",
-        var repeatCountText: String = ""
+        var repeatCountText: String = "",
+        var targetApp: String = ""
     ) : LastRunSnapshotStorage {
         override fun readPromptTemplate(): String = promptTemplate
 
         override fun readRepeatCountText(): String = repeatCountText
 
-        override fun write(promptTemplate: String, repeatCountText: String) {
+        override fun readTargetApp(): String = targetApp
+
+        override fun write(
+            promptTemplate: String,
+            repeatCountText: String,
+            targetApp: String
+        ) {
             this.promptTemplate = promptTemplate
             this.repeatCountText = repeatCountText
+            this.targetApp = targetApp
         }
     }
 
@@ -354,6 +383,7 @@ class MainViewModelTest {
         fun readyEnvironment(): EnvironmentStatus {
             return EnvironmentStatus(
                 isGeminiInstalled = true,
+                isChatGptInstalled = true,
                 isAccessibilityServiceEnabled = true,
                 hasWriteSecureSettingsPermission = true,
                 isWildcardDirectoryAccessible = true

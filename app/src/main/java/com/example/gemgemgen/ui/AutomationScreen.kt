@@ -21,15 +21,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
+import com.example.gemgemgen.automation.domain.AutomationTargetApp
 
 @Composable
-internal fun GeminiAutoSenderScreen(
+internal fun AutomationScreen(
     uiState: MainUiState,
     onClearFocus: () -> Unit,
     onHideSettings: () -> Unit,
     onRefreshStatus: () -> Unit,
     onSelectWildcardFolder: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
+    onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
     onImportFromClipboard: () -> Unit,
     onRepeatCountChange: (String) -> Unit,
@@ -55,6 +57,9 @@ internal fun GeminiAutoSenderScreen(
 
                 PromptSection(
                     promptTemplate = uiState.promptTemplate,
+                    selectedTargetApp = uiState.selectedTargetApp,
+                    isTargetSelectionEnabled = !uiState.isRunning,
+                    onTargetAppSelected = onTargetAppSelected,
                     onPromptTemplateChange = onPromptTemplateChange,
                     onImportFromClipboard = onImportFromClipboard
                 )
@@ -94,15 +99,16 @@ internal fun GeminiAutoSenderScreen(
 
 @Preview(showBackground = true)
 @Composable
-private fun GeminiAutoSenderAppPreview() {
+private fun AutomationAppPreview() {
     GemgemgenTheme {
-        GeminiAutoSenderScreen(
+        AutomationScreen(
             uiState = MainUiState(),
             onClearFocus = {},
             onHideSettings = {},
             onRefreshStatus = {},
             onSelectWildcardFolder = {},
             onOpenAccessibilitySettings = {},
+            onTargetAppSelected = {},
             onPromptTemplateChange = {},
             onImportFromClipboard = {},
             onRepeatCountChange = {},

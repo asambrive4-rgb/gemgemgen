@@ -1,9 +1,11 @@
 package com.example.gemgemgen.automation.usecase
 
-fun interface GeminiPromptGatewayProvider {
-    fun current(): GeminiPromptGateway?
+import com.example.gemgemgen.automation.domain.AutomationTargetApp
+
+fun interface PromptAutomationGatewayProvider {
+    fun current(targetApp: AutomationTargetApp): PromptAutomationGateway?
 }
 
-fun interface GeminiAppLauncher {
-    fun launch(): Boolean
+fun interface TargetAppLauncher {
+    fun launch(targetApp: AutomationTargetApp): Boolean
 }

@@ -28,7 +28,7 @@ import com.example.gemgemgen.ui.android.runAutomationWithOverlayCheck
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 
 @Composable
-internal fun GeminiAutoSenderApp() {
+internal fun AutomationApp() {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
     val viewModel: MainViewModel = viewModel(
@@ -128,7 +128,7 @@ internal fun GeminiAutoSenderApp() {
         onShowSettings = viewModel::showSettings,
         tabs = listOf(
             MainTabPage(MainTab.AUTOMATION) {
-                GeminiAutoSenderScreen(
+                AutomationScreen(
                     uiState = uiState,
                     onClearFocus = { focusManager.clearFocus() },
                     onHideSettings = viewModel::hideSettings,
@@ -137,6 +137,7 @@ internal fun GeminiAutoSenderApp() {
                     onOpenAccessibilitySettings = {
                         context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
+                    onTargetAppSelected = viewModel::onTargetAppSelected,
                     onPromptTemplateChange = viewModel::onPromptTemplateChange,
                     onImportFromClipboard = viewModel::importPromptFromClipboard,
                     onRepeatCountChange = viewModel::onRepeatCountChange,

@@ -3,11 +3,12 @@ package com.example.gemgemgen.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.automation.domain.AutomationRunState
+import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
-import com.example.gemgemgen.automation.usecase.RunGeminiAutomationUseCase
+import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.usecase.RunLogger
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
@@ -30,7 +31,7 @@ class MainViewModel(
     private val saveWildcardFolder: SaveWildcardFolderUseCase,
     private val runLogger: RunLogger,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
-    private val automation: RunGeminiAutomationUseCase,
+    private val automation: RunAutomationUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
@@ -46,6 +47,12 @@ class MainViewModel(
 
     fun onPromptTemplateChange(value: String) {
         _uiState.update { it.copy(promptTemplate = value) }
+    }
+
+    fun onTargetAppSelected(targetApp: AutomationTargetApp) {
+        _uiState.update {
+            if (it.isRunning) it else it.copy(selectedTargetApp = targetApp)
+        }
     }
 
     fun onRepeatCountChange(value: String) {
@@ -110,7 +117,8 @@ class MainViewModel(
         handleAutomationState(AutomationRunState.Running("자동화 준비 중"))
         val request = AutomationRunRequest(
             promptTemplate = state.promptTemplate,
-            repeatCountText = state.repeatCountText
+            repeatCountText = state.repeatCountText,
+            targetApp = state.selectedTargetApp
         )
         val job = scope.launch {
             try {
@@ -170,6 +178,7 @@ class MainViewModel(
                     } else {
                         it.repeatCountText
                     },
+                    selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp,
                     recentLogs = snapshotAndLogs.second
                 )
             }

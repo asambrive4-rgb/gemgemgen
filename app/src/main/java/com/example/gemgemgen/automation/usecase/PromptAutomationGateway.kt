@@ -2,15 +2,15 @@ package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 
-enum class GeminiNewChatMode {
-    SidebarThenNearestToSearch,
-    DirectVisibleButton
+enum class NewChatMode {
+    Initial,
+    Subsequent
 }
 
-interface GeminiPromptGateway {
+interface PromptAutomationGateway {
     fun sendPrompt(
         prompt: String,
-        newChatMode: GeminiNewChatMode,
+        newChatMode: NewChatMode,
         onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     )

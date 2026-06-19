@@ -54,6 +54,28 @@ class RunLoggerTest {
         )
     }
 
+    @Test
+    fun append_preservesTargetApp() {
+        val logger = RunLogger(FakeRunLogStorage())
+
+        logger.append(
+            AutomationRunLog(
+                startedAtMillis = 1L,
+                finishedAtMillis = 2L,
+                status = AutomationRunLogStatus.SUCCESS,
+                lastStep = "완료",
+                message = "성공",
+                imeRestoreMessage = "성공",
+                targetApp = AutomationTargetApp.CHATGPT.storageValue
+            )
+        )
+
+        assertEquals(
+            AutomationTargetApp.CHATGPT.storageValue,
+            logger.loadRecent().single().targetApp
+        )
+    }
+
     private class FakeRunLogStorage : RunLogStorage {
         private var value: String = ""
 

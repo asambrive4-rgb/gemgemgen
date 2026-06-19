@@ -16,10 +16,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class RunGeminiAutomationUseCaseTest {
+class RunAutomationUseCaseTest {
     @Test
     fun run_loadsWildcardsOnceSendsMarkerFirstAndGeneratesOnePromptPerRepeat() = runBlocking {
-        val service = FakeGeminiPromptGateway(autoComplete = true)
+        val service = FakePromptAutomationGateway(autoComplete = true)
         val logger = RunLogger(FakeRunLogStorage())
         var loadCount = 0
         val generatedIndexes = mutableListOf<Int>()
@@ -44,7 +44,8 @@ class RunGeminiAutomationUseCaseTest {
         automation.run(
             request = AutomationRunRequest(
                 promptTemplate = "base __hair__",
-                repeatCountText = "3"
+                repeatCountText = "3",
+                targetApp = AutomationTargetApp.GEMINI
             ),
             onStateChange = {}
         )
@@ -52,7 +53,7 @@ class RunGeminiAutomationUseCaseTest {
         assertEquals(1, loadCount)
         assertEquals(
             listOf(
-                RunGeminiAutomationUseCase.MARKER_PROMPT,
+                RunAutomationUseCase.MARKER_PROMPT,
                 "prompt 1",
                 "prompt 2",
                 "prompt 3"
@@ -61,10 +62,10 @@ class RunGeminiAutomationUseCaseTest {
         )
         assertEquals(
             listOf(
-                GeminiNewChatMode.SidebarThenNearestToSearch,
-                GeminiNewChatMode.DirectVisibleButton,
-                GeminiNewChatMode.DirectVisibleButton,
-                GeminiNewChatMode.DirectVisibleButton
+                NewChatMode.Initial,
+                NewChatMode.Subsequent,
+                NewChatMode.Subsequent,
+                NewChatMode.Subsequent
             ),
             service.newChatModes
         )
@@ -82,7 +83,7 @@ class RunGeminiAutomationUseCaseTest {
 
     @Test
     fun cancel_cancelsServiceRestoresImeAndWritesStoppedLog() = runBlocking {
-        val service = FakeGeminiPromptGateway(autoComplete = false)
+        val service = FakePromptAutomationGateway(autoComplete = false)
         val logger = RunLogger(FakeRunLogStorage())
         val automation = automation(
             service = service,
@@ -96,7 +97,8 @@ class RunGeminiAutomationUseCaseTest {
         automation.run(
             AutomationRunRequest(
                 promptTemplate = "base",
-                repeatCountText = "2"
+                repeatCountText = "2",
+                targetApp = AutomationTargetApp.GEMINI
             ),
             states::add
         )
@@ -114,7 +116,7 @@ class RunGeminiAutomationUseCaseTest {
 
     @Test
     fun run_stopsAfterFirstPromptFailureAndWritesFailureLog() = runBlocking {
-        val service = FakeGeminiPromptGateway(autoComplete = true)
+        val service = FakePromptAutomationGateway(autoComplete = true)
         val logger = RunLogger(FakeRunLogStorage())
         val automation = automation(
             service = service,
@@ -128,7 +130,8 @@ class RunGeminiAutomationUseCaseTest {
         automation.run(
             AutomationRunRequest(
                 promptTemplate = "base",
-                repeatCountText = "2"
+                repeatCountText = "2",
+                targetApp = AutomationTargetApp.GEMINI
             ),
             {}
         )
@@ -141,16 +144,54 @@ class RunGeminiAutomationUseCaseTest {
         assertEquals(1, log.failureCount)
     }
 
+    @Test
+    fun run_usesSelectedTargetForGatewayLauncherAndLog() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = true)
+        val logger = RunLogger(FakeRunLogStorage())
+        val requestedGatewayTargets = mutableListOf<AutomationTargetApp>()
+        val launchedTargets = mutableListOf<AutomationTargetApp>()
+        val automation = automation(
+            service = service,
+            logger = logger,
+            onGatewayRequest = requestedGatewayTargets::add,
+            onLaunch = {
+                launchedTargets += it
+                true
+            },
+            generatePrompt = { _, _, index ->
+                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
+            }
+        )
+
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "1",
+                targetApp = AutomationTargetApp.CHATGPT
+            ),
+            {}
+        )
+
+        assertEquals(listOf(AutomationTargetApp.CHATGPT), requestedGatewayTargets)
+        assertEquals(listOf(AutomationTargetApp.CHATGPT), launchedTargets)
+        assertEquals(
+            AutomationTargetApp.CHATGPT.storageValue,
+            logger.loadRecent().single().targetApp
+        )
+    }
+
     private var defaultImeId = ORIGINAL_IME_ID
 
     private fun automation(
-        service: FakeGeminiPromptGateway,
+        service: FakePromptAutomationGateway,
         logger: RunLogger,
         loadWildcardSets: () -> List<WildcardSet> = { emptyList() },
+        onGatewayRequest: (AutomationTargetApp) -> Unit = {},
+        onLaunch: (AutomationTargetApp) -> Boolean = { true },
         generatePrompt: (String, List<WildcardSet>, Int) -> GeneratedPrompt
-    ): RunGeminiAutomationUseCase {
+    ): RunAutomationUseCase {
         defaultImeId = ORIGINAL_IME_ID
-        return RunGeminiAutomationUseCase(
+        return RunAutomationUseCase(
             imeManager = ImeManager(
                 settings = object : ImeSettings {
                     override fun getDefaultInputMethod(): String? = defaultImeId
@@ -167,24 +208,27 @@ class RunGeminiAutomationUseCaseTest {
             clipboardGateway = FakeClipboardGateway(),
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcardSets),
             clock = { 1000L },
-            promptGatewayProvider = GeminiPromptGatewayProvider { service },
-            geminiAppLauncher = GeminiAppLauncher { true },
+            promptGatewayProvider = PromptAutomationGatewayProvider { targetApp ->
+                onGatewayRequest(targetApp)
+                service
+            },
+            targetAppLauncher = TargetAppLauncher(onLaunch),
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
             generatePrompt = generatePrompt
         )
     }
 
-    private class FakeGeminiPromptGateway(
+    private class FakePromptAutomationGateway(
         private val autoComplete: Boolean
-    ) : GeminiPromptGateway {
+    ) : PromptAutomationGateway {
         val sentPrompts = mutableListOf<String>()
-        val newChatModes = mutableListOf<GeminiNewChatMode>()
+        val newChatModes = mutableListOf<NewChatMode>()
         var failOnPrompt: String? = null
         var wasCancelled = false
 
         override fun sendPrompt(
             prompt: String,
-            newChatMode: GeminiNewChatMode,
+            newChatMode: NewChatMode,
             onStateChange: (AutomationRunState) -> Unit,
             onDone: () -> Unit
         ) {
@@ -221,7 +265,13 @@ class RunGeminiAutomationUseCaseTest {
 
         override fun readRepeatCountText(): String = ""
 
-        override fun write(promptTemplate: String, repeatCountText: String) = Unit
+        override fun readTargetApp(): String = ""
+
+        override fun write(
+            promptTemplate: String,
+            repeatCountText: String,
+            targetApp: String
+        ) = Unit
     }
 
     private class FakeClipboardGateway : ClipboardGateway {

@@ -43,32 +43,6 @@ internal class GeminiAccessibilityNodeFinder(
         ) { it.second }?.first
     }
 
-    fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
-        var current: AccessibilityNodeInfo? = node
-
-        while (current != null) {
-            if (current.isClickable && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                return true
-            }
-            current = current.parent
-        }
-
-        return false
-    }
-
-    fun findClickableNodeOrParent(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        var current: AccessibilityNodeInfo? = node
-
-        while (current != null) {
-            if (current.isClickable) {
-                return current
-            }
-            current = current.parent
-        }
-
-        return null
-    }
-
     private fun findNodeByViewId(viewId: String): AccessibilityNodeInfo? {
         return try {
             rootProvider()

@@ -18,10 +18,15 @@ class SharedPreferencesLastRunSnapshotStorage(
         return preferences.getString(KEY_REPEAT_COUNT_TEXT, "").orEmpty()
     }
 
-    override fun write(promptTemplate: String, repeatCountText: String) {
+    override fun readTargetApp(): String {
+        return preferences.getString(KEY_TARGET_APP, "").orEmpty()
+    }
+
+    override fun write(promptTemplate: String, repeatCountText: String, targetApp: String) {
         preferences.edit()
             .putString(KEY_PROMPT_TEMPLATE, promptTemplate)
             .putString(KEY_REPEAT_COUNT_TEXT, repeatCountText)
+            .putString(KEY_TARGET_APP, targetApp)
             .apply()
     }
 }
@@ -29,3 +34,4 @@ class SharedPreferencesLastRunSnapshotStorage(
 private const val PREFERENCES_NAME = "last_run_snapshot"
 private const val KEY_PROMPT_TEMPLATE = "prompt_template"
 private const val KEY_REPEAT_COUNT_TEXT = "repeat_count_text"
+private const val KEY_TARGET_APP = "target_app"

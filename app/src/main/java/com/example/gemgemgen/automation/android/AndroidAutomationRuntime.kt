@@ -2,23 +2,28 @@ package com.example.gemgemgen.automation.android
 
 import android.content.Context
 import android.content.Intent
-import com.example.gemgemgen.automation.usecase.GeminiAppLauncher
-import com.example.gemgemgen.automation.usecase.GeminiPromptGateway
-import com.example.gemgemgen.automation.usecase.GeminiPromptGatewayProvider
+import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
+import com.example.gemgemgen.automation.usecase.PromptAutomationGatewayProvider
+import com.example.gemgemgen.automation.usecase.TargetAppLauncher
 import com.example.gemgemgen.core.AppDefaults
 
-object ActiveGeminiPromptGatewayProvider : GeminiPromptGatewayProvider {
-    override fun current(): GeminiPromptGateway? {
-        return GeminiAccessibilityService.activeService
+object ActivePromptAutomationGatewayProvider : PromptAutomationGatewayProvider {
+    override fun current(targetApp: AutomationTargetApp): PromptAutomationGateway? {
+        return GeminiAccessibilityService.activeService?.gatewayFor(targetApp)
     }
 }
 
-class AndroidGeminiAppLauncher(
+class AndroidTargetAppLauncher(
     private val context: Context
-) : GeminiAppLauncher {
-    override fun launch(): Boolean {
+) : TargetAppLauncher {
+    override fun launch(targetApp: AutomationTargetApp): Boolean {
+        val packageName = when (targetApp) {
+            AutomationTargetApp.GEMINI -> AppDefaults.GEMINI_PACKAGE_NAME
+            AutomationTargetApp.CHATGPT -> AppDefaults.CHATGPT_PACKAGE_NAME
+        }
         val launchIntent = context.packageManager
-            .getLaunchIntentForPackage(AppDefaults.TARGET_PACKAGE_NAME)
+            .getLaunchIntentForPackage(packageName)
             ?: return false
 
         context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

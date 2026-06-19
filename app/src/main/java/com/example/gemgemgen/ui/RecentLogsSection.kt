@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunLog
+import com.example.gemgemgen.automation.domain.AutomationTargetApp
 
 @Composable
 internal fun RecentLogsSection(
@@ -84,6 +85,14 @@ private fun RunLogRow(log: AutomationRunLog) {
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
+            if (log.targetApp.isNotBlank()) {
+                Text(
+                    text = "대상 앱: ${
+                        AutomationTargetApp.fromStorageValue(log.targetApp).displayName
+                    }",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             Text(
                 text = "마지막 단계: ${log.lastStep.ifBlank { "기록 없음" }}",
                 style = MaterialTheme.typography.bodySmall

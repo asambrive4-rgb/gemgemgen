@@ -40,9 +40,23 @@ class MainUiStateTest {
         )
     }
 
+    @Test
+    fun canRun_usesSelectedTargetAppInstallationState() {
+        val environment = readyEnvironment().copy(isChatGptInstalled = false)
+
+        assertFalse(
+            MainUiState(
+                promptTemplate = "base prompt",
+                selectedTargetApp = AutomationTargetApp.CHATGPT,
+                environmentStatus = environment
+            ).canRun
+        )
+    }
+
     private fun readyEnvironment(): EnvironmentStatus {
         return EnvironmentStatus(
             isGeminiInstalled = true,
+            isChatGptInstalled = true,
             isAccessibilityServiceEnabled = true,
             hasWriteSecureSettingsPermission = true,
             isWildcardDirectoryAccessible = true

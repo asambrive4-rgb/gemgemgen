@@ -43,7 +43,8 @@ private object RunLogCodec {
                 log.completedCount.toString(),
                 log.successCount.toString(),
                 log.failureCount.toString(),
-                encodeText(log.markerStatus)
+                encodeText(log.markerStatus),
+                encodeText(log.targetApp)
             ).joinToString(FIELD_SEPARATOR)
         }
     }
@@ -53,7 +54,9 @@ private object RunLogCodec {
 
         return raw.lineSequence().mapNotNull { line ->
             val fields = line.split(FIELD_SEPARATOR)
-            if (fields.size != 6 && fields.size != 11) return@mapNotNull null
+            if (fields.size != 6 && fields.size != 11 && fields.size != 12) {
+                return@mapNotNull null
+            }
 
             val startedAtMillis = fields[0].toLongOrNull() ?: return@mapNotNull null
             val finishedAtMillis = fields[1].toLongOrNull() ?: return@mapNotNull null
@@ -68,7 +71,8 @@ private object RunLogCodec {
                 completedCount = fields.getOrNull(7)?.toIntOrNull() ?: 0,
                 successCount = fields.getOrNull(8)?.toIntOrNull() ?: 0,
                 failureCount = fields.getOrNull(9)?.toIntOrNull() ?: 0,
-                markerStatus = fields.getOrNull(10)?.let(::decodeText).orEmpty()
+                markerStatus = fields.getOrNull(10)?.let(::decodeText).orEmpty(),
+                targetApp = fields.getOrNull(11)?.let(::decodeText).orEmpty()
             )
         }.toList()
     }
