@@ -43,6 +43,18 @@ internal class ChatGptPromptAutomation(
         return nodeFinder.findSendNode()
     }
 
+    override fun recoverFromInputFailure(
+        onStateChange: (AutomationRunState) -> Unit
+    ) {
+        val closeNode = nodeFinder.findTooManyRequestsCloseNode() ?: return
+
+        onStateChange(AutomationRunState.Running("ChatGPT 요청 제한 알림 닫는 중"))
+        val clicked = clickNodeOrParent(closeNode)
+        if (clicked) {
+            onStateChange(AutomationRunState.Running("ChatGPT 요청 제한 알림 닫기 완료"))
+        }
+    }
+
     private fun clickMenuForInitialChat(
         attempt: Int,
         startedAtMillis: Long = SystemClock.uptimeMillis(),

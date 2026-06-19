@@ -36,6 +36,15 @@ internal class ChatGptAccessibilityNodeFinder(
         return findNodeByDescription("메시지 보내기")
     }
 
+    fun findTooManyRequestsCloseNode(): AccessibilityNodeInfo? {
+        val hasTooManyRequestsMessage = nodes().any { node ->
+            node.text?.toString()?.contains(TOO_MANY_REQUESTS_MESSAGE, ignoreCase = true) == true
+        }
+        if (!hasTooManyRequestsMessage) return null
+
+        return findNodeByDescription(TOO_MANY_REQUESTS_CLOSE_DESCRIPTION)
+    }
+
     private fun findNodeByDescription(value: String): AccessibilityNodeInfo? {
         return nodes().firstOrNull { node ->
             node.contentDescription?.toString()?.equals(value, ignoreCase = true) == true
@@ -57,5 +66,10 @@ internal class ChatGptAccessibilityNodeFinder(
 
         visit(root)
         return nodes
+    }
+
+    private companion object {
+        const val TOO_MANY_REQUESTS_MESSAGE = "Too many requests"
+        const val TOO_MANY_REQUESTS_CLOSE_DESCRIPTION = "닫기"
     }
 }

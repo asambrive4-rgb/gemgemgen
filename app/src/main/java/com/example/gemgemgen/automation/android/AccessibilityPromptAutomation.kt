@@ -56,6 +56,10 @@ internal abstract class AccessibilityPromptAutomation(
 
     protected abstract fun findSendNode(): AccessibilityNodeInfo?
 
+    protected open fun recoverFromInputFailure(
+        onStateChange: (AutomationRunState) -> Unit
+    ) = Unit
+
     protected fun retryOrFail(
         startedAtMillis: Long,
         failureMessage: String,
@@ -103,19 +107,14 @@ internal abstract class AccessibilityPromptAutomation(
                             onStateChange(AutomationRunState.Running("프롬프트 입력 완료"))
                             onDone()
                         } else {
-                            retryOrFail(
+                            handlePromptInputFailure(
+                                prompt = prompt,
+                                attempt = attempt,
                                 startedAtMillis = startedAtMillis,
                                 failureMessage = "$targetAppName 프롬프트 입력 반영 실패",
-                                onStateChange = onStateChange
-                            ) {
-                                setPromptText(
-                                    prompt = prompt,
-                                    attempt = attempt + 1,
-                                    startedAtMillis = startedAtMillis,
-                                    onStateChange = onStateChange,
-                                    onDone = onDone
-                                )
-                            }
+                                onStateChange = onStateChange,
+                                onDone = onDone
+                            )
                         }
                     },
                     INPUT_CONFIRM_WAIT_MS
@@ -124,9 +123,29 @@ internal abstract class AccessibilityPromptAutomation(
             }
         }
 
-        retryOrFail(
+        handlePromptInputFailure(
+            prompt = prompt,
+            attempt = attempt,
             startedAtMillis = startedAtMillis,
             failureMessage = "$targetAppName 입력창 못 찾음",
+            onStateChange = onStateChange,
+            onDone = onDone
+        )
+    }
+
+    private fun handlePromptInputFailure(
+        prompt: String,
+        attempt: Int,
+        startedAtMillis: Long,
+        failureMessage: String,
+        onStateChange: (AutomationRunState) -> Unit,
+        onDone: () -> Unit
+    ) {
+        recoverFromInputFailure(onStateChange)
+
+        retryOrFail(
+            startedAtMillis = startedAtMillis,
+            failureMessage = failureMessage,
             onStateChange = onStateChange
         ) {
             setPromptText(
