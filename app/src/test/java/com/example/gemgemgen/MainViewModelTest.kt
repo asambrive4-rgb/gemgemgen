@@ -1,5 +1,15 @@
 package com.example.gemgemgen
 
+import com.example.gemgemgen.automation.android.*
+import com.example.gemgemgen.automation.domain.*
+import com.example.gemgemgen.automation.usecase.*
+import com.example.gemgemgen.core.*
+import com.example.gemgemgen.environment.android.*
+import com.example.gemgemgen.environment.domain.*
+import com.example.gemgemgen.environment.usecase.*
+import com.example.gemgemgen.ui.*
+import com.example.gemgemgen.wildcard.domain.*
+import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -73,6 +83,19 @@ class MainViewModelTest {
     }
 
     @Test
+    fun saveWildcardFolder_updatesSettingsErrorWhenSaveFails() {
+        val folderSaver = FakeWildcardFolderSaver(
+            FolderSelectionResult(error = "폴더 권한 저장 실패")
+        )
+        val viewModel = viewModel(wildcardFolderSaver = folderSaver)
+
+        viewModel.saveWildcardFolder("content://wildcard")
+
+        assertEquals("", viewModel.uiState.value.settingsMessage)
+        assertEquals("폴더 권한 저장 실패", viewModel.uiState.value.settingsError)
+    }
+
+    @Test
     fun runAutomation_savesLastRunSnapshotWhenRunStarts() {
         val snapshotStorage = FakeLastRunSnapshotStorage()
         val viewModel = viewModel(
@@ -89,15 +112,15 @@ class MainViewModelTest {
 
     @Test
     fun runAutomation_copiesPromptTemplateToClipboardWhenRunStarts() {
-        val clipboardTextWriter = FakeClipboardTextWriter()
+        val clipboardGateway = FakeClipboardGateway()
         val viewModel = viewModel(
-            clipboardTextWriter = clipboardTextWriter
+            clipboardGateway = clipboardGateway
         )
 
         viewModel.onPromptTemplateChange("base __hair__ prompt")
         viewModel.runAutomation()
 
-        assertEquals("base __hair__ prompt", clipboardTextWriter.text)
+        assertEquals("base __hair__ prompt", clipboardGateway.writtenText)
     }
 
     @Test
@@ -172,7 +195,7 @@ class MainViewModelTest {
     private fun viewModel(
         environmentStatusReader: FakeEnvironmentStatusReader = FakeEnvironmentStatusReader(readyEnvironment()),
         clipboardText: String = "",
-        clipboardTextWriter: FakeClipboardTextWriter = FakeClipboardTextWriter(),
+        clipboardGateway: FakeClipboardGateway = FakeClipboardGateway(clipboardText),
         wildcardFolderSaver: FakeWildcardFolderSaver = FakeWildcardFolderSaver(),
         runLogger: RunLogger = RunLogger(FakeRunLogStorage()),
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
@@ -181,15 +204,15 @@ class MainViewModelTest {
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
         return MainViewModel(
-            environmentStatusReader = environmentStatusReader,
-            clipboardTextProvider = FakeClipboardTextProvider(clipboardText),
-            wildcardFolderSaver = wildcardFolderSaver,
+            checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentStatusReader),
+            clipboardGateway = clipboardGateway,
+            saveWildcardFolder = SaveWildcardFolderUseCase(wildcardFolderSaver),
             runLogger = runLogger,
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automationRunner ?: automation(
                 runLogger = runLogger,
                 lastRunSnapshotStore = lastRunSnapshotStore,
-                clipboardTextWriter = clipboardTextWriter,
+                clipboardGateway = clipboardGateway,
                 dispatchers = dispatchers
             ),
             dispatchers = dispatchers,
@@ -200,7 +223,7 @@ class MainViewModelTest {
     private fun automation(
         runLogger: RunLogger,
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
-        clipboardTextWriter: FakeClipboardTextWriter = FakeClipboardTextWriter(),
+        clipboardGateway: ClipboardGateway = FakeClipboardGateway(),
         service: FakeGeminiPromptGateway = FakeGeminiPromptGateway(),
         loadWildcards: () -> List<WildcardSet> = { emptyList() },
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined)
@@ -220,11 +243,11 @@ class MainViewModelTest {
             ),
             runLogger = runLogger,
             lastRunSnapshotStore = lastRunSnapshotStore,
-            clipboardTextWriter = clipboardTextWriter,
-            wildcardSetLoader = FakeWildcardSetLoader(loadWildcards),
+            clipboardGateway = clipboardGateway,
+            wildcardSetRepository = FakeWildcardSetRepository(loadWildcards),
             clock = { 1000L },
-            promptGatewayProvider = { service },
-            launchGeminiApp = { true },
+            promptGatewayProvider = GeminiPromptGatewayProvider { service },
+            geminiAppLauncher = GeminiAppLauncher { true },
             dispatchers = dispatchers,
             generatePrompt = { _, _, index ->
                 GeneratedPrompt(index, "base", "prompt $index", emptyMap())
@@ -234,7 +257,7 @@ class MainViewModelTest {
 
     private class FakeEnvironmentStatusReader(
         var status: EnvironmentStatus
-    ) : EnvironmentStatusReader {
+    ) : EnvironmentGateway {
         var checkCount = 0
 
         override fun check(): EnvironmentStatus {
@@ -243,29 +266,27 @@ class MainViewModelTest {
         }
     }
 
-    private class FakeClipboardTextProvider(
-        private val text: String
-    ) : ClipboardTextProvider {
-        override fun readText(): String = text
-    }
+    private class FakeClipboardGateway(
+        private val readableText: String = ""
+    ) : ClipboardGateway {
+        var writtenText: String = ""
 
-    private class FakeClipboardTextWriter : ClipboardTextWriter {
-        var text: String = ""
+        override fun readText(): String = readableText
 
         override fun writeText(text: String) {
-            this.text = text
+            writtenText = text
         }
     }
 
-    private class FakeWildcardSetLoader(
+    private class FakeWildcardSetRepository(
         private val loadWildcards: () -> List<WildcardSet>
-    ) : WildcardSetLoader {
+    ) : WildcardSetRepository {
         override fun load(): List<WildcardSet> = loadWildcards()
     }
 
     private class FakeWildcardFolderSaver(
         private val result: FolderSelectionResult = FolderSelectionResult()
-    ) : WildcardFolderSaver {
+    ) : WildcardFolderRepository {
         var savedFolderUri: String = ""
 
         override fun save(folderUri: String): FolderSelectionResult {

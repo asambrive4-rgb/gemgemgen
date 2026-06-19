@@ -1,5 +1,15 @@
 package com.example.gemgemgen
 
+import com.example.gemgemgen.automation.android.*
+import com.example.gemgemgen.automation.domain.*
+import com.example.gemgemgen.automation.usecase.*
+import com.example.gemgemgen.core.*
+import com.example.gemgemgen.environment.android.*
+import com.example.gemgemgen.environment.domain.*
+import com.example.gemgemgen.environment.usecase.*
+import com.example.gemgemgen.ui.*
+import com.example.gemgemgen.wildcard.domain.*
+import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -96,16 +106,16 @@ class WildcardManagerViewModelTest {
 
     @Test
     fun copyToClipboard_withEmptyTextShowsError() {
-        val writer = FakeClipboardTextWriter()
+        val clipboardGateway = FakeClipboardGateway()
         val viewModel = viewModel(
             fileManager = FakeWildcardFileManager("empty.txt" to ""),
-            clipboardTextWriter = writer
+            clipboardGateway = clipboardGateway
         )
 
         viewModel.copyToClipboard()
 
         assertEquals("복사할 내용이 없습니다.", viewModel.uiState.value.error)
-        assertEquals("", writer.writtenText)
+        assertEquals("", clipboardGateway.writtenText)
     }
 
     @Test
@@ -189,13 +199,12 @@ class WildcardManagerViewModelTest {
     private fun viewModel(
         fileManager: FakeWildcardFileManager = FakeWildcardFileManager(),
         clipboardText: String = "",
-        clipboardTextWriter: FakeClipboardTextWriter = FakeClipboardTextWriter(),
+        clipboardGateway: FakeClipboardGateway = FakeClipboardGateway(clipboardText),
         canModifyFiles: Boolean = true
     ): WildcardManagerViewModel {
         return WildcardManagerViewModel(
-            fileManager = fileManager,
-            clipboardTextProvider = FakeClipboardTextProvider(clipboardText),
-            clipboardTextWriter = clipboardTextWriter,
+            manageWildcardFiles = ManageWildcardFilesUseCase(fileManager),
+            wildcardClipboard = WildcardClipboardUseCase(clipboardGateway),
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
             coroutineScope = CoroutineScope(Dispatchers.Unconfined)
         ).also {
@@ -205,7 +214,7 @@ class WildcardManagerViewModelTest {
 
     private class FakeWildcardFileManager(
         vararg initialFiles: Pair<String, String>
-    ) : WildcardFileManager {
+    ) : WildcardFileRepository {
         private val files = linkedMapOf<String, String>()
 
         init {
@@ -269,14 +278,12 @@ class WildcardManagerViewModelTest {
         }
     }
 
-    private class FakeClipboardTextProvider(
-        private val text: String
-    ) : ClipboardTextProvider {
-        override fun readText(): String = text
-    }
-
-    private class FakeClipboardTextWriter : ClipboardTextWriter {
+    private class FakeClipboardGateway(
+        private val readableText: String = ""
+    ) : ClipboardGateway {
         var writtenText: String = ""
+
+        override fun readText(): String = readableText
 
         override fun writeText(text: String) {
             writtenText = text

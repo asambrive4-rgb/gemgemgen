@@ -1,5 +1,15 @@
 package com.example.gemgemgen
 
+import com.example.gemgemgen.automation.android.*
+import com.example.gemgemgen.automation.domain.*
+import com.example.gemgemgen.automation.usecase.*
+import com.example.gemgemgen.core.*
+import com.example.gemgemgen.environment.android.*
+import com.example.gemgemgen.environment.domain.*
+import com.example.gemgemgen.environment.usecase.*
+import com.example.gemgemgen.ui.*
+import com.example.gemgemgen.wildcard.domain.*
+import com.example.gemgemgen.wildcard.usecase.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -154,11 +164,11 @@ class RunGeminiAutomationUseCaseTest {
             ),
             runLogger = logger,
             lastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
-            clipboardTextWriter = FakeClipboardTextWriter(),
-            wildcardSetLoader = FakeWildcardSetLoader(loadWildcardSets),
+            clipboardGateway = FakeClipboardGateway(),
+            wildcardSetRepository = FakeWildcardSetRepository(loadWildcardSets),
             clock = { 1000L },
-            promptGatewayProvider = { service },
-            launchGeminiApp = { true },
+            promptGatewayProvider = GeminiPromptGatewayProvider { service },
+            geminiAppLauncher = GeminiAppLauncher { true },
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
             generatePrompt = generatePrompt
         )
@@ -214,13 +224,15 @@ class RunGeminiAutomationUseCaseTest {
         override fun write(promptTemplate: String, repeatCountText: String) = Unit
     }
 
-    private class FakeClipboardTextWriter : ClipboardTextWriter {
+    private class FakeClipboardGateway : ClipboardGateway {
+        override fun readText(): String = ""
+
         override fun writeText(text: String) = Unit
     }
 
-    private class FakeWildcardSetLoader(
+    private class FakeWildcardSetRepository(
         private val loadWildcardSets: () -> List<WildcardSet>
-    ) : WildcardSetLoader {
+    ) : WildcardSetRepository {
         override fun load(): List<WildcardSet> = loadWildcardSets()
     }
 
