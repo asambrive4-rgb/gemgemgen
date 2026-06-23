@@ -1,5 +1,6 @@
 package com.example.gemgemgen.ui
 
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.ui.AutomationScreen
@@ -55,6 +56,7 @@ internal data class WildcardAppActions(
 internal fun AutomationApp(
     selectedTab: MainTab,
     mainUiState: MainUiState,
+    promptTemplateState: TextFieldState,
     wildcardUiState: WildcardManagerUiState?,
     automationActions: AutomationAppActions,
     wildcardActions: WildcardAppActions?
@@ -67,6 +69,7 @@ internal fun AutomationApp(
             MainTabPage(MainTab.AUTOMATION) {
                 AutomationScreen(
                     uiState = mainUiState,
+                    promptTemplateState = promptTemplateState,
                     onClearFocus = automationActions.onClearFocus,
                     onHideSettings = automationActions.onHideSettings,
                     onRefreshStatus = automationActions.onRefreshStatus,

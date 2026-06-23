@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -27,6 +28,7 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 @Composable
 internal fun AutomationScreen(
     uiState: MainUiState,
+    promptTemplateState: TextFieldState,
     onClearFocus: () -> Unit,
     onHideSettings: () -> Unit,
     onRefreshStatus: () -> Unit,
@@ -57,7 +59,7 @@ internal fun AutomationScreen(
             ) {
 
                 PromptSection(
-                    promptTemplate = uiState.promptTemplate,
+                    promptTemplateState = promptTemplateState,
                     selectedTargetApp = uiState.selectedTargetApp,
                     isTargetSelectionEnabled = !uiState.isRunning,
                     onTargetAppSelected = onTargetAppSelected,
@@ -105,6 +107,7 @@ private fun AutomationAppPreview() {
     GemgemgenTheme {
         AutomationScreen(
             uiState = MainUiState(),
+            promptTemplateState = TextFieldState(),
             onClearFocus = {},
             onHideSettings = {},
             onRefreshStatus = {},

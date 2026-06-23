@@ -2,6 +2,7 @@ package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,7 @@ import com.example.gemgemgen.ui.AppMultilineTextField
 
 @Composable
 internal fun PromptSection(
-    promptTemplate: String,
+    promptTemplateState: TextFieldState,
     selectedTargetApp: AutomationTargetApp,
     isTargetSelectionEnabled: Boolean,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
@@ -72,7 +73,7 @@ internal fun PromptSection(
             }
         }
         AppMultilineTextField(
-            value = promptTemplate,
+            state = promptTemplateState,
             onValueChange = onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
             minLines = 6

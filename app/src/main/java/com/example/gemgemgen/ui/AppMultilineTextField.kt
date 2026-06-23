@@ -1,21 +1,22 @@
 package com.example.gemgemgen.ui
 
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.TextFieldValue
+import kotlinx.coroutines.flow.distinctUntilChanged
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AppMultilineTextField(
-    value: String,
+    state: TextFieldState,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -23,28 +24,14 @@ internal fun AppMultilineTextField(
     minLines: Int,
     maxLines: Int = 18
 ) {
-    var textFieldValueState by remember {
-        mutableStateOf(
-            TextFieldValue(
-                text = value,
-                selection = TextRange(value.length)
-            )
-        )
-    }
-
-    if (textFieldValueState.text != value) {
-        textFieldValueState = textFieldValueState.copy(
-            text = value,
-            selection = TextRange(value.length)
-        )
+    LaunchedEffect(state, onValueChange) {
+        snapshotFlow { state.text.toString() }
+            .distinctUntilChanged()
+            .collect { onValueChange(it) }
     }
 
     OutlinedTextField(
-        value = textFieldValueState,
-        onValueChange = { newVal ->
-            textFieldValueState = newVal
-            onValueChange(newVal.text)
-        },
+        state = state,
         modifier = modifier,
         enabled = enabled,
         placeholder = {
@@ -52,8 +39,10 @@ internal fun AppMultilineTextField(
                 Text(placeholder)
             }
         },
-        minLines = minLines,
-        maxLines = maxLines,
+        lineLimits = TextFieldLineLimits.MultiLine(
+            minHeightInLines = minLines,
+            maxHeightInLines = maxLines
+        ),
         textStyle = TextStyle(fontFamily = FontFamily.Monospace)
     )
 }

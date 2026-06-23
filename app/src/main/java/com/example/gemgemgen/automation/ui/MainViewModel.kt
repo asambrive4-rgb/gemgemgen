@@ -1,5 +1,7 @@
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -46,6 +48,7 @@ class MainViewModel(
     private var automationPreparationJob: Job? = null
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
+    val promptTemplateTextFieldState = TextFieldState()
     private val _automationBarUiState = MutableStateFlow(AutomationBarUiState())
     val automationBarUiState: StateFlow<AutomationBarUiState> =
         _automationBarUiState.asStateFlow()
@@ -56,7 +59,12 @@ class MainViewModel(
     }
 
     fun onPromptTemplateChange(value: String) {
-        _uiState.update { it.copy(promptTemplate = value) }
+        if (!promptTemplateTextFieldState.text.contentEquals(value)) {
+            promptTemplateTextFieldState.setTextAndPlaceCursorAtEnd(value)
+        }
+        _uiState.update {
+            if (it.promptTemplate == value) it else it.copy(promptTemplate = value)
+        }
     }
 
     fun onTargetAppSelected(targetApp: AutomationTargetApp) {
@@ -200,6 +208,7 @@ class MainViewModel(
                     recentLogs = snapshotAndLogs.second
                 )
             }
+            onPromptTemplateChange(uiState.value.promptTemplate)
             val restoredState = uiState.value
             _automationBarUiState.value = AutomationBarUiState(
                 repeatCountText = restoredState.repeatCountText,

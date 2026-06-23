@@ -1,5 +1,6 @@
 package com.example.gemgemgen
 
+import androidx.compose.ui.text.TextRange
 import com.example.gemgemgen.automation.android.*
 import com.example.gemgemgen.automation.domain.*
 import com.example.gemgemgen.automation.usecase.*
@@ -28,6 +29,42 @@ class MainViewModelTest {
         viewModel.importPromptFromClipboard()
 
         assertEquals("clipboard prompt", viewModel.uiState.value.promptTemplate)
+        assertEquals(
+            "clipboard prompt",
+            viewModel.promptTemplateTextFieldState.text.toString()
+        )
+    }
+
+    @Test
+    fun onPromptTemplateChange_withSameText_preservesSelection() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("abcdef")
+        viewModel.promptTemplateTextFieldState.edit {
+            selection = TextRange(1, 4)
+        }
+
+        viewModel.onPromptTemplateChange("abcdef")
+
+        assertEquals(
+            TextRange(1, 4),
+            viewModel.promptTemplateTextFieldState.selection
+        )
+    }
+
+    @Test
+    fun onPromptTemplateChange_withDifferentText_placesCursorAtEnd() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("before")
+        viewModel.promptTemplateTextFieldState.edit {
+            selection = TextRange(1, 3)
+        }
+
+        viewModel.onPromptTemplateChange("after")
+
+        assertEquals(
+            TextRange("after".length),
+            viewModel.promptTemplateTextFieldState.selection
+        )
     }
 
     @Test

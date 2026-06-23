@@ -137,6 +137,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     AutomationApp(
         selectedTab = selectedTab,
         mainUiState = mainUiState,
+        promptTemplateState = mainViewModel.promptTemplateTextFieldState,
         wildcardUiState = wildcardUiState,
         automationActions = AutomationAppActions(
             onSelectTab = {
