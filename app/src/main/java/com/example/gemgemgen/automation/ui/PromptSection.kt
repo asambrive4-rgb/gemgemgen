@@ -1,17 +1,24 @@
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -22,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.ui.AppMultilineTextField
 
@@ -30,14 +38,22 @@ internal fun PromptSection(
     promptTemplateState: TextFieldState,
     selectedTargetApp: AutomationTargetApp,
     isTargetSelectionEnabled: Boolean,
+    isParagraphSelectionMode: Boolean,
+    canUndoPromptEdit: Boolean,
+    selectedParagraphRange: PromptParagraphRange?,
+    paragraphSelectionMessage: String,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
+    onUndoPromptEdit: () -> Unit,
+    onToggleParagraphSelectionMode: () -> Unit,
+    onParagraphOffsetSelected: (Int) -> Unit,
+    onDeleteSelectedParagraph: () -> Unit,
     onImportFromClipboard: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -46,6 +62,7 @@ internal fun PromptSection(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(modifier = Modifier.width(8.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -59,6 +76,59 @@ internal fun PromptSection(
                     )
                 }
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = onUndoPromptEdit,
+                enabled = canUndoPromptEdit && isTargetSelectionEnabled,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = "Undo",
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            OutlinedButton(
+                onClick = onToggleParagraphSelectionMode,
+                enabled = isTargetSelectionEnabled,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (isParagraphSelectionMode) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    }
+                ),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = if (isParagraphSelectionMode) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+                    contentColor = if (isParagraphSelectionMode) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+            ) {
+                Text(
+                    text = "문단 선택",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
             OutlinedButton(
                 onClick = onImportFromClipboard,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
@@ -76,7 +146,13 @@ internal fun PromptSection(
             state = promptTemplateState,
             onValueChange = onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
-            minLines = 6
+            minLines = 6,
+            paragraphSelectionEnabled = isParagraphSelectionMode,
+            selectedParagraphRange = selectedParagraphRange,
+            selectedParagraphColor = MaterialTheme.colorScheme.primaryContainer,
+            supportingText = paragraphSelectionMessage,
+            onParagraphOffsetSelected = onParagraphOffsetSelected,
+            onDeleteSelectedParagraph = onDeleteSelectedParagraph
         )
     }
 }

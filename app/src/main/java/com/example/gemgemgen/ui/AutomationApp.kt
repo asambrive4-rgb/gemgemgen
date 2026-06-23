@@ -19,6 +19,10 @@ internal data class AutomationAppActions(
     val onOpenAccessibilitySettings: () -> Unit,
     val onTargetAppSelected: (AutomationTargetApp) -> Unit,
     val onPromptTemplateChange: (String) -> Unit,
+    val onUndoPromptEdit: () -> Unit,
+    val onToggleParagraphSelectionMode: () -> Unit,
+    val onParagraphOffsetSelected: (Int) -> Unit,
+    val onDeleteSelectedParagraph: () -> Unit,
     val onImportFromClipboard: () -> Unit,
     val onRepeatCountChange: (String) -> Unit,
     val onRunAutomation: () -> Unit,
@@ -78,6 +82,13 @@ internal fun AutomationApp(
                         automationActions.onOpenAccessibilitySettings,
                     onTargetAppSelected = automationActions.onTargetAppSelected,
                     onPromptTemplateChange = automationActions.onPromptTemplateChange,
+                    onUndoPromptEdit = automationActions.onUndoPromptEdit,
+                    onToggleParagraphSelectionMode =
+                        automationActions.onToggleParagraphSelectionMode,
+                    onParagraphOffsetSelected =
+                        automationActions.onParagraphOffsetSelected,
+                    onDeleteSelectedParagraph =
+                        automationActions.onDeleteSelectedParagraph,
                     onImportFromClipboard = automationActions.onImportFromClipboard,
                     onRepeatCountChange = automationActions.onRepeatCountChange,
                     onRunMvp = automationActions.onRunAutomation,

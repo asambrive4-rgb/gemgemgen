@@ -141,6 +141,9 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         wildcardUiState = wildcardUiState,
         automationActions = AutomationAppActions(
             onSelectTab = {
+                if (it != MainTab.AUTOMATION) {
+                    mainViewModel.cancelParagraphSelection()
+                }
                 if (it == MainTab.WILDCARD) shouldLoadWildcard = true
                 selectedTab = it
             },
@@ -154,6 +157,11 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             },
             onTargetAppSelected = mainViewModel::onTargetAppSelected,
             onPromptTemplateChange = mainViewModel::onPromptTemplateChange,
+            onUndoPromptEdit = mainViewModel::undoPromptEdit,
+            onToggleParagraphSelectionMode =
+                mainViewModel::toggleParagraphSelectionMode,
+            onParagraphOffsetSelected = mainViewModel::selectPromptParagraphAt,
+            onDeleteSelectedParagraph = mainViewModel::deleteSelectedPromptParagraph,
             onImportFromClipboard = mainViewModel::importPromptFromClipboard,
             onRepeatCountChange = mainViewModel::onRepeatCountChange,
             onRunAutomation = ::runAutomation,

@@ -68,6 +68,176 @@ class MainViewModelTest {
     }
 
     @Test
+    fun undoPromptEdit_revertsContinuousTypingAsSingleStep() {
+        val viewModel = viewModel()
+
+        viewModel.onPromptTemplateChange("인")
+        viewModel.onPromptTemplateChange("인물")
+        viewModel.onPromptTemplateChange("인물 설명")
+
+        assertTrue(viewModel.uiState.value.canUndoPromptEdit)
+
+        viewModel.undoPromptEdit()
+
+        assertEquals("", viewModel.uiState.value.promptTemplate)
+        assertEquals("", viewModel.promptTemplateTextFieldState.text.toString())
+        assertTrue(!viewModel.uiState.value.canUndoPromptEdit)
+    }
+
+    @Test
+    fun undoPromptEdit_afterDebounce_revertsOnlyLatestTypingGroup() {
+        val viewModel = viewModel()
+
+        viewModel.onPromptTemplateChange("인물")
+        Thread.sleep(800)
+        viewModel.onPromptTemplateChange("인물\n장소")
+
+        viewModel.undoPromptEdit()
+
+        assertEquals("인물", viewModel.uiState.value.promptTemplate)
+        assertEquals("인물", viewModel.promptTemplateTextFieldState.text.toString())
+        assertTrue(viewModel.uiState.value.canUndoPromptEdit)
+    }
+
+    @Test
+    fun undoPromptEdit_afterWholeClipboardImport_restoresPreviousPrompt() {
+        val viewModel = viewModel(
+            clipboardText = "새 프롬프트",
+            lastRunSnapshotStore = LastRunSnapshotStore(
+                FakeLastRunSnapshotStorage(promptTemplate = "기존 프롬프트")
+            )
+        )
+
+        viewModel.importPromptFromClipboard()
+        viewModel.undoPromptEdit()
+
+        assertEquals("기존 프롬프트", viewModel.uiState.value.promptTemplate)
+        assertEquals("기존 프롬프트", viewModel.promptTemplateTextFieldState.text.toString())
+    }
+
+    @Test
+    fun toggleParagraphSelectionMode_enablesAndClearsMode() {
+        val viewModel = viewModel()
+
+        viewModel.toggleParagraphSelectionMode()
+
+        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(viewModel.uiState.value.paragraphSelectionMessage.isNotBlank())
+
+        viewModel.toggleParagraphSelectionMode()
+
+        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+        assertEquals(null, viewModel.uiState.value.selectedParagraphRange)
+    }
+
+    @Test
+    fun selectPromptParagraphAt_selectsTouchedNonBlankLine() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("첫째\n둘째\n셋째")
+        viewModel.toggleParagraphSelectionMode()
+
+        viewModel.selectPromptParagraphAt(4)
+
+        assertEquals(
+            PromptParagraphRange(3, 5),
+            viewModel.uiState.value.selectedParagraphRange
+        )
+    }
+
+    @Test
+    fun selectPromptParagraphAt_blankLine_clearsSelection() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("첫째\n\n셋째")
+        viewModel.toggleParagraphSelectionMode()
+
+        viewModel.selectPromptParagraphAt(3)
+
+        assertEquals(null, viewModel.uiState.value.selectedParagraphRange)
+        assertTrue(viewModel.uiState.value.paragraphSelectionMessage.contains("빈 줄"))
+    }
+
+    @Test
+    fun importPromptFromClipboard_inSelectionMode_replacesOnlySelectedParagraph() {
+        val viewModel = viewModel(clipboardText = "새 장소\n보조 설명")
+        viewModel.onPromptTemplateChange("인물\n장소\n조명")
+        viewModel.toggleParagraphSelectionMode()
+        viewModel.selectPromptParagraphAt(4)
+
+        viewModel.importPromptFromClipboard()
+
+        assertEquals(
+            "인물\n새 장소\n보조 설명\n조명",
+            viewModel.uiState.value.promptTemplate
+        )
+        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+        assertEquals(
+            TextRange("인물\n새 장소\n보조 설명".length),
+            viewModel.promptTemplateTextFieldState.selection
+        )
+    }
+
+    @Test
+    fun importPromptFromClipboard_withoutSelection_keepsTextAndMode() {
+        val viewModel = viewModel(clipboardText = "새 장소")
+        viewModel.onPromptTemplateChange("인물\n장소")
+        viewModel.toggleParagraphSelectionMode()
+
+        viewModel.importPromptFromClipboard()
+
+        assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
+        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(viewModel.uiState.value.paragraphSelectionMessage.contains("먼저"))
+    }
+
+    @Test
+    fun importPromptFromClipboard_blankClipboard_keepsSelectedParagraph() {
+        val viewModel = viewModel(clipboardText = "   ")
+        viewModel.onPromptTemplateChange("인물\n장소")
+        viewModel.toggleParagraphSelectionMode()
+        viewModel.selectPromptParagraphAt(4)
+
+        viewModel.importPromptFromClipboard()
+
+        assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
+        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
+        assertEquals(
+            PromptParagraphRange(3, 5),
+            viewModel.uiState.value.selectedParagraphRange
+        )
+    }
+
+    @Test
+    fun deleteSelectedPromptParagraph_deletesTextButKeepsLineBreaks() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("인물\n장소\n조명")
+        viewModel.toggleParagraphSelectionMode()
+        viewModel.selectPromptParagraphAt(4)
+
+        viewModel.deleteSelectedPromptParagraph()
+
+        assertEquals("인물\n\n조명", viewModel.uiState.value.promptTemplate)
+        assertEquals(
+            TextRange("인물\n".length),
+            viewModel.promptTemplateTextFieldState.selection
+        )
+        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+    }
+
+    @Test
+    fun cancelParagraphSelection_clearsSelectionState() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("인물\n장소")
+        viewModel.toggleParagraphSelectionMode()
+        viewModel.selectPromptParagraphAt(4)
+
+        viewModel.cancelParagraphSelection()
+
+        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+        assertEquals(null, viewModel.uiState.value.selectedParagraphRange)
+        assertEquals("", viewModel.uiState.value.paragraphSelectionMessage)
+    }
+
+    @Test
     fun onRepeatCountChange_usesSharedNormalizationRule() {
         val viewModel = viewModel()
 

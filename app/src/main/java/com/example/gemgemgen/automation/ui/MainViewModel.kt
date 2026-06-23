@@ -2,10 +2,13 @@ package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.ui.text.TextRange
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.PromptParagraphEditPolicy
+import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
@@ -25,6 +28,7 @@ import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,6 +50,10 @@ class MainViewModel(
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
     private var automationPreparationJob: Job? = null
+    private var promptUndoStack: List<String> = emptyList()
+    private var pendingPromptUndoSnapshot: String? = null
+    private var promptUndoDebounceJob: Job? = null
+    private var ignoredPromptChangeText: String? = null
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
     val promptTemplateTextFieldState = TextFieldState()
@@ -59,11 +67,102 @@ class MainViewModel(
     }
 
     fun onPromptTemplateChange(value: String) {
+        val previous = _uiState.value.promptTemplate
         if (!promptTemplateTextFieldState.text.contentEquals(value)) {
             promptTemplateTextFieldState.setTextAndPlaceCursorAtEnd(value)
         }
         _uiState.update {
             if (it.promptTemplate == value) it else it.copy(promptTemplate = value)
+        }
+        if (ignoredPromptChangeText == value) {
+            ignoredPromptChangeText = null
+            return
+        }
+        if (previous != value) {
+            schedulePromptTypingUndo(previous)
+        }
+    }
+
+    fun toggleParagraphSelectionMode() {
+        _uiState.update {
+            if (it.isParagraphSelectionMode) {
+                it.copy(
+                    isParagraphSelectionMode = false,
+                    selectedParagraphRange = null,
+                    paragraphSelectionMessage = ""
+                )
+            } else {
+                it.copy(
+                    isParagraphSelectionMode = true,
+                    selectedParagraphRange = null,
+                    paragraphSelectionMessage = PARAGRAPH_SELECTION_GUIDE
+                )
+            }
+        }
+    }
+
+    fun selectPromptParagraphAt(offset: Int) {
+        if (!_uiState.value.isParagraphSelectionMode) return
+
+        val range = PromptParagraphEditPolicy.findParagraph(
+            text = promptTemplateTextFieldState.text.toString(),
+            offset = offset
+        )
+        _uiState.update {
+            if (range == null) {
+                it.copy(
+                    selectedParagraphRange = null,
+                    paragraphSelectionMessage = EMPTY_PARAGRAPH_MESSAGE
+                )
+            } else {
+                it.copy(
+                    selectedParagraphRange = range,
+                    paragraphSelectionMessage = PARAGRAPH_SELECTED_MESSAGE
+                )
+            }
+        }
+    }
+
+    fun deleteSelectedPromptParagraph() {
+        val state = _uiState.value
+        val range = state.selectedParagraphRange ?: return
+        val currentText = promptTemplateTextFieldState.text.toString()
+        if (range.endExclusive > currentText.length) {
+            cancelParagraphSelection()
+            return
+        }
+
+        recordImmediatePromptUndo(currentText)
+        val newText = PromptParagraphEditPolicy.replace(currentText, range, "")
+        ignoredPromptChangeText = newText
+        promptTemplateTextFieldState.edit {
+            replace(range.start, range.endExclusive, "")
+            selection = TextRange(range.start)
+        }
+        _uiState.update {
+            it.copy(
+                promptTemplate = newText,
+                isParagraphSelectionMode = false,
+                selectedParagraphRange = null,
+                paragraphSelectionMessage = ""
+            )
+        }
+    }
+
+    fun cancelParagraphSelection() {
+        _uiState.update {
+            if (!it.isParagraphSelectionMode &&
+                it.selectedParagraphRange == null &&
+                it.paragraphSelectionMessage.isEmpty()
+            ) {
+                it
+            } else {
+                it.copy(
+                    isParagraphSelectionMode = false,
+                    selectedParagraphRange = null,
+                    paragraphSelectionMessage = ""
+                )
+            }
         }
     }
 
@@ -84,7 +183,44 @@ class MainViewModel(
             val text = withContext(dispatchers.io) {
                 clipboardGateway.readText()
             }
-            onPromptTemplateChange(text)
+            val state = _uiState.value
+            if (!state.isParagraphSelectionMode) {
+                replaceWholePromptTemplate(text)
+                return@launch
+            }
+
+            val range = state.selectedParagraphRange
+            when {
+                range == null -> {
+                    _uiState.update {
+                        it.copy(paragraphSelectionMessage = SELECT_PARAGRAPH_FIRST_MESSAGE)
+                    }
+                }
+                text.isBlank() -> {
+                    _uiState.update {
+                        it.copy(paragraphSelectionMessage = EMPTY_CLIPBOARD_MESSAGE)
+                    }
+                }
+                else -> replaceSelectedParagraph(range.start, range.endExclusive, text)
+            }
+        }
+    }
+
+    fun undoPromptEdit() {
+        if (_uiState.value.isRunning) return
+
+        commitPendingPromptUndo()
+        val previous = promptUndoStack.firstOrNull() ?: return
+        promptUndoStack = promptUndoStack.drop(1)
+        applyPromptTemplateText(previous)
+        _uiState.update {
+            it.copy(
+                promptTemplate = previous,
+                isParagraphSelectionMode = false,
+                selectedParagraphRange = null,
+                paragraphSelectionMessage = "",
+                canUndoPromptEdit = hasPromptUndo()
+            )
         }
     }
 
@@ -140,6 +276,7 @@ class MainViewModel(
         )
         if (decision != AutomationStartDecision.Started) return decision
 
+        cancelParagraphSelection()
         handleAutomationState(AutomationRunState.Running("자동화 준비 중"))
         val request = AutomationRunRequest(
             promptTemplate = state.promptTemplate,
@@ -208,7 +345,7 @@ class MainViewModel(
                     recentLogs = snapshotAndLogs.second
                 )
             }
-            onPromptTemplateChange(uiState.value.promptTemplate)
+            applyPromptTemplateText(uiState.value.promptTemplate)
             val restoredState = uiState.value
             _automationBarUiState.value = AutomationBarUiState(
                 repeatCountText = restoredState.repeatCountText,
@@ -240,6 +377,121 @@ class MainViewModel(
             }
             _uiState.update { it.copy(recentLogs = logs) }
         }
+    }
+
+    private fun replaceSelectedParagraph(
+        start: Int,
+        endExclusive: Int,
+        replacement: String
+    ) {
+        val currentText = promptTemplateTextFieldState.text.toString()
+        if (start !in 0..currentText.length || endExclusive !in start..currentText.length) {
+            cancelParagraphSelection()
+            return
+        }
+
+        recordImmediatePromptUndo(currentText)
+        val range = PromptParagraphRange(
+            start = start,
+            endExclusive = endExclusive
+        )
+        val newText = PromptParagraphEditPolicy.replace(currentText, range, replacement)
+        ignoredPromptChangeText = newText
+        promptTemplateTextFieldState.edit {
+            replace(start, endExclusive, replacement)
+            selection = TextRange(start + replacement.length)
+        }
+        _uiState.update {
+            it.copy(
+                promptTemplate = newText,
+                isParagraphSelectionMode = false,
+                selectedParagraphRange = null,
+                paragraphSelectionMessage = ""
+            )
+        }
+    }
+
+    private fun replaceWholePromptTemplate(replacement: String) {
+        val currentText = promptTemplateTextFieldState.text.toString()
+        if (currentText == replacement) return
+
+        recordImmediatePromptUndo(currentText)
+        applyPromptTemplateText(replacement)
+        _uiState.update {
+            it.copy(
+                promptTemplate = replacement,
+                isParagraphSelectionMode = false,
+                selectedParagraphRange = null,
+                paragraphSelectionMessage = "",
+                canUndoPromptEdit = hasPromptUndo()
+            )
+        }
+    }
+
+    private fun applyPromptTemplateText(text: String) {
+        if (!promptTemplateTextFieldState.text.contentEquals(text)) {
+            ignoredPromptChangeText = text
+            promptTemplateTextFieldState.setTextAndPlaceCursorAtEnd(text)
+        }
+    }
+
+    private fun schedulePromptTypingUndo(previous: String) {
+        if (pendingPromptUndoSnapshot == null) {
+            pendingPromptUndoSnapshot = previous
+        }
+        promptUndoDebounceJob?.cancel()
+        promptUndoDebounceJob = scope.launch {
+            delay(PROMPT_UNDO_DEBOUNCE_MILLIS)
+            commitPendingPromptUndo()
+        }
+        updatePromptUndoAvailability()
+    }
+
+    private fun recordImmediatePromptUndo(snapshot: String) {
+        commitPendingPromptUndo()
+        pushPromptUndo(snapshot)
+        updatePromptUndoAvailability()
+    }
+
+    private fun commitPendingPromptUndo() {
+        val snapshot = pendingPromptUndoSnapshot ?: return
+        pendingPromptUndoSnapshot = null
+        promptUndoDebounceJob?.cancel()
+        promptUndoDebounceJob = null
+        if (snapshot != _uiState.value.promptTemplate) {
+            pushPromptUndo(snapshot)
+        }
+        updatePromptUndoAvailability()
+    }
+
+    private fun pushPromptUndo(snapshot: String) {
+        if (promptUndoStack.firstOrNull() == snapshot) return
+        promptUndoStack = (listOf(snapshot) + promptUndoStack).take(MAX_PROMPT_UNDO_COUNT)
+    }
+
+    private fun updatePromptUndoAvailability() {
+        val canUndo = hasPromptUndo()
+        _uiState.update {
+            if (it.canUndoPromptEdit == canUndo) it else it.copy(canUndoPromptEdit = canUndo)
+        }
+    }
+
+    private fun hasPromptUndo(): Boolean {
+        return pendingPromptUndoSnapshot != null || promptUndoStack.isNotEmpty()
+    }
+
+    private companion object {
+        const val MAX_PROMPT_UNDO_COUNT = 5
+        const val PROMPT_UNDO_DEBOUNCE_MILLIS = 700L
+        const val PARAGRAPH_SELECTION_GUIDE =
+            "바꿀 문단을 터치하세요. 직접 입력은 제한되며 삭제키는 사용할 수 있습니다."
+        const val PARAGRAPH_SELECTED_MESSAGE =
+            "문단이 선택되었습니다. 가져오기 또는 삭제키를 사용하세요."
+        const val EMPTY_PARAGRAPH_MESSAGE =
+            "빈 줄은 선택할 수 없습니다. 텍스트가 있는 문단을 터치하세요."
+        const val SELECT_PARAGRAPH_FIRST_MESSAGE = "먼저 바꿀 문단을 선택하세요."
+        const val EMPTY_CLIPBOARD_MESSAGE =
+            "클립보드가 비어 있어 선택한 문단을 바꾸지 않았습니다."
     }
 }
 

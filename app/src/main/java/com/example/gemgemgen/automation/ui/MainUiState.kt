@@ -3,6 +3,7 @@ package com.example.gemgemgen.automation.ui
 import com.example.gemgemgen.automation.domain.AutomationRunLog
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
@@ -18,7 +19,11 @@ data class MainUiState(
     val showSettings: Boolean = false,
     val settingsMessage: String = "",
     val settingsError: String = "",
-    val showRecentLogs: Boolean = false
+    val showRecentLogs: Boolean = false,
+    val isParagraphSelectionMode: Boolean = false,
+    val selectedParagraphRange: PromptParagraphRange? = null,
+    val paragraphSelectionMessage: String = "",
+    val canUndoPromptEdit: Boolean = false
 ) {
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()
