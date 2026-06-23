@@ -250,28 +250,20 @@ class RunAutomationUseCaseTest {
         }
     }
 
-    private class FakeRunLogStorage : RunLogStorage {
-        private var value: String = ""
+    private class FakeRunLogStorage : RunLogRepository {
+        private var logs: List<AutomationRunLog> = emptyList()
 
-        override fun read(): String = value
+        override fun load(): List<AutomationRunLog> = logs
 
-        override fun write(value: String) {
-            this.value = value
+        override fun save(logs: List<AutomationRunLog>) {
+            this.logs = logs
         }
     }
 
-    private class FakeLastRunSnapshotStorage : LastRunSnapshotStorage {
-        override fun readPromptTemplate(): String = ""
+    private class FakeLastRunSnapshotStorage : LastRunSnapshotRepository {
+        override fun load(): LastRunSnapshot? = null
 
-        override fun readRepeatCountText(): String = ""
-
-        override fun readTargetApp(): String = ""
-
-        override fun write(
-            promptTemplate: String,
-            repeatCountText: String,
-            targetApp: String
-        ) = Unit
+        override fun save(snapshot: LastRunSnapshot) = Unit
     }
 
     private class FakeClipboardGateway : ClipboardGateway {

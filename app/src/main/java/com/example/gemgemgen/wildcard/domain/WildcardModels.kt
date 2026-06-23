@@ -8,8 +8,7 @@ data class WildcardSet(
 
 data class WildcardTextFile(
     val id: String,
-    val fileName: String,
-    val documentUri: String
+    val fileName: String
 )
 
 object WildcardFileName {

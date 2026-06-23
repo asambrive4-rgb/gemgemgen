@@ -1,7 +1,6 @@
 package com.example.gemgemgen.environment.domain
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
-import com.example.gemgemgen.core.AppDefaults
 
 data class EnvironmentStatus(
     val isGeminiInstalled: Boolean = false,
@@ -9,10 +8,7 @@ data class EnvironmentStatus(
     val isAccessibilityServiceEnabled: Boolean = false,
     val hasWriteSecureSettingsPermission: Boolean = false,
     val isWildcardDirectoryAccessible: Boolean = false,
-    val isWildcardDirectoryWritable: Boolean = false,
-    val wildcardDirectoryPath: String = "",
-    val nullKeyboardTargetImeId: String = AppDefaults.NULL_KEYBOARD_IME_ID,
-    val adbGrantCommand: String = ""
+    val isWildcardDirectoryWritable: Boolean = false
 ) {
     fun isReadyFor(targetApp: AutomationTargetApp): Boolean {
         return isTargetAppInstalled(targetApp) &&
@@ -31,4 +27,15 @@ data class EnvironmentStatus(
     val canEditWildcardFiles: Boolean
         get() = isWildcardDirectoryAccessible && isWildcardDirectoryWritable
 }
+
+data class EnvironmentSetupInfo(
+    val wildcardDirectoryPath: String = "",
+    val nullKeyboardTargetImeId: String = "",
+    val adbGrantCommand: String = ""
+)
+
+data class EnvironmentReport(
+    val status: EnvironmentStatus = EnvironmentStatus(),
+    val setupInfo: EnvironmentSetupInfo = EnvironmentSetupInfo()
+)
 

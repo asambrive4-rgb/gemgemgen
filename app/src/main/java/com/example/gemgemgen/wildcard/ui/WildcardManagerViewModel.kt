@@ -1,28 +1,23 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.gemgemgen.core.AppDispatchers
-import com.example.gemgemgen.core.ClipboardGateway
+import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
 import com.example.gemgemgen.wildcard.domain.WildcardTextEditResult
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardPasteResult
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
-import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class WildcardManagerViewModel(
     private val manageWildcardFiles: ManageWildcardFilesUseCase,
     private val wildcardClipboard: WildcardClipboardUseCase,
-    private val dispatchers: AppDispatchers = AppDispatchers(),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
@@ -47,24 +42,37 @@ class WildcardManagerViewModel(
         scope.launch {
             try {
                 val state = uiState.value
-                val files = listFiles()
-                val currentFile = state.selectedFile?.let { selected ->
-                    files.firstOrNull { it.id == selected.id }
-                }
-
+                val workspace = manageWildcardFiles.refreshWorkspace(
+                    selectedFile = state.selectedFile,
+                    openFirstFile = openFirstFile
+                )
+                val openedFile = workspace.selectedFile
+                val openedText = workspace.selectedText
                 _uiState.update {
+                    val editor = when {
+                        openedFile != null && openedText != null ->
+                            it.editor.open(openedFile, openedText)
+                        openedFile != null -> it.editor.rename(openedFile)
+                        else -> it.editor
+                    }
                     it.copy(
-                        files = files,
-                        selectedFile = currentFile ?: it.selectedFile,
+                        files = workspace.files,
+                        editor = editor,
+                        message = if (openedFile != null && openedText != null) {
+                            "${openedFile.fileName} 열기 완료"
+                        } else {
+                            it.message
+                        },
                         error = ""
                     )
                 }
 
-                when {
-                    currentFile != null -> Unit
-                    openFirstFile && files.isNotEmpty() -> openFileInCurrentOperation(files.first())
-                    state.selectedFile != null && files.isEmpty() -> clearSelectedFile("txt 파일이 없습니다.")
-                    state.selectedFile != null -> clearSelectedFile("선택했던 파일을 찾지 못했습니다.")
+                if (workspace.previousSelectionMissing && workspace.selectedFile == null) {
+                    if (workspace.files.isEmpty()) {
+                        clearSelectedFile("txt 파일이 없습니다.")
+                    } else {
+                        clearSelectedFile("선택했던 파일을 찾지 못했습니다.")
+                    }
                 }
             } catch (error: RuntimeException) {
                 showFileListError(error)
@@ -78,10 +86,7 @@ class WildcardManagerViewModel(
         _uiState.update {
             it.copy(
                 files = emptyList(),
-                selectedFile = null,
-                savedText = "",
-                editingText = "",
-                undoStack = emptyList(),
+                editor = WildcardEditorSession(),
                 isFileOperationInProgress = false,
                 pendingAction = null,
                 message = "wildcard 폴더를 선택했습니다.",
@@ -128,7 +133,7 @@ class WildcardManagerViewModel(
     fun onTextChange(value: String) {
         _uiState.update {
             it.copy(
-                editingText = value,
+                editor = it.editor.edit(value),
                 message = "",
                 error = ""
             )
@@ -184,15 +189,12 @@ class WildcardManagerViewModel(
 
         scope.launch {
             try {
-                val createdFile = createFile(input)
-                val files = listFiles()
+                val workspace = manageWildcardFiles.createFile(input)
+                val createdFile = checkNotNull(workspace.selectedFile)
                 _uiState.update {
                     it.copy(
-                        files = files,
-                        selectedFile = createdFile,
-                        savedText = "",
-                        editingText = "",
-                        undoStack = emptyList(),
+                        files = workspace.files,
+                        editor = it.editor.open(createdFile, workspace.selectedText.orEmpty()),
                         showNewFileDialog = false,
                         newFileName = "",
                         message = "${createdFile.fileName} 생성 완료",
@@ -264,12 +266,12 @@ class WildcardManagerViewModel(
 
         scope.launch {
             try {
-                val updatedFile = renameFile(file, newName)
-                val files = listFiles()
+                val workspace = manageWildcardFiles.renameFile(file, newName)
+                val updatedFile = checkNotNull(workspace.selectedFile)
                 _uiState.update {
                     it.copy(
-                        files = files,
-                        selectedFile = updatedFile,
+                        files = workspace.files,
+                        editor = it.editor.rename(updatedFile),
                         showRenameDialog = false,
                         renameFileName = "",
                         message = "${updatedFile.fileName}으로 이름 수정 완료",
@@ -319,14 +321,12 @@ class WildcardManagerViewModel(
 
         scope.launch {
             try {
-                deleteFile(file)
-                val files = listFiles()
-                val oldIndex = state.files.indexOfFirst { it.id == file.id }.coerceAtLeast(0)
-                val nextFile = files.getOrNull(oldIndex) ?: files.lastOrNull()
+                val workspace = manageWildcardFiles.deleteFile(file, state.files)
+                val nextFile = workspace.selectedFile
 
                 _uiState.update {
                     it.copy(
-                        files = files,
+                        files = workspace.files,
                         showDeleteConfirm = false,
                         message = "${file.fileName} 삭제 완료",
                         error = ""
@@ -336,7 +336,14 @@ class WildcardManagerViewModel(
                 if (nextFile == null) {
                     clearSelectedFile("txt 파일이 없습니다.")
                 } else {
-                    openFileInCurrentOperation(nextFile, keepMessage = true)
+                    _uiState.update {
+                        it.copy(
+                            editor = it.editor.open(
+                                nextFile,
+                                workspace.selectedText.orEmpty()
+                            )
+                        )
+                    }
                 }
             } catch (error: RuntimeException) {
                 _uiState.update {
@@ -414,8 +421,7 @@ class WildcardManagerViewModel(
 
         _uiState.update {
             it.copy(
-                editingText = result.text,
-                undoStack = result.undoStack,
+                editor = it.editor.apply(result),
                 message = "붙여넣기 전 상태로 되돌렸습니다.",
                 error = ""
             )
@@ -458,10 +464,10 @@ class WildcardManagerViewModel(
         scope.launch {
             try {
                 val textToSave = state.editingText
-                writeFile(file, textToSave)
+                manageWildcardFiles.saveFile(file, textToSave)
                 _uiState.update {
                     it.copy(
-                        savedText = textToSave,
+                        editor = it.editor.markSaved(),
                         message = "${file.fileName} 저장 완료",
                         error = ""
                     )
@@ -493,58 +499,16 @@ class WildcardManagerViewModel(
         keepMessage: Boolean = false
     ) {
         try {
-            val text = readFile(file)
+            val text = manageWildcardFiles.openFile(file)
             _uiState.update {
                 it.copy(
-                    selectedFile = file,
-                    savedText = text,
-                    editingText = text,
-                    undoStack = emptyList(),
+                    editor = it.editor.open(file, text),
                     message = if (keepMessage) it.message else "${file.fileName} 열기 완료",
                     error = ""
                 )
             }
         } catch (error: RuntimeException) {
             showError(error.message ?: "파일을 열지 못했습니다.")
-        }
-    }
-
-    private suspend fun listFiles(): List<WildcardTextFile> {
-        return withContext(dispatchers.io) {
-            manageWildcardFiles.listFiles()
-        }
-    }
-
-    private suspend fun readFile(file: WildcardTextFile): String {
-        return withContext(dispatchers.io) {
-            manageWildcardFiles.readFile(file)
-        }
-    }
-
-    private suspend fun writeFile(file: WildcardTextFile, text: String) {
-        withContext(dispatchers.io) {
-            manageWildcardFiles.writeFile(file, text)
-        }
-    }
-
-    private suspend fun createFile(fileName: String): WildcardTextFile {
-        return withContext(dispatchers.io) {
-            manageWildcardFiles.createFile(fileName)
-        }
-    }
-
-    private suspend fun renameFile(
-        file: WildcardTextFile,
-        newName: String
-    ): WildcardTextFile {
-        return withContext(dispatchers.io) {
-            manageWildcardFiles.renameFile(file, newName)
-        }
-    }
-
-    private suspend fun deleteFile(file: WildcardTextFile) {
-        withContext(dispatchers.io) {
-            manageWildcardFiles.deleteFile(file)
         }
     }
 
@@ -593,8 +557,7 @@ class WildcardManagerViewModel(
     private fun applyTextEditResult(result: WildcardTextEditResult) {
         _uiState.update {
             it.copy(
-                editingText = result.text,
-                undoStack = result.undoStack,
+                editor = it.editor.apply(result),
                 message = "클립보드 내용을 반영했습니다.",
                 error = ""
             )
@@ -604,10 +567,7 @@ class WildcardManagerViewModel(
     private fun clearSelectedFile(message: String) {
         _uiState.update {
             it.copy(
-                selectedFile = null,
-                savedText = "",
-                editingText = "",
-                undoStack = emptyList(),
+                editor = it.editor.clear(),
                 message = message,
                 error = ""
             )
@@ -644,10 +604,7 @@ class WildcardManagerViewModel(
         _uiState.update {
             it.copy(
                 files = emptyList(),
-                selectedFile = null,
-                savedText = "",
-                editingText = "",
-                undoStack = emptyList(),
+                editor = it.editor.clear(),
                 error = error.message ?: "파일 목록을 불러오지 못했습니다."
             )
         }
@@ -670,23 +627,6 @@ class WildcardManagerViewModel(
                 error = ""
             )
         }
-    }
-}
-
-class WildcardManagerViewModelFactory(
-    private val fileRepository: WildcardFileRepository,
-    private val clipboardGateway: ClipboardGateway
-) : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (!modelClass.isAssignableFrom(WildcardManagerViewModel::class.java)) {
-            error("Unknown ViewModel class: ${modelClass.name}")
-        }
-
-        return WildcardManagerViewModel(
-            manageWildcardFiles = ManageWildcardFilesUseCase(fileRepository),
-            wildcardClipboard = WildcardClipboardUseCase(clipboardGateway)
-        ) as T
     }
 }
 

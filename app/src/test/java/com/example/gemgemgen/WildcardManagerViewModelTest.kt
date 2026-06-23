@@ -8,6 +8,7 @@ import com.example.gemgemgen.environment.android.*
 import com.example.gemgemgen.environment.domain.*
 import com.example.gemgemgen.environment.usecase.*
 import com.example.gemgemgen.ui.*
+import com.example.gemgemgen.wildcard.ui.*
 import com.example.gemgemgen.wildcard.domain.*
 import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
@@ -203,9 +204,11 @@ class WildcardManagerViewModelTest {
         canModifyFiles: Boolean = true
     ): WildcardManagerViewModel {
         return WildcardManagerViewModel(
-            manageWildcardFiles = ManageWildcardFilesUseCase(fileManager),
+            manageWildcardFiles = ManageWildcardFilesUseCase(
+                repository = fileManager,
+                dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+            ),
             wildcardClipboard = WildcardClipboardUseCase(clipboardGateway),
-            dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
             coroutineScope = CoroutineScope(Dispatchers.Unconfined)
         ).also {
             it.onFolderAccessChanged(canModifyFiles)
@@ -272,8 +275,7 @@ class WildcardManagerViewModelTest {
         private fun file(fileName: String): WildcardTextFile {
             return WildcardTextFile(
                 id = fileName,
-                fileName = fileName,
-                documentUri = "content://wildcard/$fileName"
+                fileName = fileName
             )
         }
     }

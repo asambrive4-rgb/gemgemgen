@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

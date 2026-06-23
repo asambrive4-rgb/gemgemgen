@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.selection.selectable
@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.ui.AppMultilineTextField
 
 @Composable
 internal fun PromptSection(

@@ -10,33 +10,32 @@ data class LastRunSnapshot(
 )
 
 class LastRunSnapshotStore(
-    private val storage: LastRunSnapshotStorage
+    private val repository: LastRunSnapshotRepository
 ) {
     fun load(): LastRunSnapshot? {
-        val promptTemplate = storage.readPromptTemplate()
-        val repeatCountText = storage.readRepeatCountText()
+        val snapshot = repository.load() ?: return null
+        val promptTemplate = snapshot.promptTemplate
+        val repeatCountText = snapshot.repeatCountText
         if (promptTemplate.isBlank() && repeatCountText.isBlank()) return null
 
         return LastRunSnapshot(
             promptTemplate = promptTemplate,
             repeatCountText = RepeatCountParser.normalizeInput(repeatCountText),
-            targetApp = AutomationTargetApp.fromStorageValue(storage.readTargetApp())
+            targetApp = snapshot.targetApp
         )
     }
 
     fun save(snapshot: LastRunSnapshot) {
-        storage.write(
-            promptTemplate = snapshot.promptTemplate,
-            repeatCountText = RepeatCountParser.normalizeInput(snapshot.repeatCountText),
-            targetApp = snapshot.targetApp.storageValue
+        repository.save(
+            snapshot.copy(
+                repeatCountText = RepeatCountParser.normalizeInput(snapshot.repeatCountText)
+            )
         )
     }
 }
 
-interface LastRunSnapshotStorage {
-    fun readPromptTemplate(): String
-    fun readRepeatCountText(): String
-    fun readTargetApp(): String
-    fun write(promptTemplate: String, repeatCountText: String, targetApp: String)
+interface LastRunSnapshotRepository {
+    fun load(): LastRunSnapshot?
+    fun save(snapshot: LastRunSnapshot)
 }
 

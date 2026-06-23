@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.wildcard.ui
 
 import java.net.URLDecoder
 

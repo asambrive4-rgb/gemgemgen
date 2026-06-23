@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.automation.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,14 +7,19 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
+import com.example.gemgemgen.automation.usecase.AutomationStartDecision
+import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.usecase.RunLogger
+import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
+import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
+import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -32,6 +37,8 @@ class MainViewModel(
     private val runLogger: RunLogger,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: RunAutomationUseCase,
+    private val checkAutomationStart: CheckAutomationStartUseCase =
+        CheckAutomationStartUseCase(OverlayPermissionGateway { true }),
     private val dispatchers: AppDispatchers = AppDispatchers(),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
@@ -39,6 +46,9 @@ class MainViewModel(
     private var automationPreparationJob: Job? = null
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
+    private val _automationBarUiState = MutableStateFlow(AutomationBarUiState())
+    val automationBarUiState: StateFlow<AutomationBarUiState> =
+        _automationBarUiState.asStateFlow()
 
     init {
         loadInitialState()
@@ -56,7 +66,9 @@ class MainViewModel(
     }
 
     fun onRepeatCountChange(value: String) {
-        _uiState.update { it.copy(repeatCountText = RepeatCountParser.normalizeInput(value)) }
+        val normalized = RepeatCountParser.normalizeInput(value)
+        _uiState.update { it.copy(repeatCountText = normalized) }
+        _automationBarUiState.update { it.copy(repeatCountText = normalized) }
     }
 
     fun importPromptFromClipboard() {
@@ -70,10 +82,15 @@ class MainViewModel(
 
     fun refreshStatus() {
         scope.launch {
-            val status = withContext(dispatchers.io) {
+            val report = withContext(dispatchers.io) {
                 checkEnvironmentStatus.check()
             }
-            _uiState.update { it.copy(environmentStatus = status) }
+            _uiState.update {
+                it.copy(
+                    environmentStatus = report.status,
+                    environmentSetupInfo = report.setupInfo
+                )
+            }
         }
     }
 
@@ -91,28 +108,29 @@ class MainViewModel(
                 saveWildcardFolder.save(folderUri)
             }
             _uiState.update {
-                it.copy(
-                    settingsMessage = result.message,
-                    settingsError = result.error
-                )
+                when (result) {
+                    FolderSelectionResult.Success -> it.copy(
+                        settingsMessage = "wildcard 폴더를 선택했습니다.",
+                        settingsError = ""
+                    )
+                    is FolderSelectionResult.Failure -> it.copy(
+                        settingsMessage = "",
+                        settingsError =
+                            "폴더 권한 저장 실패: ${result.reason ?: "다시 선택해주세요."}"
+                    )
+                }
             }
             refreshStatus()
         }
     }
 
-    fun showWildcardFolderSaveError(message: String) {
-        _uiState.update {
-            it.copy(
-                settingsMessage = "",
-                settingsError = message
-            )
-        }
-    }
-
-    fun runAutomation(): Boolean {
+    fun runAutomation(): AutomationStartDecision {
         val state = uiState.value
-        if (!state.canRun) return false
-        if (automationPreparationJob?.isActive == true) return false
+        val decision = checkAutomationStart.decide(
+            canRun = state.canRun,
+            isStartInProgress = automationPreparationJob?.isActive == true
+        )
+        if (decision != AutomationStartDecision.Started) return decision
 
         handleAutomationState(AutomationRunState.Running("자동화 준비 중"))
         val request = AutomationRunRequest(
@@ -138,7 +156,7 @@ class MainViewModel(
                 automationPreparationJob = null
             }
         }
-        return true
+        return AutomationStartDecision.Started
     }
 
     fun cancelAutomation() {
@@ -182,6 +200,11 @@ class MainViewModel(
                     recentLogs = snapshotAndLogs.second
                 )
             }
+            val restoredState = uiState.value
+            _automationBarUiState.value = AutomationBarUiState(
+                repeatCountText = restoredState.repeatCountText,
+                automationState = restoredState.automationState
+            )
         }
     }
 
@@ -198,6 +221,7 @@ class MainViewModel(
         if (stateChanged && state.isTerminal()) {
             refreshLogs()
         }
+        _automationBarUiState.update { it.copy(automationState = state) }
     }
 
     private fun refreshLogs() {

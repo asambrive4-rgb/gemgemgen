@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
+import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 
 @Composable
@@ -84,6 +85,7 @@ internal fun AutomationScreen(
             if (uiState.showSettings) {
                 StatusSettingsDialog(
                     status = uiState.environmentStatus,
+                    setupInfo = uiState.environmentSetupInfo,
                     hasPromptTemplate = uiState.hasPromptTemplate,
                     message = uiState.settingsMessage,
                     error = uiState.settingsError,

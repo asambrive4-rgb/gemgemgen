@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

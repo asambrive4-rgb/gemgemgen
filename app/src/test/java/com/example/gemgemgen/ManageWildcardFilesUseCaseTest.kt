@@ -1,9 +1,12 @@
 package com.example.gemgemgen
 
+import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.wildcard.domain.WildcardFileException
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.fail
@@ -11,22 +14,22 @@ import org.junit.Test
 
 class ManageWildcardFilesUseCaseTest {
     @Test
-    fun createFile_normalizesNameBeforeCallingRepository() {
+    fun createFile_normalizesNameBeforeCallingRepository() = runBlocking {
         val repository = RecordingWildcardFileRepository()
-        val useCase = ManageWildcardFilesUseCase(repository)
+        val useCase = useCase(repository)
 
-        val file = useCase.createFile("hair")
+        val workspace = useCase.createFile("hair")
 
         assertEquals("hair.txt", repository.createdFileName)
-        assertEquals("hair.txt", file.fileName)
+        assertEquals("hair.txt", workspace.selectedFile?.fileName)
     }
 
     @Test
-    fun createFile_rejectsDuplicateNameBeforeCallingRepository() {
+    fun createFile_rejectsDuplicateNameBeforeCallingRepository() = runBlocking {
         val repository = RecordingWildcardFileRepository(
-            WildcardTextFile("hair", "hair.txt", "content://hair")
+            WildcardTextFile("hair", "hair.txt")
         )
-        val useCase = ManageWildcardFilesUseCase(repository)
+        val useCase = useCase(repository)
 
         assertWildcardFileException("이미 같은 이름의 파일이 있습니다.") {
             useCase.createFile("HAIR")
@@ -36,25 +39,25 @@ class ManageWildcardFilesUseCaseTest {
     }
 
     @Test
-    fun renameFile_normalizesNameBeforeCallingRepository() {
-        val original = WildcardTextFile("hair", "hair.txt", "content://hair")
+    fun renameFile_normalizesNameBeforeCallingRepository() = runBlocking {
+        val original = WildcardTextFile("hair", "hair.txt")
         val repository = RecordingWildcardFileRepository(original)
-        val useCase = ManageWildcardFilesUseCase(repository)
+        val useCase = useCase(repository)
 
-        val renamed = useCase.renameFile(original, "new_hair")
+        val workspace = useCase.renameFile(original, "new_hair")
 
         assertEquals("new_hair.txt", repository.renamedFileName)
-        assertEquals("new_hair.txt", renamed.fileName)
+        assertEquals("new_hair.txt", workspace.selectedFile?.fileName)
     }
 
     @Test
-    fun renameFile_rejectsDuplicateNameBeforeCallingRepository() {
-        val original = WildcardTextFile("color", "color.txt", "content://color")
+    fun renameFile_rejectsDuplicateNameBeforeCallingRepository() = runBlocking {
+        val original = WildcardTextFile("color", "color.txt")
         val repository = RecordingWildcardFileRepository(
-            WildcardTextFile("hair", "hair.txt", "content://hair"),
+            WildcardTextFile("hair", "hair.txt"),
             original
         )
-        val useCase = ManageWildcardFilesUseCase(repository)
+        val useCase = useCase(repository)
 
         assertWildcardFileException("이미 같은 이름의 파일이 있습니다.") {
             useCase.renameFile(original, "hair")
@@ -63,9 +66,33 @@ class ManageWildcardFilesUseCaseTest {
         assertNull(repository.renamedFileName)
     }
 
-    private fun assertWildcardFileException(
+    @Test
+    fun deleteFile_selectsFileAtDeletedIndexOrLastFile() = runBlocking {
+        val first = WildcardTextFile("a", "a.txt")
+        val middle = WildcardTextFile("b", "b.txt")
+        val last = WildcardTextFile("c", "c.txt")
+        val repository = RecordingWildcardFileRepository(first, middle, last)
+
+        val workspace = useCase(repository).deleteFile(
+            file = middle,
+            previousFiles = listOf(first, middle, last)
+        )
+
+        assertEquals(last, workspace.selectedFile)
+    }
+
+    private fun useCase(
+        repository: WildcardFileRepository
+    ): ManageWildcardFilesUseCase {
+        return ManageWildcardFilesUseCase(
+            repository = repository,
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        )
+    }
+
+    private suspend fun assertWildcardFileException(
         expectedMessage: String,
-        block: () -> Unit
+        block: suspend () -> Unit
     ) {
         try {
             block()
@@ -83,16 +110,14 @@ class ManageWildcardFilesUseCaseTest {
         var renamedFileName: String? = null
 
         override fun listFiles(): List<WildcardTextFile> {
-            return files.values.toList()
+            return files.values.sortedBy { it.fileName }
         }
 
-        override fun readFile(file: WildcardTextFile): String {
-            return ""
-        }
+        override fun readFile(file: WildcardTextFile): String = file.fileName
 
         override fun createFile(fileName: String): WildcardTextFile {
             createdFileName = fileName
-            return WildcardTextFile(fileName, fileName, "content://$fileName")
+            return WildcardTextFile(fileName, fileName).also { files[it.id] = it }
         }
 
         override fun renameFile(
@@ -100,11 +125,14 @@ class ManageWildcardFilesUseCaseTest {
             newName: String
         ): WildcardTextFile {
             renamedFileName = newName
-            return file.copy(fileName = newName)
+            files.remove(file.id)
+            return file.copy(fileName = newName).also { files[it.id] = it }
         }
 
         override fun writeFile(file: WildcardTextFile, text: String) = Unit
 
-        override fun deleteFile(file: WildcardTextFile) = Unit
+        override fun deleteFile(file: WildcardTextFile) {
+            files.remove(file.id)
+        }
     }
 }

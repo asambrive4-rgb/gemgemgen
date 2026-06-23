@@ -12,6 +12,7 @@ import com.example.gemgemgen.wildcard.domain.*
 import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.example.gemgemgen.automation.android.RunLogCodec
 
 class RunLoggerTest {
     @Test
@@ -76,13 +77,38 @@ class RunLoggerTest {
         )
     }
 
-    private class FakeRunLogStorage : RunLogStorage {
-        private var value: String = ""
+    @Test
+    fun codec_readsLegacySixAndElevenFieldLogsAndCurrentTwelveFieldLogs() {
+        val log = AutomationRunLog(
+            startedAtMillis = 1L,
+            finishedAtMillis = 2L,
+            status = AutomationRunLogStatus.SUCCESS,
+            lastStep = "done",
+            message = "success",
+            imeRestoreMessage = "restored",
+            repeatCount = 3,
+            completedCount = 3,
+            successCount = 3,
+            markerStatus = "success",
+            targetApp = AutomationTargetApp.CHATGPT.storageValue
+        )
+        val fields = RunLogCodec.encode(listOf(log)).split("\t")
 
-        override fun read(): String = value
+        assertEquals("", RunLogCodec.decode(fields.take(6).joinToString("\t")).single().targetApp)
+        assertEquals("", RunLogCodec.decode(fields.take(11).joinToString("\t")).single().targetApp)
+        assertEquals(
+            AutomationTargetApp.CHATGPT.storageValue,
+            RunLogCodec.decode(fields.joinToString("\t")).single().targetApp
+        )
+    }
 
-        override fun write(value: String) {
-            this.value = value
+    private class FakeRunLogStorage : RunLogRepository {
+        private var logs: List<AutomationRunLog> = emptyList()
+
+        override fun load(): List<AutomationRunLog> = logs
+
+        override fun save(logs: List<AutomationRunLog>) {
+            this.logs = logs
         }
     }
 }

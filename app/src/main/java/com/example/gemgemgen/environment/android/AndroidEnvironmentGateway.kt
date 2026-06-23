@@ -8,6 +8,8 @@ import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.example.gemgemgen.automation.android.GeminiAccessibilityService
 import com.example.gemgemgen.core.AppDefaults
+import com.example.gemgemgen.environment.domain.EnvironmentReport
+import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.environment.usecase.EnvironmentGateway
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderAccessChecker
@@ -16,21 +18,26 @@ import com.example.gemgemgen.wildcard.android.WildcardFolderStore
 class AndroidEnvironmentGateway(
     private val context: Context
 ) : EnvironmentGateway {
-    override fun check(): EnvironmentStatus {
+    override fun check(): EnvironmentReport {
         val wildcardFolderUri = WildcardFolderStore.getFolderUri(context)
 
-        return EnvironmentStatus(
-            isGeminiInstalled = isPackageInstalled(AppDefaults.GEMINI_PACKAGE_NAME),
-            isChatGptInstalled = isPackageInstalled(AppDefaults.CHATGPT_PACKAGE_NAME),
-            isAccessibilityServiceEnabled = isAccessibilityServiceEnabled(),
-            hasWriteSecureSettingsPermission = hasWriteSecureSettingsPermission(),
-            isWildcardDirectoryAccessible = wildcardFolderUri != null &&
-                AndroidWildcardFolderAccessChecker.canReadFolder(context, wildcardFolderUri),
-            isWildcardDirectoryWritable = wildcardFolderUri != null &&
-                AndroidWildcardFolderAccessChecker.canWriteFolder(context, wildcardFolderUri),
-            wildcardDirectoryPath = wildcardFolderUri?.toString().orEmpty(),
-            nullKeyboardTargetImeId = AppDefaults.NULL_KEYBOARD_IME_ID,
-            adbGrantCommand = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
+        return EnvironmentReport(
+            status = EnvironmentStatus(
+                isGeminiInstalled = isPackageInstalled(AppDefaults.GEMINI_PACKAGE_NAME),
+                isChatGptInstalled = isPackageInstalled(AppDefaults.CHATGPT_PACKAGE_NAME),
+                isAccessibilityServiceEnabled = isAccessibilityServiceEnabled(),
+                hasWriteSecureSettingsPermission = hasWriteSecureSettingsPermission(),
+                isWildcardDirectoryAccessible = wildcardFolderUri != null &&
+                    AndroidWildcardFolderAccessChecker.canReadFolder(context, wildcardFolderUri),
+                isWildcardDirectoryWritable = wildcardFolderUri != null &&
+                    AndroidWildcardFolderAccessChecker.canWriteFolder(context, wildcardFolderUri)
+            ),
+            setupInfo = EnvironmentSetupInfo(
+                wildcardDirectoryPath = wildcardFolderUri?.toString().orEmpty(),
+                nullKeyboardTargetImeId = AppDefaults.NULL_KEYBOARD_IME_ID,
+                adbGrantCommand =
+                    "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
+            )
         )
     }
 

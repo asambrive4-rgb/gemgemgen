@@ -8,6 +8,7 @@ import com.example.gemgemgen.environment.android.*
 import com.example.gemgemgen.environment.domain.*
 import com.example.gemgemgen.environment.usecase.*
 import com.example.gemgemgen.ui.*
+import com.example.gemgemgen.automation.ui.*
 import com.example.gemgemgen.wildcard.domain.*
 import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertFalse

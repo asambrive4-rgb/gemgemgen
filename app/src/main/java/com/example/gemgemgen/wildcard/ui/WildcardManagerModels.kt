@@ -1,5 +1,6 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.wildcard.ui
 
+import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 
 data class WildcardFileUiItem(
@@ -10,13 +11,10 @@ data class WildcardFileUiItem(
 
 data class WildcardManagerUiState(
     val files: List<WildcardTextFile> = emptyList(),
-    val selectedFile: WildcardTextFile? = null,
-    val savedText: String = "",
-    val editingText: String = "",
+    val editor: WildcardEditorSession = WildcardEditorSession(),
     val canModifyFiles: Boolean = false,
     val message: String = "",
     val error: String = "",
-    val undoStack: List<String> = emptyList(),
     val isFileOperationInProgress: Boolean = false,
     val pendingAction: WildcardPendingAction? = null,
     val showNewFileDialog: Boolean = false,
@@ -25,8 +23,20 @@ data class WildcardManagerUiState(
     val showRenameDialog: Boolean = false,
     val renameFileName: String = ""
 ) {
+    val selectedFile: WildcardTextFile?
+        get() = editor.selectedFile
+
+    val savedText: String
+        get() = editor.savedText
+
+    val editingText: String
+        get() = editor.editingText
+
+    val undoStack: List<String>
+        get() = editor.undoStack
+
     val hasUnsavedChanges: Boolean
-        get() = selectedFile != null && savedText != editingText
+        get() = editor.hasUnsavedChanges
 
     val fileItems: List<WildcardFileUiItem>
         get() = files.map { file ->

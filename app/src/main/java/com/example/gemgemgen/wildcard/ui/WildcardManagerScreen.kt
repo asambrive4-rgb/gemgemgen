@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.wildcard.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -59,8 +59,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
+import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.theme.*
+import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import kotlinx.coroutines.delay
 
@@ -68,6 +71,7 @@ import kotlinx.coroutines.delay
 internal fun WildcardManagerScreen(
     uiState: WildcardManagerUiState,
     environmentStatus: EnvironmentStatus,
+    environmentSetupInfo: EnvironmentSetupInfo,
     onClearFocus: () -> Unit,
     onRefresh: () -> Unit,
     onSelectFolder: () -> Unit,
@@ -288,6 +292,7 @@ internal fun WildcardManagerScreen(
                 // 4구역: 폴더 정보 스트립 (화면 최하단)
                 FolderInfoSection(
                     environmentStatus = environmentStatus,
+                    setupInfo = environmentSetupInfo,
                     onRefresh = {
                         runWithCommittedText(onRefresh)
                     },
@@ -475,11 +480,12 @@ private fun FileTabsSection(
 @Composable
 private fun FolderInfoSection(
     environmentStatus: EnvironmentStatus,
+    setupInfo: EnvironmentSetupInfo,
     onRefresh: () -> Unit,
     onSelectFolder: () -> Unit
 ) {
     val folderPathDesc = WildcardFolderPathFormatter.summaryPath(
-        environmentStatus.wildcardDirectoryPath
+        setupInfo.wildcardDirectoryPath
     )
 
     Row(
@@ -540,7 +546,7 @@ private fun FolderInfoSection(
                 modifier = Modifier.height(40.dp)
             ) {
                 Text(
-                    text = if (environmentStatus.wildcardDirectoryPath.isBlank()) "Select Folder" else "Change Folder",
+                    text = if (setupInfo.wildcardDirectoryPath.isBlank()) "Select Folder" else "Change Folder",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -878,17 +884,21 @@ private fun WildcardManagerScreenPreview() {
         WildcardManagerScreen(
             uiState = WildcardManagerUiState(
                 files = listOf(
-                    WildcardTextFile("1", "hair.txt", "content://hair"),
-                    WildcardTextFile("2", "color.txt", "content://color")
+                    WildcardTextFile("1", "hair.txt"),
+                    WildcardTextFile("2", "color.txt")
                 ),
-                selectedFile = WildcardTextFile("1", "hair.txt", "content://hair"),
-                savedText = "black hair",
-                editingText = "black hair\nsilver hair",
+                editor = WildcardEditorSession(
+                    selectedFile = WildcardTextFile("1", "hair.txt"),
+                    savedText = "black hair",
+                    editingText = "black hair\nsilver hair"
+                ),
                 canModifyFiles = true
             ),
             environmentStatus = EnvironmentStatus(
                 isWildcardDirectoryAccessible = true,
-                isWildcardDirectoryWritable = true,
+                isWildcardDirectoryWritable = true
+            ),
+            environmentSetupInfo = EnvironmentSetupInfo(
                 wildcardDirectoryPath = "content://wildcard"
             ),
             onClearFocus = {},

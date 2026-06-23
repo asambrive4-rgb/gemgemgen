@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,11 +19,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 
 @Composable
 internal fun StatusSettingsDialog(
     status: EnvironmentStatus,
+    setupInfo: EnvironmentSetupInfo,
     hasPromptTemplate: Boolean,
     message: String,
     error: String,
@@ -78,19 +80,19 @@ internal fun StatusSettingsDialog(
                     Text("wildcard 폴더 선택")
                 }
 
-                if (!status.hasWriteSecureSettingsPermission && status.adbGrantCommand.isNotBlank()) {
+                if (!status.hasWriteSecureSettingsPermission && setupInfo.adbGrantCommand.isNotBlank()) {
                     Text(
-                        text = "ADB 권한 명령어:\n${status.adbGrantCommand}",
+                        text = "ADB 권한 명령어:\n${setupInfo.adbGrantCommand}",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
 
                 Text(
-                    text = "wildcard 폴더: ${status.wildcardDirectoryPath.ifBlank { "선택 안 됨" }}",
+                    text = "wildcard 폴더: ${setupInfo.wildcardDirectoryPath.ifBlank { "선택 안 됨" }}",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    text = "Null Keyboard 전환 대상: ${status.nullKeyboardTargetImeId}",
+                    text = "Null Keyboard 전환 대상: ${setupInfo.nullKeyboardTargetImeId}",
                     style = MaterialTheme.typography.bodySmall
                 )
 

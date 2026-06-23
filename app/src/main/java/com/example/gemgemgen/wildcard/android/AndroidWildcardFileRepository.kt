@@ -66,13 +66,12 @@ class AndroidWildcardFileRepository(
 
         return WildcardTextFile(
             id = DocumentsContract.getDocumentId(documentUri),
-            fileName = fileName,
-            documentUri = documentUri.toString()
+            fileName = fileName
         )
     }
 
     override fun writeFile(file: WildcardTextFile, text: String) {
-        val uri = Uri.parse(file.documentUri)
+        val uri = documentUriFor(file)
         val output = context.contentResolver.openOutputStream(uri, "wt")
             ?: throw WildcardFileException("${file.fileName} 파일을 저장하지 못했습니다.")
 
@@ -84,13 +83,13 @@ class AndroidWildcardFileRepository(
     }
 
     override fun deleteFile(file: WildcardTextFile) {
-        val uri = Uri.parse(file.documentUri)
+        val uri = documentUriFor(file)
         val deleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
         if (!deleted) throw WildcardFileException("${file.fileName} 파일을 삭제하지 못했습니다.")
     }
 
     override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile {
-        val uri = Uri.parse(file.documentUri)
+        val uri = documentUriFor(file)
         val newUri = DocumentsContract.renameDocument(
             context.contentResolver,
             uri,
@@ -99,8 +98,7 @@ class AndroidWildcardFileRepository(
 
         return WildcardTextFile(
             id = DocumentsContract.getDocumentId(newUri),
-            fileName = newName,
-            documentUri = newUri.toString()
+            fileName = newName
         )
     }
 
@@ -112,8 +110,7 @@ class AndroidWildcardFileRepository(
     private fun WildcardDocument.toTextFile(): WildcardTextFile {
         return WildcardTextFile(
             id = id,
-            fileName = fileName,
-            documentUri = documentUri.toString()
+            fileName = fileName
         )
     }
 
@@ -121,8 +118,13 @@ class AndroidWildcardFileRepository(
         return WildcardDocument(
             id = id,
             fileName = fileName,
-            documentUri = Uri.parse(documentUri)
+            documentUri = documentUriFor(this)
         )
+    }
+
+    private fun documentUriFor(file: WildcardTextFile): Uri {
+        val folderUri = currentFolderUri()
+        return DocumentsContract.buildDocumentUriUsingTree(folderUri, file.id)
     }
 }
 

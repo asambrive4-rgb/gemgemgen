@@ -1,6 +1,6 @@
 package com.example.gemgemgen
 
-import com.example.gemgemgen.ui.WildcardFolderPathFormatter
+import com.example.gemgemgen.wildcard.ui.WildcardFolderPathFormatter
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

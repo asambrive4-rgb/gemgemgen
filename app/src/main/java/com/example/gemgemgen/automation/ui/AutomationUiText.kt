@@ -1,4 +1,4 @@
-package com.example.gemgemgen.ui
+package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 

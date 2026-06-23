@@ -8,6 +8,8 @@ import com.example.gemgemgen.environment.android.*
 import com.example.gemgemgen.environment.domain.*
 import com.example.gemgemgen.environment.usecase.*
 import com.example.gemgemgen.ui.*
+import com.example.gemgemgen.automation.ui.*
+import com.example.gemgemgen.wildcard.ui.*
 import com.example.gemgemgen.wildcard.domain.*
 import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
@@ -68,6 +70,28 @@ class MainViewModelTest {
     }
 
     @Test
+    fun refreshStatus_keepsSetupDisplayInfoSeparateFromReadinessStatus() {
+        val setupInfo = EnvironmentSetupInfo(
+            wildcardDirectoryPath = "content://wildcard",
+            nullKeyboardTargetImeId = "null/.Ime",
+            adbGrantCommand = "adb grant command"
+        )
+        val environment = FakeEnvironmentStatusReader(
+            status = readyEnvironment(),
+            setupInfo = setupInfo
+        )
+        val viewModel = viewModel(environmentStatusReader = environment)
+
+        viewModel.refreshStatus()
+
+        assertEquals(setupInfo, viewModel.uiState.value.environmentSetupInfo)
+        assertTrue(
+            viewModel.uiState.value.environmentStatus
+                .isReadyFor(AutomationTargetApp.GEMINI)
+        )
+    }
+
+    @Test
     fun init_missingTargetAppInOldSnapshotDefaultsToGemini() {
         val viewModel = viewModel(
             lastRunSnapshotStore = LastRunSnapshotStore(
@@ -86,7 +110,7 @@ class MainViewModelTest {
     fun saveWildcardFolder_updatesSettingsMessageAndRefreshesStatus() {
         val environment = FakeEnvironmentStatusReader(readyEnvironment())
         val folderSaver = FakeWildcardFolderSaver(
-            FolderSelectionResult(message = "폴더 선택 완료")
+            FolderSelectionResult.Success
         )
         val viewModel = viewModel(
             environmentStatusReader = environment,
@@ -96,7 +120,7 @@ class MainViewModelTest {
         viewModel.saveWildcardFolder("content://wildcard")
 
         assertEquals("content://wildcard", folderSaver.savedFolderUri)
-        assertEquals("폴더 선택 완료", viewModel.uiState.value.settingsMessage)
+        assertEquals("wildcard 폴더를 선택했습니다.", viewModel.uiState.value.settingsMessage)
         assertEquals("", viewModel.uiState.value.settingsError)
         assertEquals(2, environment.checkCount)
     }
@@ -104,14 +128,17 @@ class MainViewModelTest {
     @Test
     fun saveWildcardFolder_updatesSettingsErrorWhenSaveFails() {
         val folderSaver = FakeWildcardFolderSaver(
-            FolderSelectionResult(error = "폴더 권한 저장 실패")
+            FolderSelectionResult.Failure("저장 권한 없음")
         )
         val viewModel = viewModel(wildcardFolderSaver = folderSaver)
 
         viewModel.saveWildcardFolder("content://wildcard")
 
         assertEquals("", viewModel.uiState.value.settingsMessage)
-        assertEquals("폴더 권한 저장 실패", viewModel.uiState.value.settingsError)
+        assertEquals(
+            "폴더 권한 저장 실패: 저장 권한 없음",
+            viewModel.uiState.value.settingsError
+        )
     }
 
     @Test
@@ -198,7 +225,7 @@ class MainViewModelTest {
                 viewModel.uiState.value.promptTemplate == "base"
         }
 
-        assertTrue(viewModel.runAutomation())
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
         assertEquals(
             AutomationRunState.Running("자동화 준비 중"),
@@ -277,13 +304,14 @@ class MainViewModelTest {
     }
 
     private class FakeEnvironmentStatusReader(
-        var status: EnvironmentStatus
+        var status: EnvironmentStatus,
+        var setupInfo: EnvironmentSetupInfo = EnvironmentSetupInfo()
     ) : EnvironmentGateway {
         var checkCount = 0
 
-        override fun check(): EnvironmentStatus {
+        override fun check(): EnvironmentReport {
             checkCount += 1
-            return status
+            return EnvironmentReport(status = status, setupInfo = setupInfo)
         }
     }
 
@@ -306,7 +334,7 @@ class MainViewModelTest {
     }
 
     private class FakeWildcardFolderSaver(
-        private val result: FolderSelectionResult = FolderSelectionResult()
+        private val result: FolderSelectionResult = FolderSelectionResult.Success
     ) : WildcardFolderRepository {
         var savedFolderUri: String = ""
 
@@ -344,13 +372,13 @@ class MainViewModelTest {
         assertTrue("Condition was not met within $timeoutMillis ms", condition())
     }
 
-    private class FakeRunLogStorage : RunLogStorage {
-        private var value: String = ""
+    private class FakeRunLogStorage : RunLogRepository {
+        private var logs: List<AutomationRunLog> = emptyList()
 
-        override fun read(): String = value
+        override fun load(): List<AutomationRunLog> = logs
 
-        override fun write(value: String) {
-            this.value = value
+        override fun save(logs: List<AutomationRunLog>) {
+            this.logs = logs
         }
     }
 
@@ -358,21 +386,20 @@ class MainViewModelTest {
         var promptTemplate: String = "",
         var repeatCountText: String = "",
         var targetApp: String = ""
-    ) : LastRunSnapshotStorage {
-        override fun readPromptTemplate(): String = promptTemplate
+    ) : LastRunSnapshotRepository {
+        override fun load(): LastRunSnapshot? {
+            if (promptTemplate.isBlank() && repeatCountText.isBlank()) return null
+            return LastRunSnapshot(
+                promptTemplate = promptTemplate,
+                repeatCountText = repeatCountText,
+                targetApp = AutomationTargetApp.fromStorageValue(targetApp)
+            )
+        }
 
-        override fun readRepeatCountText(): String = repeatCountText
-
-        override fun readTargetApp(): String = targetApp
-
-        override fun write(
-            promptTemplate: String,
-            repeatCountText: String,
-            targetApp: String
-        ) {
-            this.promptTemplate = promptTemplate
-            this.repeatCountText = repeatCountText
-            this.targetApp = targetApp
+        override fun save(snapshot: LastRunSnapshot) {
+            promptTemplate = snapshot.promptTemplate
+            repeatCountText = snapshot.repeatCountText
+            targetApp = snapshot.targetApp.storageValue
         }
     }
 

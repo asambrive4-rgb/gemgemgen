@@ -1,9 +1,9 @@
 package com.example.gemgemgen.wildcard.usecase
 
-data class FolderSelectionResult(
-    val message: String = "",
-    val error: String = ""
-)
+sealed interface FolderSelectionResult {
+    data object Success : FolderSelectionResult
+    data class Failure(val reason: String? = null) : FolderSelectionResult
+}
 
 interface WildcardFolderRepository {
     fun save(folderUri: String): FolderSelectionResult
