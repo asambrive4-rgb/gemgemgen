@@ -16,6 +16,15 @@ import java.util.Random
 
 class PromptGeneratorTest {
     @Test
+    fun extractTokens_returnsDistinctTokensInPromptOrder() {
+        val tokens = PromptGenerator(Random(0)).extractTokens(
+            "__hair__ portrait with __color__ ribbon and __hair__"
+        )
+
+        assertEquals(listOf("__hair__", "__color__"), tokens)
+    }
+
+    @Test
     fun generate_keepsPromptWhenThereAreNoTokens() {
         val generated = PromptGenerator(Random(0)).generate(
             basePrompt = "plain prompt",

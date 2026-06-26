@@ -404,7 +404,7 @@ class MainViewModelTest {
             runLogger = runLogger,
             lastRunSnapshotStore = LastRunSnapshotStore(
                 FakeLastRunSnapshotStorage(
-                    promptTemplate = "base",
+                    promptTemplate = "base __hair__",
                     repeatCountText = "1"
                 )
             ),
@@ -412,7 +412,7 @@ class MainViewModelTest {
                 runLogger = runLogger,
                 lastRunSnapshotStore = LastRunSnapshotStore(
                     FakeLastRunSnapshotStorage(
-                        promptTemplate = "base",
+                        promptTemplate = "base __hair__",
                         repeatCountText = "1"
                     )
                 ),
@@ -429,7 +429,7 @@ class MainViewModelTest {
         )
         waitUntil {
             viewModel.uiState.value.environmentStatus.isReadyFor(AutomationTargetApp.GEMINI) &&
-                viewModel.uiState.value.promptTemplate == "base"
+                viewModel.uiState.value.promptTemplate == "base __hair__"
         }
 
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
@@ -447,6 +447,38 @@ class MainViewModelTest {
         assertEquals(RunAutomationUseCase.MARKER_PROMPT, service.sentPrompts.first())
     }
 
+    @Test
+    fun closeGeminiApp_updatesResultMessage() {
+        val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 2))
+        val viewModel = viewModel(
+            closeGeminiApp = CloseGeminiAppUseCase(closer)
+        )
+
+        viewModel.closeGeminiApp()
+
+        assertEquals(1, closer.closeCount)
+        assertTrue(!viewModel.uiState.value.isClosingGemini)
+        assertEquals(
+            "Gemini 앱 2개를 종료했습니다.",
+            viewModel.uiState.value.geminiCloseMessage
+        )
+    }
+
+    @Test
+    fun closeGeminiApp_requiresAccessibilityAndDoesNotCallCloser() {
+        val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 1))
+        val viewModel = viewModel(
+            environmentStatusReader = FakeEnvironmentStatusReader(
+                readyEnvironment().copy(isAccessibilityServiceEnabled = false)
+            ),
+            closeGeminiApp = CloseGeminiAppUseCase(closer)
+        )
+
+        viewModel.closeGeminiApp()
+
+        assertEquals(0, closer.closeCount)
+        assertTrue(viewModel.uiState.value.geminiCloseMessage.contains("접근성"))
+    }
     private fun viewModel(
         environmentStatusReader: FakeEnvironmentStatusReader = FakeEnvironmentStatusReader(readyEnvironment()),
         clipboardText: String = "",
@@ -455,6 +487,7 @@ class MainViewModelTest {
         runLogger: RunLogger = RunLogger(FakeRunLogStorage()),
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         automationRunner: RunAutomationUseCase? = null,
+        closeGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
@@ -470,6 +503,7 @@ class MainViewModelTest {
                 clipboardGateway = clipboardGateway,
                 dispatchers = dispatchers
             ),
+            closeGeminiApp = closeGeminiApp,
             dispatchers = dispatchers,
             coroutineScope = coroutineScope
         )
@@ -547,6 +581,18 @@ class MainViewModelTest {
 
         override fun save(folderUri: String): FolderSelectionResult {
             savedFolderUri = folderUri
+            return result
+        }
+    }
+
+
+    private class FakeGeminiAppCloser(
+        private val result: CloseGeminiAppResult = CloseGeminiAppResult.Success(closedCount = 1)
+    ) : GeminiAppCloser {
+        var closeCount = 0
+
+        override suspend fun closeGeminiApp(): CloseGeminiAppResult {
+            closeCount += 1
             return result
         }
     }

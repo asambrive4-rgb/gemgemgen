@@ -28,13 +28,17 @@ class PromptGenerator(
     ): CompiledPrompt {
         return CompiledPrompt(
             basePrompt = basePrompt,
-            tokens = tokenRegex.findAll(basePrompt)
-                .map { it.value }
-                .distinct()
-                .toList(),
+            tokens = extractTokens(basePrompt),
             wildcardsByToken = wildcardSets.associateBy { it.token },
             random = random
         )
+    }
+
+    fun extractTokens(basePrompt: String): List<String> {
+        return tokenRegex.findAll(basePrompt)
+            .map { it.value }
+            .distinct()
+            .toList()
     }
 
     class CompiledPrompt internal constructor(

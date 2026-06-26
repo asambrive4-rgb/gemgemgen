@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,13 +28,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.ui.AppMultilineTextField
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PromptSection(
     promptTemplateState: TextFieldState,
@@ -40,10 +43,14 @@ internal fun PromptSection(
     isTargetSelectionEnabled: Boolean,
     isParagraphSelectionMode: Boolean,
     canUndoPromptEdit: Boolean,
+    canCloseGemini: Boolean,
+    isClosingGemini: Boolean,
+    geminiCloseMessage: String,
     selectedParagraphRange: PromptParagraphRange?,
     paragraphSelectionMessage: String,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
+    onCloseGeminiApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
     onToggleParagraphSelectionMode: () -> Unit,
     onParagraphOffsetSelected: (Int) -> Unit,
@@ -77,11 +84,38 @@ internal fun PromptSection(
                 }
             }
         }
-        Row(
+
+        AppMultilineTextField(
+            state = promptTemplateState,
+            onValueChange = onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
+            minLines = 6,
+            paragraphSelectionEnabled = isParagraphSelectionMode,
+            selectedParagraphRange = selectedParagraphRange,
+            selectedParagraphColor = MaterialTheme.colorScheme.primaryContainer,
+            supportingText = paragraphSelectionMessage,
+            onParagraphOffsetSelected = onParagraphOffsetSelected,
+            onDeleteSelectedParagraph = onDeleteSelectedParagraph
+        )
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            OutlinedButton(
+                onClick = onCloseGeminiApp,
+                enabled = canCloseGemini && !isClosingGemini,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Text(
+                    text = "Gemini 종료",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             OutlinedButton(
                 onClick = onUndoPromptEdit,
                 enabled = canUndoPromptEdit && isTargetSelectionEnabled,
@@ -95,7 +129,6 @@ internal fun PromptSection(
                     modifier = Modifier.size(16.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(4.dp))
             OutlinedButton(
                 onClick = onToggleParagraphSelectionMode,
                 enabled = isTargetSelectionEnabled,
@@ -128,7 +161,6 @@ internal fun PromptSection(
                     fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(modifier = Modifier.width(4.dp))
             OutlinedButton(
                 onClick = onImportFromClipboard,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
@@ -142,18 +174,14 @@ internal fun PromptSection(
                 )
             }
         }
-        AppMultilineTextField(
-            state = promptTemplateState,
-            onValueChange = onPromptTemplateChange,
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 6,
-            paragraphSelectionEnabled = isParagraphSelectionMode,
-            selectedParagraphRange = selectedParagraphRange,
-            selectedParagraphColor = MaterialTheme.colorScheme.primaryContainer,
-            supportingText = paragraphSelectionMessage,
-            onParagraphOffsetSelected = onParagraphOffsetSelected,
-            onDeleteSelectedParagraph = onDeleteSelectedParagraph
-        )
+
+        if (geminiCloseMessage.isNotBlank()) {
+            Text(
+                text = geminiCloseMessage,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -205,4 +233,3 @@ private fun TargetAppButton(
         }
     }
 }
-

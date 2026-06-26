@@ -48,6 +48,7 @@ class RunAutomationUseCase(
         isPreparingRun = true
         val startedAtMillis = clock()
         val repeatCount = RepeatCountParser.parse(request.repeatCountText)
+        val wildcardTokens = promptGenerator.extractTokens(request.promptTemplate).toSet()
         val wildcards = try {
             withContext(dispatchers.io) {
                 lastRunSnapshotStore.save(
@@ -58,7 +59,11 @@ class RunAutomationUseCase(
                     )
                 )
                 clipboardGateway.writeText(request.promptTemplate)
-                wildcardSetRepository.load()
+                if (wildcardTokens.isEmpty()) {
+                    emptyList()
+                } else {
+                    wildcardSetRepository.load(wildcardTokens)
+                }
             }
         } catch (error: CancellationException) {
             throw error

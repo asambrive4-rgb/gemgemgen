@@ -3,6 +3,7 @@ package com.example.gemgemgen.ui.android
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.android.AndroidImeSettings
 import com.example.gemgemgen.automation.android.AndroidOverlayPermissionGateway
@@ -10,6 +11,7 @@ import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesRunLogRepository
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
+import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.ImeManager
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
@@ -54,6 +56,9 @@ class AndroidAppContainer(context: Context) {
                 clock = System::currentTimeMillis,
                 promptGatewayProvider = ActivePromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
+            ),
+            closeGeminiApp = CloseGeminiAppUseCase(
+                AndroidGeminiAppCloser(appContext)
             ),
             checkAutomationStart = CheckAutomationStartUseCase(
                 AndroidOverlayPermissionGateway(appContext)

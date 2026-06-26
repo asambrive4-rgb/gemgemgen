@@ -23,7 +23,9 @@ data class MainUiState(
     val isParagraphSelectionMode: Boolean = false,
     val selectedParagraphRange: PromptParagraphRange? = null,
     val paragraphSelectionMessage: String = "",
-    val canUndoPromptEdit: Boolean = false
+    val canUndoPromptEdit: Boolean = false,
+    val isClosingGemini: Boolean = false,
+    val geminiCloseMessage: String = ""
 ) {
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()
@@ -37,5 +39,10 @@ data class MainUiState(
     val canRun: Boolean
         get() = hasRunRequirements && !isRunning
 
-}
+    val canCloseGemini: Boolean
+        get() = environmentStatus.isGeminiInstalled &&
+            environmentStatus.isAccessibilityServiceEnabled &&
+            !isRunning &&
+            !isClosingGemini
 
+}

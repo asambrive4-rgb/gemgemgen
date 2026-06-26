@@ -23,11 +23,13 @@ class RunAutomationUseCaseTest {
         val logger = RunLogger(FakeRunLogStorage())
         var loadCount = 0
         val generatedIndexes = mutableListOf<Int>()
+        var loadedTokens: Set<String>? = null
         val automation = automation(
             service = service,
             logger = logger,
-            loadWildcardSets = {
+            loadWildcardSets = { tokens ->
                 loadCount += 1
+                loadedTokens = tokens
                 listOf(WildcardSet("__hair__", "hair.txt", listOf("black hair")))
             },
             generatePrompt = { _, _, index ->
@@ -51,6 +53,7 @@ class RunAutomationUseCaseTest {
         )
 
         assertEquals(1, loadCount)
+        assertEquals(setOf("__hair__"), loadedTokens)
         assertEquals(
             listOf(
                 RunAutomationUseCase.MARKER_PROMPT,
@@ -79,6 +82,39 @@ class RunAutomationUseCaseTest {
         assertEquals(0, log.failureCount)
         assertEquals("성공", log.markerStatus)
         assertEquals("성공", log.imeRestoreMessage)
+    }
+
+    @Test
+    fun run_withoutWildcardTokens_doesNotLoadWildcardSets() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = true)
+        val logger = RunLogger(FakeRunLogStorage())
+        var loadCount = 0
+        val automation = automation(
+            service = service,
+            logger = logger,
+            loadWildcardSets = {
+                loadCount += 1
+                emptyList()
+            },
+            generatePrompt = { _, _, index ->
+                GeneratedPrompt(index, "plain prompt", "plain prompt", emptyMap())
+            }
+        )
+
+        automation.run(
+            request = AutomationRunRequest(
+                promptTemplate = "plain prompt",
+                repeatCountText = "1",
+                targetApp = AutomationTargetApp.GEMINI
+            ),
+            onStateChange = {}
+        )
+
+        assertEquals(0, loadCount)
+        assertEquals(
+            listOf(RunAutomationUseCase.MARKER_PROMPT, "plain prompt"),
+            service.sentPrompts
+        )
     }
 
     @Test
@@ -185,7 +221,7 @@ class RunAutomationUseCaseTest {
     private fun automation(
         service: FakePromptAutomationGateway,
         logger: RunLogger,
-        loadWildcardSets: () -> List<WildcardSet> = { emptyList() },
+        loadWildcardSets: (Set<String>) -> List<WildcardSet> = { emptyList() },
         onGatewayRequest: (AutomationTargetApp) -> Unit = {},
         onLaunch: (AutomationTargetApp) -> Boolean = { true },
         generatePrompt: (String, List<WildcardSet>, Int) -> GeneratedPrompt
@@ -273,9 +309,11 @@ class RunAutomationUseCaseTest {
     }
 
     private class FakeWildcardSetRepository(
-        private val loadWildcardSets: () -> List<WildcardSet>
+        private val loadWildcardSets: (Set<String>) -> List<WildcardSet>
     ) : WildcardSetRepository {
-        override fun load(): List<WildcardSet> = loadWildcardSets()
+        override fun load(): List<WildcardSet> = loadWildcardSets(emptySet())
+
+        override fun load(tokens: Set<String>): List<WildcardSet> = loadWildcardSets(tokens)
     }
 
     private companion object {
