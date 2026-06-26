@@ -73,7 +73,7 @@ class GeminiAccessibilityService : AccessibilityService() {
 
     private fun closeGeminiFromRecents(onFinished: (CloseGeminiAppResult) -> Unit) {
         if (closeGeminiCompletion != null) {
-            onFinished(CloseGeminiAppResult.Failure("Gemini 종료가 이미 진행 중입니다."))
+            onFinished(CloseGeminiAppResult.Failure("Gemini 재시작이 이미 진행 중입니다."))
             return
         }
 

@@ -459,7 +459,7 @@ class MainViewModelTest {
         assertEquals(1, closer.closeCount)
         assertTrue(!viewModel.uiState.value.isClosingGemini)
         assertEquals(
-            "Gemini 앱 2개를 종료했습니다.",
+            "Gemini 앱 2개를 종료한 뒤 재시작했습니다.",
             viewModel.uiState.value.geminiCloseMessage
         )
     }

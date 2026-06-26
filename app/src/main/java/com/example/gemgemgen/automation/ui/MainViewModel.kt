@@ -228,7 +228,7 @@ class MainViewModel(
         _uiState.update {
             it.copy(
                 isClosingGemini = true,
-                geminiCloseMessage = "Gemini 종료 중..."
+                geminiCloseMessage = "Gemini 재시작 중..."
             )
         }
         scope.launch {
@@ -240,7 +240,7 @@ class MainViewModel(
                 _uiState.update {
                     it.copy(
                         isClosingGemini = false,
-                        geminiCloseMessage = "Gemini 종료를 취소했습니다."
+                        geminiCloseMessage = "Gemini 재시작을 취소했습니다."
                     )
                 }
                 throw error
@@ -535,12 +535,12 @@ class MainViewModel(
 
     private fun geminiCloseUnavailableMessage(state: MainUiState): String {
         return when {
-            state.isRunning -> "자동화 중에는 Gemini를 종료할 수 없습니다."
-            state.isClosingGemini -> "Gemini 종료가 이미 진행 중입니다."
+            state.isRunning -> "자동화 중에는 Gemini를 재시작할 수 없습니다."
+            state.isClosingGemini -> "Gemini 재시작이 이미 진행 중입니다."
             !state.environmentStatus.isGeminiInstalled -> "Gemini 앱이 설치되어 있지 않습니다."
             !state.environmentStatus.isAccessibilityServiceEnabled ->
                 "접근성 서비스를 먼저 켜주세요."
-            else -> "Gemini 종료를 지금 실행할 수 없습니다."
+            else -> "Gemini 재시작을 지금 실행할 수 없습니다."
         }
     }
 
@@ -548,9 +548,9 @@ class MainViewModel(
         return when (result) {
             is CloseGeminiAppResult.Success -> {
                 if (result.closedCount <= 1) {
-                    "Gemini 앱을 종료했습니다."
+                    "Gemini 앱을 재시작했습니다."
                 } else {
-                    "Gemini 앱 ${result.closedCount}개를 종료했습니다."
+                    "Gemini 앱 ${result.closedCount}개를 종료한 뒤 재시작했습니다."
                 }
             }
             CloseGeminiAppResult.AccessibilityUnavailable ->
@@ -560,7 +560,7 @@ class MainViewModel(
             CloseGeminiAppResult.NotFound ->
                 "최근 앱에서 Gemini를 찾지 못했습니다."
             is CloseGeminiAppResult.Failure ->
-                "Gemini 종료 실패: ${result.message}"
+                "Gemini 재시작 실패: ${result.message}"
         }
     }
 
@@ -578,4 +578,3 @@ class MainViewModel(
             "클립보드가 비어 있어 선택한 문단을 바꾸지 않았습니다."
     }
 }
-

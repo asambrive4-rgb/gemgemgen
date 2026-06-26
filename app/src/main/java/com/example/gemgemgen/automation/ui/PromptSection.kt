@@ -111,7 +111,7 @@ internal fun PromptSection(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Text(
-                    text = "Gemini 종료",
+                    text = "Gemini 재시작",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
