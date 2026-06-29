@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -13,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -43,9 +45,12 @@ internal fun AppMultilineTextField(
     selectedParagraphColor: Color = Color.Transparent,
     supportingText: String = "",
     onParagraphOffsetSelected: (Int) -> Unit = {},
-    onDeleteSelectedParagraph: () -> Unit = {}
+    onDeleteSelectedParagraph: () -> Unit = {},
+    onReplaceSelectedParagraph: (String) -> Unit = {}
 ) {
     var deleteRequestId by remember { mutableIntStateOf(0) }
+    var replaceRequestId by remember { mutableIntStateOf(0) }
+    var replacementText by remember { mutableStateOf("") }
     var paragraphTapRequestId by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(state, onValueChange) {
@@ -57,6 +62,12 @@ internal fun AppMultilineTextField(
     LaunchedEffect(deleteRequestId) {
         if (deleteRequestId > 0) {
             onDeleteSelectedParagraph()
+        }
+    }
+
+    LaunchedEffect(replaceRequestId) {
+        if (replaceRequestId > 0) {
+            onReplaceSelectedParagraph(replacementText)
         }
     }
 
@@ -84,9 +95,17 @@ internal fun AppMultilineTextField(
                         changes.getRange(index).collapsed &&
                             !changes.getOriginalRange(index).collapsed
                     }
+                val insertedText = if (isPureDeletion) {
+                    ""
+                } else {
+                    insertedTextFromChanges(toString(), changes)
+                }
                 revertAllChanges()
                 if (isPureDeletion && selectedParagraphRange != null) {
                     deleteRequestId += 1
+                } else if (selectedParagraphRange != null && insertedText.isNotEmpty()) {
+                    replacementText = insertedText
+                    replaceRequestId += 1
                 }
             }
         }
@@ -134,6 +153,22 @@ internal fun AppMultilineTextField(
         ),
         textStyle = TextStyle(fontFamily = FontFamily.Monospace)
     )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private fun insertedTextFromChanges(
+    text: String,
+    changes: TextFieldBuffer.ChangeList
+): String {
+    return (0 until changes.changeCount)
+        .map { changes.getRange(it) }
+        .filter { !it.collapsed }
+        .sortedBy { minOf(it.start, it.end) }
+        .joinToString(separator = "") { range ->
+            val start = minOf(range.start, range.end).coerceIn(0, text.length)
+            val end = maxOf(range.start, range.end).coerceIn(start, text.length)
+            text.substring(start, end)
+        }
 }
 
 private fun Modifier.observeSimpleTap(onTap: () -> Unit): Modifier {

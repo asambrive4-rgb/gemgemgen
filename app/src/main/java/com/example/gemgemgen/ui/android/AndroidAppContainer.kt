@@ -60,6 +60,9 @@ class AndroidAppContainer(context: Context) {
             closeGeminiApp = CloseGeminiAppUseCase(
                 AndroidGeminiAppCloser(appContext)
             ),
+            terminateGeminiApp = CloseGeminiAppUseCase(
+                AndroidGeminiAppCloser(appContext, relaunchAfterClose = false)
+            ),
             checkAutomationStart = CheckAutomationStartUseCase(
                 AndroidOverlayPermissionGateway(appContext)
             )

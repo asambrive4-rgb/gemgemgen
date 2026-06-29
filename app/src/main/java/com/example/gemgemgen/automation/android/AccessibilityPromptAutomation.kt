@@ -257,6 +257,6 @@ internal abstract class AccessibilityPromptAutomation(
 
     private companion object {
         const val INPUT_CONFIRM_WAIT_MS = 500L
-        const val SEND_CONFIRM_WAIT_MS = 1000L
+        const val SEND_CONFIRM_WAIT_MS = 500L
     }
 }

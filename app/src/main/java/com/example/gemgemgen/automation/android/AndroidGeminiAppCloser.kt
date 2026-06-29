@@ -7,7 +7,8 @@ import com.example.gemgemgen.automation.usecase.GeminiAppCloser
 import com.example.gemgemgen.core.AppDefaults
 
 class AndroidGeminiAppCloser(
-    private val context: Context
+    private val context: Context,
+    private val relaunchAfterClose: Boolean = true
 ) : GeminiAppCloser {
     override suspend fun closeGeminiApp(): CloseGeminiAppResult {
         val service = GeminiAccessibilityService.activeService
@@ -15,6 +16,7 @@ class AndroidGeminiAppCloser(
 
         val result = service.closeGeminiFromRecents()
         if (result !is CloseGeminiAppResult.Success) return result
+        if (!relaunchAfterClose) return result
 
         return if (launchGemini()) {
             result

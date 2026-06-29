@@ -177,6 +177,43 @@ class MainViewModelTest {
     }
 
     @Test
+    fun replaceSelectedPromptParagraph_replacesOnlySelectedParagraph() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("인물\n장소\n조명")
+        viewModel.toggleParagraphSelectionMode()
+        viewModel.selectPromptParagraphAt(4)
+
+        viewModel.replaceSelectedPromptParagraph("새 장소\n보조 설명")
+
+        assertEquals(
+            "인물\n새 장소\n보조 설명\n조명",
+            viewModel.uiState.value.promptTemplate
+        )
+        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+        assertEquals(
+            TextRange("인물\n새 장소\n보조 설명".length),
+            viewModel.promptTemplateTextFieldState.selection
+        )
+    }
+
+    @Test
+    fun replaceSelectedPromptParagraph_blankText_keepsSelectedParagraph() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("인물\n장소")
+        viewModel.toggleParagraphSelectionMode()
+        viewModel.selectPromptParagraphAt(4)
+
+        viewModel.replaceSelectedPromptParagraph("   ")
+
+        assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
+        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
+        assertEquals(
+            PromptParagraphRange(3, 5),
+            viewModel.uiState.value.selectedParagraphRange
+        )
+    }
+
+    @Test
     fun importPromptFromClipboard_withoutSelection_keepsTextAndMode() {
         val viewModel = viewModel(clipboardText = "새 장소")
         viewModel.onPromptTemplateChange("인물\n장소")
@@ -465,6 +502,23 @@ class MainViewModelTest {
     }
 
     @Test
+    fun terminateGeminiApp_updatesResultMessageWithoutRestartText() {
+        val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 2))
+        val viewModel = viewModel(
+            terminateGeminiApp = CloseGeminiAppUseCase(closer)
+        )
+
+        viewModel.terminateGeminiApp()
+
+        assertEquals(1, closer.closeCount)
+        assertTrue(!viewModel.uiState.value.isClosingGemini)
+        assertEquals(
+            "Gemini 앱 2개를 종료했습니다.",
+            viewModel.uiState.value.geminiCloseMessage
+        )
+    }
+
+    @Test
     fun closeGeminiApp_requiresAccessibilityAndDoesNotCallCloser() {
         val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 1))
         val viewModel = viewModel(
@@ -488,6 +542,7 @@ class MainViewModelTest {
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         automationRunner: RunAutomationUseCase? = null,
         closeGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
+        terminateGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
@@ -504,6 +559,7 @@ class MainViewModelTest {
                 dispatchers = dispatchers
             ),
             closeGeminiApp = closeGeminiApp,
+            terminateGeminiApp = terminateGeminiApp,
             dispatchers = dispatchers,
             coroutineScope = coroutineScope
         )

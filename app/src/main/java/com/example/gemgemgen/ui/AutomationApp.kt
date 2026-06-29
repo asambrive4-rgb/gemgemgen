@@ -23,8 +23,10 @@ internal data class AutomationAppActions(
     val onToggleParagraphSelectionMode: () -> Unit,
     val onParagraphOffsetSelected: (Int) -> Unit,
     val onDeleteSelectedParagraph: () -> Unit,
+    val onReplaceSelectedParagraph: (String) -> Unit,
     val onImportFromClipboard: () -> Unit,
     val onCloseGeminiApp: () -> Unit,
+    val onTerminateGeminiApp: () -> Unit,
     val onRepeatCountChange: (String) -> Unit,
     val onRunAutomation: () -> Unit,
     val onCancelAutomation: () -> Unit,
@@ -90,8 +92,11 @@ internal fun AutomationApp(
                         automationActions.onParagraphOffsetSelected,
                     onDeleteSelectedParagraph =
                         automationActions.onDeleteSelectedParagraph,
+                    onReplaceSelectedParagraph =
+                        automationActions.onReplaceSelectedParagraph,
                     onImportFromClipboard = automationActions.onImportFromClipboard,
                     onCloseGeminiApp = automationActions.onCloseGeminiApp,
+                    onTerminateGeminiApp = automationActions.onTerminateGeminiApp,
                     onRepeatCountChange = automationActions.onRepeatCountChange,
                     onRunMvp = automationActions.onRunAutomation,
                     onCancelAutomation = automationActions.onCancelAutomation,

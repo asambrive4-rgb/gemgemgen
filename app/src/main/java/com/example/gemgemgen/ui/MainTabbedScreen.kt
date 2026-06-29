@@ -5,13 +5,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Tab
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -39,27 +42,41 @@ internal fun MainTabbedScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                PrimaryTabRow(selectedTabIndex = selectedTabIndex) {
+                PrimaryTabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    modifier = Modifier.height(38.dp)
+                ) {
                     tabs.forEach { page ->
                         Tab(
                             selected = selectedTab == page.tab,
                             onClick = { onSelectTab(page.tab) },
-                            text = { Text(page.tab.label) }
+                            modifier = Modifier.height(38.dp),
+                            text = {
+                                Text(
+                                    text = page.tab.label,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         )
                     }
                 }
             }
             IconButton(
                 onClick = onShowSettings,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                modifier = Modifier
+                    .size(38.dp)
+                    .padding(horizontal = 4.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
-                    contentDescription = "설정"
+                    contentDescription = "설정",
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
@@ -73,4 +90,5 @@ internal fun MainTabbedScreen(
         }
     }
 }
+
 

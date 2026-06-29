@@ -48,13 +48,16 @@ internal fun PromptSection(
     geminiCloseMessage: String,
     selectedParagraphRange: PromptParagraphRange?,
     paragraphSelectionMessage: String,
+    showPromptActions: Boolean = true,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
     onCloseGeminiApp: () -> Unit,
+    onTerminateGeminiApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
     onToggleParagraphSelectionMode: () -> Unit,
     onParagraphOffsetSelected: (Int) -> Unit,
     onDeleteSelectedParagraph: () -> Unit,
+    onReplaceSelectedParagraph: (String) -> Unit,
     onImportFromClipboard: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -95,84 +98,23 @@ internal fun PromptSection(
             selectedParagraphColor = MaterialTheme.colorScheme.primaryContainer,
             supportingText = paragraphSelectionMessage,
             onParagraphOffsetSelected = onParagraphOffsetSelected,
-            onDeleteSelectedParagraph = onDeleteSelectedParagraph
+            onDeleteSelectedParagraph = onDeleteSelectedParagraph,
+            onReplaceSelectedParagraph = onReplaceSelectedParagraph
         )
 
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            OutlinedButton(
-                onClick = onCloseGeminiApp,
-                enabled = canCloseGemini && !isClosingGemini,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                modifier = Modifier.height(28.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-            ) {
-                Text(
-                    text = "Gemini 재시작",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            OutlinedButton(
-                onClick = onUndoPromptEdit,
-                enabled = canUndoPromptEdit && isTargetSelectionEnabled,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                modifier = Modifier.height(28.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Undo,
-                    contentDescription = "Undo",
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            OutlinedButton(
-                onClick = onToggleParagraphSelectionMode,
-                enabled = isTargetSelectionEnabled,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                modifier = Modifier.height(28.dp),
-                border = BorderStroke(
-                    1.dp,
-                    if (isParagraphSelectionMode) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outline
-                    }
-                ),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = if (isParagraphSelectionMode) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                    contentColor = if (isParagraphSelectionMode) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
-                )
-            ) {
-                Text(
-                    text = "문단 선택",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            OutlinedButton(
-                onClick = onImportFromClipboard,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                modifier = Modifier.height(28.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-            ) {
-                Text(
-                    text = "가져오기",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+        if (showPromptActions) {
+            PromptActionRow(
+                canCloseGemini = canCloseGemini,
+                isClosingGemini = isClosingGemini,
+                canUndoPromptEdit = canUndoPromptEdit,
+                isTargetSelectionEnabled = isTargetSelectionEnabled,
+                isParagraphSelectionMode = isParagraphSelectionMode,
+                onCloseGeminiApp = onCloseGeminiApp,
+                onTerminateGeminiApp = onTerminateGeminiApp,
+                onUndoPromptEdit = onUndoPromptEdit,
+                onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
+                onImportFromClipboard = onImportFromClipboard
+            )
         }
 
         if (geminiCloseMessage.isNotBlank()) {
@@ -180,6 +122,112 @@ internal fun PromptSection(
                 text = geminiCloseMessage,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun PromptActionRow(
+    canCloseGemini: Boolean,
+    isClosingGemini: Boolean,
+    canUndoPromptEdit: Boolean,
+    isTargetSelectionEnabled: Boolean,
+    isParagraphSelectionMode: Boolean,
+    onCloseGeminiApp: () -> Unit,
+    onTerminateGeminiApp: () -> Unit,
+    onUndoPromptEdit: () -> Unit,
+    onToggleParagraphSelectionMode: () -> Unit,
+    onImportFromClipboard: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        OutlinedButton(
+            onClick = onCloseGeminiApp,
+            enabled = canCloseGemini && !isClosingGemini,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.height(28.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Text(
+                text = "Gemini 재시작",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        OutlinedButton(
+            onClick = onTerminateGeminiApp,
+            enabled = canCloseGemini && !isClosingGemini,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.height(28.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Text(
+                text = "Gemini 종료",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        OutlinedButton(
+            onClick = onUndoPromptEdit,
+            enabled = canUndoPromptEdit && isTargetSelectionEnabled,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.height(28.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Undo,
+                contentDescription = "Undo",
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        OutlinedButton(
+            onClick = onToggleParagraphSelectionMode,
+            enabled = isTargetSelectionEnabled,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.height(28.dp),
+            border = BorderStroke(
+                1.dp,
+                if (isParagraphSelectionMode) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outline
+                }
+            ),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = if (isParagraphSelectionMode) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+                contentColor = if (isParagraphSelectionMode) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+        ) {
+            Text(
+                text = "문단 선택",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        OutlinedButton(
+            onClick = onImportFromClipboard,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.height(28.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Text(
+                text = "가져오기",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
             )
         }
     }

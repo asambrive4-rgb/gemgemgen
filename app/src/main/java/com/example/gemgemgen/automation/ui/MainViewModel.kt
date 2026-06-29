@@ -53,6 +53,13 @@ class MainViewModel(
             }
         }
     ),
+    private val terminateGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(
+        object : GeminiAppCloser {
+            override suspend fun closeGeminiApp(): CloseGeminiAppResult {
+                return CloseGeminiAppResult.AccessibilityUnavailable
+            }
+        }
+    ),
     private val checkAutomationStart: CheckAutomationStartUseCase =
         CheckAutomationStartUseCase(OverlayPermissionGateway { true }),
     private val dispatchers: AppDispatchers = AppDispatchers(),
@@ -199,20 +206,27 @@ class MainViewModel(
                 return@launch
             }
 
-            val range = state.selectedParagraphRange
-            when {
-                range == null -> {
-                    _uiState.update {
-                        it.copy(paragraphSelectionMessage = SELECT_PARAGRAPH_FIRST_MESSAGE)
-                    }
+            replaceSelectedPromptParagraph(text)
+        }
+    }
+
+    fun replaceSelectedPromptParagraph(replacement: String) {
+        val state = _uiState.value
+        if (!state.isParagraphSelectionMode) return
+
+        val range = state.selectedParagraphRange
+        when {
+            range == null -> {
+                _uiState.update {
+                    it.copy(paragraphSelectionMessage = SELECT_PARAGRAPH_FIRST_MESSAGE)
                 }
-                text.isBlank() -> {
-                    _uiState.update {
-                        it.copy(paragraphSelectionMessage = EMPTY_CLIPBOARD_MESSAGE)
-                    }
-                }
-                else -> replaceSelectedParagraph(range.start, range.endExclusive, text)
             }
+            replacement.isBlank() -> {
+                _uiState.update {
+                    it.copy(paragraphSelectionMessage = EMPTY_CLIPBOARD_MESSAGE)
+                }
+            }
+            else -> replaceSelectedParagraph(range.start, range.endExclusive, replacement)
         }
     }
 
@@ -254,6 +268,49 @@ class MainViewModel(
                 it.copy(
                     isClosingGemini = false,
                     geminiCloseMessage = geminiCloseResultMessage(result)
+                )
+            }
+        }
+    }
+
+    fun terminateGeminiApp() {
+        val state = _uiState.value
+        if (!state.canCloseGemini) {
+            _uiState.update {
+                it.copy(geminiCloseMessage = geminiTerminateUnavailableMessage(it))
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                isClosingGemini = true,
+                geminiCloseMessage = "Gemini 종료 중..."
+            )
+        }
+        scope.launch {
+            val result = try {
+                withContext(dispatchers.io) {
+                    terminateGeminiApp.close()
+                }
+            } catch (error: CancellationException) {
+                _uiState.update {
+                    it.copy(
+                        isClosingGemini = false,
+                        geminiCloseMessage = "Gemini 종료를 취소했습니다."
+                    )
+                }
+                throw error
+            } catch (error: Exception) {
+                CloseGeminiAppResult.Failure(
+                    error.message ?: "알 수 없는 오류가 발생했습니다."
+                )
+            }
+
+            _uiState.update {
+                it.copy(
+                    isClosingGemini = false,
+                    geminiCloseMessage = geminiTerminateResultMessage(result)
                 )
             }
         }
@@ -544,6 +601,17 @@ class MainViewModel(
         }
     }
 
+    private fun geminiTerminateUnavailableMessage(state: MainUiState): String {
+        return when {
+            state.isRunning -> "자동화 중에는 Gemini를 종료할 수 없습니다."
+            state.isClosingGemini -> "Gemini 종료가 이미 진행 중입니다."
+            !state.environmentStatus.isGeminiInstalled -> "Gemini 앱이 설치되어 있지 않습니다."
+            !state.environmentStatus.isAccessibilityServiceEnabled ->
+                "접근성 서비스를 먼저 켜주세요."
+            else -> "Gemini 종료를 지금 실행할 수 없습니다."
+        }
+    }
+
     private fun geminiCloseResultMessage(result: CloseGeminiAppResult): String {
         return when (result) {
             is CloseGeminiAppResult.Success -> {
@@ -561,6 +629,26 @@ class MainViewModel(
                 "최근 앱에서 Gemini를 찾지 못했습니다."
             is CloseGeminiAppResult.Failure ->
                 "Gemini 재시작 실패: ${result.message}"
+        }
+    }
+
+    private fun geminiTerminateResultMessage(result: CloseGeminiAppResult): String {
+        return when (result) {
+            is CloseGeminiAppResult.Success -> {
+                if (result.closedCount <= 1) {
+                    "Gemini 앱을 종료했습니다."
+                } else {
+                    "Gemini 앱 ${result.closedCount}개를 종료했습니다."
+                }
+            }
+            CloseGeminiAppResult.AccessibilityUnavailable ->
+                "접근성 서비스가 켜져 있지 않습니다."
+            CloseGeminiAppResult.RecentsUnavailable ->
+                "최근 앱 화면을 열지 못했습니다."
+            CloseGeminiAppResult.NotFound ->
+                "최근 앱에서 Gemini를 찾지 못했습니다."
+            is CloseGeminiAppResult.Failure ->
+                "Gemini 종료 실패: ${result.message}"
         }
     }
 
