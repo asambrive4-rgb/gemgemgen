@@ -119,6 +119,7 @@ internal class GeminiPromptAutomation(
             return
         }
 
+        restoreSidebarTopOnce(onStateChange)
         retryOrFail(
             startedAtMillis = startedAtMillis,
             failureMessage = "Gemini 채팅 검색 근처 새 채팅 못 찾음",
@@ -126,6 +127,19 @@ internal class GeminiPromptAutomation(
         ) {
             clickNewChatNearSearch(attempt + 1, startedAtMillis, onStateChange, onDone)
         }
+    }
+
+    private fun restoreSidebarTopOnce(
+        onStateChange: (AutomationRunState) -> Unit
+    ) {
+        val node = nodeFinder.findSidebarScrollableNode()
+        if (node == null) {
+            onStateChange(AutomationRunState.Running("사이드바 스크롤 영역 못 찾음"))
+            return
+        }
+
+        onStateChange(AutomationRunState.Running("사이드바 상단 복원 스크롤 실행"))
+        node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
     }
 
     private companion object {

@@ -43,6 +43,25 @@ internal class GeminiAccessibilityNodeFinder(
         ) { it.second }?.first
     }
 
+    fun findSidebarScrollableNode(): AccessibilityNodeInfo? {
+        val root = rootProvider() ?: return null
+        val rootBounds = root.nodeBounds()
+        val nodes = flattenNodes(root)
+        if (!nodes.hasOpenSidebarSignal(rootBounds)) return null
+
+        return nodes.asSequence()
+            .filter { node -> node.isScrollable }
+            .mapNotNull { node ->
+                val bounds = node.nodeBounds() ?: return@mapNotNull null
+                node to bounds
+            }
+            .filter { (_, bounds) ->
+                bounds.isLikelySidebarScrollable(rootBounds = rootBounds)
+            }
+            .maxByOrNull { (_, bounds) -> bounds.area }
+            ?.first
+    }
+
     private fun findNodeByViewId(viewId: String): AccessibilityNodeInfo? {
         return try {
             rootProvider()
@@ -72,6 +91,17 @@ internal class GeminiAccessibilityNodeFinder(
             contentDescription?.toString()?.contains(value, ignoreCase = true) == true
     }
 
+    private fun List<AccessibilityNodeInfo>.hasOpenSidebarSignal(
+        rootBounds: NodeBounds?
+    ): Boolean {
+        return any { node ->
+            node.matchesTextOrDescription("사이드바 닫기")
+        } || any { node ->
+            node.matchesTextOrDescription("Gemini") &&
+                node.nodeBounds()?.isLikelySidebarHeader(rootBounds) == true
+        }
+    }
+
     private fun AccessibilityNodeInfo.nodeBounds(): NodeBounds? {
         val rect = Rect()
         getBoundsInScreen(rect)
@@ -84,5 +114,35 @@ internal class GeminiAccessibilityNodeFinder(
             bottom = rect.bottom
         )
     }
+
+    private fun NodeBounds.isLikelySidebarScrollable(
+        rootBounds: NodeBounds?
+    ): Boolean {
+        if (width <= 0 || height <= 0) return false
+        if (rootBounds == null) return true
+
+        val tallEnoughForSidebarList = height >= rootBounds.height / 3
+        val startsNearLeftEdge = left <= rootBounds.left + rootBounds.width / 4
+        val centerIsNotOnRightPane = centerX <= rootBounds.centerX
+
+        return tallEnoughForSidebarList && startsNearLeftEdge && centerIsNotOnRightPane
+    }
+
+    private fun NodeBounds.isLikelySidebarHeader(rootBounds: NodeBounds?): Boolean {
+        if (rootBounds == null) return true
+
+        return top <= rootBounds.top + rootBounds.height / 8 &&
+            left <= rootBounds.left + rootBounds.width / 2 &&
+            centerX <= rootBounds.centerX
+    }
+
+    private val NodeBounds.width: Int
+        get() = right - left
+
+    private val NodeBounds.height: Int
+        get() = bottom - top
+
+    private val NodeBounds.area: Long
+        get() = width.toLong() * height.toLong()
 }
 
