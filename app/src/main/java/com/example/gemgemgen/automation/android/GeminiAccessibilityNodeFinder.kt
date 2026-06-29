@@ -2,6 +2,7 @@ package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
+import com.example.gemgemgen.core.AppDefaults
 
 internal class GeminiAccessibilityNodeFinder(
     private val rootProvider: () -> AccessibilityNodeInfo?,
@@ -10,22 +11,19 @@ internal class GeminiAccessibilityNodeFinder(
     fun findInputNode(): AccessibilityNodeInfo? {
         findNodeByViewId(inputResourceId)?.let { return it }
 
-        return rootProvider()
-            ?.let(::flattenNodes)
-            ?.firstOrNull { node ->
+        return nodes()
+            .firstOrNull { node ->
                 node.className?.toString()?.contains("EditText", ignoreCase = true) == true ||
                     node.isEditable
             }
     }
 
     fun findNodeByTextOrDescription(value: String): AccessibilityNodeInfo? {
-        return rootProvider()
-            ?.let(::flattenNodes)
-            ?.firstOrNull { node -> node.matchesTextOrDescription(value) }
+        return nodes().firstOrNull { node -> node.matchesTextOrDescription(value) }
     }
 
     fun findNewChatNearestToSearch(): AccessibilityNodeInfo? {
-        val nodes = rootProvider()?.let(::flattenNodes) ?: return null
+        val nodes = nodes()
         val searchNode = nodes.firstOrNull { node ->
             node.matchesTextOrDescription("채팅 검색")
         } ?: return null
@@ -46,7 +44,7 @@ internal class GeminiAccessibilityNodeFinder(
     fun findSidebarScrollableNode(): AccessibilityNodeInfo? {
         val root = rootProvider() ?: return null
         val rootBounds = root.nodeBounds()
-        val nodes = flattenNodes(root)
+        val nodes = nodesIn(root)
         if (!nodes.hasOpenSidebarSignal(rootBounds)) return null
 
         return nodes.asSequence()
@@ -66,10 +64,19 @@ internal class GeminiAccessibilityNodeFinder(
         return try {
             rootProvider()
                 ?.findAccessibilityNodeInfosByViewId(viewId)
-                ?.firstOrNull()
+                ?.firstOrNull { node -> node.isGeminiPackage() }
         } catch (_: RuntimeException) {
             null
         }
+    }
+
+    private fun nodes(): List<AccessibilityNodeInfo> {
+        val root = rootProvider() ?: return emptyList()
+        return nodesIn(root)
+    }
+
+    private fun nodesIn(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
+        return flattenNodes(root).filter { node -> node.isGeminiPackage() }
     }
 
     private fun flattenNodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
@@ -89,6 +96,10 @@ internal class GeminiAccessibilityNodeFinder(
     private fun AccessibilityNodeInfo.matchesTextOrDescription(value: String): Boolean {
         return text?.toString()?.contains(value, ignoreCase = true) == true ||
             contentDescription?.toString()?.contains(value, ignoreCase = true) == true
+    }
+
+    private fun AccessibilityNodeInfo.isGeminiPackage(): Boolean {
+        return packageName?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
     }
 
     private fun List<AccessibilityNodeInfo>.hasOpenSidebarSignal(
@@ -144,5 +155,12 @@ internal class GeminiAccessibilityNodeFinder(
 
     private val NodeBounds.area: Long
         get() = width.toLong() * height.toLong()
+
+    private companion object {
+        val GEMINI_ACCESSIBILITY_PACKAGES = setOf(
+            AppDefaults.GEMINI_PACKAGE_NAME,
+            "com.google.android.googlequicksearchbox"
+        )
+    }
 }
 
