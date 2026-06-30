@@ -210,6 +210,18 @@ class MainViewModel(
         }
     }
 
+    fun copyPromptToClipboard() {
+        val state = _uiState.value
+        val text = state.promptTemplate
+        if (state.isRunning || text.isBlank()) return
+
+        scope.launch {
+            withContext(dispatchers.io) {
+                clipboardGateway.writeText(text)
+            }
+        }
+    }
+
     fun replaceSelectedPromptParagraph(replacement: String) {
         val state = _uiState.value
         if (!state.isParagraphSelectionMode) return

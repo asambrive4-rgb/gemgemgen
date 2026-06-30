@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,7 @@ internal fun PromptSection(
     isTargetSelectionEnabled: Boolean,
     isParagraphSelectionMode: Boolean,
     canUndoPromptEdit: Boolean,
+    canCopyPrompt: Boolean,
     canCloseGemini: Boolean,
     isClosingGemini: Boolean,
     geminiCloseMessage: String,
@@ -58,7 +60,8 @@ internal fun PromptSection(
     onParagraphOffsetSelected: (Int) -> Unit,
     onDeleteSelectedParagraph: () -> Unit,
     onReplaceSelectedParagraph: (String) -> Unit,
-    onImportFromClipboard: () -> Unit
+    onImportFromClipboard: () -> Unit,
+    onCopyPromptToClipboard: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -107,13 +110,15 @@ internal fun PromptSection(
                 canCloseGemini = canCloseGemini,
                 isClosingGemini = isClosingGemini,
                 canUndoPromptEdit = canUndoPromptEdit,
+                canCopyPrompt = canCopyPrompt,
                 isTargetSelectionEnabled = isTargetSelectionEnabled,
                 isParagraphSelectionMode = isParagraphSelectionMode,
                 onCloseGeminiApp = onCloseGeminiApp,
                 onTerminateGeminiApp = onTerminateGeminiApp,
                 onUndoPromptEdit = onUndoPromptEdit,
                 onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
-                onImportFromClipboard = onImportFromClipboard
+                onImportFromClipboard = onImportFromClipboard,
+                onCopyPromptToClipboard = onCopyPromptToClipboard
             )
         }
 
@@ -133,6 +138,7 @@ internal fun PromptActionRow(
     canCloseGemini: Boolean,
     isClosingGemini: Boolean,
     canUndoPromptEdit: Boolean,
+    canCopyPrompt: Boolean,
     isTargetSelectionEnabled: Boolean,
     isParagraphSelectionMode: Boolean,
     onCloseGeminiApp: () -> Unit,
@@ -140,6 +146,7 @@ internal fun PromptActionRow(
     onUndoPromptEdit: () -> Unit,
     onToggleParagraphSelectionMode: () -> Unit,
     onImportFromClipboard: () -> Unit,
+    onCopyPromptToClipboard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     FlowRow(
@@ -228,6 +235,19 @@ internal fun PromptActionRow(
                 text = "가져오기",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold
+            )
+        }
+        OutlinedButton(
+            onClick = onCopyPromptToClipboard,
+            enabled = canCopyPrompt,
+            contentPadding = PaddingValues(0.dp),
+            modifier = Modifier.size(28.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ContentCopy,
+                contentDescription = "프롬프트 복사",
+                modifier = Modifier.size(16.dp)
             )
         }
     }

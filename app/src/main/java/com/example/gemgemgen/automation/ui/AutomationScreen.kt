@@ -44,6 +44,7 @@ internal fun AutomationScreen(
     onDeleteSelectedParagraph: () -> Unit,
     onReplaceSelectedParagraph: (String) -> Unit,
     onImportFromClipboard: () -> Unit,
+    onCopyPromptToClipboard: () -> Unit,
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
     onRepeatCountChange: (String) -> Unit,
@@ -75,6 +76,7 @@ internal fun AutomationScreen(
                     isTargetSelectionEnabled = !uiState.isRunning,
                     isParagraphSelectionMode = uiState.isParagraphSelectionMode,
                     canUndoPromptEdit = uiState.canUndoPromptEdit,
+                    canCopyPrompt = uiState.hasPromptTemplate && !uiState.isRunning,
                     canCloseGemini = uiState.canCloseGemini,
                     isClosingGemini = uiState.isClosingGemini,
                     geminiCloseMessage = uiState.geminiCloseMessage,
@@ -90,7 +92,8 @@ internal fun AutomationScreen(
                     onParagraphOffsetSelected = onParagraphOffsetSelected,
                     onDeleteSelectedParagraph = onDeleteSelectedParagraph,
                     onReplaceSelectedParagraph = onReplaceSelectedParagraph,
-                    onImportFromClipboard = onImportFromClipboard
+                    onImportFromClipboard = onImportFromClipboard,
+                    onCopyPromptToClipboard = onCopyPromptToClipboard
                 )
 
                 if (!isKeyboardVisible) {
@@ -133,13 +136,16 @@ internal fun AutomationScreen(
                             canCloseGemini = uiState.canCloseGemini,
                             isClosingGemini = uiState.isClosingGemini,
                             canUndoPromptEdit = uiState.canUndoPromptEdit,
+                            canCopyPrompt = uiState.hasPromptTemplate &&
+                                !uiState.isRunning,
                             isTargetSelectionEnabled = !uiState.isRunning,
                             isParagraphSelectionMode = uiState.isParagraphSelectionMode,
                             onCloseGeminiApp = onCloseGeminiApp,
                             onTerminateGeminiApp = onTerminateGeminiApp,
                             onUndoPromptEdit = onUndoPromptEdit,
                             onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
-                            onImportFromClipboard = onImportFromClipboard
+                            onImportFromClipboard = onImportFromClipboard,
+                            onCopyPromptToClipboard = onCopyPromptToClipboard
                         )
 
                         AutomationActionBar(
@@ -191,6 +197,7 @@ private fun AutomationAppPreview() {
             onDeleteSelectedParagraph = {},
             onReplaceSelectedParagraph = {},
             onImportFromClipboard = {},
+            onCopyPromptToClipboard = {},
             onCloseGeminiApp = {},
             onTerminateGeminiApp = {},
             onRepeatCountChange = {},

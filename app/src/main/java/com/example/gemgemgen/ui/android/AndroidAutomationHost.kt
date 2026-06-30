@@ -164,6 +164,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onDeleteSelectedParagraph = mainViewModel::deleteSelectedPromptParagraph,
             onReplaceSelectedParagraph = mainViewModel::replaceSelectedPromptParagraph,
             onImportFromClipboard = mainViewModel::importPromptFromClipboard,
+            onCopyPromptToClipboard = mainViewModel::copyPromptToClipboard,
             onCloseGeminiApp = mainViewModel::closeGeminiApp,
             onTerminateGeminiApp = mainViewModel::terminateGeminiApp,
             onRepeatCountChange = mainViewModel::onRepeatCountChange,

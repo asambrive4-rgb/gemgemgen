@@ -36,6 +36,28 @@ class MainViewModelTest {
     }
 
     @Test
+    fun copyPromptToClipboard_writesPromptTemplate() {
+        val clipboardGateway = FakeClipboardGateway()
+        val viewModel = viewModel(clipboardGateway = clipboardGateway)
+
+        viewModel.onPromptTemplateChange("prompt to copy")
+        viewModel.copyPromptToClipboard()
+
+        assertEquals("prompt to copy", clipboardGateway.writtenText)
+    }
+
+    @Test
+    fun copyPromptToClipboard_withBlankPromptDoesNothing() {
+        val clipboardGateway = FakeClipboardGateway()
+        val viewModel = viewModel(clipboardGateway = clipboardGateway)
+
+        viewModel.onPromptTemplateChange("   ")
+        viewModel.copyPromptToClipboard()
+
+        assertEquals("", clipboardGateway.writtenText)
+    }
+
+    @Test
     fun onPromptTemplateChange_withSameText_preservesSelection() {
         val viewModel = viewModel()
         viewModel.onPromptTemplateChange("abcdef")
