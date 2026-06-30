@@ -1,7 +1,5 @@
 package com.example.gemgemgen.automation.usecase
 
-import com.example.gemgemgen.automation.domain.AutomationRunLog
-import com.example.gemgemgen.automation.domain.AutomationRunLogStatus
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeneratedPrompt
@@ -22,7 +20,6 @@ data class AutomationRunRequest(
 
 class RunAutomationUseCase(
     private val imeManager: ImeManager,
-    private val runLogger: RunLogger,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val clipboardGateway: ClipboardGateway,
     private val wildcardSetRepository: WildcardSetRepository,
@@ -281,7 +278,6 @@ class RunAutomationUseCase(
             )
         }
 
-        runLogger.append(run.toLog(finalState, imeRestoreMessage, clock()))
         currentRun = null
         onStateChange(finalState)
     }
@@ -294,40 +290,7 @@ class RunAutomationUseCase(
         state: AutomationRunState,
         onStateChange: (AutomationRunState) -> Unit
     ) {
-        runLogger.append(
-            AutomationRunLog(
-                startedAtMillis = startedAtMillis,
-                finishedAtMillis = clock(),
-                status = AutomationRunLogStatus.fromState(state),
-                lastStep = lastStep,
-                message = state.message(),
-                imeRestoreMessage = "해당 없음",
-                repeatCount = repeatCount,
-                targetApp = targetApp.storageValue
-            )
-        )
         onStateChange(state)
-    }
-
-    private fun CurrentRun.toLog(
-        state: AutomationRunState,
-        imeRestoreMessage: String,
-        finishedAtMillis: Long
-    ): AutomationRunLog {
-        return AutomationRunLog(
-            startedAtMillis = startedAtMillis,
-            finishedAtMillis = finishedAtMillis,
-            status = AutomationRunLogStatus.fromState(state),
-            lastStep = lastStep,
-            message = state.message(),
-            imeRestoreMessage = imeRestoreMessage,
-            repeatCount = repeatCount,
-            completedCount = completedCount,
-            successCount = successCount,
-            failureCount = failureCount,
-            markerStatus = markerStatus,
-            targetApp = targetApp.storageValue
-        )
     }
 
     private fun ImeRestoreResult.message(): String {

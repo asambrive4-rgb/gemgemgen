@@ -29,9 +29,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.gemgemgen.R
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.ui.AppMultilineTextField
@@ -158,27 +162,51 @@ internal fun PromptActionRow(
             onClick = onCloseGeminiApp,
             enabled = canCloseGemini && !isClosingGemini,
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier.height(28.dp),
+            modifier = Modifier
+                .height(28.dp)
+                .semantics { contentDescription = "Gemini 앱 재시작" },
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
-            Text(
-                text = "Gemini 재시작",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_gemini_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "재시작",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
         OutlinedButton(
             onClick = onTerminateGeminiApp,
             enabled = canCloseGemini && !isClosingGemini,
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier.height(28.dp),
+            modifier = Modifier
+                .height(28.dp)
+                .semantics { contentDescription = "Gemini 앱 종료" },
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
-            Text(
-                text = "Gemini 종료",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_gemini_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "종료",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
         OutlinedButton(
             onClick = onUndoPromptEdit,

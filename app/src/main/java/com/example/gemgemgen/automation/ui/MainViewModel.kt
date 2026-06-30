@@ -19,7 +19,6 @@ import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.GeminiAppCloser
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
-import com.example.gemgemgen.automation.usecase.RunLogger
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.core.AppDefaults
@@ -43,7 +42,6 @@ class MainViewModel(
     private val checkEnvironmentStatus: CheckEnvironmentStatusUseCase,
     private val clipboardGateway: ClipboardGateway,
     private val saveWildcardFolder: SaveWildcardFolderUseCase,
-    private val runLogger: RunLogger,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: RunAutomationUseCase,
     private val closeGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(
@@ -437,17 +435,11 @@ class MainViewModel(
         automation.cancel(::handleAutomationState)
     }
 
-    fun toggleRecentLogs() {
-        refreshLogs()
-        _uiState.update { it.copy(showRecentLogs = !it.showRecentLogs) }
-    }
-
     private fun loadInitialState() {
         scope.launch {
-            val snapshotAndLogs = withContext(dispatchers.io) {
-                lastRunSnapshotStore.load() to runLogger.loadRecent()
+            val lastRunSnapshot = withContext(dispatchers.io) {
+                lastRunSnapshotStore.load()
             }
-            val lastRunSnapshot = snapshotAndLogs.first
             _uiState.update {
                 val defaultRepeatCountText = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
                 it.copy(
@@ -463,8 +455,7 @@ class MainViewModel(
                     } else {
                         it.repeatCountText
                     },
-                    selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp,
-                    recentLogs = snapshotAndLogs.second
+                    selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp
                 )
             }
             applyPromptTemplateText(uiState.value.promptTemplate)
@@ -477,28 +468,14 @@ class MainViewModel(
     }
 
     private fun handleAutomationState(state: AutomationRunState) {
-        var stateChanged = false
         _uiState.update {
             if (it.automationState == state) {
                 it
             } else {
-                stateChanged = true
                 it.copy(automationState = state)
             }
         }
-        if (stateChanged && state.isTerminal()) {
-            refreshLogs()
-        }
         _automationBarUiState.update { it.copy(automationState = state) }
-    }
-
-    private fun refreshLogs() {
-        scope.launch {
-            val logs = withContext(dispatchers.io) {
-                runLogger.loadRecent()
-            }
-            _uiState.update { it.copy(recentLogs = logs) }
-        }
     }
 
     private fun replaceSelectedParagraph(

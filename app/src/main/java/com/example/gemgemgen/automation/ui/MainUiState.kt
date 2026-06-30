@@ -1,6 +1,5 @@
 package com.example.gemgemgen.automation.ui
 
-import com.example.gemgemgen.automation.domain.AutomationRunLog
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
@@ -15,11 +14,9 @@ data class MainUiState(
     val environmentStatus: EnvironmentStatus = EnvironmentStatus(),
     val environmentSetupInfo: EnvironmentSetupInfo = EnvironmentSetupInfo(),
     val automationState: AutomationRunState = AutomationRunState.Idle,
-    val recentLogs: List<AutomationRunLog> = emptyList(),
     val showSettings: Boolean = false,
     val settingsMessage: String = "",
     val settingsError: String = "",
-    val showRecentLogs: Boolean = false,
     val isParagraphSelectionMode: Boolean = false,
     val selectedParagraphRange: PromptParagraphRange? = null,
     val paragraphSelectionMessage: String = "",

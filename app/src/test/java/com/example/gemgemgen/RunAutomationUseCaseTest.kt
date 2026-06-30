@@ -20,13 +20,11 @@ class RunAutomationUseCaseTest {
     @Test
     fun run_loadsWildcardsOnceSendsMarkerFirstAndGeneratesOnePromptPerRepeat() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = true)
-        val logger = RunLogger(FakeRunLogStorage())
         var loadCount = 0
         val generatedIndexes = mutableListOf<Int>()
         var loadedTokens: Set<String>? = null
         val automation = automation(
             service = service,
-            logger = logger,
             loadWildcardSets = { tokens ->
                 loadCount += 1
                 loadedTokens = tokens
@@ -73,25 +71,14 @@ class RunAutomationUseCaseTest {
             service.newChatModes
         )
         assertEquals(listOf(1, 2, 3), generatedIndexes)
-
-        val log = logger.loadRecent().single()
-        assertEquals(AutomationRunLogStatus.SUCCESS, log.status)
-        assertEquals(3, log.repeatCount)
-        assertEquals(3, log.completedCount)
-        assertEquals(3, log.successCount)
-        assertEquals(0, log.failureCount)
-        assertEquals("성공", log.markerStatus)
-        assertEquals("성공", log.imeRestoreMessage)
     }
 
     @Test
     fun run_withoutWildcardTokens_doesNotLoadWildcardSets() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = true)
-        val logger = RunLogger(FakeRunLogStorage())
         var loadCount = 0
         val automation = automation(
             service = service,
-            logger = logger,
             loadWildcardSets = {
                 loadCount += 1
                 emptyList()
@@ -120,10 +107,8 @@ class RunAutomationUseCaseTest {
     @Test
     fun cancel_cancelsServiceRestoresImeAndWritesStoppedLog() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = false)
-        val logger = RunLogger(FakeRunLogStorage())
         val automation = automation(
             service = service,
-            logger = logger,
             generatePrompt = { _, _, index ->
                 GeneratedPrompt(index, "base", "prompt $index", emptyMap())
             }
@@ -143,25 +128,19 @@ class RunAutomationUseCaseTest {
         assertTrue(service.wasCancelled)
         assertEquals(ORIGINAL_IME_ID, defaultImeId)
         assertEquals(AutomationRunState.Stopped, states.last())
-
-        val log = logger.loadRecent().single()
-        assertEquals(AutomationRunLogStatus.STOPPED, log.status)
-        assertEquals("사용자 중지", log.message)
-        assertEquals("성공", log.imeRestoreMessage)
     }
 
     @Test
     fun run_stopsAfterFirstPromptFailureAndWritesFailureLog() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = true)
-        val logger = RunLogger(FakeRunLogStorage())
         val automation = automation(
             service = service,
-            logger = logger,
             generatePrompt = { _, _, index ->
                 GeneratedPrompt(index, "base", "prompt $index", emptyMap())
             }
         )
         service.failOnPrompt = "prompt 1"
+        val states = mutableListOf<AutomationRunState>()
 
         automation.run(
             AutomationRunRequest(
@@ -169,26 +148,19 @@ class RunAutomationUseCaseTest {
                 repeatCountText = "2",
                 targetApp = AutomationTargetApp.GEMINI
             ),
-            {}
+            states::add
         )
 
-        val log = logger.loadRecent().single()
-        assertEquals(AutomationRunLogStatus.FAILURE, log.status)
-        assertEquals(2, log.repeatCount)
-        assertEquals(0, log.completedCount)
-        assertEquals(0, log.successCount)
-        assertEquals(1, log.failureCount)
+        assertTrue(states.any { it is AutomationRunState.Failure })
     }
 
     @Test
     fun run_usesSelectedTargetForGatewayLauncherAndLog() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = true)
-        val logger = RunLogger(FakeRunLogStorage())
         val requestedGatewayTargets = mutableListOf<AutomationTargetApp>()
         val launchedTargets = mutableListOf<AutomationTargetApp>()
         val automation = automation(
             service = service,
-            logger = logger,
             onGatewayRequest = requestedGatewayTargets::add,
             onLaunch = {
                 launchedTargets += it
@@ -210,17 +182,12 @@ class RunAutomationUseCaseTest {
 
         assertEquals(listOf(AutomationTargetApp.CHATGPT), requestedGatewayTargets)
         assertEquals(listOf(AutomationTargetApp.CHATGPT), launchedTargets)
-        assertEquals(
-            AutomationTargetApp.CHATGPT.storageValue,
-            logger.loadRecent().single().targetApp
-        )
     }
 
     private var defaultImeId = ORIGINAL_IME_ID
 
     private fun automation(
         service: FakePromptAutomationGateway,
-        logger: RunLogger,
         loadWildcardSets: (Set<String>) -> List<WildcardSet> = { emptyList() },
         onGatewayRequest: (AutomationTargetApp) -> Unit = {},
         onLaunch: (AutomationTargetApp) -> Boolean = { true },
@@ -239,7 +206,6 @@ class RunAutomationUseCaseTest {
                 },
                 nullKeyboardImeId = NULL_IME_ID
             ),
-            runLogger = logger,
             lastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
             clipboardGateway = FakeClipboardGateway(),
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcardSets),
@@ -283,16 +249,6 @@ class RunAutomationUseCaseTest {
 
         override fun cancelCurrentRun() {
             wasCancelled = true
-        }
-    }
-
-    private class FakeRunLogStorage : RunLogRepository {
-        private var logs: List<AutomationRunLog> = emptyList()
-
-        override fun load(): List<AutomationRunLog> = logs
-
-        override fun save(logs: List<AutomationRunLog>) {
-            this.logs = logs
         }
     }
 

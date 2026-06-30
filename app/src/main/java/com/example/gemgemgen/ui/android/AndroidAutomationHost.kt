@@ -169,8 +169,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onTerminateGeminiApp = mainViewModel::terminateGeminiApp,
             onRepeatCountChange = mainViewModel::onRepeatCountChange,
             onRunAutomation = ::runAutomation,
-            onCancelAutomation = mainViewModel::cancelAutomation,
-            onToggleRecentLogs = mainViewModel::toggleRecentLogs
+            onCancelAutomation = mainViewModel::cancelAutomation
         ),
         wildcardActions = wildcardViewModel?.let { viewModel ->
             WildcardAppActions(

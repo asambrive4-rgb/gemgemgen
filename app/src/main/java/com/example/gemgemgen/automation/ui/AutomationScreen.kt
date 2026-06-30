@@ -1,4 +1,4 @@
-﻿package com.example.gemgemgen.automation.ui
+package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,8 +49,7 @@ internal fun AutomationScreen(
     onTerminateGeminiApp: () -> Unit,
     onRepeatCountChange: (String) -> Unit,
     onRunMvp: () -> Unit,
-    onCancelAutomation: () -> Unit,
-    onToggleRecentLogs: () -> Unit
+    onCancelAutomation: () -> Unit
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
@@ -105,12 +104,6 @@ internal fun AutomationScreen(
                         canRun = uiState.canRun,
                         isRunning = uiState.isRunning,
                         automationState = uiState.automationState
-                    )
-
-                    RecentLogsSection(
-                        recentLogs = uiState.recentLogs,
-                        showRecentLogs = uiState.showRecentLogs,
-                        onToggleRecentLogs = onToggleRecentLogs
                     )
                 } else {
                     Spacer(modifier = Modifier.height(144.dp))
@@ -202,9 +195,7 @@ private fun AutomationAppPreview() {
             onTerminateGeminiApp = {},
             onRepeatCountChange = {},
             onRunMvp = {},
-            onCancelAutomation = {},
-            onToggleRecentLogs = {}
+            onCancelAutomation = {}
         )
     }
 }
-

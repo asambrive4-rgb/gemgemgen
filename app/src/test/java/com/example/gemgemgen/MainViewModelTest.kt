@@ -438,29 +438,11 @@ class MainViewModelTest {
     }
 
     @Test
-    fun runAutomation_refreshesRecentLogsWhenRunFinishes() {
-        val runLogger = RunLogger(FakeRunLogStorage())
-        val viewModel = viewModel(
-            runLogger = runLogger,
-            automationRunner = automation(runLogger)
-        )
-
-        viewModel.onPromptTemplateChange("base")
-        viewModel.runAutomation()
-
-        assertEquals(AutomationRunState.Success, viewModel.uiState.value.automationState)
-        assertEquals(1, viewModel.uiState.value.recentLogs.size)
-        assertEquals(AutomationRunLogStatus.SUCCESS, viewModel.uiState.value.recentLogs.single().status)
-    }
-
-    @Test
     fun runAutomation_showsPreparingStateUntilWildcardPreparationFinishes() {
-        val runLogger = RunLogger(FakeRunLogStorage())
         val prepareStarted = CountDownLatch(1)
         val allowPrepareToFinish = CountDownLatch(1)
         val service = FakePromptAutomationGateway()
         val viewModel = viewModel(
-            runLogger = runLogger,
             lastRunSnapshotStore = LastRunSnapshotStore(
                 FakeLastRunSnapshotStorage(
                     promptTemplate = "base __hair__",
@@ -468,7 +450,6 @@ class MainViewModelTest {
                 )
             ),
             automationRunner = automation(
-                runLogger = runLogger,
                 lastRunSnapshotStore = LastRunSnapshotStore(
                     FakeLastRunSnapshotStorage(
                         promptTemplate = "base __hair__",
@@ -560,7 +541,6 @@ class MainViewModelTest {
         clipboardText: String = "",
         clipboardGateway: FakeClipboardGateway = FakeClipboardGateway(clipboardText),
         wildcardFolderSaver: FakeWildcardFolderSaver = FakeWildcardFolderSaver(),
-        runLogger: RunLogger = RunLogger(FakeRunLogStorage()),
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         automationRunner: RunAutomationUseCase? = null,
         closeGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
@@ -572,10 +552,8 @@ class MainViewModelTest {
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentStatusReader),
             clipboardGateway = clipboardGateway,
             saveWildcardFolder = SaveWildcardFolderUseCase(wildcardFolderSaver),
-            runLogger = runLogger,
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automationRunner ?: automation(
-                runLogger = runLogger,
                 lastRunSnapshotStore = lastRunSnapshotStore,
                 clipboardGateway = clipboardGateway,
                 dispatchers = dispatchers
@@ -588,7 +566,6 @@ class MainViewModelTest {
     }
 
     private fun automation(
-        runLogger: RunLogger,
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         clipboardGateway: ClipboardGateway = FakeClipboardGateway(),
         service: FakePromptAutomationGateway = FakePromptAutomationGateway(),
@@ -608,7 +585,6 @@ class MainViewModelTest {
                 },
                 nullKeyboardImeId = NULL_IME_ID
             ),
-            runLogger = runLogger,
             lastRunSnapshotStore = lastRunSnapshotStore,
             clipboardGateway = clipboardGateway,
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcards),
@@ -703,15 +679,7 @@ class MainViewModelTest {
         assertTrue("Condition was not met within $timeoutMillis ms", condition())
     }
 
-    private class FakeRunLogStorage : RunLogRepository {
-        private var logs: List<AutomationRunLog> = emptyList()
 
-        override fun load(): List<AutomationRunLog> = logs
-
-        override fun save(logs: List<AutomationRunLog>) {
-            this.logs = logs
-        }
-    }
 
     private class FakeLastRunSnapshotStorage(
         var promptTemplate: String = "",

@@ -30,8 +30,7 @@ internal data class AutomationAppActions(
     val onTerminateGeminiApp: () -> Unit,
     val onRepeatCountChange: (String) -> Unit,
     val onRunAutomation: () -> Unit,
-    val onCancelAutomation: () -> Unit,
-    val onToggleRecentLogs: () -> Unit
+    val onCancelAutomation: () -> Unit
 )
 
 internal data class WildcardAppActions(
@@ -102,8 +101,7 @@ internal fun AutomationApp(
                     onTerminateGeminiApp = automationActions.onTerminateGeminiApp,
                     onRepeatCountChange = automationActions.onRepeatCountChange,
                     onRunMvp = automationActions.onRunAutomation,
-                    onCancelAutomation = automationActions.onCancelAutomation,
-                    onToggleRecentLogs = automationActions.onToggleRecentLogs
+                    onCancelAutomation = automationActions.onCancelAutomation
                 )
             },
             MainTabPage(MainTab.WILDCARD) {

@@ -9,13 +9,11 @@ import com.example.gemgemgen.automation.android.AndroidImeSettings
 import com.example.gemgemgen.automation.android.AndroidOverlayPermissionGateway
 import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
-import com.example.gemgemgen.automation.android.SharedPreferencesRunLogRepository
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.ImeManager
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
-import com.example.gemgemgen.automation.usecase.RunLogger
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
@@ -30,7 +28,6 @@ import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
 
 class AndroidAppContainer(context: Context) {
     private val appContext = context.applicationContext
-    private val runLogger = RunLogger(SharedPreferencesRunLogRepository(appContext))
     private val lastRunSnapshotStore = LastRunSnapshotStore(
         SharedPreferencesLastRunSnapshotRepository(appContext)
     )
@@ -45,11 +42,9 @@ class AndroidAppContainer(context: Context) {
             saveWildcardFolder = SaveWildcardFolderUseCase(
                 AndroidWildcardFolderRepository(appContext)
             ),
-            runLogger = runLogger,
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = RunAutomationUseCase(
                 imeManager = ImeManager(AndroidImeSettings(appContext)),
-                runLogger = runLogger,
                 lastRunSnapshotStore = lastRunSnapshotStore,
                 clipboardGateway = clipboardGateway,
                 wildcardSetRepository = AndroidWildcardSetRepository(appContext),
