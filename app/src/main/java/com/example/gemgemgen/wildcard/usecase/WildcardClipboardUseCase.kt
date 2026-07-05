@@ -1,20 +1,23 @@
 package com.example.gemgemgen.wildcard.usecase
 
 import com.example.gemgemgen.core.ClipboardGateway
+import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.wildcard.domain.WildcardTextEditPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardTextEditResult
+import kotlinx.coroutines.withContext
 
 class WildcardClipboardUseCase(
-    private val clipboardGateway: ClipboardGateway
+    private val clipboardGateway: ClipboardGateway,
+    private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
-    fun paste(
+    suspend fun paste(
         currentText: String,
         undoStack: List<String>
-    ): WildcardClipboardPasteResult {
+    ): WildcardClipboardPasteResult = withContext(dispatchers.io) {
         val text = clipboardGateway.readText()
-        if (text.isEmpty()) return WildcardClipboardPasteResult.EmptyClipboard
+        if (text.isEmpty()) return@withContext WildcardClipboardPasteResult.EmptyClipboard
 
-        return WildcardClipboardPasteResult.Success(
+        WildcardClipboardPasteResult.Success(
             WildcardTextEditPolicy.paste(
                 currentText = currentText,
                 undoStack = undoStack,
@@ -23,14 +26,14 @@ class WildcardClipboardUseCase(
         )
     }
 
-    fun pasteBelow(
+    suspend fun pasteBelow(
         currentText: String,
         undoStack: List<String>
-    ): WildcardClipboardPasteResult {
+    ): WildcardClipboardPasteResult = withContext(dispatchers.io) {
         val text = clipboardGateway.readText()
-        if (text.isEmpty()) return WildcardClipboardPasteResult.EmptyClipboard
+        if (text.isEmpty()) return@withContext WildcardClipboardPasteResult.EmptyClipboard
 
-        return WildcardClipboardPasteResult.Success(
+        WildcardClipboardPasteResult.Success(
             WildcardTextEditPolicy.pasteBelow(
                 currentText = currentText,
                 undoStack = undoStack,
@@ -39,11 +42,11 @@ class WildcardClipboardUseCase(
         )
     }
 
-    fun copy(text: String): Boolean {
-        if (text.isEmpty()) return false
+    suspend fun copy(text: String): Boolean = withContext(dispatchers.io) {
+        if (text.isEmpty()) return@withContext false
 
         clipboardGateway.writeText(text)
-        return true
+        true
     }
 
     fun undo(undoStack: List<String>): WildcardTextEditResult? {

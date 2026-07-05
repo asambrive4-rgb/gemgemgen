@@ -195,12 +195,22 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     private fun findCloseNodeInSubtree(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        return flattenNodes(node).firstOrNull { candidate ->
-            candidate.isClickable && (
-                candidate.viewIdResourceName?.endsWith(":id/task_close") == true ||
-                    candidate.contentDescription?.toString() == GEMINI_CLOSE_DESCRIPTION
-                )
+        if (node.isClickable && (
+                node.viewIdResourceName?.endsWith(":id/task_close") == true ||
+                    node.contentDescription?.toString() == GEMINI_CLOSE_DESCRIPTION
+            )
+        ) {
+            return node
         }
+
+        for (index in 0 until node.childCount) {
+            val closeNode = node.getChild(index)?.let(::findCloseNodeInSubtree)
+            if (closeNode != null) {
+                return closeNode
+            }
+        }
+
+        return null
     }
 
     private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {

@@ -1,13 +1,20 @@
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +27,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -65,7 +73,8 @@ internal fun PromptSection(
     onDeleteSelectedParagraph: () -> Unit,
     onReplaceSelectedParagraph: (String) -> Unit,
     onImportFromClipboard: () -> Unit,
-    onCopyPromptToClipboard: () -> Unit
+    onCopyPromptToClipboard: () -> Unit,
+    onPasteFromClipboard: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -122,7 +131,8 @@ internal fun PromptSection(
                 onUndoPromptEdit = onUndoPromptEdit,
                 onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
                 onImportFromClipboard = onImportFromClipboard,
-                onCopyPromptToClipboard = onCopyPromptToClipboard
+                onCopyPromptToClipboard = onCopyPromptToClipboard,
+                onPasteFromClipboard = onPasteFromClipboard
             )
         }
 
@@ -151,133 +161,178 @@ internal fun PromptActionRow(
     onToggleParagraphSelectionMode: () -> Unit,
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
+    onPasteFromClipboard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        OutlinedButton(
-            onClick = onCloseGeminiApp,
-            enabled = canCloseGemini && !isClosingGemini,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier
-                .height(28.dp)
-                .semantics { contentDescription = "Gemini 앱 재시작" },
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+        // 섬 1: 종료 재시작
+        ActionIsland {
+            OutlinedButton(
+                onClick = onTerminateGeminiApp,
+                enabled = canCloseGemini && !isClosingGemini,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .height(28.dp)
+                    .semantics { contentDescription = "Gemini 앱 종료" },
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Image(
+                        imageVector = GeminiGradientLogo,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "종료",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = onCloseGeminiApp,
+                enabled = canCloseGemini && !isClosingGemini,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .height(28.dp)
+                    .semantics { contentDescription = "Gemini 앱 재시작" },
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Image(
+                        imageVector = GeminiGradientLogo,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "재시작",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        // 섬 2: Undo 문단 선택
+        ActionIsland {
+            OutlinedButton(
+                onClick = onUndoPromptEdit,
+                enabled = canUndoPromptEdit && isTargetSelectionEnabled,
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.size(width = 40.dp, height = 28.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_gemini_logo),
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp)
+                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = "Undo",
+                    modifier = Modifier.size(16.dp)
                 )
+            }
+            OutlinedButton(
+                onClick = onToggleParagraphSelectionMode,
+                enabled = isTargetSelectionEnabled,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp),
+                border = BorderStroke(
+                    1.dp,
+                    if (isParagraphSelectionMode) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    }
+                ),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = if (isParagraphSelectionMode) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+                    contentColor = if (isParagraphSelectionMode) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+            ) {
                 Text(
-                    text = "재시작",
+                    text = "문단 선택",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
-        OutlinedButton(
-            onClick = onTerminateGeminiApp,
-            enabled = canCloseGemini && !isClosingGemini,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier
-                .height(28.dp)
-                .semantics { contentDescription = "Gemini 앱 종료" },
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+        // 섬 3: 복사 가져오기 붙여넣기
+        ActionIsland {
+            OutlinedButton(
+                onClick = onCopyPromptToClipboard,
+                enabled = canCopyPrompt,
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.size(width = 40.dp, height = 28.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_gemini_logo),
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp)
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "프롬프트 복사",
+                    modifier = Modifier.size(16.dp)
                 )
+            }
+            OutlinedButton(
+                onClick = onImportFromClipboard,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
                 Text(
-                    text = "종료",
+                    text = "가져오기",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
+            OutlinedButton(
+                onClick = onPasteFromClipboard,
+                enabled = isTargetSelectionEnabled,
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.size(width = 40.dp, height = 28.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentPaste,
+                    contentDescription = "프롬프트 붙여넣기",
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
-        OutlinedButton(
-            onClick = onUndoPromptEdit,
-            enabled = canUndoPromptEdit && isTargetSelectionEnabled,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier.height(28.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.Undo,
-                contentDescription = "Undo",
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        OutlinedButton(
-            onClick = onToggleParagraphSelectionMode,
-            enabled = isTargetSelectionEnabled,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier.height(28.dp),
-            border = BorderStroke(
-                1.dp,
-                if (isParagraphSelectionMode) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.outline
-                }
-            ),
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = if (isParagraphSelectionMode) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                },
-                contentColor = if (isParagraphSelectionMode) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-        ) {
-            Text(
-                text = "문단 선택",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        OutlinedButton(
-            onClick = onImportFromClipboard,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier.height(28.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Text(
-                text = "가져오기",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        OutlinedButton(
-            onClick = onCopyPromptToClipboard,
-            enabled = canCopyPrompt,
-            contentPadding = PaddingValues(0.dp),
-            modifier = Modifier.size(28.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            Icon(
-                imageVector = Icons.Default.ContentCopy,
-                contentDescription = "프롬프트 복사",
-                modifier = Modifier.size(16.dp)
-            )
-        }
+    }
+}
+
+@Composable
+private fun ActionIsland(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
     }
 }
 
@@ -328,4 +383,27 @@ private fun TargetAppButton(
             )
         }
     }
+}
+
+private val GeminiGradientLogo: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "GeminiGradientLogo",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = Brush.linearGradient(
+            colors = listOf(Color(0xFF4285F4), Color(0xFF9B72CB), Color(0xFFE8710A)),
+            start = Offset(2f, 22f),
+            end = Offset(22f, 2f)
+        )
+    ) {
+        moveTo(12f, 2f)
+        curveTo(12f, 2f, 12.5f, 9.5f, 22f, 12f)
+        curveTo(12.5f, 14.5f, 12f, 22f, 12f, 22f)
+        curveTo(12f, 22f, 11.5f, 14.5f, 2f, 12f)
+        curveTo(11.5f, 9.5f, 12f, 2f, 12f, 2f)
+        close()
+    }.build()
 }

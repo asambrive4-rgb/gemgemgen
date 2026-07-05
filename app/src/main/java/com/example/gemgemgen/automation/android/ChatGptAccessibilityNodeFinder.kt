@@ -1,11 +1,16 @@
 package com.example.gemgemgen.automation.android
 
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.core.AppDefaults
 
 internal class ChatGptAccessibilityNodeFinder(
     private val rootProvider: () -> AccessibilityNodeInfo?
 ) {
+    private var cachedRoot: AccessibilityNodeInfo? = null
+    private var cachedNodes: List<AccessibilityNodeInfo> = emptyList()
+    private var cachedAtMillis: Long = 0L
+
     fun findInputNode(): AccessibilityNodeInfo? {
         return nodes().firstOrNull { node ->
             node.className?.toString()?.contains("EditText", ignoreCase = true) == true ||
@@ -53,6 +58,11 @@ internal class ChatGptAccessibilityNodeFinder(
 
     private fun nodes(): List<AccessibilityNodeInfo> {
         val root = rootProvider() ?: return emptyList()
+        val now = SystemClock.uptimeMillis()
+        if (root == cachedRoot && now - cachedAtMillis <= NODE_SNAPSHOT_CACHE_MS) {
+            return cachedNodes
+        }
+
         val nodes = mutableListOf<AccessibilityNodeInfo>()
 
         fun visit(node: AccessibilityNodeInfo) {
@@ -65,10 +75,15 @@ internal class ChatGptAccessibilityNodeFinder(
         }
 
         visit(root)
-        return nodes
+        return nodes.also {
+            cachedRoot = root
+            cachedNodes = it
+            cachedAtMillis = now
+        }
     }
 
     private companion object {
+        const val NODE_SNAPSHOT_CACHE_MS = 32L
         const val TOO_MANY_REQUESTS_MESSAGE = "Too many requests"
         const val TOO_MANY_REQUESTS_CLOSE_DESCRIPTION = "닫기"
     }

@@ -2,7 +2,11 @@ package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
+import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.ui.AnalysisScreen
+import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.automation.ui.AutomationScreen
 import com.example.gemgemgen.automation.ui.MainUiState
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
@@ -26,6 +30,7 @@ internal data class AutomationAppActions(
     val onReplaceSelectedParagraph: (String) -> Unit,
     val onImportFromClipboard: () -> Unit,
     val onCopyPromptToClipboard: () -> Unit,
+    val onPasteFromClipboard: () -> Unit,
     val onCloseGeminiApp: () -> Unit,
     val onTerminateGeminiApp: () -> Unit,
     val onRepeatCountChange: (String) -> Unit,
@@ -59,13 +64,42 @@ internal data class WildcardAppActions(
     val onCancelPending: () -> Unit
 )
 
+internal data class AnalysisAppActions(
+    val onClearFocus: () -> Unit,
+    val onSourcePromptChange: (String) -> Unit,
+    val onCategorySelected: (AnalysisCategory) -> Unit,
+    val onApplyManualSelection: () -> Unit,
+    val onClearTargetSegment: () -> Unit,
+    val onAnalyzeAndMask: () -> Unit,
+    val onGenerateTxt: () -> Unit,
+    val onCancelWork: () -> Unit,
+    val onTxtCountChange: (Int) -> Unit,
+    val onToggleDirection: (String) -> Unit,
+    val onResultFileNameChange: (String) -> Unit,
+    val onCopyResults: () -> Unit,
+    val onSaveResults: () -> Unit,
+    val onConfirmOverwrite: () -> Unit,
+    val onDismissOverwrite: () -> Unit,
+    val onShowKeyDialog: () -> Unit,
+    val onDismissKeyDialog: () -> Unit,
+    val onKeyLabelChange: (String) -> Unit,
+    val onKeyValueChange: (String) -> Unit,
+    val onAddApiKey: () -> Unit,
+    val onDeleteApiKey: (String) -> Unit,
+    val onActivateApiKey: (String) -> Unit
+)
+
 @Composable
 internal fun AutomationApp(
     selectedTab: MainTab,
     mainUiState: MainUiState,
+    automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
+    analysisUiState: AnalysisUiState,
+    analysisPromptState: TextFieldState,
     wildcardUiState: WildcardManagerUiState?,
     automationActions: AutomationAppActions,
+    analysisActions: AnalysisAppActions,
     wildcardActions: WildcardAppActions?
 ) {
     MainTabbedScreen(
@@ -76,6 +110,7 @@ internal fun AutomationApp(
             MainTabPage(MainTab.AUTOMATION) {
                 AutomationScreen(
                     uiState = mainUiState,
+                    automationBarUiState = automationBarUiState,
                     promptTemplateState = promptTemplateState,
                     onClearFocus = automationActions.onClearFocus,
                     onHideSettings = automationActions.onHideSettings,
@@ -97,11 +132,40 @@ internal fun AutomationApp(
                     onImportFromClipboard = automationActions.onImportFromClipboard,
                     onCopyPromptToClipboard =
                         automationActions.onCopyPromptToClipboard,
+                    onPasteFromClipboard = automationActions.onPasteFromClipboard,
                     onCloseGeminiApp = automationActions.onCloseGeminiApp,
                     onTerminateGeminiApp = automationActions.onTerminateGeminiApp,
                     onRepeatCountChange = automationActions.onRepeatCountChange,
                     onRunMvp = automationActions.onRunAutomation,
                     onCancelAutomation = automationActions.onCancelAutomation
+                )
+            },
+            MainTabPage(MainTab.ANALYSIS) {
+                AnalysisScreen(
+                    uiState = analysisUiState,
+                    sourcePromptState = analysisPromptState,
+                    onClearFocus = analysisActions.onClearFocus,
+                    onSourcePromptChange = analysisActions.onSourcePromptChange,
+                    onCategorySelected = analysisActions.onCategorySelected,
+                    onApplyManualSelection = analysisActions.onApplyManualSelection,
+                    onClearTargetSegment = analysisActions.onClearTargetSegment,
+                    onAnalyzeAndMask = analysisActions.onAnalyzeAndMask,
+                    onGenerateTxt = analysisActions.onGenerateTxt,
+                    onCancelWork = analysisActions.onCancelWork,
+                    onTxtCountChange = analysisActions.onTxtCountChange,
+                    onToggleDirection = analysisActions.onToggleDirection,
+                    onResultFileNameChange = analysisActions.onResultFileNameChange,
+                    onCopyResults = analysisActions.onCopyResults,
+                    onSaveResults = analysisActions.onSaveResults,
+                    onConfirmOverwrite = analysisActions.onConfirmOverwrite,
+                    onDismissOverwrite = analysisActions.onDismissOverwrite,
+                    onShowKeyDialog = analysisActions.onShowKeyDialog,
+                    onDismissKeyDialog = analysisActions.onDismissKeyDialog,
+                    onKeyLabelChange = analysisActions.onKeyLabelChange,
+                    onKeyValueChange = analysisActions.onKeyValueChange,
+                    onAddApiKey = analysisActions.onAddApiKey,
+                    onDeleteApiKey = analysisActions.onDeleteApiKey,
+                    onActivateApiKey = analysisActions.onActivateApiKey
                 )
             },
             MainTabPage(MainTab.WILDCARD) {

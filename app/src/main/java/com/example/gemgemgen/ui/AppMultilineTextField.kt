@@ -26,13 +26,19 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.yield
 import kotlin.math.abs
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class,
+    FlowPreview::class
+)
 @Composable
-internal fun AppMultilineTextField(
+fun AppMultilineTextField(
     state: TextFieldState,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -56,6 +62,7 @@ internal fun AppMultilineTextField(
     LaunchedEffect(state, onValueChange) {
         snapshotFlow { state.text.toString() }
             .distinctUntilChanged()
+            .debounce(TEXT_CHANGE_DEBOUNCE_MILLIS)
             .collect { onValueChange(it) }
     }
 
@@ -154,6 +161,8 @@ internal fun AppMultilineTextField(
         textStyle = TextStyle(fontFamily = FontFamily.Monospace)
     )
 }
+
+private const val TEXT_CHANGE_DEBOUNCE_MILLIS = 75L
 
 @OptIn(ExperimentalFoundationApi::class)
 private fun insertedTextFromChanges(

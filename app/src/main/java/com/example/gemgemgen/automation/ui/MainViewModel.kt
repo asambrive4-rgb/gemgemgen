@@ -9,8 +9,8 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptParagraphEditPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
+import com.example.gemgemgen.automation.domain.PromptUndoHistory
 import com.example.gemgemgen.automation.domain.RepeatCountParser
-import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
@@ -20,7 +20,6 @@ import com.example.gemgemgen.automation.usecase.GeminiAppCloser
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
-import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
@@ -65,8 +64,7 @@ class MainViewModel(
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
     private var automationPreparationJob: Job? = null
-    private var promptUndoStack: List<String> = emptyList()
-    private var pendingPromptUndoSnapshot: String? = null
+    private val promptUndoHistory = PromptUndoHistory()
     private var promptUndoDebounceJob: Job? = null
     private var ignoredPromptChangeText: String? = null
     private val _uiState = MutableStateFlow(MainUiState())
@@ -194,6 +192,7 @@ class MainViewModel(
     }
 
     fun importPromptFromClipboard() {
+        syncPromptTemplateFromTextField()
         scope.launch {
             val text = withContext(dispatchers.io) {
                 clipboardGateway.readText()
@@ -209,6 +208,7 @@ class MainViewModel(
     }
 
     fun copyPromptToClipboard() {
+        syncPromptTemplateFromTextField()
         val state = _uiState.value
         val text = state.promptTemplate
         if (state.isRunning || text.isBlank()) return
@@ -216,6 +216,36 @@ class MainViewModel(
         scope.launch {
             withContext(dispatchers.io) {
                 clipboardGateway.writeText(text)
+            }
+        }
+    }
+
+    fun pastePromptFromClipboard() {
+        syncPromptTemplateFromTextField()
+        scope.launch {
+            val text = withContext(dispatchers.io) {
+                clipboardGateway.readText()
+            }
+            if (text.isEmpty()) return@launch
+
+            val currentText = promptTemplateTextFieldState.text.toString()
+            recordImmediatePromptUndo(currentText)
+
+            val selection = promptTemplateTextFieldState.selection
+            val start = selection.min
+            val end = selection.max
+
+            promptTemplateTextFieldState.edit {
+                replace(start, end, text)
+                this.selection = TextRange(start + text.length)
+            }
+
+            val newText = promptTemplateTextFieldState.text.toString()
+            _uiState.update {
+                it.copy(
+                    promptTemplate = newText,
+                    canUndoPromptEdit = hasPromptUndo()
+                )
             }
         }
     }
@@ -244,7 +274,9 @@ class MainViewModel(
         val state = _uiState.value
         if (!state.canCloseGemini) {
             _uiState.update {
-                it.copy(geminiCloseMessage = geminiCloseUnavailableMessage(it))
+                it.copy(
+                    geminiCloseMessage = AutomationUiText.geminiRestartUnavailableMessage(it)
+                )
             }
             return
         }
@@ -277,7 +309,7 @@ class MainViewModel(
             _uiState.update {
                 it.copy(
                     isClosingGemini = false,
-                    geminiCloseMessage = geminiCloseResultMessage(result)
+                    geminiCloseMessage = AutomationUiText.geminiRestartResultMessage(result)
                 )
             }
         }
@@ -287,7 +319,9 @@ class MainViewModel(
         val state = _uiState.value
         if (!state.canCloseGemini) {
             _uiState.update {
-                it.copy(geminiCloseMessage = geminiTerminateUnavailableMessage(it))
+                it.copy(
+                    geminiCloseMessage = AutomationUiText.geminiTerminateUnavailableMessage(it)
+                )
             }
             return
         }
@@ -320,7 +354,7 @@ class MainViewModel(
             _uiState.update {
                 it.copy(
                     isClosingGemini = false,
-                    geminiCloseMessage = geminiTerminateResultMessage(result)
+                    geminiCloseMessage = AutomationUiText.geminiTerminateResultMessage(result)
                 )
             }
         }
@@ -330,8 +364,7 @@ class MainViewModel(
         if (_uiState.value.isRunning) return
 
         commitPendingPromptUndo()
-        val previous = promptUndoStack.firstOrNull() ?: return
-        promptUndoStack = promptUndoStack.drop(1)
+        val previous = promptUndoHistory.popUndo() ?: return
         applyPromptTemplateText(previous)
         _uiState.update {
             it.copy(
@@ -389,6 +422,7 @@ class MainViewModel(
     }
 
     fun runAutomation(): AutomationStartDecision {
+        syncPromptTemplateFromTextField()
         val state = uiState.value
         val decision = checkAutomationStart.decide(
             canRun = state.canRun,
@@ -469,13 +503,26 @@ class MainViewModel(
 
     private fun handleAutomationState(state: AutomationRunState) {
         _uiState.update {
-            if (it.automationState == state) {
+            val coarseState = it.automationState.coarseAutomationStateFor(state)
+            if (it.automationState == coarseState) {
                 it
             } else {
-                it.copy(automationState = state)
+                it.copy(automationState = coarseState)
             }
         }
-        _automationBarUiState.update { it.copy(automationState = state) }
+        _automationBarUiState.update {
+            if (it.automationState == state) it else it.copy(automationState = state)
+        }
+    }
+
+    private fun AutomationRunState.coarseAutomationStateFor(
+        nextState: AutomationRunState
+    ): AutomationRunState {
+        return if (this is AutomationRunState.Running && nextState is AutomationRunState.Running) {
+            this
+        } else {
+            nextState
+        }
     }
 
     private fun replaceSelectedParagraph(
@@ -534,10 +581,15 @@ class MainViewModel(
         }
     }
 
-    private fun schedulePromptTypingUndo(previous: String) {
-        if (pendingPromptUndoSnapshot == null) {
-            pendingPromptUndoSnapshot = previous
+    private fun syncPromptTemplateFromTextField() {
+        val currentText = promptTemplateTextFieldState.text.toString()
+        if (_uiState.value.promptTemplate != currentText) {
+            onPromptTemplateChange(currentText)
         }
+    }
+
+    private fun schedulePromptTypingUndo(previous: String) {
+        promptUndoHistory.recordTypingSnapshot(previous)
         promptUndoDebounceJob?.cancel()
         promptUndoDebounceJob = scope.launch {
             delay(PROMPT_UNDO_DEBOUNCE_MILLIS)
@@ -548,24 +600,15 @@ class MainViewModel(
 
     private fun recordImmediatePromptUndo(snapshot: String) {
         commitPendingPromptUndo()
-        pushPromptUndo(snapshot)
+        promptUndoHistory.recordImmediateSnapshot(snapshot)
         updatePromptUndoAvailability()
     }
 
     private fun commitPendingPromptUndo() {
-        val snapshot = pendingPromptUndoSnapshot ?: return
-        pendingPromptUndoSnapshot = null
+        promptUndoHistory.commitPendingTyping(_uiState.value.promptTemplate)
         promptUndoDebounceJob?.cancel()
         promptUndoDebounceJob = null
-        if (snapshot != _uiState.value.promptTemplate) {
-            pushPromptUndo(snapshot)
-        }
         updatePromptUndoAvailability()
-    }
-
-    private fun pushPromptUndo(snapshot: String) {
-        if (promptUndoStack.firstOrNull() == snapshot) return
-        promptUndoStack = (listOf(snapshot) + promptUndoStack).take(MAX_PROMPT_UNDO_COUNT)
     }
 
     private fun updatePromptUndoAvailability() {
@@ -576,7 +619,7 @@ class MainViewModel(
     }
 
     private fun hasPromptUndo(): Boolean {
-        return pendingPromptUndoSnapshot != null || promptUndoStack.isNotEmpty()
+        return promptUndoHistory.canUndo
     }
 
     private fun geminiCloseUnavailableMessage(state: MainUiState): String {
@@ -642,7 +685,6 @@ class MainViewModel(
     }
 
     private companion object {
-        const val MAX_PROMPT_UNDO_COUNT = 5
         const val PROMPT_UNDO_DEBOUNCE_MILLIS = 700L
         const val PARAGRAPH_SELECTION_GUIDE =
             "바꿀 문단을 터치하세요. 직접 입력은 제한되며 삭제키는 사용할 수 있습니다."

@@ -9,7 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,9 +22,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.ui.MainViewModel
+import com.example.gemgemgen.ui.AnalysisAppActions
 import com.example.gemgemgen.ui.AutomationApp
 import com.example.gemgemgen.ui.AutomationAppActions
 import com.example.gemgemgen.ui.MainActivity
@@ -39,7 +41,11 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mainViewModel: MainViewModel = viewModel(factory = container.mainViewModelFactory)
+    val analysisViewModel: AnalysisViewModel =
+        viewModel(factory = container.analysisViewModelFactory)
     val mainUiState by mainViewModel.uiState.collectAsState()
+    val analysisUiState by analysisViewModel.uiState.collectAsState()
+    val automationBarUiState by mainViewModel.automationBarUiState.collectAsState()
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.AUTOMATION) }
     var shouldLoadWildcard by rememberSaveable { mutableStateOf(false) }
     val wildcardViewModel: WildcardManagerViewModel? = if (shouldLoadWildcard) {
@@ -128,7 +134,10 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         onDispose { floatingBarController?.hide() }
     }
 
-    SideEffect {
+    LaunchedEffect(
+        wildcardViewModel,
+        mainUiState.environmentStatus.canEditWildcardFiles
+    ) {
         wildcardViewModel?.onFolderAccessChanged(
             mainUiState.environmentStatus.canEditWildcardFiles
         )
@@ -137,7 +146,10 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     AutomationApp(
         selectedTab = selectedTab,
         mainUiState = mainUiState,
+        automationBarUiState = automationBarUiState,
         promptTemplateState = mainViewModel.promptTemplateTextFieldState,
+        analysisUiState = analysisUiState,
+        analysisPromptState = analysisViewModel.sourcePromptTextFieldState,
         wildcardUiState = wildcardUiState,
         automationActions = AutomationAppActions(
             onSelectTab = {
@@ -165,11 +177,36 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onReplaceSelectedParagraph = mainViewModel::replaceSelectedPromptParagraph,
             onImportFromClipboard = mainViewModel::importPromptFromClipboard,
             onCopyPromptToClipboard = mainViewModel::copyPromptToClipboard,
+            onPasteFromClipboard = mainViewModel::pastePromptFromClipboard,
             onCloseGeminiApp = mainViewModel::closeGeminiApp,
             onTerminateGeminiApp = mainViewModel::terminateGeminiApp,
             onRepeatCountChange = mainViewModel::onRepeatCountChange,
             onRunAutomation = ::runAutomation,
             onCancelAutomation = mainViewModel::cancelAutomation
+        ),
+        analysisActions = AnalysisAppActions(
+            onClearFocus = { focusManager.clearFocus() },
+            onSourcePromptChange = analysisViewModel::onSourcePromptChange,
+            onCategorySelected = analysisViewModel::onCategorySelected,
+            onApplyManualSelection = analysisViewModel::applyManualSelection,
+            onClearTargetSegment = analysisViewModel::clearTargetSegment,
+            onAnalyzeAndMask = analysisViewModel::analyzeAndMask,
+            onGenerateTxt = analysisViewModel::generateTxt,
+            onCancelWork = analysisViewModel::cancelActiveWork,
+            onTxtCountChange = analysisViewModel::onTxtCountChange,
+            onToggleDirection = analysisViewModel::toggleDirection,
+            onResultFileNameChange = analysisViewModel::onResultFileNameChange,
+            onCopyResults = analysisViewModel::copyGeneratedResults,
+            onSaveResults = { analysisViewModel.saveGeneratedResults() },
+            onConfirmOverwrite = analysisViewModel::confirmOverwrite,
+            onDismissOverwrite = analysisViewModel::dismissOverwrite,
+            onShowKeyDialog = analysisViewModel::showKeyDialog,
+            onDismissKeyDialog = analysisViewModel::dismissKeyDialog,
+            onKeyLabelChange = analysisViewModel::onKeyLabelChange,
+            onKeyValueChange = analysisViewModel::onKeyValueChange,
+            onAddApiKey = analysisViewModel::addApiKey,
+            onDeleteApiKey = analysisViewModel::deleteApiKey,
+            onActivateApiKey = analysisViewModel::activateApiKey
         ),
         wildcardActions = wildcardViewModel?.let { viewModel ->
             WildcardAppActions(

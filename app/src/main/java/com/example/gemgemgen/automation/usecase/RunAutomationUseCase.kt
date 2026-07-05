@@ -4,13 +4,11 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeneratedPrompt
 import com.example.gemgemgen.automation.domain.PromptGenerator
-import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.WildcardSet
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withContext
 
 data class AutomationRunRequest(
     val promptTemplate: String,
@@ -20,15 +18,22 @@ data class AutomationRunRequest(
 
 class RunAutomationUseCase(
     private val imeManager: ImeManager,
-    private val lastRunSnapshotStore: LastRunSnapshotStore,
-    private val clipboardGateway: ClipboardGateway,
-    private val wildcardSetRepository: WildcardSetRepository,
+    lastRunSnapshotStore: LastRunSnapshotStore,
+    clipboardGateway: ClipboardGateway,
+    wildcardSetRepository: WildcardSetRepository,
     private val clock: () -> Long,
     private val promptGatewayProvider: PromptAutomationGatewayProvider,
     private val targetAppLauncher: TargetAppLauncher,
-    private val dispatchers: AppDispatchers = AppDispatchers(),
-    private val promptGenerator: PromptGenerator = PromptGenerator(),
-    private val generatePrompt: ((String, List<WildcardSet>, Int) -> GeneratedPrompt)? = null
+    dispatchers: AppDispatchers = AppDispatchers(),
+    promptGenerator: PromptGenerator = PromptGenerator(),
+    private val generatePrompt: ((String, List<WildcardSet>, Int) -> GeneratedPrompt)? = null,
+    private val runPreparer: AutomationRunPreparer = AutomationRunPreparer(
+        lastRunSnapshotStore = lastRunSnapshotStore,
+        clipboardGateway = clipboardGateway,
+        wildcardSetRepository = wildcardSetRepository,
+        dispatchers = dispatchers,
+        promptGenerator = promptGenerator
+    )
 ) {
     private var currentRun: CurrentRun? = null
     private var isPreparingRun = false
@@ -43,35 +48,14 @@ class RunAutomationUseCase(
         }
 
         isPreparingRun = true
-        val startedAtMillis = clock()
-        val repeatCount = RepeatCountParser.parse(request.repeatCountText)
-        val wildcardTokens = promptGenerator.extractTokens(request.promptTemplate).toSet()
-        val wildcards = try {
-            withContext(dispatchers.io) {
-                lastRunSnapshotStore.save(
-                    LastRunSnapshot(
-                        promptTemplate = request.promptTemplate,
-                        repeatCountText = request.repeatCountText,
-                        targetApp = request.targetApp
-                    )
-                )
-                clipboardGateway.writeText(request.promptTemplate)
-                if (wildcardTokens.isEmpty()) {
-                    emptyList()
-                } else {
-                    wildcardSetRepository.load(wildcardTokens)
-                }
-            }
+        val preparedRun = try {
+            runPreparer.prepare(request)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             finishWithoutRun(
-                startedAtMillis = startedAtMillis,
-                repeatCount = repeatCount,
-                targetApp = request.targetApp,
-                lastStep = "와일드카드 파일 로드 중",
                 state = AutomationRunState.Failure(
-                    "와일드카드 파일을 읽지 못했습니다: ${
+                    "wildcard 파일을 읽지 못했습니다. ${
                         error.message ?: "폴더를 다시 선택해주세요."
                     }"
                 ),
@@ -83,28 +67,31 @@ class RunAutomationUseCase(
         }
 
         startPreparedRun(
-            request = request,
-            startedAtMillis = startedAtMillis,
-            repeatCount = repeatCount,
-            wildcards = wildcards,
+            preparedRun = preparedRun,
+            startedAtMillis = clock(),
+            onStateChange = onStateChange
+        )
+    }
+
+    fun cancel(onStateChange: (AutomationRunState) -> Unit) {
+        val run = currentRun ?: return
+        run.promptGateway.cancelCurrentRun()
+        finishRun(
+            run = run,
+            state = AutomationRunState.Stopped,
             onStateChange = onStateChange
         )
     }
 
     private fun startPreparedRun(
-        request: AutomationRunRequest,
+        preparedRun: PreparedAutomationRun,
         startedAtMillis: Long,
-        repeatCount: Int,
-        wildcards: List<WildcardSet>,
         onStateChange: (AutomationRunState) -> Unit
     ) {
+        val request = preparedRun.request
         val promptGateway = promptGatewayProvider.current(request.targetApp)
         if (promptGateway == null) {
             finishWithoutRun(
-                startedAtMillis = startedAtMillis,
-                repeatCount = repeatCount,
-                targetApp = request.targetApp,
-                lastStep = "접근성 서비스 확인",
                 state = AutomationRunState.Failure("접근성 서비스가 켜져 있지 않습니다."),
                 onStateChange = onStateChange
             )
@@ -113,26 +100,16 @@ class RunAutomationUseCase(
 
         if (request.promptTemplate.isBlank()) {
             finishWithoutRun(
-                startedAtMillis = startedAtMillis,
-                repeatCount = repeatCount,
-                targetApp = request.targetApp,
-                lastStep = "프롬프트 확인",
                 state = AutomationRunState.Failure("원본 프롬프트를 입력하거나 클립보드에서 가져오세요."),
                 onStateChange = onStateChange
             )
             return
         }
 
-        val promptPlan = promptGenerator.compile(request.promptTemplate, wildcards)
-
         onStateChange(AutomationRunState.Running("Null Keyboard로 전환 중"))
         val imeSwitchResult = imeManager.switchToNullKeyboard()
         if (imeSwitchResult is ImeSwitchResult.Failure) {
             finishWithoutRun(
-                startedAtMillis = startedAtMillis,
-                repeatCount = repeatCount,
-                targetApp = request.targetApp,
-                lastStep = "Null Keyboard로 전환 중",
                 state = AutomationRunState.Failure(
                     "${imeSwitchResult.message} WRITE_SECURE_SETTINGS 권한과 Null Keyboard 설치 상태를 확인해주세요."
                 ),
@@ -146,9 +123,9 @@ class RunAutomationUseCase(
             imeSession = (imeSwitchResult as ImeSwitchResult.Success).session,
             promptGateway = promptGateway,
             promptTemplate = request.promptTemplate,
-            repeatCount = repeatCount,
-            wildcards = wildcards,
-            promptPlan = promptPlan,
+            repeatCount = preparedRun.repeatCount,
+            wildcards = preparedRun.wildcards,
+            promptPlan = preparedRun.promptPlan,
             targetApp = request.targetApp
         )
         currentRun = run
@@ -166,16 +143,6 @@ class RunAutomationUseCase(
         }
 
         sendMarker(run, onStateChange)
-    }
-
-    fun cancel(onStateChange: (AutomationRunState) -> Unit) {
-        val run = currentRun ?: return
-        run.promptGateway.cancelCurrentRun()
-        finishRun(
-            run = run,
-            state = AutomationRunState.Stopped,
-            onStateChange = onStateChange
-        )
     }
 
     private fun sendMarker(
@@ -267,13 +234,11 @@ class RunAutomationUseCase(
         run.finished = true
         onStateChange(AutomationRunState.Running("원래 입력기로 복구 중"))
 
-        val restoreResult = imeManager.restore(run.imeSession)
-        val imeRestoreMessage = restoreResult.message()
-        val finalState = when (restoreResult) {
+        val finalState = when (val restoreResult = imeManager.restore(run.imeSession)) {
             ImeRestoreResult.Success -> state
             is ImeRestoreResult.Failure -> AutomationRunState.Failure(
-                "입력기 복구 실패. 원래 입력기: " +
-                    "${restoreResult.originalImeId}, 현재 입력기: " +
+                "입력기 복구 실패. 원래 입력기 " +
+                    "${restoreResult.originalImeId}, 현재 입력기 " +
                     "${restoreResult.currentImeId ?: "확인 불가"}"
             )
         }
@@ -283,33 +248,10 @@ class RunAutomationUseCase(
     }
 
     private fun finishWithoutRun(
-        startedAtMillis: Long,
-        repeatCount: Int,
-        targetApp: AutomationTargetApp,
-        lastStep: String,
         state: AutomationRunState,
         onStateChange: (AutomationRunState) -> Unit
     ) {
         onStateChange(state)
-    }
-
-    private fun ImeRestoreResult.message(): String {
-        return when (this) {
-            ImeRestoreResult.Success -> "성공"
-            is ImeRestoreResult.Failure -> {
-                "실패: 원래 입력기 ${originalImeId}, 현재 입력기 ${currentImeId ?: "확인 불가"}"
-            }
-        }
-    }
-
-    private fun AutomationRunState.message(): String {
-        return when (this) {
-            AutomationRunState.Idle -> ""
-            is AutomationRunState.Running -> step
-            AutomationRunState.Success -> "성공"
-            AutomationRunState.Stopped -> "사용자 중지"
-            is AutomationRunState.Failure -> message
-        }
     }
 
     private data class CurrentRun(
@@ -332,6 +274,6 @@ class RunAutomationUseCase(
     )
 
     companion object {
-        const val MARKER_PROMPT = "자연수의 가장 첫 번째 숫자는? 숫자 하나로만 답변해."
+        const val MARKER_PROMPT = "자연수의 가장 첫 번째 숫자를 숫자 하나로만 답해줘"
     }
 }

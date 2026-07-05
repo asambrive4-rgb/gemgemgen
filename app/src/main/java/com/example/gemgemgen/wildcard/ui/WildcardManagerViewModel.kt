@@ -365,13 +365,14 @@ class WildcardManagerViewModel(
         if (!ensureFileSelected()) return
 
         val state = uiState.value
-        when (val result = wildcardClipboard.paste(
+        scope.launch {
+            when (val result = wildcardClipboard.paste(
                 currentText = state.editingText,
                 undoStack = state.undoStack
-            )
-        ) {
-            WildcardClipboardPasteResult.EmptyClipboard -> showError("클립보드가 비어 있습니다.")
-            is WildcardClipboardPasteResult.Success -> applyTextEditResult(result.edit)
+            )) {
+                WildcardClipboardPasteResult.EmptyClipboard -> showError("클립보드가 비어 있습니다.")
+                is WildcardClipboardPasteResult.Success -> applyTextEditResult(result.edit)
+            }
         }
     }
 
@@ -381,13 +382,14 @@ class WildcardManagerViewModel(
         if (!ensureFileSelected()) return
 
         val state = uiState.value
-        when (val result = wildcardClipboard.pasteBelow(
+        scope.launch {
+            when (val result = wildcardClipboard.pasteBelow(
                 currentText = state.editingText,
                 undoStack = state.undoStack
-            )
-        ) {
-            WildcardClipboardPasteResult.EmptyClipboard -> showError("클립보드가 비어 있습니다.")
-            is WildcardClipboardPasteResult.Success -> applyTextEditResult(result.edit)
+            )) {
+                WildcardClipboardPasteResult.EmptyClipboard -> showError("클립보드가 비어 있습니다.")
+                is WildcardClipboardPasteResult.Success -> applyTextEditResult(result.edit)
+            }
         }
     }
 
@@ -399,15 +401,17 @@ class WildcardManagerViewModel(
             return
         }
 
-        if (!wildcardClipboard.copy(text)) {
-            showError("복사할 내용이 없습니다.")
-            return
-        }
-        _uiState.update {
-            it.copy(
-                message = "클립보드에 복사했습니다.",
-                error = ""
-            )
+        scope.launch {
+            if (!wildcardClipboard.copy(text)) {
+                showError("복사할 내용이 없습니다.")
+                return@launch
+            }
+            _uiState.update {
+                it.copy(
+                    message = "클립보드에 복사했습니다.",
+                    error = ""
+                )
+            }
         }
     }
 
@@ -629,4 +633,3 @@ class WildcardManagerViewModel(
         }
     }
 }
-

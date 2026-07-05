@@ -208,7 +208,10 @@ class WildcardManagerViewModelTest {
                 repository = fileManager,
                 dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
             ),
-            wildcardClipboard = WildcardClipboardUseCase(clipboardGateway),
+            wildcardClipboard = WildcardClipboardUseCase(
+                clipboardGateway,
+                dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+            ),
             coroutineScope = CoroutineScope(Dispatchers.Unconfined)
         ).also {
             it.onFolderAccessChanged(canModifyFiles)

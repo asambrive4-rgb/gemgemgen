@@ -1,6 +1,7 @@
 package com.example.gemgemgen.automation.android
 
 import android.graphics.PixelFormat
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -24,10 +25,18 @@ internal class FloatingAutomationBarController(
     private val appContext = activity.applicationContext
     private val windowManager = appContext.getSystemService(WindowManager::class.java)
     private val positionStore = FloatingBarPositionStore(appContext)
+    private val choreographer = Choreographer.getInstance()
     private var overlayView: ComposeView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var overlayLifecycleOwner: FloatingBarLifecycleOwner? = null
     private var currentPosition = positionStore.load()
+    private var pendingDragX = 0f
+    private var pendingDragY = 0f
+    private var isDragFrameScheduled = false
+    private val dragFrameCallback = Choreographer.FrameCallback {
+        isDragFrameScheduled = false
+        applyPendingDrag()
+    }
 
     fun showOrUpdate(
         uiStateFlow: StateFlow<AutomationBarUiState>,
@@ -65,6 +74,10 @@ internal class FloatingAutomationBarController(
         windowManager.removeView(view)
         overlayView = null
         layoutParams = null
+        choreographer.removeFrameCallback(dragFrameCallback)
+        isDragFrameScheduled = false
+        pendingDragX = 0f
+        pendingDragY = 0f
         overlayLifecycleOwner?.destroy()
         overlayLifecycleOwner = null
     }
@@ -88,8 +101,22 @@ internal class FloatingAutomationBarController(
     }
 
     private fun moveBy(deltaX: Float, deltaY: Float) {
+        pendingDragX += deltaX
+        pendingDragY += deltaY
+        if (!isDragFrameScheduled) {
+            isDragFrameScheduled = true
+            choreographer.postFrameCallback(dragFrameCallback)
+        }
+    }
+
+    private fun applyPendingDrag() {
         val params = layoutParams ?: return
         val view = overlayView ?: return
+        val deltaX = pendingDragX
+        val deltaY = pendingDragY
+        pendingDragX = 0f
+        pendingDragY = 0f
+        if (deltaX == 0f && deltaY == 0f) return
 
         params.x = clampX(params.x + deltaX.roundToInt())
         params.y = clampY(params.y + deltaY.roundToInt())
@@ -98,6 +125,11 @@ internal class FloatingAutomationBarController(
     }
 
     private fun savePosition() {
+        if (isDragFrameScheduled) {
+            choreographer.removeFrameCallback(dragFrameCallback)
+            isDragFrameScheduled = false
+            applyPendingDrag()
+        }
         currentPosition?.let(positionStore::save)
     }
 

@@ -30,6 +30,7 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 @Composable
 internal fun AutomationScreen(
     uiState: MainUiState,
+    automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
     onClearFocus: () -> Unit,
     onHideSettings: () -> Unit,
@@ -45,6 +46,7 @@ internal fun AutomationScreen(
     onReplaceSelectedParagraph: (String) -> Unit,
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
+    onPasteFromClipboard: () -> Unit,
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
     onRepeatCountChange: (String) -> Unit,
@@ -92,7 +94,8 @@ internal fun AutomationScreen(
                     onDeleteSelectedParagraph = onDeleteSelectedParagraph,
                     onReplaceSelectedParagraph = onReplaceSelectedParagraph,
                     onImportFromClipboard = onImportFromClipboard,
-                    onCopyPromptToClipboard = onCopyPromptToClipboard
+                    onCopyPromptToClipboard = onCopyPromptToClipboard,
+                    onPasteFromClipboard = onPasteFromClipboard
                 )
 
                 if (!isKeyboardVisible) {
@@ -103,7 +106,7 @@ internal fun AutomationScreen(
                         onCancelAutomation = onCancelAutomation,
                         canRun = uiState.canRun,
                         isRunning = uiState.isRunning,
-                        automationState = uiState.automationState
+                        automationState = automationBarUiState.automationState
                     )
                 } else {
                     Spacer(modifier = Modifier.height(144.dp))
@@ -138,7 +141,8 @@ internal fun AutomationScreen(
                             onUndoPromptEdit = onUndoPromptEdit,
                             onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
                             onImportFromClipboard = onImportFromClipboard,
-                            onCopyPromptToClipboard = onCopyPromptToClipboard
+                            onCopyPromptToClipboard = onCopyPromptToClipboard,
+                            onPasteFromClipboard = onPasteFromClipboard
                         )
 
                         AutomationActionBar(
@@ -148,7 +152,7 @@ internal fun AutomationScreen(
                             onCancelAutomation = onCancelAutomation,
                             canRun = uiState.canRun,
                             isRunning = uiState.isRunning,
-                            automationState = uiState.automationState
+                            automationState = automationBarUiState.automationState
                         )
                     }
                 }
@@ -176,6 +180,7 @@ private fun AutomationAppPreview() {
     GemgemgenTheme {
         AutomationScreen(
             uiState = MainUiState(),
+            automationBarUiState = AutomationBarUiState(),
             promptTemplateState = TextFieldState(),
             onClearFocus = {},
             onHideSettings = {},
@@ -191,6 +196,7 @@ private fun AutomationAppPreview() {
             onReplaceSelectedParagraph = {},
             onImportFromClipboard = {},
             onCopyPromptToClipboard = {},
+            onPasteFromClipboard = {},
             onCloseGeminiApp = {},
             onTerminateGeminiApp = {},
             onRepeatCountChange = {},

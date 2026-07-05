@@ -1,6 +1,7 @@
 package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.core.AppDefaults
 
@@ -8,6 +9,10 @@ internal class GeminiAccessibilityNodeFinder(
     private val rootProvider: () -> AccessibilityNodeInfo?,
     private val inputResourceId: String
 ) {
+    private var cachedRoot: AccessibilityNodeInfo? = null
+    private var cachedNodes: List<AccessibilityNodeInfo> = emptyList()
+    private var cachedAtMillis: Long = 0L
+
     fun findInputNode(): AccessibilityNodeInfo? {
         findNodeByViewId(inputResourceId)?.let { return it }
 
@@ -72,7 +77,16 @@ internal class GeminiAccessibilityNodeFinder(
 
     private fun nodes(): List<AccessibilityNodeInfo> {
         val root = rootProvider() ?: return emptyList()
-        return nodesIn(root)
+        val now = SystemClock.uptimeMillis()
+        if (root == cachedRoot && now - cachedAtMillis <= NODE_SNAPSHOT_CACHE_MS) {
+            return cachedNodes
+        }
+
+        return nodesIn(root).also {
+            cachedRoot = root
+            cachedNodes = it
+            cachedAtMillis = now
+        }
     }
 
     private fun nodesIn(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
@@ -157,6 +171,8 @@ internal class GeminiAccessibilityNodeFinder(
         get() = width.toLong() * height.toLong()
 
     private companion object {
+        const val NODE_SNAPSHOT_CACHE_MS = 32L
+
         val GEMINI_ACCESSIBILITY_PACKAGES = setOf(
             AppDefaults.GEMINI_PACKAGE_NAME,
             "com.google.android.googlequicksearchbox"

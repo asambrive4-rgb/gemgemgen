@@ -36,6 +36,60 @@ class MainViewModelTest {
     }
 
     @Test
+    fun pastePromptFromClipboard_insertsTextAtCursorPosition() {
+        val viewModel = viewModel(clipboardText = "INSERT")
+        viewModel.onPromptTemplateChange("beforeafter")
+        viewModel.promptTemplateTextFieldState.edit {
+            selection = TextRange(6)
+        }
+
+        viewModel.pastePromptFromClipboard()
+
+        assertEquals("beforeINSERTafter", viewModel.uiState.value.promptTemplate)
+        assertEquals(
+            "beforeINSERTafter",
+            viewModel.promptTemplateTextFieldState.text.toString()
+        )
+        assertEquals(TextRange(12), viewModel.promptTemplateTextFieldState.selection)
+    }
+
+    @Test
+    fun pastePromptFromClipboard_replacesSelectedText() {
+        val viewModel = viewModel(clipboardText = "REPLACE")
+        viewModel.onPromptTemplateChange("beforeTargetafter")
+        viewModel.promptTemplateTextFieldState.edit {
+            selection = TextRange(6, 12)
+        }
+
+        viewModel.pastePromptFromClipboard()
+
+        assertEquals("beforeREPLACEafter", viewModel.uiState.value.promptTemplate)
+        assertEquals(
+            "beforeREPLACEafter",
+            viewModel.promptTemplateTextFieldState.text.toString()
+        )
+        assertEquals(TextRange(13), viewModel.promptTemplateTextFieldState.selection)
+    }
+
+    @Test
+    fun pastePromptFromClipboard_withEmptyClipboardDoesNothing() {
+        val viewModel = viewModel(clipboardText = "")
+        viewModel.onPromptTemplateChange("original")
+        viewModel.promptTemplateTextFieldState.edit {
+            selection = TextRange(4)
+        }
+
+        viewModel.pastePromptFromClipboard()
+
+        assertEquals("original", viewModel.uiState.value.promptTemplate)
+        assertEquals(
+            "original",
+            viewModel.promptTemplateTextFieldState.text.toString()
+        )
+        assertEquals(TextRange(4), viewModel.promptTemplateTextFieldState.selection)
+    }
+
+    @Test
     fun copyPromptToClipboard_writesPromptTemplate() {
         val clipboardGateway = FakeClipboardGateway()
         val viewModel = viewModel(clipboardGateway = clipboardGateway)
@@ -488,6 +542,51 @@ class MainViewModelTest {
     }
 
     @Test
+    fun runAutomation_keepsDetailedProgressInAutomationBarState() {
+        val service = HoldingPromptAutomationGateway(
+            AutomationRunState.Running(
+                step = "typing prompt",
+                currentIndex = 1,
+                totalCount = 2,
+                lastPrompt = "generated prompt"
+            )
+        )
+        val viewModel = viewModel(
+            automationRunner = automation(service = service)
+        )
+
+        viewModel.onPromptTemplateChange("base prompt")
+
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+
+        assertTrue(viewModel.uiState.value.automationState is AutomationRunState.Running)
+        assertEquals(
+            AutomationRunState.Running("자동화 준비 중"),
+            viewModel.uiState.value.automationState
+        )
+        val automationBarState = viewModel.automationBarUiState.value.automationState
+        assertTrue(automationBarState is AutomationRunState.Running)
+        assertEquals("typing prompt", (automationBarState as AutomationRunState.Running).step)
+        assertTrue(viewModel.uiState.value.automationState != automationBarState)
+        assertTrue(!viewModel.uiState.value.canRun)
+    }
+
+    @Test
+    fun runAutomation_updatesMainAndBarStateWhenFinished() {
+        val viewModel = viewModel()
+
+        viewModel.onPromptTemplateChange("base prompt")
+
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+
+        assertEquals(AutomationRunState.Success, viewModel.uiState.value.automationState)
+        assertEquals(
+            AutomationRunState.Success,
+            viewModel.automationBarUiState.value.automationState
+        )
+    }
+
+    @Test
     fun closeGeminiApp_updatesResultMessage() {
         val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 2))
         val viewModel = viewModel(
@@ -499,7 +598,7 @@ class MainViewModelTest {
         assertEquals(1, closer.closeCount)
         assertTrue(!viewModel.uiState.value.isClosingGemini)
         assertEquals(
-            "Gemini 앱 2개를 종료한 뒤 재시작했습니다.",
+            "Gemini 앱 2개를 종료하고 재시작했습니다.",
             viewModel.uiState.value.geminiCloseMessage
         )
     }
@@ -568,7 +667,7 @@ class MainViewModelTest {
     private fun automation(
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         clipboardGateway: ClipboardGateway = FakeClipboardGateway(),
-        service: FakePromptAutomationGateway = FakePromptAutomationGateway(),
+        service: PromptAutomationGateway = FakePromptAutomationGateway(),
         loadWildcards: () -> List<WildcardSet> = { emptyList() },
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined)
     ): RunAutomationUseCase {
@@ -662,6 +761,24 @@ class MainViewModelTest {
         ) {
             sentPrompts += prompt
             onDone()
+        }
+
+        override fun cancelCurrentRun() = Unit
+    }
+
+    private class HoldingPromptAutomationGateway(
+        private val progressState: AutomationRunState
+    ) : PromptAutomationGateway {
+        val sentPrompts = mutableListOf<String>()
+
+        override fun sendPrompt(
+            prompt: String,
+            newChatMode: NewChatMode,
+            onStateChange: (AutomationRunState) -> Unit,
+            onDone: () -> Unit
+        ) {
+            sentPrompts += prompt
+            onStateChange(progressState)
         }
 
         override fun cancelCurrentRun() = Unit
