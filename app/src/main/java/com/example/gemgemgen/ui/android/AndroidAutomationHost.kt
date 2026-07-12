@@ -212,6 +212,12 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onShowSettings = mainViewModel::showSettings,
             onClearFocus = { focusManager.clearFocus() },
             onHideSettings = mainViewModel::hideSettings,
+            onConfirmAccessibilityPrompt = {
+                mainViewModel.confirmAccessibilityPrompt()
+                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            },
+            onDismissAccessibilityPromptToSettings =
+                mainViewModel::dismissAccessibilityPromptToSettings,
             onRefreshStatus = mainViewModel::refreshStatus,
             onSelectWildcardFolder = ::selectWildcardFolder,
             onOpenAccessibilitySettings = {
@@ -230,6 +236,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onPasteFromClipboard = mainViewModel::pastePromptFromClipboard,
             onCloseGeminiApp = mainViewModel::closeGeminiApp,
             onTerminateGeminiApp = mainViewModel::terminateGeminiApp,
+            onTerminateSelfApp = mainViewModel::terminateSelfApp,
             onRepeatCountChange = mainViewModel::onRepeatCountChange,
             onRunAutomation = ::runAutomation,
             onCancelAutomation = mainViewModel::cancelAutomation

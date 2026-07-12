@@ -20,7 +20,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 class GeminiAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
-    private var closeGeminiCompletion: ((CloseGeminiAppResult) -> Unit)? = null
+    private var closeAppCompletion: ((CloseGeminiAppResult) -> Unit)? = null
+    private var closeTaskTitle: String = GEMINI_TASK_TITLE
+    private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
             handler = handler,
@@ -42,7 +44,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
-        finishCloseGemini(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
+        finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
         handler.removeCallbacksAndMessages(null)
         clearPackageRestriction()
@@ -52,7 +54,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         if (activeService == this) {
             activeService = null
         }
-        finishCloseGemini(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
+        finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -71,36 +73,59 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     internal suspend fun closeGeminiFromRecents(): CloseGeminiAppResult {
+        return closeAppFromRecents(
+            taskTitle = GEMINI_TASK_TITLE,
+            closeDescription = GEMINI_CLOSE_DESCRIPTION
+        )
+    }
+
+    /**
+     * 최근 앱에서 [taskTitle] 카드의 닫기 버튼을 눌러 앱을 종료한다.
+     * Gemini 종료와 같은 제스처/탐색 경로를 재사용한다.
+     */
+    internal suspend fun closeAppFromRecents(
+        taskTitle: String,
+        closeDescription: String
+    ): CloseGeminiAppResult {
         return suspendCancellableCoroutine { continuation ->
-            closeGeminiFromRecents { result ->
+            closeAppFromRecents(
+                taskTitle = taskTitle,
+                closeDescription = closeDescription
+            ) { result ->
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }
             }
             continuation.invokeOnCancellation {
-                closeGeminiCompletion = null
+                closeAppCompletion = null
             }
         }
     }
 
-    private fun closeGeminiFromRecents(onFinished: (CloseGeminiAppResult) -> Unit) {
-        if (closeGeminiCompletion != null) {
-            onFinished(CloseGeminiAppResult.Failure("Gemini 재시작이 이미 진행 중입니다."))
+    private fun closeAppFromRecents(
+        taskTitle: String,
+        closeDescription: String,
+        onFinished: (CloseGeminiAppResult) -> Unit
+    ) {
+        if (closeAppCompletion != null) {
+            onFinished(CloseGeminiAppResult.Failure("앱 종료가 이미 진행 중입니다."))
             return
         }
 
-        closeGeminiCompletion = onFinished
+        closeTaskTitle = taskTitle
+        closeTaskDescription = closeDescription
+        closeAppCompletion = onFinished
         handler.post {
             // Recents/system UI must stay visible to package filter.
             clearPackageRestriction()
             val opened = tapDexRecentsButton {
                 handler.postDelayed(
-                    { closeNextGeminiCard(closedCount = 0, clickCount = 0) },
+                    { closeNextTaskCard(closedCount = 0, clickCount = 0) },
                     RECENTS_OPEN_WAIT_MS
                 )
             }
             if (!opened) {
-                finishCloseGemini(CloseGeminiAppResult.RecentsUnavailable)
+                finishCloseApp(CloseGeminiAppResult.RecentsUnavailable)
             }
         }
     }
@@ -188,27 +213,27 @@ class GeminiAccessibilityService : AccessibilityService() {
                 }
 
                 override fun onCancelled(gestureDescription: GestureDescription?) {
-                    finishCloseGemini(CloseGeminiAppResult.RecentsUnavailable)
+                    finishCloseApp(CloseGeminiAppResult.RecentsUnavailable)
                 }
             },
             handler
         )
     }
 
-    private fun closeNextGeminiCard(closedCount: Int, clickCount: Int) {
-        if (clickCount >= MAX_GEMINI_CLOSE_CLICKS) {
+    private fun closeNextTaskCard(closedCount: Int, clickCount: Int) {
+        if (clickCount >= MAX_TASK_CLOSE_CLICKS) {
             val result = if (closedCount > 0) {
                 CloseGeminiAppResult.Success(closedCount)
             } else {
-                CloseGeminiAppResult.Failure("Gemini 닫기 버튼을 누르지 못했습니다.")
+                CloseGeminiAppResult.Failure("${closeTaskTitle} 닫기 버튼을 누르지 못했습니다.")
             }
-            finishCloseGeminiAfterDismissingRecents(result)
+            finishCloseAppAfterDismissingRecents(result)
             return
         }
 
-        val closeNode = findGeminiCloseNode()
+        val closeNode = findTaskCloseNode()
         if (closeNode == null) {
-            finishCloseGeminiAfterDismissingRecents(
+            finishCloseAppAfterDismissingRecents(
                 if (closedCount > 0) {
                     CloseGeminiAppResult.Success(closedCount)
                 } else {
@@ -219,15 +244,15 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
 
         if (!clickNodeOrParent(closeNode)) {
-            finishCloseGeminiAfterDismissingRecents(
-                CloseGeminiAppResult.Failure("Gemini 닫기 버튼을 누르지 못했습니다.")
+            finishCloseAppAfterDismissingRecents(
+                CloseGeminiAppResult.Failure("${closeTaskTitle} 닫기 버튼을 누르지 못했습니다.")
             )
             return
         }
 
         handler.postDelayed(
             {
-                closeNextGeminiCard(
+                closeNextTaskCard(
                     closedCount = closedCount + 1,
                     clickCount = clickCount + 1
                 )
@@ -236,23 +261,23 @@ class GeminiAccessibilityService : AccessibilityService() {
         )
     }
 
-    private fun finishCloseGeminiAfterDismissingRecents(result: CloseGeminiAppResult) {
+    private fun finishCloseAppAfterDismissingRecents(result: CloseGeminiAppResult) {
         performGlobalAction(GLOBAL_ACTION_BACK)
         handler.postDelayed(
-            { finishCloseGemini(result) },
+            { finishCloseApp(result) },
             RECENTS_DISMISS_WAIT_MS
         )
     }
 
-    private fun findGeminiCloseNode(): AccessibilityNodeInfo? {
+    private fun findTaskCloseNode(): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: return null
         val nodes = flattenNodes(root)
         nodes.firstOrNull { node ->
-            node.contentDescription?.toString() == GEMINI_CLOSE_DESCRIPTION && node.isClickable
+            node.contentDescription?.toString() == closeTaskDescription && node.isClickable
         }?.let { return it }
 
         val titleNodes = nodes.filter { node ->
-            node.text?.toString() == GEMINI_TASK_TITLE
+            node.text?.toString() == closeTaskTitle
         }
 
         for (titleNode in titleNodes) {
@@ -270,7 +295,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     private fun findCloseNodeInSubtree(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         if (node.isClickable && (
                 node.viewIdResourceName?.endsWith(":id/task_close") == true ||
-                    node.contentDescription?.toString() == GEMINI_CLOSE_DESCRIPTION
+                    node.contentDescription?.toString() == closeTaskDescription
             )
         ) {
             return node
@@ -313,9 +338,9 @@ class GeminiAccessibilityService : AccessibilityService() {
         return nodes
     }
 
-    private fun finishCloseGemini(result: CloseGeminiAppResult) {
-        val completion = closeGeminiCompletion ?: return
-        closeGeminiCompletion = null
+    private fun finishCloseApp(result: CloseGeminiAppResult) {
+        val completion = closeAppCompletion ?: return
+        closeAppCompletion = null
         completion(result)
     }
 
@@ -331,7 +356,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         private const val RECENTS_BUTTON_TAP_MS = 80L
         private const val NAVIGATION_BAR_HEIGHT_RATIO = 0.06125f
         private const val CARD_CLOSE_WAIT_MS = 450L
-        private const val MAX_GEMINI_CLOSE_CLICKS = 10
+        private const val MAX_TASK_CLOSE_CLICKS = 10
         private const val TITLE_ANCESTOR_SEARCH_DEPTH = 4
     }
 }

@@ -59,6 +59,13 @@ class MainViewModel(
             }
         }
     ),
+    private val terminateSelfApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(
+        object : GeminiAppCloser {
+            override suspend fun closeGeminiApp(): CloseGeminiAppResult {
+                return CloseGeminiAppResult.AccessibilityUnavailable
+            }
+        }
+    ),
     private val checkAutomationStart: CheckAutomationStartUseCase =
         CheckAutomationStartUseCase(OverlayPermissionGateway { true }),
     private val dispatchers: AppDispatchers = AppDispatchers(),
@@ -337,6 +344,52 @@ class MainViewModel(
         }
     }
 
+    fun terminateSelfApp() {
+        val state = _uiState.value
+        if (!state.canCloseSelfApp) {
+            _uiState.update {
+                it.copy(
+                    geminiCloseMessage = AutomationUiText.selfAppTerminateUnavailableMessage(it)
+                )
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                isClosingGemini = true,
+                geminiCloseMessage = AutomationUiText.selfAppTerminateStartingText()
+            )
+        }
+        scope.launch {
+            val result = try {
+                withContext(dispatchers.io) {
+                    terminateSelfApp.close()
+                }
+            } catch (error: CancellationException) {
+                _uiState.update {
+                    it.copy(
+                        isClosingGemini = false,
+                        geminiCloseMessage = AutomationUiText.selfAppTerminateCanceledText()
+                    )
+                }
+                throw error
+            } catch (error: Exception) {
+                CloseGeminiAppResult.Failure(
+                    AutomationUiText.unknownCloseErrorMessage(error)
+                )
+            }
+
+            // 성공 시 프로세스가 이미 종료될 수 있어 UI 갱신이 안 될 수 있다.
+            _uiState.update {
+                it.copy(
+                    isClosingGemini = false,
+                    geminiCloseMessage = AutomationUiText.selfAppTerminateResultMessage(result)
+                )
+            }
+        }
+    }
+
     fun undoPromptEdit() {
         if (_uiState.value.isRunning) return
 
@@ -365,11 +418,31 @@ class MainViewModel(
     }
 
     fun showSettings() {
-        _uiState.update { it.copy(showSettings = true) }
+        _uiState.update { state ->
+            if (!state.environmentStatus.isAccessibilityServiceEnabled) {
+                state.copy(showAccessibilityPrompt = true, showSettings = false)
+            } else {
+                state.copy(showSettings = true, showAccessibilityPrompt = false)
+            }
+        }
+    }
+
+    /** 접근성 확인 팝업에서 「이동」: 팝업만 닫고 시스템 설정 이동은 UI에서 처리. */
+    fun confirmAccessibilityPrompt() {
+        _uiState.update { it.copy(showAccessibilityPrompt = false) }
+    }
+
+    /** 접근성 확인 팝업에서 「취소」: 전체 설정 다이얼로그로 진입. */
+    fun dismissAccessibilityPromptToSettings() {
+        _uiState.update {
+            it.copy(showAccessibilityPrompt = false, showSettings = true)
+        }
     }
 
     fun hideSettings() {
-        _uiState.update { it.copy(showSettings = false) }
+        _uiState.update {
+            it.copy(showSettings = false, showAccessibilityPrompt = false)
+        }
     }
 
     fun saveWildcardFolder(folderUri: String) {

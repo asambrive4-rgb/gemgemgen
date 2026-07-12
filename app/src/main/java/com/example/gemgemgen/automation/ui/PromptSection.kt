@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +59,7 @@ internal fun PromptSection(
     canUndoPromptEdit: Boolean,
     canCopyPrompt: Boolean,
     canCloseGemini: Boolean,
+    canCloseSelfApp: Boolean,
     isClosingGemini: Boolean,
     geminiCloseMessage: String,
     selectedParagraphRange: PromptParagraphRange?,
@@ -67,6 +69,7 @@ internal fun PromptSection(
     onPromptTemplateChange: (String) -> Unit,
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
+    onTerminateSelfApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
     onToggleParagraphSelectionMode: () -> Unit,
     onParagraphOffsetSelected: (Int) -> Unit,
@@ -121,6 +124,7 @@ internal fun PromptSection(
         if (showPromptActions) {
             PromptActionRow(
                 canCloseGemini = canCloseGemini,
+                canCloseSelfApp = canCloseSelfApp,
                 isClosingGemini = isClosingGemini,
                 canUndoPromptEdit = canUndoPromptEdit,
                 canCopyPrompt = canCopyPrompt,
@@ -128,6 +132,7 @@ internal fun PromptSection(
                 isParagraphSelectionMode = isParagraphSelectionMode,
                 onCloseGeminiApp = onCloseGeminiApp,
                 onTerminateGeminiApp = onTerminateGeminiApp,
+                onTerminateSelfApp = onTerminateSelfApp,
                 onUndoPromptEdit = onUndoPromptEdit,
                 onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
                 onImportFromClipboard = onImportFromClipboard,
@@ -150,6 +155,7 @@ internal fun PromptSection(
 @Composable
 internal fun PromptActionRow(
     canCloseGemini: Boolean,
+    canCloseSelfApp: Boolean,
     isClosingGemini: Boolean,
     canUndoPromptEdit: Boolean,
     canCopyPrompt: Boolean,
@@ -157,6 +163,7 @@ internal fun PromptActionRow(
     isParagraphSelectionMode: Boolean,
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
+    onTerminateSelfApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
     onToggleParagraphSelectionMode: () -> Unit,
     onImportFromClipboard: () -> Unit,
@@ -166,15 +173,40 @@ internal fun PromptActionRow(
 ) {
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 섬 1: 종료 재시작
+        // 섬 1: 앱 자체 종료(왼쪽) + Gemini 종료/재시작
         ActionIsland {
+            OutlinedButton(
+                onClick = onTerminateSelfApp,
+                enabled = canCloseSelfApp && !isClosingGemini,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .height(28.dp)
+                    .semantics { contentDescription = "GemGemGen 앱 종료" },
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PowerSettingsNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "앱 종료",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
             OutlinedButton(
                 onClick = onTerminateGeminiApp,
                 enabled = canCloseGemini && !isClosingGemini,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "Gemini 앱 종료" },
@@ -199,7 +231,7 @@ internal fun PromptActionRow(
             OutlinedButton(
                 onClick = onCloseGeminiApp,
                 enabled = canCloseGemini && !isClosingGemini,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "Gemini 앱 재시작" },
@@ -241,7 +273,7 @@ internal fun PromptActionRow(
             OutlinedButton(
                 onClick = onToggleParagraphSelectionMode,
                 enabled = isTargetSelectionEnabled,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier.height(28.dp),
                 border = BorderStroke(
                     1.dp,
@@ -289,7 +321,7 @@ internal fun PromptActionRow(
             }
             OutlinedButton(
                 onClick = onImportFromClipboard,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier.height(28.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {

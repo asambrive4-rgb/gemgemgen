@@ -4,9 +4,16 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphMessageKey
+import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
+import com.example.gemgemgen.automation.domain.SelfAppControlPolicy
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 
 object AutomationUiText {
+    fun accessibilityPromptTitle(): String = "접근성 서비스 필요"
+
+    fun accessibilityPromptMessage(): String =
+        "자동화를 쓰려면 접근성 서비스「GemGemGen 자동화」를 켜야 합니다. 접근성 설정으로 이동할까요?"
+
     fun paragraphMessage(key: PromptParagraphMessageKey): String {
         return when (key) {
             PromptParagraphMessageKey.None -> ""
@@ -37,9 +44,13 @@ object AutomationUiText {
 
     fun geminiTerminateStartingText(): String = "Gemini 종료 중..."
 
+    fun selfAppTerminateStartingText(): String = "앱 종료 중..."
+
     fun geminiRestartCanceledText(): String = "Gemini 재시작을 취소했습니다."
 
     fun geminiTerminateCanceledText(): String = "Gemini 종료를 취소했습니다."
+
+    fun selfAppTerminateCanceledText(): String = "앱 종료를 취소했습니다."
 
     fun unknownCloseErrorMessage(error: Throwable): String {
         return error.message ?: "알 수 없는 오류가 발생했습니다."
@@ -51,6 +62,22 @@ object AutomationUiText {
 
     fun geminiTerminateUnavailableMessage(state: MainUiState): String {
         return geminiTerminateUnavailableMessage(blockReasonFor(state))
+    }
+
+    fun selfAppTerminateUnavailableMessage(state: MainUiState): String {
+        return selfAppTerminateUnavailableMessage(selfBlockReasonFor(state))
+    }
+
+    fun selfAppTerminateUnavailableMessage(reason: SelfAppControlBlockReason?): String {
+        return when (reason) {
+            SelfAppControlBlockReason.AutomationRunning ->
+                "자동화 중에는 앱을 종료할 수 없습니다."
+            SelfAppControlBlockReason.AlreadyInProgress ->
+                "앱 종료가 이미 진행 중입니다."
+            SelfAppControlBlockReason.AccessibilityDisabled ->
+                "접근성 서비스를 먼저 켜주세요."
+            null -> "앱 종료를 지금 실행할 수 없습니다."
+        }
     }
 
     fun geminiRestartUnavailableMessage(reason: GeminiAppControlBlockReason?): String {
@@ -84,6 +111,14 @@ object AutomationUiText {
     private fun blockReasonFor(state: MainUiState): GeminiAppControlBlockReason? {
         return GeminiAppControlPolicy.blockReason(
             isGeminiInstalled = state.environmentStatus.isGeminiInstalled,
+            isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
+            isAutomationRunning = state.isRunning,
+            isClosingInProgress = state.isClosingGemini
+        )
+    }
+
+    private fun selfBlockReasonFor(state: MainUiState): SelfAppControlBlockReason? {
+        return SelfAppControlPolicy.blockReason(
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = state.isRunning,
             isClosingInProgress = state.isClosingGemini
@@ -127,6 +162,26 @@ object AutomationUiText {
                 "최근 앱에서 Gemini를 찾지 못했습니다."
             is CloseGeminiAppResult.Failure ->
                 "Gemini 종료 실패: ${result.message}"
+        }
+    }
+
+    fun selfAppTerminateResultMessage(result: CloseGeminiAppResult): String {
+        return when (result) {
+            is CloseGeminiAppResult.Success -> {
+                if (result.closedCount <= 1) {
+                    "앱을 종료했습니다."
+                } else {
+                    "앱 ${result.closedCount}개를 종료했습니다."
+                }
+            }
+            CloseGeminiAppResult.AccessibilityUnavailable ->
+                "접근성 서비스가 켜져 있지 않습니다."
+            CloseGeminiAppResult.RecentsUnavailable ->
+                "최근 앱 화면을 열지 못했습니다."
+            CloseGeminiAppResult.NotFound ->
+                "최근 앱에서 GemGemGen을 찾지 못했습니다."
+            is CloseGeminiAppResult.Failure ->
+                "앱 종료 실패: ${result.message}"
         }
     }
 }

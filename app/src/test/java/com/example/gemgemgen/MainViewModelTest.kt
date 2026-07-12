@@ -620,6 +620,61 @@ class MainViewModelTest {
     }
 
     @Test
+    fun terminateSelfApp_updatesResultMessage() {
+        val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 1))
+        val viewModel = viewModel(
+            terminateSelfApp = CloseGeminiAppUseCase(closer)
+        )
+
+        viewModel.terminateSelfApp()
+
+        assertEquals(1, closer.closeCount)
+        assertTrue(!viewModel.uiState.value.isClosingGemini)
+        assertEquals(
+            "앱을 종료했습니다.",
+            viewModel.uiState.value.geminiCloseMessage
+        )
+    }
+
+    @Test
+    fun terminateSelfApp_requiresAccessibilityAndDoesNotCallCloser() {
+        val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 1))
+        val viewModel = viewModel(
+            environmentStatusReader = FakeEnvironmentStatusReader(
+                readyEnvironment().copy(isAccessibilityServiceEnabled = false)
+            ),
+            terminateSelfApp = CloseGeminiAppUseCase(closer)
+        )
+
+        viewModel.terminateSelfApp()
+
+        assertEquals(0, closer.closeCount)
+        assertTrue(viewModel.uiState.value.geminiCloseMessage.contains("접근성"))
+    }
+
+    @Test
+    fun terminateSelfApp_blockedWhileAutomationRunning() {
+        val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 1))
+        val runner = HoldingPromptAutomationGateway(
+            AutomationRunState.Running("진행 중")
+        )
+        val viewModel = viewModel(
+            automationRunner = automation(service = runner),
+            terminateSelfApp = CloseGeminiAppUseCase(closer)
+        )
+        viewModel.onPromptTemplateChange("base")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+        assertTrue(viewModel.uiState.value.isRunning)
+
+        viewModel.terminateSelfApp()
+
+        assertEquals(0, closer.closeCount)
+        assertTrue(
+            viewModel.uiState.value.geminiCloseMessage.contains("자동화 중에는 앱을 종료")
+        )
+    }
+
+    @Test
     fun closeGeminiApp_requiresAccessibilityAndDoesNotCallCloser() {
         val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 1))
         val viewModel = viewModel(
@@ -634,6 +689,60 @@ class MainViewModelTest {
         assertEquals(0, closer.closeCount)
         assertTrue(viewModel.uiState.value.geminiCloseMessage.contains("접근성"))
     }
+
+    @Test
+    fun showSettings_whenAccessibilityOff_showsPromptInsteadOfSettings() {
+        val viewModel = viewModel(
+            environmentStatusReader = FakeEnvironmentStatusReader(
+                readyEnvironment().copy(isAccessibilityServiceEnabled = false)
+            )
+        )
+
+        viewModel.showSettings()
+
+        assertTrue(viewModel.uiState.value.showAccessibilityPrompt)
+        assertTrue(!viewModel.uiState.value.showSettings)
+    }
+
+    @Test
+    fun showSettings_whenAccessibilityOn_opensSettingsDialog() {
+        val viewModel = viewModel()
+
+        viewModel.showSettings()
+
+        assertTrue(viewModel.uiState.value.showSettings)
+        assertTrue(!viewModel.uiState.value.showAccessibilityPrompt)
+    }
+
+    @Test
+    fun confirmAccessibilityPrompt_hidesPrompt() {
+        val viewModel = viewModel(
+            environmentStatusReader = FakeEnvironmentStatusReader(
+                readyEnvironment().copy(isAccessibilityServiceEnabled = false)
+            )
+        )
+        viewModel.showSettings()
+
+        viewModel.confirmAccessibilityPrompt()
+
+        assertTrue(!viewModel.uiState.value.showAccessibilityPrompt)
+        assertTrue(!viewModel.uiState.value.showSettings)
+    }
+
+    @Test
+    fun dismissAccessibilityPromptToSettings_opensFullSettings() {
+        val viewModel = viewModel(
+            environmentStatusReader = FakeEnvironmentStatusReader(
+                readyEnvironment().copy(isAccessibilityServiceEnabled = false)
+            )
+        )
+        viewModel.showSettings()
+
+        viewModel.dismissAccessibilityPromptToSettings()
+
+        assertTrue(!viewModel.uiState.value.showAccessibilityPrompt)
+        assertTrue(viewModel.uiState.value.showSettings)
+    }
     private fun viewModel(
         environmentStatusReader: FakeEnvironmentStatusReader = FakeEnvironmentStatusReader(readyEnvironment()),
         clipboardText: String = "",
@@ -643,6 +752,7 @@ class MainViewModelTest {
         automationRunner: RunAutomationUseCase? = null,
         closeGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
         terminateGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
+        terminateSelfApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
@@ -658,6 +768,7 @@ class MainViewModelTest {
             ),
             closeGeminiApp = closeGeminiApp,
             terminateGeminiApp = terminateGeminiApp,
+            terminateSelfApp = terminateSelfApp,
             dispatchers = dispatchers,
             coroutineScope = coroutineScope
         )

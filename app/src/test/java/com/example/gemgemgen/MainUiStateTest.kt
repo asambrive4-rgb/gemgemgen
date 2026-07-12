@@ -81,6 +81,35 @@ class MainUiStateTest {
         )
     }
 
+    @Test
+    fun canCloseSelfApp_requiresAccessibilityAndIdleState_withoutGeminiInstall() {
+        assertTrue(
+            MainUiState(
+                environmentStatus = readyEnvironment().copy(isGeminiInstalled = false)
+            ).canCloseSelfApp
+        )
+
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment().copy(isAccessibilityServiceEnabled = false)
+            ).canCloseSelfApp
+        )
+
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment(),
+                automationState = AutomationRunState.Running("실행 중")
+            ).canCloseSelfApp
+        )
+
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment(),
+                isClosingGemini = true
+            ).canCloseSelfApp
+        )
+    }
+
     private fun readyEnvironment(): EnvironmentStatus {
         return EnvironmentStatus(
             isGeminiInstalled = true,

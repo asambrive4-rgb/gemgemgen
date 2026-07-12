@@ -4,6 +4,7 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
+import com.example.gemgemgen.automation.domain.SelfAppControlPolicy
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
@@ -16,6 +17,7 @@ data class MainUiState(
     val environmentSetupInfo: EnvironmentSetupInfo = EnvironmentSetupInfo(),
     val automationState: AutomationRunState = AutomationRunState.Idle,
     val showSettings: Boolean = false,
+    val showAccessibilityPrompt: Boolean = false,
     val settingsMessage: String = "",
     val settingsError: String = "",
     val isParagraphSelectionMode: Boolean = false,
@@ -40,6 +42,13 @@ data class MainUiState(
     val canCloseGemini: Boolean
         get() = GeminiAppControlPolicy.canClose(
             isGeminiInstalled = environmentStatus.isGeminiInstalled,
+            isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
+            isAutomationRunning = isRunning,
+            isClosingInProgress = isClosingGemini
+        )
+
+    val canCloseSelfApp: Boolean
+        get() = SelfAppControlPolicy.canClose(
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning,
             isClosingInProgress = isClosingGemini

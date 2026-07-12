@@ -103,7 +103,7 @@ internal fun AnalysisScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(12.dp),
+                    .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 ApiKeyHeader(

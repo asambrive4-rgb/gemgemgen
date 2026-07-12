@@ -13,6 +13,7 @@ import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
+import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
 import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.android.AndroidImeSettings
 import com.example.gemgemgen.automation.android.AndroidOverlayPermissionGateway
@@ -70,6 +71,9 @@ class AndroidAppContainer(context: Context) {
             ),
             terminateGeminiApp = CloseGeminiAppUseCase(
                 AndroidGeminiAppCloser(appContext, relaunchAfterClose = false)
+            ),
+            terminateSelfApp = CloseGeminiAppUseCase(
+                AndroidSelfAppCloser(appContext)
             ),
             checkAutomationStart = CheckAutomationStartUseCase(
                 AndroidOverlayPermissionGateway(appContext)

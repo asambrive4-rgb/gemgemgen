@@ -34,6 +34,8 @@ internal fun AutomationScreen(
     promptTemplateState: TextFieldState,
     onClearFocus: () -> Unit,
     onHideSettings: () -> Unit,
+    onConfirmAccessibilityPrompt: () -> Unit,
+    onDismissAccessibilityPromptToSettings: () -> Unit,
     onRefreshStatus: () -> Unit,
     onSelectWildcardFolder: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
@@ -49,6 +51,7 @@ internal fun AutomationScreen(
     onPasteFromClipboard: () -> Unit,
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
+    onTerminateSelfApp: () -> Unit,
     onRepeatCountChange: (String) -> Unit,
     onRunMvp: () -> Unit,
     onCancelAutomation: () -> Unit
@@ -67,7 +70,7 @@ internal fun AutomationScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(12.dp),
+                    .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
@@ -79,6 +82,7 @@ internal fun AutomationScreen(
                     canUndoPromptEdit = uiState.canUndoPromptEdit,
                     canCopyPrompt = uiState.hasPromptTemplate && !uiState.isRunning,
                     canCloseGemini = uiState.canCloseGemini,
+                    canCloseSelfApp = uiState.canCloseSelfApp,
                     isClosingGemini = uiState.isClosingGemini,
                     geminiCloseMessage = uiState.geminiCloseMessage,
                     selectedParagraphRange = uiState.selectedParagraphRange,
@@ -88,6 +92,7 @@ internal fun AutomationScreen(
                     onPromptTemplateChange = onPromptTemplateChange,
                     onCloseGeminiApp = onCloseGeminiApp,
                     onTerminateGeminiApp = onTerminateGeminiApp,
+                    onTerminateSelfApp = onTerminateSelfApp,
                     onUndoPromptEdit = onUndoPromptEdit,
                     onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
                     onParagraphOffsetSelected = onParagraphOffsetSelected,
@@ -130,6 +135,7 @@ internal fun AutomationScreen(
                     ) {
                         PromptActionRow(
                             canCloseGemini = uiState.canCloseGemini,
+                            canCloseSelfApp = uiState.canCloseSelfApp,
                             isClosingGemini = uiState.isClosingGemini,
                             canUndoPromptEdit = uiState.canUndoPromptEdit,
                             canCopyPrompt = uiState.hasPromptTemplate &&
@@ -138,6 +144,7 @@ internal fun AutomationScreen(
                             isParagraphSelectionMode = uiState.isParagraphSelectionMode,
                             onCloseGeminiApp = onCloseGeminiApp,
                             onTerminateGeminiApp = onTerminateGeminiApp,
+                            onTerminateSelfApp = onTerminateSelfApp,
                             onUndoPromptEdit = onUndoPromptEdit,
                             onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
                             onImportFromClipboard = onImportFromClipboard,
@@ -156,6 +163,12 @@ internal fun AutomationScreen(
                         )
                     }
                 }
+            }
+            if (uiState.showAccessibilityPrompt) {
+                AccessibilityPromptDialog(
+                    onConfirm = onConfirmAccessibilityPrompt,
+                    onDismissToSettings = onDismissAccessibilityPromptToSettings
+                )
             }
             if (uiState.showSettings) {
                 StatusSettingsDialog(
@@ -184,6 +197,8 @@ private fun AutomationAppPreview() {
             promptTemplateState = TextFieldState(),
             onClearFocus = {},
             onHideSettings = {},
+            onConfirmAccessibilityPrompt = {},
+            onDismissAccessibilityPromptToSettings = {},
             onRefreshStatus = {},
             onSelectWildcardFolder = {},
             onOpenAccessibilitySettings = {},
@@ -199,6 +214,7 @@ private fun AutomationAppPreview() {
             onPasteFromClipboard = {},
             onCloseGeminiApp = {},
             onTerminateGeminiApp = {},
+            onTerminateSelfApp = {},
             onRepeatCountChange = {},
             onRunMvp = {},
             onCancelAutomation = {}

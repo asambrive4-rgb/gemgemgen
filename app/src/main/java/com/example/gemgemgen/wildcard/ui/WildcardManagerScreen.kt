@@ -169,7 +169,7 @@ internal fun WildcardManagerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
+                .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 1구역: Top Strip (파일 탭 목록 + 새 파일/삭제 버튼)

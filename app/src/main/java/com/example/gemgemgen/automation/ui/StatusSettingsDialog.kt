@@ -23,6 +23,36 @@ import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 
 @Composable
+internal fun AccessibilityPromptDialog(
+    onConfirm: () -> Unit,
+    onDismissToSettings: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissToSettings,
+        title = {
+            Text(
+                text = AutomationUiText.accessibilityPromptTitle(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        text = {
+            Text(text = AutomationUiText.accessibilityPromptMessage())
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("이동")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissToSettings) {
+                Text("취소")
+            }
+        }
+    )
+}
+
+@Composable
 internal fun StatusSettingsDialog(
     status: EnvironmentStatus,
     setupInfo: EnvironmentSetupInfo,

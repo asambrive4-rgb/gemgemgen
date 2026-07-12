@@ -19,6 +19,8 @@ internal data class AutomationAppActions(
     val onShowSettings: () -> Unit,
     val onClearFocus: () -> Unit,
     val onHideSettings: () -> Unit,
+    val onConfirmAccessibilityPrompt: () -> Unit,
+    val onDismissAccessibilityPromptToSettings: () -> Unit,
     val onRefreshStatus: () -> Unit,
     val onSelectWildcardFolder: () -> Unit,
     val onOpenAccessibilitySettings: () -> Unit,
@@ -34,6 +36,7 @@ internal data class AutomationAppActions(
     val onPasteFromClipboard: () -> Unit,
     val onCloseGeminiApp: () -> Unit,
     val onTerminateGeminiApp: () -> Unit,
+    val onTerminateSelfApp: () -> Unit,
     val onRepeatCountChange: (String) -> Unit,
     val onRunAutomation: () -> Unit,
     val onCancelAutomation: () -> Unit
@@ -121,6 +124,10 @@ internal fun AutomationApp(
                     promptTemplateState = promptTemplateState,
                     onClearFocus = automationActions.onClearFocus,
                     onHideSettings = automationActions.onHideSettings,
+                    onConfirmAccessibilityPrompt =
+                        automationActions.onConfirmAccessibilityPrompt,
+                    onDismissAccessibilityPromptToSettings =
+                        automationActions.onDismissAccessibilityPromptToSettings,
                     onRefreshStatus = automationActions.onRefreshStatus,
                     onSelectWildcardFolder = automationActions.onSelectWildcardFolder,
                     onOpenAccessibilitySettings =
@@ -142,6 +149,7 @@ internal fun AutomationApp(
                     onPasteFromClipboard = automationActions.onPasteFromClipboard,
                     onCloseGeminiApp = automationActions.onCloseGeminiApp,
                     onTerminateGeminiApp = automationActions.onTerminateGeminiApp,
+                    onTerminateSelfApp = automationActions.onTerminateSelfApp,
                     onRepeatCountChange = automationActions.onRepeatCountChange,
                     onRunMvp = automationActions.onRunAutomation,
                     onCancelAutomation = automationActions.onCancelAutomation
