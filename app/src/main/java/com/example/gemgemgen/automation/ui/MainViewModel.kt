@@ -232,6 +232,17 @@ class MainViewModel(
         }
     }
 
+    /** TextField 최신 값을 반영한 현재 원본 프롬프트. 분석 탭 가져오기 등에서 사용. */
+    fun currentPromptTemplateText(): String {
+        syncPromptTemplateFromTextField()
+        return promptTemplateValue
+    }
+
+    /** 외부(분석 저장 등)에서 프롬프트 템플릿 전체를 교체한다. Undo 가능. */
+    fun replacePromptTemplateEntirely(replacement: String) {
+        replaceWholePromptTemplate(replacement)
+    }
+
     fun copyPromptToClipboard() {
         syncPromptTemplateFromTextField()
         val state = _uiState.value

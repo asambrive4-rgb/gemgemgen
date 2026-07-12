@@ -110,6 +110,36 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
     }
 
+    fun selectMainTab(tab: MainTab) {
+        if (tab != MainTab.AUTOMATION) {
+            mainViewModel.cancelParagraphSelection()
+        }
+        if (selectedTab == MainTab.ANALYSIS && tab != MainTab.ANALYSIS) {
+            analysisViewModel?.trimForInactiveTab()
+            shouldLoadAnalysis = false
+            analysisStoreOwner.clear()
+        }
+        if (selectedTab == MainTab.WILDCARD && tab != MainTab.WILDCARD) {
+            val dirty = wildcardViewModel?.uiState?.value?.hasUnsavedChanges == true
+            if (dirty) {
+                // Policy B: keep dirty editor; only drop undo buffers.
+                wildcardViewModel?.trimForInactiveTab()
+            } else {
+                wildcardViewModel?.trimForInactiveTab()
+                shouldLoadWildcard = false
+                wildcardStoreOwner.clear()
+            }
+        }
+        if (tab == MainTab.ANALYSIS) shouldLoadAnalysis = true
+        if (tab == MainTab.WILDCARD) shouldLoadWildcard = true
+        selectedTab = tab
+    }
+
+    fun handoffSavedAnalysisToAutomation(replacedSource: String) {
+        mainViewModel.replacePromptTemplateEntirely(replacedSource)
+        selectMainTab(MainTab.AUTOMATION)
+    }
+
     fun bringMainActivityToFront() {
         val appContext = context.applicationContext
         val launchIntent = appContext.packageManager.getLaunchIntentForPackage(appContext.packageName)
@@ -207,30 +237,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         analysisPromptState = analysisPromptState,
         wildcardUiState = wildcardUiState,
         automationActions = AutomationAppActions(
-            onSelectTab = { tab ->
-                if (tab != MainTab.AUTOMATION) {
-                    mainViewModel.cancelParagraphSelection()
-                }
-                if (selectedTab == MainTab.ANALYSIS && tab != MainTab.ANALYSIS) {
-                    analysisViewModel?.trimForInactiveTab()
-                    shouldLoadAnalysis = false
-                    analysisStoreOwner.clear()
-                }
-                if (selectedTab == MainTab.WILDCARD && tab != MainTab.WILDCARD) {
-                    val dirty = wildcardViewModel?.uiState?.value?.hasUnsavedChanges == true
-                    if (dirty) {
-                        // Policy B: keep dirty editor; only drop undo buffers.
-                        wildcardViewModel?.trimForInactiveTab()
-                    } else {
-                        wildcardViewModel?.trimForInactiveTab()
-                        shouldLoadWildcard = false
-                        wildcardStoreOwner.clear()
-                    }
-                }
-                if (tab == MainTab.ANALYSIS) shouldLoadAnalysis = true
-                if (tab == MainTab.WILDCARD) shouldLoadWildcard = true
-                selectedTab = tab
-            },
+            onSelectTab = ::selectMainTab,
             onShowSettings = mainViewModel::showSettings,
             onClearFocus = clearInputFocus,
             onHideSettings = mainViewModel::hideSettings,
@@ -266,6 +273,11 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         analysisActions = AnalysisAppActions(
             onClearFocus = clearInputFocus,
             onSourcePromptChange = { analysisViewModel?.onSourcePromptChange(it) },
+            onImportFromAutomation = {
+                analysisViewModel?.importSourcePromptFromAutomation(
+                    mainViewModel.currentPromptTemplateText()
+                )
+            },
             onCategorySelected = { analysisViewModel?.onCategorySelected(it) },
             onApplyManualSelection = { analysisViewModel?.applyManualSelection() },
             onClearTargetSegment = { analysisViewModel?.clearTargetSegment() },
@@ -277,8 +289,16 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onCustomHintChange = { analysisViewModel?.onCustomHintChange(it) },
             onResultFileNameChange = { analysisViewModel?.onResultFileNameChange(it) },
             onCopyResults = { analysisViewModel?.copyGeneratedResults() },
-            onSaveResults = { analysisViewModel?.saveGeneratedResults() },
-            onConfirmOverwrite = { analysisViewModel?.confirmOverwrite() },
+            onSaveResults = {
+                analysisViewModel?.saveGeneratedResults(
+                    onSuccess = ::handoffSavedAnalysisToAutomation
+                )
+            },
+            onConfirmOverwrite = {
+                analysisViewModel?.confirmOverwrite(
+                    onSuccess = ::handoffSavedAnalysisToAutomation
+                )
+            },
             onDismissOverwrite = { analysisViewModel?.dismissOverwrite() },
             onShowKeyDialog = { analysisViewModel?.showKeyDialog() },
             onDismissKeyDialog = { analysisViewModel?.dismissKeyDialog() },

@@ -2,8 +2,8 @@ package com.example.gemgemgen.analysis.domain
 
 /**
  * 분석 파이프라인 단계별 모델 역할.
- * - [MASKING]: 자동 마스킹 버튼
- * - [GENERATION]: TXT 후보 생성 + 생성 전 재분석
+ * - [MASKING]: 자동 마스킹 버튼 + TXT 생성 전 구간 분석/재분석
+ * - [GENERATION]: TXT 후보 생성만
  */
 enum class AnalysisModelRole(val storageValue: String) {
     MASKING("masking"),

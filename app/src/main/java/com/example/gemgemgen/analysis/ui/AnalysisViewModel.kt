@@ -1,6 +1,7 @@
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
@@ -9,6 +10,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisStartGate
 import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
+import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.analysis.domain.ManualTargetSegmentResult
@@ -22,6 +24,7 @@ import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
+import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -38,6 +41,7 @@ class AnalysisViewModel(
     private val grokAuth: ManageGrokAuthUseCase,
     private val copyResults: CopyAnalysisResultsUseCase,
     private val saveWildcardFile: SaveAnalysisWildcardFileUseCase,
+    private val dispatchers: AppDispatchers = AppDispatchers(),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
@@ -81,6 +85,61 @@ class AnalysisViewModel(
                 sourcePrompt = value,
                 targetSegment = nextSegment,
                 generatedCandidates = if (shouldClearCandidates) {
+                    emptyList()
+                } else {
+                    it.generatedCandidates
+                },
+                error = "",
+                message = if (nextSegment != segment) "" else it.message,
+                warning = "",
+                status = if (it.status == AnalysisStatus.ERROR) {
+                    AnalysisStatus.IDLE
+                } else {
+                    it.status
+                }
+            )
+        }
+    }
+
+    /**
+     * 자동화 탭에 입력된 원본 프롬프트로 분석 원문을 통째로 교체한다.
+     * 비어 있으면 원문은 유지하고 안내만 표시한다.
+     */
+    fun importSourcePromptFromAutomation(text: String) {
+        if (text.isBlank()) {
+            showError("자동화에 입력된 텍스트가 없습니다.")
+            return
+        }
+        replaceSourcePrompt(text)
+    }
+
+    private fun replaceSourcePrompt(value: String) {
+        val currentText = sourcePromptTextFieldState.text.toString()
+        if (currentText != value) {
+            sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(value)
+        }
+
+        analysisCache = null
+        val state = _uiState.value
+        if (state.sourcePrompt == value &&
+            state.targetSegment == null &&
+            state.generatedCandidates.isEmpty() &&
+            state.error.isEmpty() &&
+            state.warning.isEmpty()
+        ) {
+            return
+        }
+
+        val segment = state.targetSegment
+        val segmentStillValid = segment == null ||
+            AnalysisTargetSegmentPolicy.isStillValid(value, segment)
+        val nextSegment = if (segmentStillValid) segment else null
+
+        _uiState.update {
+            it.copy(
+                sourcePrompt = value,
+                targetSegment = nextSegment,
+                generatedCandidates = if (it.generatedCandidates.isNotEmpty()) {
                     emptyList()
                 } else {
                     it.generatedCandidates
@@ -230,6 +289,34 @@ class AnalysisViewModel(
     fun generateTxt() {
         val snapshot = _uiState.value
         val source = currentSourcePrompt()
+        val needsMaskingAnalysis = willNeedMaskingAnalysis(
+            source = source,
+            category = snapshot.selectedCategory,
+            existingTarget = snapshot.targetSegment,
+            cache = analysisCache
+        )
+        // 캐시 미스 등으로 구간 분석이 필요하면 마스킹 자격증명도 먼저 확인
+        if (needsMaskingAnalysis) {
+            when (
+                val gate = AnalysisStartPolicy.evaluateInputs(
+                    source = source,
+                    category = snapshot.selectedCategory,
+                    hasActiveKey = snapshot.hasMaskingCredential
+                )
+            ) {
+                is AnalysisStartGate.Blocked -> {
+                    showError(
+                        AnalysisUiText.startBlockedMessage(
+                            reason = gate.reason,
+                            provider = snapshot.maskingProvider,
+                            role = AnalysisModelRole.MASKING
+                        )
+                    )
+                    return
+                }
+                AnalysisStartGate.Allowed -> Unit
+            }
+        }
         when (
             val gate = AnalysisStartPolicy.evaluateInputs(
                 source = source,
@@ -257,7 +344,11 @@ class AnalysisViewModel(
                 it.copy(
                     status = AnalysisStatus.GENERATING,
                     error = "",
-                    message = "TXT 후보 생성 중...",
+                    message = if (needsMaskingAnalysis) {
+                        "자동 마스킹 중..."
+                    } else {
+                        "프롬프트 목록 생성 중..."
+                    },
                     warning = ""
                 )
             }
@@ -277,6 +368,12 @@ class AnalysisViewModel(
                         )
                     }
                 }
+                // 마스킹 단계가 끝났으면 생성 단계 문구로 전환
+                if (needsMaskingAnalysis) {
+                    _uiState.update {
+                        it.copy(message = "프롬프트 목록 생성 중...")
+                    }
+                }
                 val selectedHints = _uiState.value.directions
                     .filter { it.id in _uiState.value.selectedDirectionIds }
                     .map { it.hint }
@@ -289,6 +386,13 @@ class AnalysisViewModel(
                     selectedHints = selectedHints,
                     customHint = _uiState.value.customHint
                 )
+                if (ensured.didAnalyze) {
+                    rememberLastUsed(
+                        role = AnalysisModelRole.MASKING,
+                        provider = snapshot.maskingProvider,
+                        modelId = snapshot.maskingModel
+                    )
+                }
                 rememberLastUsed(
                     role = AnalysisModelRole.GENERATION,
                     provider = snapshot.generationProvider,
@@ -299,15 +403,21 @@ class AnalysisViewModel(
                         sourcePrompt = source,
                         targetSegment = ensured.target,
                         generatedCandidates = result.candidates,
+                        // 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
+                        // 사용자가 이전에 수정했더라도 이번 생성 카테고리 기준으로 덮어쓴다.
+                        resultFileName = category.defaultWildcardSaveFileName(),
                         status = AnalysisStatus.SUCCESS,
                         message = "${result.candidates.size}개 후보를 생성했습니다.",
                         warning = result.warning,
                         error = ""
                     )
                 }
-                if (snapshot.generationProvider == AnalysisProvider.GROK ||
-                    _uiState.value.usesGrok
-                ) {
+                val usedGrok =
+                    snapshot.generationProvider == AnalysisProvider.GROK ||
+                        (ensured.didAnalyze &&
+                            snapshot.maskingProvider == AnalysisProvider.GROK) ||
+                        _uiState.value.usesGrok
+                if (usedGrok) {
                     refreshGrokQuotaIfLoggedIn()
                 }
             } catch (error: CancellationException) {
@@ -317,6 +427,23 @@ class AnalysisViewModel(
                 showError(error.message ?: "TXT 생성에 실패했습니다.")
             }
         }
+    }
+
+    /**
+     * TXT 생성 시 캐시로 분석 결과를 재사용하지 못하면 마스킹 모델 분석이 필요하다.
+     * (ResolveAnalysisTargetUseCase.getOrAnalyzeReport 캐시 조건과 동일)
+     */
+    private fun willNeedMaskingAnalysis(
+        source: String,
+        category: AnalysisCategory?,
+        existingTarget: AnalysisTargetSegment?,
+        cache: AnalysisReportCache?
+    ): Boolean {
+        if (category == null) return false
+        return cache == null ||
+            cache.sourcePrompt != source ||
+            cache.category != category ||
+            cache.targetSegment != existingTarget
     }
 
     fun cancelActiveWork() {
@@ -389,7 +516,14 @@ class AnalysisViewModel(
         }
     }
 
-    fun saveGeneratedResults(overwrite: Boolean = false) {
+    /**
+     * 와일드카드 파일 저장 후, 치환된 원문([replacedSource])을 호출측에 넘긴다.
+     * 호출측(호스트)에서 자동화 템플릿 반영·탭 이동을 처리한다.
+     */
+    fun saveGeneratedResults(
+        overwrite: Boolean = false,
+        onSuccess: ((replacedSource: String) -> Unit)? = null
+    ) {
         val state = _uiState.value
         val candidates = state.generatedCandidates
         if (candidates.isEmpty()) return
@@ -416,9 +550,10 @@ class AnalysisViewModel(
                         }
                     is AnalysisSaveAndReplaceResult.Success -> {
                         val message = if (result.clipboardCopied) {
-                            "${result.fileName} 파일로 저장하고, 치환된 원문을 클립보드에 복사했습니다."
+                            "${result.fileName} 파일로 저장하고, 치환된 원문을 클립보드에 복사한 뒤 자동화 프롬프트에 반영했습니다."
                         } else {
-                            "${result.fileName} 파일로 저장했습니다. (클립보드 복사 실패: ${result.clipboardError})"
+                            "${result.fileName} 파일로 저장하고 자동화 프롬프트에 반영했습니다. " +
+                                "(클립보드 복사 실패: ${result.clipboardError})"
                         }
                         _uiState.update {
                             it.copy(
@@ -427,6 +562,7 @@ class AnalysisViewModel(
                                 error = ""
                             )
                         }
+                        onSuccess?.invoke(result.replacedSource)
                     }
                 }
             } catch (error: RuntimeException) {
@@ -435,8 +571,8 @@ class AnalysisViewModel(
         }
     }
 
-    fun confirmOverwrite() {
-        saveGeneratedResults(overwrite = true)
+    fun confirmOverwrite(onSuccess: ((replacedSource: String) -> Unit)? = null) {
+        saveGeneratedResults(overwrite = true, onSuccess = onSuccess)
     }
 
     fun dismissOverwrite() {

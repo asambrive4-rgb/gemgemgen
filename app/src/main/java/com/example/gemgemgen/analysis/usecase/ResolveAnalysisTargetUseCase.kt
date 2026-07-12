@@ -25,7 +25,9 @@ data class EnsureTargetResult(
     val report: AnalysisReport,
     val cache: AnalysisReportCache,
     val targetChanged: Boolean,
-    val warning: String
+    val warning: String,
+    /** true면 캐시 미스 등으로 마스킹 모델 분석 API를 호출함 */
+    val didAnalyze: Boolean
 )
 
 /**
@@ -68,21 +70,22 @@ class ResolveAnalysisTargetUseCase(
         existingTarget: AnalysisTargetSegment?,
         cache: AnalysisReportCache?
     ): EnsureTargetResult {
-        // 생성 전 재분석 → 생성 모델(기본 Grok)
+        // TXT 생성 전 구간 분석/재분석은 항상 마스킹 모델 사용
         if (existingTarget?.source == AnalysisTargetSource.MANUAL && existingTarget.isValid) {
             val report = getOrAnalyzeReport(
                 source = source,
                 category = category,
                 targetSegment = existingTarget,
                 cache = cache,
-                role = AnalysisModelRole.GENERATION
+                role = AnalysisModelRole.MASKING
             )
             return EnsureTargetResult(
                 target = existingTarget,
                 report = report.report,
                 cache = report.cache,
                 targetChanged = false,
-                warning = ""
+                warning = "",
+                didAnalyze = report.didAnalyze
             )
         }
 
@@ -91,7 +94,7 @@ class ResolveAnalysisTargetUseCase(
             category = category,
             targetSegment = existingTarget,
             cache = cache,
-            role = AnalysisModelRole.GENERATION
+            role = AnalysisModelRole.MASKING
         )
         val autoTarget = AnalysisTargetSegmentPolicy.fromAutoReport(resolved.report, category)
             ?: throw AnalysisException(
@@ -112,7 +115,8 @@ class ResolveAnalysisTargetUseCase(
                 resolved.report.warnings.firstOrNull().orEmpty()
             } else {
                 ""
-            }
+            },
+            didAnalyze = resolved.didAnalyze
         )
     }
 
@@ -128,7 +132,7 @@ class ResolveAnalysisTargetUseCase(
             cache.category == category &&
             cache.targetSegment == targetSegment
         ) {
-            return CachedReport(report = cache.report, cache = cache)
+            return CachedReport(report = cache.report, cache = cache, didAnalyze = false)
         }
         val report = analyzePrompt.analyze(
             sourcePrompt = source,
@@ -141,11 +145,12 @@ class ResolveAnalysisTargetUseCase(
             targetSegment = targetSegment,
             report = report
         )
-        return CachedReport(report = report, cache = nextCache)
+        return CachedReport(report = report, cache = nextCache, didAnalyze = true)
     }
 
     private data class CachedReport(
         val report: AnalysisReport,
-        val cache: AnalysisReportCache
+        val cache: AnalysisReportCache,
+        val didAnalyze: Boolean
     )
 }

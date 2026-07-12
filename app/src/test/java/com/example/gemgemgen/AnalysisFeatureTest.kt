@@ -201,6 +201,7 @@ class AnalysisFeatureTest {
 
         val masked = resolve.analyzeAndMask(source, category)
         assertEquals(1, aiGateway.analyzeCallCount)
+        assertEquals(listOf(DEFAULT_ANALYSIS_MODEL), aiGateway.analyzeModelIds)
 
         val first = resolve.ensureForGeneration(
             source = source,
@@ -210,6 +211,7 @@ class AnalysisFeatureTest {
         )
         assertEquals(1, aiGateway.analyzeCallCount)
         assertEquals(masked.targetSegment, first.target)
+        assertFalse(first.didAnalyze)
 
         val afterCategoryChange = resolve.ensureForGeneration(
             source = source,
@@ -218,7 +220,68 @@ class AnalysisFeatureTest {
             cache = first.cache
         )
         assertEquals(2, aiGateway.analyzeCallCount)
+        assertTrue(afterCategoryChange.didAnalyze)
         assertEquals(AnalysisTargetSource.AUTO, afterCategoryChange.target.source)
+        // 재분석도 마스킹 역할 모델(테스트 기본값)을 사용
+        assertEquals(
+            listOf(DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_MODEL),
+            aiGateway.analyzeModelIds
+        )
+    }
+
+    @Test
+    fun ensureForGeneration_usesMaskingModelNotGenerationModel() = runBlocking {
+        val maskingModel = "gemini-3.1-flash-lite"
+        val generationModel = "gemini-3.5-flash"
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"후보","explanation":"설명"}]"""
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret").apply {
+            setRoleModel("masking", maskingModel)
+            setRoleModel("generation", generationModel)
+        }
+        val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        val credentialResolver = AnalysisCredentialResolver(
+            apiKeyRepository = keyRepository,
+            grokAuth = ManageGrokAuthUseCase(
+                gateway = FakeGrokAuthGateway(),
+                repository = FakeGrokAuthRepository(),
+                dispatchers = dispatchers
+            ),
+            dispatchers = dispatchers
+        )
+        val resolve = ResolveAnalysisTargetUseCase(
+            AnalyzePromptForCategoryUseCase(
+                aiGateway = aiGateway,
+                credentialResolver = credentialResolver,
+                dispatchers = dispatchers
+            )
+        )
+        val source = "red hair and blue dress"
+
+        val ensured = resolve.ensureForGeneration(
+            source = source,
+            category = AnalysisCategory.WOMEN_CLOTHING,
+            existingTarget = null,
+            cache = null
+        )
+        assertTrue(ensured.didAnalyze)
+        assertEquals(listOf(maskingModel), aiGateway.analyzeModelIds)
+
+        GenerateAnalysisTxtUseCase(
+            aiGateway = aiGateway,
+            credentialResolver = credentialResolver,
+            dispatchers = dispatchers
+        ).generate(
+            sourcePrompt = source,
+            category = AnalysisCategory.WOMEN_CLOTHING,
+            targetSegment = ensured.target,
+            analysisReport = ensured.report,
+            count = 1,
+            selectedHints = emptyList()
+        )
+        assertEquals(listOf(generationModel), aiGateway.generateModelIds)
     }
 
     @Test
@@ -261,6 +324,40 @@ class AnalysisFeatureTest {
         assertEquals("red hair", viewModel.uiState.value.targetSegment?.text)
         assertEquals(listOf("수동 후보"), viewModel.uiState.value.generatedCandidates)
         assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun category_defaultWildcardSaveFileName_removesWhitespace() {
+        assertEquals("여성의상.txt", AnalysisCategory.WOMEN_CLOTHING.defaultWildcardSaveFileName())
+        assertEquals("장소.txt", AnalysisCategory.LOCATION.defaultWildcardSaveFileName())
+        assertEquals(
+            "여성헤어스타일.txt",
+            AnalysisCategory.WOMEN_HAIRSTYLE.defaultWildcardSaveFileName()
+        )
+    }
+
+    @Test
+    fun viewModel_generateTxt_setsResultFileNameFromCategoryWithoutSpaces() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"후보","explanation":"설명"}]"""
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        val prompt = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.onResultFileNameChange("custom-name.txt")
+        viewModel.generateTxt()
+
+        assertEquals("여성의상.txt", viewModel.uiState.value.resultFileName)
+
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
+        viewModel.generateTxt()
+
+        assertEquals("여성헤어스타일.txt", viewModel.uiState.value.resultFileName)
     }
 
     @Test
@@ -332,9 +429,95 @@ class AnalysisFeatureTest {
         assertEquals(prompt, viewModel.uiState.value.sourcePrompt)
     }
 
+    @Test
+    fun importSourcePromptFromAutomation_replacesWholeSourcePrompt() {
+        val viewModel = analysisViewModel(
+            aiGateway = FakeAnalysisAiGateway(),
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        )
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("old source")
+        viewModel.onSourcePromptChange("old source")
+
+        viewModel.importSourcePromptFromAutomation("automation source")
+
+        assertEquals("automation source", viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals("automation source", viewModel.uiState.value.sourcePrompt)
+    }
+
+    @Test
+    fun importSourcePromptFromAutomation_clearsInvalidTargetSegment() {
+        val viewModel = analysisViewModel(
+            aiGateway = FakeAnalysisAiGateway(),
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        )
+        val original = "red dress blue sky"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
+        viewModel.onSourcePromptChange(original)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        // 원문에 있던 구간을 수동으로 지정한 뒤 가져오기로 원문을 바꾸면 구간이 비워져야 한다.
+        viewModel.sourcePromptTextFieldState.edit {
+            selection = TextRange(0, "red dress".length)
+        }
+        viewModel.applyManualSelection()
+        assertTrue(viewModel.uiState.value.targetSegment != null)
+
+        viewModel.importSourcePromptFromAutomation("completely different text")
+
+        assertEquals("completely different text", viewModel.uiState.value.sourcePrompt)
+        assertEquals(null, viewModel.uiState.value.targetSegment)
+    }
+
+    @Test
+    fun importSourcePromptFromAutomation_keepsSourceWhenAutomationEmpty() {
+        val viewModel = analysisViewModel(
+            aiGateway = FakeAnalysisAiGateway(),
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        )
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("keep me")
+        viewModel.onSourcePromptChange("keep me")
+
+        viewModel.importSourcePromptFromAutomation("   ")
+
+        assertEquals("keep me", viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals("keep me", viewModel.uiState.value.sourcePrompt)
+        assertEquals("자동화에 입력된 텍스트가 없습니다.", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun saveGeneratedResults_invokesOnSuccessWithReplacedSourceAndKeepsClipboard() {
+        val clipboard = RecordingClipboard()
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"후보","explanation":"설명"}]"""
+        )
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            clipboardGateway = clipboard
+        )
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.sourcePromptTextFieldState.edit {
+            selection = TextRange(0, "red hair".length)
+        }
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
+        viewModel.applyManualSelection()
+        viewModel.generateTxt()
+        viewModel.onResultFileNameChange("hair")
+
+        var handedOff: String? = null
+        viewModel.saveGeneratedResults { handedOff = it }
+
+        assertEquals("__hair__ and blue dress", handedOff)
+        assertEquals("__hair__ and blue dress", clipboard.writtenText)
+        assertTrue(viewModel.uiState.value.message.contains("자동화 프롬프트"))
+    }
+
     private fun analysisViewModel(
         aiGateway: AnalysisAiGateway,
-        keyRepository: GeminiApiKeyRepository
+        keyRepository: GeminiApiKeyRepository,
+        clipboardGateway: ClipboardGateway = FakeClipboard()
     ): AnalysisViewModel {
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         val grokAuth = ManageGrokAuthUseCase(
@@ -353,7 +536,7 @@ class AnalysisFeatureTest {
             dispatchers = dispatchers
         )
         val copyResults = CopyAnalysisResultsUseCase(
-            clipboardGateway = FakeClipboard(),
+            clipboardGateway = clipboardGateway,
             dispatchers = dispatchers
         )
         return AnalysisViewModel(
@@ -374,6 +557,7 @@ class AnalysisFeatureTest {
                 copyResults = copyResults,
                 dispatchers = dispatchers
             ),
+            dispatchers = dispatchers,
             coroutineScope = CoroutineScope(Dispatchers.Unconfined)
         )
     }
@@ -425,6 +609,8 @@ class AnalysisFeatureTest {
         private val generateResponse: String = "[]"
     ) : AnalysisAiGateway {
         var analyzeCallCount = 0
+        val analyzeModelIds = mutableListOf<String>()
+        val generateModelIds = mutableListOf<String>()
 
         override suspend fun analyze(
             apiKey: String,
@@ -432,7 +618,7 @@ class AnalysisFeatureTest {
             payload: AnalysisPromptPayload
         ): String {
             analyzeCallCount++
-            assertEquals(DEFAULT_ANALYSIS_MODEL, modelId)
+            analyzeModelIds += modelId
             return analyzeResponse
         }
 
@@ -441,6 +627,7 @@ class AnalysisFeatureTest {
             modelId: String,
             payload: AnalysisTxtPromptPayload
         ): String {
+            generateModelIds += modelId
             assertFalse(payload.systemInstruction.contains("fallback", ignoreCase = true))
             return generateResponse
         }

@@ -73,6 +73,7 @@ internal data class WildcardAppActions(
 internal data class AnalysisAppActions(
     val onClearFocus: () -> Unit,
     val onSourcePromptChange: (String) -> Unit,
+    val onImportFromAutomation: () -> Unit,
     val onCategorySelected: (AnalysisCategory) -> Unit,
     val onApplyManualSelection: () -> Unit,
     val onClearTargetSegment: () -> Unit,
@@ -168,6 +169,7 @@ internal fun AutomationApp(
                     sourcePromptState = analysisPromptState,
                     onClearFocus = analysisActions.onClearFocus,
                     onSourcePromptChange = analysisActions.onSourcePromptChange,
+                    onImportFromAutomation = analysisActions.onImportFromAutomation,
                     onCategorySelected = analysisActions.onCategorySelected,
                     onApplyManualSelection = analysisActions.onApplyManualSelection,
                     onClearTargetSegment = analysisActions.onClearTargetSegment,

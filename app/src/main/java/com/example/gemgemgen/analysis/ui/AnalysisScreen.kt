@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,13 +44,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
@@ -67,6 +65,7 @@ internal fun AnalysisScreen(
     sourcePromptState: TextFieldState,
     onClearFocus: () -> Unit,
     onSourcePromptChange: (String) -> Unit,
+    onImportFromAutomation: () -> Unit,
     onCategorySelected: (AnalysisCategory) -> Unit,
     onApplyManualSelection: () -> Unit,
     onClearTargetSegment: () -> Unit,
@@ -127,7 +126,8 @@ internal fun AnalysisScreen(
 
                 SourcePromptInputSection(
                     sourcePromptState = sourcePromptState,
-                    onSourcePromptChange = onSourcePromptChange
+                    onSourcePromptChange = onSourcePromptChange,
+                    onImportFromAutomation = onImportFromAutomation
                 )
 
                 TargetSegmentPanel(
@@ -283,28 +283,38 @@ private fun ApiKeyHeader(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            RoleModelRow(
-                label = "자동 마스킹",
-                provider = uiState.maskingProvider,
-                modelId = uiState.maskingModel,
-                onProviderSelected = {
-                    onRoleProviderSelected(AnalysisModelRole.MASKING, it)
-                },
-                onModelSelected = {
-                    onRoleModelSelected(AnalysisModelRole.MASKING, it)
-                }
-            )
-            RoleModelRow(
-                label = "TXT 생성",
-                provider = uiState.generationProvider,
-                modelId = uiState.generationModel,
-                onProviderSelected = {
-                    onRoleProviderSelected(AnalysisModelRole.GENERATION, it)
-                },
-                onModelSelected = {
-                    onRoleModelSelected(AnalysisModelRole.GENERATION, it)
-                }
-            )
+            // 세로 스크롤을 줄이기 위해 두 역할을 항상 좌우 1행으로 배치한다.
+            // 좁은 폭에서는 칸 안 칩만 줄바꿈하고, 2행 세로 복귀는 하지 않는다.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                RoleModelRow(
+                    modifier = Modifier.weight(1f),
+                    label = "자동 마스킹",
+                    provider = uiState.maskingProvider,
+                    modelId = uiState.maskingModel,
+                    onProviderSelected = {
+                        onRoleProviderSelected(AnalysisModelRole.MASKING, it)
+                    },
+                    onModelSelected = {
+                        onRoleModelSelected(AnalysisModelRole.MASKING, it)
+                    }
+                )
+                RoleModelRow(
+                    modifier = Modifier.weight(1f),
+                    label = "TXT 생성",
+                    provider = uiState.generationProvider,
+                    modelId = uiState.generationModel,
+                    onProviderSelected = {
+                        onRoleProviderSelected(AnalysisModelRole.GENERATION, it)
+                    },
+                    onModelSelected = {
+                        onRoleModelSelected(AnalysisModelRole.GENERATION, it)
+                    }
+                )
+            }
             AuthActionsRow(
                 uiState = uiState,
                 onShowKeyDialog = onShowKeyDialog,
@@ -315,58 +325,54 @@ private fun ApiKeyHeader(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoleModelRow(
     label: String,
     provider: AnalysisProvider,
     modelId: String,
     onProviderSelected: (AnalysisProvider) -> Unit,
-    onModelSelected: (String) -> Unit
+    onModelSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Row(
+        // 반폭 칸에서도 칩이 잘리지 않도록 FlowRow로 감싼다 (1행 레이아웃은 유지).
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ModelChip(
-                    label = "Gemini",
-                    selected = provider == AnalysisProvider.GEMINI,
-                    onClick = { onProviderSelected(AnalysisProvider.GEMINI) }
-                )
-                ModelChip(
-                    label = "Grok",
-                    selected = provider == AnalysisProvider.GROK,
-                    onClick = { onProviderSelected(AnalysisProvider.GROK) }
-                )
-            }
+            ModelChip(
+                label = "Gemini",
+                selected = provider == AnalysisProvider.GEMINI,
+                onClick = { onProviderSelected(AnalysisProvider.GEMINI) }
+            )
+            ModelChip(
+                label = "Grok",
+                selected = provider == AnalysisProvider.GROK,
+                onClick = { onProviderSelected(AnalysisProvider.GROK) }
+            )
             when (provider) {
                 AnalysisProvider.GEMINI -> {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        ModelChip(
-                            label = "3.5 Flash",
-                            selected = modelId == MODEL_GEMINI_3_5_FLASH,
-                            onClick = { onModelSelected(MODEL_GEMINI_3_5_FLASH) }
-                        )
-                        ModelChip(
-                            label = "3.1 Lite",
-                            selected = modelId == MODEL_GEMINI_3_1_FLASH_LITE,
-                            onClick = { onModelSelected(MODEL_GEMINI_3_1_FLASH_LITE) }
-                        )
-                    }
+                    ModelChip(
+                        label = "3.5 Flash",
+                        selected = modelId == MODEL_GEMINI_3_5_FLASH,
+                        onClick = { onModelSelected(MODEL_GEMINI_3_5_FLASH) }
+                    )
+                    ModelChip(
+                        label = "3.1 Lite",
+                        selected = modelId == MODEL_GEMINI_3_1_FLASH_LITE,
+                        onClick = { onModelSelected(MODEL_GEMINI_3_1_FLASH_LITE) }
+                    )
                 }
                 AnalysisProvider.GROK -> {
                     ModelChip(
@@ -502,14 +508,25 @@ private fun GrokLoginDialog(
 @Composable
 private fun SourcePromptInputSection(
     sourcePromptState: TextFieldState,
-    onSourcePromptChange: (String) -> Unit
+    onSourcePromptChange: (String) -> Unit,
+    onImportFromAutomation: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "원문 입력",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "원문 입력",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            CompactOutlinedButton(
+                text = "자동화에서 가져오기",
+                onClick = onImportFromAutomation
+            )
+        }
         AppMultilineTextField(
             state = sourcePromptState,
             onValueChange = onSourcePromptChange,
@@ -539,7 +556,7 @@ private fun StickyBottomActionPanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
+            .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 2.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         FlowRow(
@@ -547,13 +564,6 @@ private fun StickyBottomActionPanel(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = "카테고리:",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(end = 2.dp)
-            )
             AnalysisCategory.entries.forEach { category ->
                 CategoryChip(
                     category = category,
@@ -577,24 +587,24 @@ private fun StickyBottomActionPanel(
                     OutlinedButton(
                         onClick = onCopyResults,
                         enabled = uiState.canCopyOrSave,
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
                     ) {
-                        Text("목록 복사", style = MaterialTheme.typography.labelSmall)
+                        Text("목록 복사", style = MaterialTheme.typography.labelMedium)
                     }
                     Button(
                         onClick = onSaveResults,
                         enabled = uiState.canCopyOrSave,
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
                     ) {
-                        Text("와일드카드 파일 저장", style = MaterialTheme.typography.labelSmall)
+                        Text("와일드카드 파일 저장", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedButton(
@@ -603,10 +613,10 @@ private fun StickyBottomActionPanel(
                         onClearFocus()
                     },
                     enabled = !uiState.isBusy,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
                 ) {
-                    Text("선택 구간 지정", style = MaterialTheme.typography.labelSmall)
+                    Text("선택 구간 지정", style = MaterialTheme.typography.labelMedium)
                 }
                 OutlinedButton(
                     onClick = if (uiState.status == AnalysisStatus.ANALYZING) {
@@ -615,12 +625,12 @@ private fun StickyBottomActionPanel(
                         onAnalyzeAndMask
                     },
                     enabled = uiState.canAnalyze || uiState.status == AnalysisStatus.ANALYZING,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
                 ) {
                     Text(
                         text = if (uiState.status == AnalysisStatus.ANALYZING) "중지" else "자동 분석",
-                        style = MaterialTheme.typography.labelSmall
+                        style = MaterialTheme.typography.labelMedium
                     )
                 }
                 Button(
@@ -630,12 +640,12 @@ private fun StickyBottomActionPanel(
                         onGenerateTxt
                     },
                     enabled = uiState.canGenerate || uiState.status == AnalysisStatus.GENERATING,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
                 ) {
                     Text(
                         text = if (uiState.status == AnalysisStatus.GENERATING) "중지" else "TXT 생성",
-                        style = MaterialTheme.typography.labelSmall
+                        style = MaterialTheme.typography.labelMedium
                     )
                 }
             }
@@ -725,47 +735,32 @@ private fun TargetSegmentPanel(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DirectionSection(
     directions: List<AnalysisDirection>,
     selectedIds: Set<String>,
     onToggleDirection: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // 세로를 줄이기 위해 제목 + 한 줄 칩만 표시한다.
+    // 더미 안내 문구·카드형 설명은 제거한다 (선택/힌트 로직은 유지).
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = "추천 방향",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
         )
-        Text(
-            text = "v1에서는 더미 방향을 사용합니다. 선택한 항목은 생성 힌트로만 반영됩니다.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        
-        val rows = directions.chunked(2)
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            rows.forEach { rowItems ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    rowItems.forEach { direction ->
-                        DirectionChip(
-                            direction = direction,
-                            selected = direction.id in selectedIds,
-                            onClick = { onToggleDirection(direction.id) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                        )
-                    }
-                    if (rowItems.size < 2) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            directions.forEach { direction ->
+                DirectionChip(
+                    title = direction.title,
+                    selected = direction.id in selectedIds,
+                    onClick = { onToggleDirection(direction.id) }
+                )
             }
         }
     }
@@ -773,14 +768,12 @@ private fun DirectionSection(
 
 @Composable
 private fun DirectionChip(
-    direction: AnalysisDirection,
+    title: String,
     selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onClick: () -> Unit
 ) {
     Surface(
-        modifier = modifier
-            .clickable(onClick = onClick),
+        modifier = Modifier.clickable(onClick = onClick),
         shape = MaterialTheme.shapes.small,
         color = if (selected) {
             MaterialTheme.colorScheme.secondaryContainer
@@ -796,18 +789,12 @@ private fun DirectionChip(
             }
         )
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(
-                text = direction.title,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = direction.description,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(
+            text = title,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 

@@ -9,7 +9,14 @@ enum class AnalysisCategory(val label: String) {
     MEN_POSE("남성 자세"),
     WOMEN_EXPRESSION("여성 표정"),
     WOMEN_HAIRSTYLE("여성 헤어스타일"),
-    WAKA("와카")
+    WAKA("와카");
+
+    /**
+     * 저장 기본 파일명: 라벨에서 공백을 제거해 토큰 호환 이름(`__이름__`)을 만든다.
+     * 예: "여성 의상" → "여성의상.txt"
+     */
+    fun defaultWildcardSaveFileName(): String =
+        "${label.filterNot { it.isWhitespace() }}.txt"
 }
 
 data class AnalysisCategoryRule(
