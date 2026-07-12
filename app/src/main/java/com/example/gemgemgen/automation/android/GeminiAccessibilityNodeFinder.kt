@@ -175,7 +175,7 @@ internal class GeminiAccessibilityNodeFinder(
 
         val GEMINI_ACCESSIBILITY_PACKAGES = setOf(
             AppDefaults.GEMINI_PACKAGE_NAME,
-            "com.google.android.googlequicksearchbox"
+            AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME
         )
     }
 }

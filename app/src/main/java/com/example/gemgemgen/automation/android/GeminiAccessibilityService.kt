@@ -9,9 +9,12 @@ import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
+import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
+import com.example.gemgemgen.core.AppDefaults
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -33,13 +36,16 @@ class GeminiAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         activeService = this
+        clearPackageRestriction()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
         finishCloseGemini(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
+        ProcessAutomationHolder.onAccessibilityLost()
         handler.removeCallbacksAndMessages(null)
+        clearPackageRestriction()
     }
 
     override fun onDestroy() {
@@ -47,15 +53,21 @@ class GeminiAccessibilityService : AccessibilityService() {
             activeService = null
         }
         finishCloseGemini(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
+        ProcessAutomationHolder.onAccessibilityLost()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
     internal fun gatewayFor(targetApp: AutomationTargetApp): PromptAutomationGateway {
-        return when (targetApp) {
+        val delegate = when (targetApp) {
             AutomationTargetApp.GEMINI -> geminiAutomation
             AutomationTargetApp.CHATGPT -> chatGptAutomation
         }
+        return PackageScopedPromptAutomation(
+            delegate = delegate,
+            targetApp = targetApp,
+            service = this
+        )
     }
 
     internal suspend fun closeGeminiFromRecents(): CloseGeminiAppResult {
@@ -79,6 +91,8 @@ class GeminiAccessibilityService : AccessibilityService() {
 
         closeGeminiCompletion = onFinished
         handler.post {
+            // Recents/system UI must stay visible to package filter.
+            clearPackageRestriction()
             val opened = tapDexRecentsButton {
                 handler.postDelayed(
                     { closeNextGeminiCard(closedCount = 0, clickCount = 0) },
@@ -88,6 +102,65 @@ class GeminiAccessibilityService : AccessibilityService() {
             if (!opened) {
                 finishCloseGemini(CloseGeminiAppResult.RecentsUnavailable)
             }
+        }
+    }
+
+    private fun restrictPackagesTo(targetApp: AutomationTargetApp) {
+        applyAccessibilitySubscription(packageNamesFor(targetApp))
+    }
+
+    private fun clearPackageRestriction() {
+        applyAccessibilitySubscription(packageNames = null)
+    }
+
+    private fun applyAccessibilitySubscription(packageNames: Array<String>?) {
+        val info = serviceInfo ?: return
+        info.eventTypes = 0
+        info.packageNames = packageNames
+        setServiceInfo(info)
+    }
+
+    private fun packageNamesFor(targetApp: AutomationTargetApp): Array<String> {
+        return when (targetApp) {
+            AutomationTargetApp.GEMINI -> arrayOf(
+                AppDefaults.GEMINI_PACKAGE_NAME,
+                AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME
+            )
+            AutomationTargetApp.CHATGPT -> arrayOf(AppDefaults.CHATGPT_PACKAGE_NAME)
+        }
+    }
+
+    private class PackageScopedPromptAutomation(
+        private val delegate: PromptAutomationGateway,
+        private val targetApp: AutomationTargetApp,
+        private val service: GeminiAccessibilityService
+    ) : PromptAutomationGateway {
+        override fun sendPrompt(
+            prompt: String,
+            newChatMode: NewChatMode,
+            onStateChange: (AutomationRunState) -> Unit,
+            onDone: () -> Unit
+        ) {
+            service.restrictPackagesTo(targetApp)
+            delegate.sendPrompt(
+                prompt = prompt,
+                newChatMode = newChatMode,
+                onStateChange = { state ->
+                    if (state is AutomationRunState.Failure || state is AutomationRunState.Stopped) {
+                        service.clearPackageRestriction()
+                    }
+                    onStateChange(state)
+                },
+                onDone = {
+                    service.clearPackageRestriction()
+                    onDone()
+                }
+            )
+        }
+
+        override fun cancelCurrentRun() {
+            delegate.cancelCurrentRun()
+            service.clearPackageRestriction()
         }
     }
 

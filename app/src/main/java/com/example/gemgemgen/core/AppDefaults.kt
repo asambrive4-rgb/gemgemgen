@@ -2,6 +2,7 @@ package com.example.gemgemgen.core
 
 object AppDefaults {
     const val GEMINI_PACKAGE_NAME = "com.google.android.apps.bard"
+    const val GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME = "com.google.android.googlequicksearchbox"
     const val CHATGPT_PACKAGE_NAME = "com.openai.chatgpt"
     const val WILDCARD_DIRECTORY = "Download/wildcard"
     const val NULL_KEYBOARD_IME_ID = "com.wparam.nullkeyboard/.NullInputMethod"

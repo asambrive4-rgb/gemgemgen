@@ -77,6 +77,11 @@ class MainViewModel(
         _automationBarUiState.asStateFlow()
 
     init {
+        scope.launch {
+            automation.runState.collect { state ->
+                handleAutomationState(state)
+            }
+        }
         loadInitialState()
         refreshStatus()
     }
@@ -474,7 +479,7 @@ class MainViewModel(
         )
         val job = scope.launch {
             try {
-                automation.run(request, ::handleAutomationState)
+                automation.run(request)
             } catch (error: CancellationException) {
                 handleAutomationState(AutomationRunState.Stopped)
                 throw error
@@ -501,7 +506,7 @@ class MainViewModel(
             return
         }
 
-        automation.cancel(::handleAutomationState)
+        automation.cancel()
     }
 
     private fun loadInitialState() {

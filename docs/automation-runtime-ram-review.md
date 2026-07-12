@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |------|------|
 | 작성일 | 2026-07-12 |
-| 수정 | 2026-07-12 — … (8) §4.7 와일드카드 baseline P1. (9) §4.8 **P2** AnalysisViewModel 항상 생성·결과 상주 |
+| 수정 | 2026-07-12 — … (13) §4.3 package. (14) §4.6 Phase1: 프로세스 단일 RunAutomation + runState + 서비스 끊김 finish |
 | 범위 | 자동화 실행 · 접근성 서비스 상시 비용 · **Activity/ViewModel 생명주기와 실행 소유권** |
 | 방법 | 소스 코드 경로 추적만 (실기기 힙 덤프·Profiler 측정 **없음**) |
 | 전제 | **기능 변경 없음**. 수정 제안은 후속 작업용 참고이며 본 문서는 구현하지 않음 |
@@ -15,11 +15,10 @@
 
 **우선 최적화 축 (누적 RAM·안정성)**
 
-0. **P0 세션 아키텍처:** 프로세스 전역 active session 부재 (§4.6) — §4.4·§4.5의 뿌리  
-1. **P0 상시:** 미사용 접근성 이벤트 (§4.3)  
-2. **P0 실행 중:** 트리 flatten · 스냅샷 캐시 (§4.1)  
-3. **P1 baseline:** 와일드카드 탭 한 번 연 뒤 편집 텍스트·undo Activity 상주 (§4.7)  
-4. **P2 baseline:** `AnalysisViewModel` 항상 생성·collect, 분석 결과가 자동화 중에도 유지 (§4.8)  
+0. **P0 세션 잔여:** Handler session token · stale callback (§4.5-B)·(중기) Job 구조 — Phase1(단일 엔진·runState·서비스 끊김 finish)은 적용됨 (§4.6)  
+1. **P0 실행 중:** 트리 flatten · 스냅샷 캐시 (§4.1)  
+2. **P1 baseline:** 와일드카드 탭 한 번 연 뒤 편집 텍스트·undo Activity 상주 (§4.7)  
+3. **P2 baseline:** `AnalysisViewModel` 항상 생성·collect, 분석 결과가 자동화 중에도 유지 (§4.8)  
 
 - `lastPrompt` / `generateFinalPrompt` 는 P2 필드 정리 (§4.0·§4.2). `recycle()` 누수 해석 철회 (§4.1.1).
 
@@ -69,6 +68,10 @@ onStateChange(Running)
 | 와일드카드 토큰 필터 | `load(tokens)` 로 템플릿에 있는 토큰만 파일 로드 |
 | 노드 스냅샷 단기 캐시 | Gemini/ChatGPT finder 32ms 재사용 (트리 완전 재탐색 완화 목적) |
 | 실행 종료 시 run 해제 | `finishRun` → `currentRun = null` |
+| 접근성 XML content-changed 미구독 | `gemini_accessibility_service.xml` → `typeWindowStateChanged`만 (고빈도 content IPC 제거) |
+| 접근성 이벤트 수신 중단 | `eventTypes = 0` (이벤트 미사용·폴링 전송) |
+| 접근성 package 범위 | 전송 중 대상 앱만; idle·최근 앱 닫기 전 `packageNames = null` |
+| 프로세스 단일 자동화 엔진 (Phase1) | `ProcessAutomationHolder` + `runState` 공유; 서비스 끊김 → `onAccessibilityLost` finish |
 
 ---
 
@@ -261,164 +264,86 @@ fun generate(index: Int): GeneratedPrompt {
 
 `generate`와 `generateFinalPrompt`가 치환 로직을 한곳에서 쓰도록 private 헬퍼로 묶으면 동작 드리프트를 막기 쉽다.
 
-### 4.3 미사용 접근성 이벤트 수신 (앱을 오래 켜 둘 때 · 제안 검토)
+### 4.4 P0 — Activity/ViewModelStore clear 후 이전 자동화가 남는 구조 (조건부 · 제안 검토)
 
-**판정: 타당. 장기 가동·상시 비용 축에서는 가장 먼저 검토할 변경에 해당.**  
-전형적 **메모리 누수(이벤트를 리스트에 쌓음)는 아님.** 비용은 **Binder IPC + 임시 객체 할당 반복**.
+**판정: 맞지만 조건부.**  
+정확한 분류는 **조건부 orphan 실행 및 lifecycle race** 이다.  
+“백그라운드만 가면 항상 영구 누수”처럼 읽히면 **과장**이다.
 
-#### 사실 확인 (코드)
+#### 정확한 표현 (오해 방지)
 
-| 주장 | 판정 | 근거 |
-|------|------|------|
-| XML이 `typeWindowStateChanged \| typeWindowContentChanged` 구독 | **맞음** | `res/xml/gemini_accessibility_service.xml` |
-| `notificationTimeout="100"` | **맞음** | 동일 파일 |
-| `packageNames` 없음 → **모든 패키지** 이벤트 | **맞음** | 속성 미지정. 공식 문서: 생략 시 전 패키지 |
-| `onAccessibilityEvent`가 이벤트를 쓰지 않음 | **맞음** | `GeminiAccessibilityService`: `= Unit` |
-| 자동화 전송은 이벤트 콜백이 아니라 **Handler + `rootInActiveWindow` 폴링** | **맞음** | `AccessibilityPromptAutomation` / finder |
-| 최근 앱에서 Gemini 닫기도 이벤트 미사용 | **맞음** | 제스처 + `rootInActiveWindow` + `flattenNodes` (타이머 폴링) |
-| 이벤트 객체를 계속 보관하지 않음 → **전형 누수 아님** | **맞음** | 콜백이 no-op |
-| 그럼에도 IPC·임시 할당이 반복됨 | **타당 (추정)** | 접근성 이벤트 전달은 프로세스 간 비용이 있는 경로로 문서화됨 |
-| 스트리밍 답변 시 `TYPE_WINDOW_CONTENT_CHANGED` 빈번 가능 | **타당 (추정)** | 채팅 UI 부분 갱신 패턴 |
-
-수신되지만 버려지는 이벤트 예시 (코드상 구독 범위 기준):
-
-- 다른 앱 화면 전환·스크롤·UI 갱신  
-- Gemini/ChatGPT 스트리밍 답변 갱신  
-- 시스템/런처/앱 전환  
-- 텍스트·채팅 화면 업데이트  
-
-→ **자동화 중이 아니어도**, 접근성 서비스만 켜 두면 비용이 이어질 수 있다.  
-여러 번 자동화한 뒤 대상 앱에 응답 스레드가 남아 갱신되면 **불필요 전달이 더 길어질 수 있음** (추정).
-
-#### 개선안 타당성
-
-**A. 정적 XML 축소 (가장 먼저 검토 · 리스크 낮음)**
-
-```xml
-<!-- 사용하지 않는다면 typeWindowContentChanged 제거 검토 -->
-android:accessibilityEventTypes="typeWindowStateChanged"
-```
-
-| 항목 | 내용 |
+| 구분 | 내용 |
 |------|------|
-| **타당성** | **높음.** 현재 코드가 어떤 이벤트 타입도 소비하지 않음. CONTENT_CHANGED 제거해도 폴링 기반 전송/닫기와 **직접 결합 없음** |
-| **효과** | 스트리밍·스크롤 등 **고빈도 content 변경 IPC 감소** 기대 (체감은 실측) |
-| **리스크** | 낮음. 단, 나중에 이벤트 기반 캐시 무효화·응답 완료 탐지를 넣을 계획이면 그때 타입을 다시 켬 |
-| **한계** | `typeWindowStateChanged`만 남겨도 **전 패키지**면 앱 전환 시 이벤트는 계속 옴. package 제한 없으면 상시 비용이 일부 남음 |
-
-**B. 런타임 `AccessibilityServiceInfo` 조정 (더 적극적)**
-
-| 구간 | 제안 | 타당성 |
-|------|------|--------|
-| 자동화 **대기** | 이벤트 타입 0 또는 최소 | **타당.** 폴링도 안 하는 idle이면 수신 자체를 끄는 편이 맞음 |
-| 자동화 **실행** | 현재 대상 앱 패키지만 | **타당 방향.** 단 아래 패키지·최근앱 주의 |
-| 자동화 **종료** | 다시 최소 | **타당** |
-| `TYPE_WINDOW_CONTENT_CHANGED` | 캐시 무효화·응답 완료 탐지 등 **실제로 쓸 때만** | **타당.** 현재는 사용처 없음 → 기본 off |
-
-패키지 제한 후보 (노드 탐색과 정합):
-
-| 패키지 | 용도 |
-|--------|------|
-| `com.google.android.apps.bard` | Gemini (`AppDefaults.GEMINI_PACKAGE_NAME`) |
-| `com.google.android.googlequicksearchbox` | Gemini UI/입력 리소스 id·패키지 필터에 포함 |
-| `com.openai.chatgpt` | ChatGPT (`AppDefaults.CHATGPT_PACKAGE_NAME`) |
-
-**C. 패키지 제한 시 필수 검증 — 최근 앱 닫기**
-
-| 항목 | 내용 |
-|------|------|
-| **위험** | `closeGeminiFromRecents`는 런처/시스템 UI(최근 앱)에서 `rootInActiveWindow`로 닫기 노드를 찾음. **이벤트**는 안 쓰지만, `packageNames`를 대상 앱만으로 고정하면 **윈도우 콘텐츠 조회·이벤트 범위**가 기기/OS에 따라 달라질 수 있음 |
-| **판정** | 패키지 제한은 **실기기에서 종료/재시작 플로우 검증 후** 적용. “이벤트만 줄이고 retrieve는 유지” 가능 여부도 기기에서 확인 |
-| **완화** | 닫기 실행 구간에만 `packageNames`를 비우거나 시스템/런처 패키지를 임시 포함 → 종료 후 대상 앱만으로 복귀 (런타임 설정) |
-
-#### 심각도 · 우선순위
-
-| 등급 | 설명 |
-|------|------|
-| **P0 (상시/장기 가동)** | 서비스 ON 동안 **소비하지 않는 고빈도 이벤트**를 전 패키지에서 받는 구조. 앱을 오래 켜 둘수록 §4.1(실행 중 flatten)과 **다른 축**으로 비용 누적 |
-| **누수?** | **아니오** (보관 구조 없음). “누락된 낭비”에 가깝다 |
-| **권장 순서** | (1) XML에서 `typeWindowContentChanged` 제거 검토 → (2) idle 시 이벤트 최소/0 → (3) 실행 중 package 제한 + **최근앱 닫기 실기기 검증** → (4) content changed는 실사용 기능 붙일 때만 |
-
-`notificationTimeout="100"`은 동일 타입 폭주 완화용으로 보이며, 이벤트 자체를 안 쓰면 **구독 타입·패키지를 줄이는 쪽이 본전**.
-
-### 4.4 P0 — Activity가 사라진 뒤에도 이전 자동화가 살아남는 구조 (제안 검토)
-
-**판정: 타당. 정상 반복 실행보다 “긴 실행 + task 제거 + 재실행” 조합에서 가장 먼저 고쳐야 할 누적 RAM·안정성 위험.**
+| **핵심 조건** | `ViewModelStore`가 **실제로 clear**되는 경우 — 예: **task 제거**, Activity **finish** 등. 이때 프로세스가 AccessibilityService로 살아 있으면 Handler 쪽 실행이 남을 수 있음 |
+| **해당 아님 (정상 경로)** | 자동화 시작 후 `moveTaskToBack(true)` 로 **백그라운드 이동만** 한 경우 → Activity/ViewModel이 **즉시 제거되지 않음**. 같은 VM·use case가 유지되는 것이 정상 UX |
+| **설정 변경** | 회전 등으로 Activity 재생성 시 ViewModelStore 유지 → **같은** ViewModel/use case (orphan 시나리오 아님) |
+| **영구 누수?** | **항상 아님.** 각 실행이 **정상 terminal**(`finishRun`)에 도달하면 callback·CurrentRun 참조는 해제될 수 있음. 문제는 끝나기 전 clear + 재실행 겹침, 또는 terminal 미도달(§4.5) |
+| **기능 안정성** | **P0** — 긴 실행 중 task 제거 → 앱 재실행 → **새 실행 시작** 시 두 실행이 **같은 Handler에서 겹칠 가능성 실재** |
+| **RAM** | **조건부 누적 위험** — orphan이 생기거나 여러 실행 그래프가 겹칠 때만 프롬프트·와일드카드·VM 캡처가 중첩. 정상 완료·정상 백그라운드만으로는 “항상 쌓임”이 아님 |
 
 #### 현재 소유권 구조 (코드 확인)
 
 | 주장 | 판정 | 근거 |
 |------|------|------|
-| Activity마다 `AndroidAppContainer` | **맞음** | `MainActivity`의 `lazy { AndroidAppContainer(applicationContext) }` — Activity 인스턴스 단위 |
-| 새 `MainViewModel`마다 새 `RunAutomationUseCase` | **맞음** | `AndroidAppContainer.mainViewModelFactory`가 `MainViewModel(... automation = RunAutomationUseCase(...) )` 로 **매번 새 인스턴스** 생성 |
-| 자동화는 `viewModelScope` 끝까지 도는 단일 suspend가 아님 | **맞음** | `scope.launch { automation.run(...) }` 이지만 `run()`은 prepare 후 `startPreparedRun` → `sendPrompt`가 **Handler에 post 하고 반환**. 코루틴 Job은 곧 완료 |
-| 이후 진행은 Accessibility `Handler` callback | **맞음** | `AccessibilityPromptAutomation.sendPrompt` / `postDelayed` 재시도·입력·전송 확인 |
-| callback이 prompt, onStateChange, onDone, 다음 단계 클로저를 캡처 | **맞음** | 람다 체인으로 `CurrentRun`·`onStateChange` 유지 |
-| `onStateChange`가 `MainViewModel::handleAutomationState`에 바인딩 | **맞음** | `automation.run(request, ::handleAutomationState)` |
-| `onCleared()`에서 자동화 취소/분리 없음 | **맞음** | `MainViewModel`에 `onCleared` 오버라이드 없음. `cancelAutomation()`은 UI 경로만 |
-| `currentRun != null`은 **인스턴스 로컬** 가드 | **맞음** | `RunAutomationUseCase` 필드. 프로세스/서비스 전역 잠금 아님 |
-| Gateway는 서비스 공유 | **맞음** | `ActivePromptAutomationGatewayProvider` → 동일 `GeminiAccessibilityService` 쪽 automation |
+| Activity마다 `AndroidAppContainer` | **맞음** | `MainActivity` lazy container |
+| 새 `MainViewModel`마다 새 `RunAutomationUseCase` | **맞음** | factory가 매번 새 인스턴스 |
+| 준비 코루틴은 Handler 등록 후 종료 가능 | **맞음** | `automation.run()` → `sendPrompt`가 `handler.post` 후 반환, Job 곧 완료 |
+| 이후 실행은 Handler callback 체인 | **맞음** | post / postDelayed 재시도·입력·전송 확인 |
+| 람다가 prompt, run, onStateChange, onDone 등 캡처 | **맞음** | |
+| `onStateChange` → `MainViewModel::handleAutomationState` | **맞음** | |
+| `onCleared`에서 자동화 cancel 없음 | **맞음** | |
+| `currentRun`은 **인스턴스 로컬** 가드 | **맞음** | 프로세스 전역 잠금 아님 |
+| Gateway·Handler는 서비스 공유 | **맞음** | |
 
-참고: **설정 변경(회전 등)** 으로 Activity가 재생성되면 ViewModelStore가 유지되어 **같은** ViewModel/use case가 남을 수 있다. orphan 시나리오의 핵심은 **task 제거·Activity 종료로 ViewModelStore가 clear** 된 뒤, **프로세스는 AccessibilityService 때문에 살아 있는** 경우다.
-
-#### 실제 누적 시나리오 (코드상 가능)
+#### 조건부 겹침 시나리오 (코드상 가능)
 
 ```text
-실행 A 시작
-  → useCaseA.currentRun = CurrentRun(...)
-  → Handler에 A의 callback (onStateChange → ViewModelA) 등록
-앱 task 제거 / Activity 종료
-  → ViewModelA.onCleared (프레임워크) — 그러나 자동화 cancel 없음
-  → UI 생명주기 종료, 그러나 Handler 큐의 A callback 잔존
-앱 재실행
-  → Activity·ViewModelB·RunAutomationUseCaseB 신규
-  → useCaseB.currentRun == null → 실행 B 시작 가능
-  → Handler에 B callback 추가
-동일 AccessibilityService Handler에서 A와 B 콜백 교차 실행 가능
-반복 시 A,B,C … 실행 객체 그래프 동시 생존 가능
+실행 A 시작 → Handler에 A callback (prompt/run/onStateChange/onDone 캡처)
+[정상] moveTaskToBack → VM 유지, orphan 아님
+[위험] task 제거 / finish 등으로 ViewModelStore clear
+  → cancel 없음 → Handler에 A callback 잔존 가능
+앱 재실행 → ViewModelB·useCaseB (currentRun == null) → 실행 B 가능
+동일 AccessibilityService Handler에서 A·B 교차 가능
+A 또는 B가 정상 finishRun 하면 그 쪽 참조는 풀릴 수 있음
+둘 다 살아 있는 구간 = lifecycle race + 기능 경합 + (조건부) RAM 중첩
 ```
 
-`cancelCurrentRun()`은 `handler.removeCallbacksAndMessages(null)` 이라 **호출되면** 큐를 비우지만, orphan A에 대해 **아무도 cancel을 호출하지 않으면** 큐는 남는다. B 시작 시에도 기존 A를 취소하는 코드가 없다.
+`cancelCurrentRun()`의 `removeCallbacksAndMessages(null)`은 **호출되면** 큐를 비우지만, orphan A에 대해 호출되지 않으면 남고, B 시작 시 A를 끊는 코드도 없다.
 
-#### orphan 실행이 붙잡는 것 (코드상)
-
-`CurrentRun` 및 캡처 경로 기준:
+#### 겹침 구간에 붙잡을 수 있는 것 (조건부)
 
 | 보유 | 내용 |
 |------|------|
-| 실행 데이터 | `promptTemplate`, `wildcards`, `promptPlan` (`CompiledPrompt`), `repeatCount`, `lastPrompt` 등 |
-| 게이트웨이 | `promptGateway` (서비스 쪽 공유 인스턴스 참조) |
-| IME | `imeSession` (복구 시점까지) |
-| 상태 콜백 | bound `MainViewModel` (`::handleAutomationState`) |
-| ViewModel 쪽 | 해당 VM의 `TextFieldState`, `PromptUndoHistory`, `StateFlow` 등 — **callback이 VM을 살리면 함께 생존** |
+| 실행 데이터 | template, wildcards, `CompiledPrompt`, `lastPrompt` 등 |
+| IME 세션 | `finishRun` 전 |
+| 상태 콜백 | bound `MainViewModel` (callback이 살리면 VM·TextField·undo 등) |
 
-여러 orphan이 겹치면 **프롬프트·와일드카드·CompiledPrompt·VM** 이 실행 수만큼 겹칠 수 있다.  
-긴 반복 · 큰 와일드카드 · 긴 템플릿 · 실행 중 task 제거 · 재실행 시작 조합에서 **정상 반복보다 위험**하다는 판정에 동의.
+긴 반복 · 큰 와일드카드 · 긴 템플릿 · **실행 중 store clear** · **재실행 시작** 조합에서 기능·조건부 RAM 위험이 커진다는 점에 동의.
 
-#### 부수 위험 (RAM 외)
+#### 부수 위험 (기능 축 · P0에 해당)
 
-- A/B가 같은 입력창·보내기 버튼을 동시에 조작  
-- A `finishRun`의 IME 복구가 B 실행 중 개입  
-- B의 state UI와 A의 late callback이 엇갈림  
+- A/B가 같은 입력창·보내기 동시 조작  
+- A `finishRun`의 IME 복구가 B 중 개입  
+- late callback과 새 UI state 엇갈림  
 
 #### 개선 방향 (미구현 · 타당성)
 
 | 방향 | 타당성 | 비고 |
 |------|--------|------|
-| `MainViewModel.onCleared`에서 `cancelAutomation()` / gateway cancel | **필수에 가까움** | orphan 방지 최소선. 종료 시 IME 복구 정책 명시 |
-| **프로세스(또는 서비스) 단위 단일 실행 잠금** | **타당** | `RunAutomationUseCase` 인스턴스 로컬 `currentRun`만으로는 불충분 |
-| Application/서비스 스코프의 **단일** `RunAutomationUseCase` (또는 AutomationSession) | **타당** | ViewModel은 세션에 구독만; 생명주기 분리 |
-| 새 실행 시작 전 **기존 Handler 작업 전량 취소** | **타당** | 이미 `removeCallbacksAndMessages(null)` 존재 — **전역 세션 cancel에 연결** |
-| run token / generation id로 late callback 무시 | **타당 (방어층)** | cancel 누락 시에도 잘못된 onStateChange 방지 |
+| 정책 B면 `onCleared`에서 session cancel | **타당** | store clear 시 orphan 방지 |
+| 정책 A면 VM은 observer, cancel은 store clear와 분리 | **타당** | §4.6 · 플로팅 바와 정합 |
+| **프로세스 단위 단일 실행** | **필수에 가까움** | 로컬 `currentRun`만으로는 race 불가피 |
+| 새 실행 전 기존 세션 종료 + session ID | **타당** | late callback no-op |
+| (중기) suspend + 단일 Job | **타당** | |
 
-#### 심각도
+#### 심각도 (표현 정리)
 
-| 항목 | 내용 |
-|------|------|
-| **등급** | **P0 — 누적 RAM + 기능 안전** |
-| **우선순위** | 문서 기준 **가장 먼저 수정** 후보 (정상 핫패스 최적화보다 앞) |
-| **누수 유형** | 전형 “리스트에 쌓기”가 아니라 **생명주기 밖 비동기 작업 + 공유 Handler + 인스턴스 로컬 가드** 로 인한 **다중 실행 그래프 잔존** |
-| **연관** | 서비스 중단·전역 cancel이 세션을 안 끝내는 문제 → **§4.5** |
+| 축 | 등급 | 설명 |
+|----|------|------|
+| **기능 안정성** | **P0** | Handler 공유 + 인스턴스 로컬 가드 → **lifecycle race로 이중 실행 가능** |
+| **RAM** | **조건부 누적 위험** | 영구 누수 단정 금지. clear+재실행·미종료 orphan 구간에서만 그래프 중첩 |
+| **분류 명칭** | | **조건부 orphan 실행 및 lifecycle race** |
+| **연관** | | 서비스 중단 시 finish 없음 → **§4.5**; 뿌리 → **§4.6** |
 
 ### 4.5 P0 — AccessibilityService 중단 시 callback만 삭제 · 실행 미종료 / 전역 Handler 취소 (제안 검토)
 
@@ -504,7 +429,7 @@ handler.removeCallbacksAndMessages(session.callbackToken)
 | 항목 | 내용 |
 |------|------|
 | **등급** | **P0** (세션 좀비 · IME · UI 고착 · 취소 시 타 실행 손상) |
-| **§4.4** | Activity 종료로 orphan |  
+| **§4.4** | ViewModelStore clear 후 **조건부 orphan · lifecycle race** (기능 P0 / RAM 조건부) |  
 | **§4.5** | 서비스 끊김/전역 cancel로 **콜백은 죽이고 세션 메타는 살림** 또는 **타 세션까지 콜백만 죽임** |
 | **결합** | 둘 다 “실행 수명 = Handler 큐”에 의존하고 수명 종료 시 **대칭적인 finish가 없음** |
 | **뿌리** | 프로세스 전역 세션 부재 → **§4.6** |
@@ -531,7 +456,7 @@ handler.removeCallbacksAndMessages(session.callbackToken)
 
 | 정책 | 의미 | 현재 |
 |------|------|------|
-| **A. Activity 없어도 자동화 계속** | VM은 observer; 세션은 app/service 스코프 | 부분: `moveTaskToBack` + 플로팅 바로 **백그라운드 실행 의도**는 있음. 그러나 세션이 VM/use case에 묶여 task 제거 시 orphan |
+| **A. Activity 없어도 자동화 계속** | VM은 observer; 세션은 app/service 스코프 | 부분: `moveTaskToBack` + 플로팅 바 **의도**. store **clear**(task 제거 등) 시에만 §4.4 race — 백그라운드 이동만으로는 VM 즉시 제거 아님 |
 | **B. Activity 사라지면 자동화 종료** | `onCleared`에서 session cancel | **미구현** (`onCleared` 없음) |
 
 → 백그라운드는 이어 가려 하면서, 수명은 VM/Handler에 흩어져 있어 **A도 B도 아닌 중간 상태**라는 진단에 동의.
@@ -583,7 +508,7 @@ AccessibilityService
 | 항목 | 내용 |
 |------|------|
 | **등급** | **P0 구조** — §4.4·§4.5 수정이 이 모델 없이 부분 패치되면 재발하기 쉬움 |
-| **우선** | 세션 소유권 이전 + 단일 activeSession + 정책 A/B 명시 → 그다음 Handler token / 이벤트 / flatten |
+| **우선** | 세션 소유권 이전 + 단일 activeSession + 정책 A/B 명시 → 그다음 Handler token / flatten |
 | **RAM** | 다중 orphan 그래프 방지; 정상 1세션 피크는 별개 |
 
 ### 4.7 P1 — 와일드카드 탭을 한 번 열면 편집 데이터가 이후 자동화 baseline에 남음 (제안 검토)
@@ -751,21 +676,21 @@ RAM 자체는 작음. “쓸데없는 동작” 정리 후보(가독성·유지�
 - **추가:** 와일드카드 탭을 한 번이라도 열면 editor `savedText`/`editingText`/undo≤5가 Activity 수명 상주 → 이후 자동화마다 **baseline↑**  
 - 탭 leave trim 또는 tab-scoped ViewModelStore로 완화 가능  
 
-### 5.4 접근성 ON · 장시간 / 자동화 후 채팅 화면 방치
+### 5.4 접근성 ON · 장시간
 
-1. 서비스 연결 유지 → XML 구독대로 **전 패키지** window state/content 이벤트 전달  
-2. `onAccessibilityEvent` no-op → 매 이벤트마다 시스템→앱 IPC 후 즉시 폐기  
-3. Gemini/ChatGPT에 스트리밍·과거 스레드 UI 갱신이 있으면 **CONTENT_CHANGED 폭주 가능** (추정)  
-4. 자동화 폴링·트리 flatten과 **독립 축** — 실행이 끝나도 서비스가 켜져 있으면 계속됨  
+1. 서비스 연결·idle: `eventTypes = 0`, `packageNames = null`  
+2. 프롬프트 전송 중: 대상 앱 package만 (Gemini 계열 / ChatGPT)  
+3. 최근 앱 닫기 직전: `packageNames` 해제 (시스템 UI 조회)  
 
-### 5.5 실행 중 task 제거 후 앱 재실행·새 자동화 (orphan 누적)
 
-1. 실행 A: `useCaseA` + Handler callbacks + `ViewModelA` 캡처  
-2. task 스와이프 등으로 Activity/ViewModel 종료 — **cancel 없음**  
-3. 접근성 서비스·프로세스 생존 → A callback 계속  
-4. 재실행: `useCaseB` 신규, `currentRun == null` → B 시작  
-5. Handler에 A·B 공존 → **RAM 그래프 중첩 + UI/IME 경합**  
-6. 긴 반복·큰 와일드카드·긴 프롬프트일수록 orphan 1건 비용↑  
+### 5.5 실행 중 ViewModelStore clear 후 재실행 (조건부 orphan · lifecycle race)
+
+1. 실행 A: Handler callback이 prompt/run/onStateChange 캡처  
+2. **`moveTaskToBack`만** → VM 유지, 이 절 해당 없음  
+3. **task 제거 / finish 등으로 store clear** — cancel 없음 → A callback 잔존 가능  
+4. 재실행: `useCaseB`, `currentRun == null` → B 시작 가능  
+5. A·B Handler 교차 → **기능 경합 (P0)** + **조건부** 참조 중첩  
+6. A/B가 각각 정상 `finishRun`하면 그쪽 참조는 풀릴 수 있음 (영구 누수 단정 금지)  
 
 ### 5.6 접근성 서비스 중단 / 전역 cancel (§4.5)
 
@@ -787,13 +712,13 @@ RAM 자체는 작음. “쓸데없는 동작” 정리 후보(가독성·유지�
 
 | # | 동작 | 자동화 전송에 필수? | RAM/중복 | 비고 |
 |---|------|---------------------|----------|------|
-| 0 | **프로세스 전역 active session 없음** | 아니오 (설계 구멍) | 상태 분산·배타성 실패 | **P0 뿌리**. §4.6 |
-| 0a | **Activity 종료 후에도 Handler 자동화 잔존** | 아니오 | **누적** (실행 그래프×N) | **P0**. §4.4 ← §4.6 증상 |
-| 0b | **서비스 중단 시 큐만 삭제·finishRun 없음** | 아니오 | 세션 좀비·IME·UI 고착 | **P0**. §4.5-A |
-| 0c | **`cancelCurrentRun` = Handler 전량 삭제** | 부분 (본인 cancel은 finishRun) | 타 실행 좀비·closeGemini 지연 손상 | **P0**. §4.5-B |
+| 0 | 프로세스 단일 자동화 엔진 | Phase1 적용 | 배타성·runState 공유 | §3. `ProcessAutomationHolder` |
+| 0a | ViewModelStore clear 후 재실행 겹침 | 완화(단일 엔진) | 잔여: Handler token 없음 | §4.4 잔여 → Phase2 token |
+| 0b | 서비스 중단 시 finish 없음 | Phase1 적용 | `onAccessibilityLost` | §3 |
+| 0c | **`cancelCurrentRun` = Handler 전량 삭제** | 부분 | 타 작업·closeGemini 지연 손상 | **P0 잔여**. §4.5-B |
 | 1 | `lastPrompt`를 매 Running에 실음 | 아니오 (UI 미표시) | **낮음** (참조 공유; 내용 복제 아님) | **P2** |
 | 2 | 트리 전체 flatten + 32ms 재사용 캐시 | 탐색은 필요, 방식 개선 여지 | 높음(추정) | **P0** 실행 중. recycle 누수 아님 |
-| 3 | **미사용 접근성 이벤트 전 패키지 수신** | **아니오** | IPC·임시 할당 | **P0 상시**. §4.3 |
+| 3 | 접근성 이벤트·package 범위 | 폴링 전송만 필수 | 완화됨 | §3. 전송 중 package 제한 + 닫기 시 해제 |
 | 4 | prepare 시 클립보드에 템플릿 기록 | 전송엔 불필요, **제품 의도(편의)** | 중(시스템) | **유지** (의도 확인됨) |
 | 5 | 템플릿 다중 필드 중복 참조 | 일부 필요 | 중 | 참조 공유로 완화 가능 |
 | 6 | 회차마다 `GeneratedPrompt` + `replacements` Map | 자동화는 **final만** 필요 | 임시 할당 (누적 아님) | **§4.2** 경량 API 타당 |
@@ -811,44 +736,32 @@ RAM 자체는 작음. “쓸데없는 동작” 정리 후보(가독성·유지�
 
 기능 동등성을 깨지 않는 방향만 적습니다.
 
-**0순위 — 프로세스 전역 세션 (§4.6 → §4.4·§4.5) ← 구조 최우선**
+**0순위 — 세션 잔여 (§4.5-B · Phase2)**
 
-1. **제품 정책 A/B 결정**  
-   - 권장 힌트: 플로팅 바 + `moveTaskToBack` → **A (세션 지속, VM = observer)**  
-   - task 완전 제거 시 계속/중지는 별도 결정  
-2. **`AutomationRunCoordinator`** (Application 또는 Service 스코프)  
-   - `activeSession` 최대 1 · exclusivity · plan/IME · terminal cleanup 1회  
-3. **MainViewModel** = start/cancel/observe 만 (실행 소유 금지)  
-4. **AccessibilityService** = session ID 포함 동작; disconnect 시 coordinator에 Failure  
-5. **Handler token per session** + stale session ID no-op (`removeCallbacksAndMessages(null)` 폐기)  
-6. (중기) suspend + **단일 Job** structured concurrency  
-7. 정책 B일 때만 `onCleared` → session cancel; **정책 A면 onCleared에서 cancel 금지**
+1. ~~정책 A + 프로세스 단일 엔진 + runState + 서비스 끊김 finish~~ **Phase1 적용**  
+2. **Handler token per session** + stale session ID no-op (`removeCallbacksAndMessages(null)` 폐기)  
+3. (중기) suspend + **단일 Job** structured concurrency  
 
-**1순위 — 미사용 접근성 이벤트 (§4.3, 상시)**
+**1순위 — 실행 중 트리 탐색·캐시 (§4.1)**
 
-6. XML `typeWindowContentChanged` 제거 검토 · runtime package/event 정책  
+4. flatten 축소 · 스냅샷 참조 수명 · stale 방지  
 
-**2순위 — 실행 중 트리 탐색·캐시 (§4.1)**
+**2순위 — 와일드카드 탭 baseline (§4.7, P1)**
 
-7. flatten 축소 · 스냅샷 참조 수명 · stale 방지  
+5. 탭 leave / 자동화 시작 전 editor·undo trim (저장·dirty 정책 분기)  
+6. (구조) tab-scoped `ViewModelStoreOwner` 로 Wildcard VM unload  
 
-**3순위 — 와일드카드 탭 baseline (§4.7, P1)**
+**3순위 — 분석 탭 baseline (§4.8, P2)**
 
-8. 탭 leave / 자동화 시작 전 editor·undo trim (저장·dirty 정책 분기)  
-9. (구조) tab-scoped `ViewModelStoreOwner` 로 Wildcard VM unload — `shouldLoadWildcard=false`만으로는 부족  
+7. Analysis VM lazy · candidates clear · inactive trim  
 
-**4순위 — 분석 탭 baseline (§4.8, P2)**
+**4순위 — 회차 할당 (§4.2) · 필드 정리 (P2)**
 
-10. Analysis VM lazy · candidates clear · inactive trim  
-11. (구조) tab-scoped ViewModelStore — 와일드카드와 동일 패턴  
-
-**5순위 — 회차 할당 (§4.2) · 필드 정리 (P2)**
-
-12. `generateFinalPrompt` · `lastPrompt` UI 제거 · 미사용 CurrentRun 필드  
+8. `generateFinalPrompt` · `lastPrompt` UI 제거 · 미사용 CurrentRun 필드  
 
 **유지**
 
-13. prepare 클립보드 템플릿 쓰기 (의도)
+9. prepare 클립보드 템플릿 쓰기 (의도)  
 
 레이어: domain/usecase 순수성 유지. Accessibility 탐색·Handler는 `automation/android`에 한정.
 
@@ -870,8 +783,7 @@ RAM 자체는 작음. “쓸데없는 동작” 정리 후보(가독성·유지�
 
 | 등급 | 후보 |
 |------|------|
-| **가장 먼저 (P0 세션)** | **프로세스 전역 session 없음** (§4.6) → Coordinator + activeSession 1개 + 정책 A/B. 증상: orphan (§4.4), 서비스 끊김/전역 cancel (§4.5) |
-| **P0 상시** | 미사용 접근성 이벤트 (§4.3) |
+| **P0 세션 잔여** | Handler token / 전역 cancel 부작용 (§4.5-B). Phase1: 단일 엔진·runState·서비스 끊김 finish **적용** |
 | **P0 실행 중** | 트리 flatten · 스냅샷 잔류 · stale (§4.1) |
 | **P1 baseline** | 와일드카드 탭 상주 editor/undo + prepare 재로드 (§4.7) |
 | **P2 baseline** | AnalysisViewModel 항상 생성·candidates 등 상주 (§4.8) |

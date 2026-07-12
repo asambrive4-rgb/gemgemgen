@@ -128,6 +128,87 @@ class RunAutomationUseCaseTest {
         assertTrue(service.wasCancelled)
         assertEquals(ORIGINAL_IME_ID, defaultImeId)
         assertEquals(AutomationRunState.Stopped, states.last())
+        assertEquals(AutomationRunState.Stopped, automation.runState.value)
+    }
+
+    @Test
+    fun onAccessibilityLost_cancelsRestoresImeAndEmitsFailure() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = false)
+        val automation = automation(
+            service = service,
+            generatePrompt = { _, _, index ->
+                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
+            }
+        )
+
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "2",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+        automation.onAccessibilityLost()
+
+        assertTrue(service.wasCancelled)
+        assertEquals(ORIGINAL_IME_ID, defaultImeId)
+        val failure = automation.runState.value
+        assertTrue(failure is AutomationRunState.Failure)
+        assertEquals(
+            "접근성 서비스가 중단되었습니다.",
+            (failure as AutomationRunState.Failure).message
+        )
+
+        service.autoComplete = true
+        service.wasCancelled = false
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "1",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+        assertEquals(AutomationRunState.Success, automation.runState.value)
+    }
+
+    @Test
+    fun run_rejectsSecondStartWhileActiveWithoutClearingRunState() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = false)
+        val automation = automation(
+            service = service,
+            generatePrompt = { _, _, index ->
+                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
+            }
+        )
+        val rejected = mutableListOf<AutomationRunState>()
+
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "2",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+        val activeState = automation.runState.value
+        assertTrue(activeState is AutomationRunState.Running)
+
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "1",
+                targetApp = AutomationTargetApp.GEMINI
+            ),
+            rejected::add
+        )
+
+        assertEquals(
+            listOf(AutomationRunState.Failure("이미 실행 중입니다.")),
+            rejected
+        )
+        assertEquals(activeState, automation.runState.value)
+
+        automation.cancel()
+        assertEquals(AutomationRunState.Stopped, automation.runState.value)
     }
 
     @Test
@@ -221,7 +302,7 @@ class RunAutomationUseCaseTest {
     }
 
     private class FakePromptAutomationGateway(
-        private val autoComplete: Boolean
+        var autoComplete: Boolean
     ) : PromptAutomationGateway {
         val sentPrompts = mutableListOf<String>()
         val newChatModes = mutableListOf<NewChatMode>()

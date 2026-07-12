@@ -16,6 +16,7 @@ import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayPro
 import com.example.gemgemgen.automation.android.AndroidImeSettings
 import com.example.gemgemgen.automation.android.AndroidOverlayPermissionGateway
 import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
+import com.example.gemgemgen.automation.android.ProcessAutomationHolder
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
@@ -53,15 +54,17 @@ class AndroidAppContainer(context: Context) {
                 AndroidWildcardFolderRepository(appContext)
             ),
             lastRunSnapshotStore = lastRunSnapshotStore,
-            automation = RunAutomationUseCase(
-                imeManager = ImeManager(AndroidImeSettings(appContext)),
-                lastRunSnapshotStore = lastRunSnapshotStore,
-                clipboardGateway = clipboardGateway,
-                wildcardSetRepository = AndroidWildcardSetRepository(appContext),
-                clock = System::currentTimeMillis,
-                promptGatewayProvider = ActivePromptAutomationGatewayProvider,
-                targetAppLauncher = AndroidTargetAppLauncher(appContext)
-            ),
+            automation = ProcessAutomationHolder.getOrCreate {
+                RunAutomationUseCase(
+                    imeManager = ImeManager(AndroidImeSettings(appContext)),
+                    lastRunSnapshotStore = lastRunSnapshotStore,
+                    clipboardGateway = clipboardGateway,
+                    wildcardSetRepository = AndroidWildcardSetRepository(appContext),
+                    clock = System::currentTimeMillis,
+                    promptGatewayProvider = ActivePromptAutomationGatewayProvider,
+                    targetAppLauncher = AndroidTargetAppLauncher(appContext)
+                )
+            },
             closeGeminiApp = CloseGeminiAppUseCase(
                 AndroidGeminiAppCloser(appContext)
             ),

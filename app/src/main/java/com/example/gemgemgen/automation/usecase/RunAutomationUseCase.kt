@@ -9,6 +9,9 @@ import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.WildcardSet
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 data class AutomationRunRequest(
     val promptTemplate: String,
@@ -37,13 +40,16 @@ class RunAutomationUseCase(
 ) {
     private var currentRun: CurrentRun? = null
     private var isPreparingRun = false
+    private val _runState = MutableStateFlow<AutomationRunState>(AutomationRunState.Idle)
+    val runState: StateFlow<AutomationRunState> = _runState.asStateFlow()
 
     suspend fun run(
         request: AutomationRunRequest,
-        onStateChange: (AutomationRunState) -> Unit
+        onStateChange: ((AutomationRunState) -> Unit)? = null
     ) {
         if (currentRun != null || isPreparingRun) {
-            onStateChange(AutomationRunState.Failure("이미 실행 중입니다."))
+            // Do not overwrite active runState (still Running); only notify optional callback.
+            onStateChange?.invoke(AutomationRunState.Failure("이미 실행 중입니다."))
             return
         }
 
@@ -73,7 +79,7 @@ class RunAutomationUseCase(
         )
     }
 
-    fun cancel(onStateChange: (AutomationRunState) -> Unit) {
+    fun cancel(onStateChange: ((AutomationRunState) -> Unit)? = null) {
         val run = currentRun ?: return
         run.promptGateway.cancelCurrentRun()
         finishRun(
@@ -83,10 +89,20 @@ class RunAutomationUseCase(
         )
     }
 
+    fun onAccessibilityLost() {
+        val run = currentRun ?: return
+        run.promptGateway.cancelCurrentRun()
+        finishRun(
+            run = run,
+            state = AutomationRunState.Failure("접근성 서비스가 중단되었습니다."),
+            onStateChange = null
+        )
+    }
+
     private fun startPreparedRun(
         preparedRun: PreparedAutomationRun,
         startedAtMillis: Long,
-        onStateChange: (AutomationRunState) -> Unit
+        onStateChange: ((AutomationRunState) -> Unit)?
     ) {
         val request = preparedRun.request
         val promptGateway = promptGatewayProvider.current(request.targetApp)
@@ -106,7 +122,7 @@ class RunAutomationUseCase(
             return
         }
 
-        onStateChange(AutomationRunState.Running("Null Keyboard로 전환 중"))
+        emitState(AutomationRunState.Running("Null Keyboard로 전환 중"), onStateChange)
         val imeSwitchResult = imeManager.switchToNullKeyboard()
         if (imeSwitchResult is ImeSwitchResult.Failure) {
             finishWithoutRun(
@@ -147,7 +163,7 @@ class RunAutomationUseCase(
 
     private fun sendMarker(
         run: CurrentRun,
-        onStateChange: (AutomationRunState) -> Unit
+        onStateChange: ((AutomationRunState) -> Unit)?
     ) {
         updateRunState(run, "세션 마커 전송 중", onStateChange)
         run.promptGateway.sendPrompt(
@@ -163,7 +179,7 @@ class RunAutomationUseCase(
 
     private fun sendNextPrompt(
         run: CurrentRun,
-        onStateChange: (AutomationRunState) -> Unit
+        onStateChange: ((AutomationRunState) -> Unit)?
     ) {
         if (run.successCount >= run.repeatCount) {
             finishRun(run, AutomationRunState.Success, onStateChange)
@@ -192,7 +208,7 @@ class RunAutomationUseCase(
 
     private fun childStateCallback(
         run: CurrentRun,
-        onStateChange: (AutomationRunState) -> Unit
+        onStateChange: ((AutomationRunState) -> Unit)?
     ): (AutomationRunState) -> Unit {
         return { state ->
             when (state) {
@@ -203,7 +219,7 @@ class RunAutomationUseCase(
                 }
                 AutomationRunState.Success -> Unit
                 AutomationRunState.Stopped -> finishRun(run, state, onStateChange)
-                AutomationRunState.Idle -> onStateChange(state)
+                AutomationRunState.Idle -> emitState(state, onStateChange)
             }
         }
     }
@@ -211,28 +227,29 @@ class RunAutomationUseCase(
     private fun updateRunState(
         run: CurrentRun,
         step: String,
-        onStateChange: (AutomationRunState) -> Unit
+        onStateChange: ((AutomationRunState) -> Unit)?
     ) {
         run.lastStep = step
-        onStateChange(
+        emitState(
             AutomationRunState.Running(
                 step = step,
                 currentIndex = run.currentIndex.coerceAtMost(run.repeatCount),
                 totalCount = run.repeatCount,
                 lastPrompt = run.lastPrompt
-            )
+            ),
+            onStateChange
         )
     }
 
     private fun finishRun(
         run: CurrentRun,
         state: AutomationRunState,
-        onStateChange: (AutomationRunState) -> Unit
+        onStateChange: ((AutomationRunState) -> Unit)?
     ) {
         if (run.finished) return
 
         run.finished = true
-        onStateChange(AutomationRunState.Running("원래 입력기로 복구 중"))
+        emitState(AutomationRunState.Running("원래 입력기로 복구 중"), onStateChange)
 
         val finalState = when (val restoreResult = imeManager.restore(run.imeSession)) {
             ImeRestoreResult.Success -> state
@@ -244,14 +261,22 @@ class RunAutomationUseCase(
         }
 
         currentRun = null
-        onStateChange(finalState)
+        emitState(finalState, onStateChange)
     }
 
     private fun finishWithoutRun(
         state: AutomationRunState,
-        onStateChange: (AutomationRunState) -> Unit
+        onStateChange: ((AutomationRunState) -> Unit)?
     ) {
-        onStateChange(state)
+        emitState(state, onStateChange)
+    }
+
+    private fun emitState(
+        state: AutomationRunState,
+        onStateChange: ((AutomationRunState) -> Unit)?
+    ) {
+        _runState.value = state
+        onStateChange?.invoke(state)
     }
 
     private data class CurrentRun(
