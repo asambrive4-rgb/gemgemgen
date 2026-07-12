@@ -34,6 +34,9 @@ class AutomationRunPreparer(
                     targetApp = request.targetApp
                 )
             )
+            // 의도적 동작: 자동화 시작 시 원본 프롬프트 템플릿으로 시스템 클립보드를 덮어쓴다.
+            // 전송은 Accessibility ACTION_SET_TEXT 경로를 쓰며, 클립보드 붙여넣기에 의존하지 않는다.
+            // 실행 중/직후 수동 붙여넣기·백업 등 사용자 편의용으로 남겨 둔 것이며 제거하지 말 것.
             clipboardGateway.writeText(request.promptTemplate)
 
             val wildcards = if (wildcardTokens.isEmpty()) {
