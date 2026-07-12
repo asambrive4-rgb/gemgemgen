@@ -1,15 +1,16 @@
 package com.example.gemgemgen.automation.android
 
-import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.core.AppDefaults
 
 internal class ChatGptAccessibilityNodeFinder(
     private val rootProvider: () -> AccessibilityNodeInfo?
 ) {
-    private var cachedRoot: AccessibilityNodeInfo? = null
-    private var cachedNodes: List<AccessibilityNodeInfo> = emptyList()
-    private var cachedAtMillis: Long = 0L
+    private val snapshotCache = AccessibilityNodeSnapshotCache()
+
+    fun invalidateCache() {
+        snapshotCache.clear()
+    }
 
     fun findInputNode(): AccessibilityNodeInfo? {
         return nodes().firstOrNull { node ->
@@ -57,33 +58,24 @@ internal class ChatGptAccessibilityNodeFinder(
     }
 
     private fun nodes(): List<AccessibilityNodeInfo> {
-        val root = rootProvider() ?: return emptyList()
-        val now = SystemClock.uptimeMillis()
-        if (root == cachedRoot && now - cachedAtMillis <= NODE_SNAPSHOT_CACHE_MS) {
-            return cachedNodes
-        }
+        return snapshotCache.getOrLoad(rootProvider()) { root ->
+            val nodes = mutableListOf<AccessibilityNodeInfo>()
 
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-
-        fun visit(node: AccessibilityNodeInfo) {
-            if (node.packageName?.toString() == AppDefaults.CHATGPT_PACKAGE_NAME) {
-                nodes += node
+            fun visit(node: AccessibilityNodeInfo) {
+                if (node.packageName?.toString() == AppDefaults.CHATGPT_PACKAGE_NAME) {
+                    nodes += node
+                }
+                for (index in 0 until node.childCount) {
+                    node.getChild(index)?.let(::visit)
+                }
             }
-            for (index in 0 until node.childCount) {
-                node.getChild(index)?.let(::visit)
-            }
-        }
 
-        visit(root)
-        return nodes.also {
-            cachedRoot = root
-            cachedNodes = it
-            cachedAtMillis = now
+            visit(root)
+            nodes
         }
     }
 
     private companion object {
-        const val NODE_SNAPSHOT_CACHE_MS = 32L
         const val TOO_MANY_REQUESTS_MESSAGE = "Too many requests"
         const val TOO_MANY_REQUESTS_CLOSE_DESCRIPTION = "닫기"
     }

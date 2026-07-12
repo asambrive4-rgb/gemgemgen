@@ -203,6 +203,31 @@ class AnalysisFeatureTest {
         assertEquals(3, aiGateway.analyzeCallCount)
     }
 
+    @Test
+    fun viewModel_trimForInactiveTab_clearsCandidatesAndKeepsSource() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"후보","explanation":"설명"}]"""
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        val prompt = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.generateTxt()
+        assertEquals(listOf("후보"), viewModel.uiState.value.generatedCandidates)
+
+        viewModel.trimForInactiveTab()
+
+        assertEquals(emptyList<String>(), viewModel.uiState.value.generatedCandidates)
+        assertEquals(null, viewModel.uiState.value.targetSegment)
+        assertEquals(AnalysisStatus.IDLE, viewModel.uiState.value.status)
+        assertEquals(prompt, viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals(prompt, viewModel.uiState.value.sourcePrompt)
+    }
+
     private fun analysisViewModel(
         aiGateway: AnalysisAiGateway,
         keyRepository: GeminiApiKeyRepository

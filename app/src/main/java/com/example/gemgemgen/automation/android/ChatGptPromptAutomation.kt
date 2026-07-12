@@ -15,6 +15,10 @@ internal class ChatGptPromptAutomation(
 ) {
     private val nodeFinder = ChatGptAccessibilityNodeFinder(rootProvider)
 
+    override fun onRunFinished() {
+        nodeFinder.invalidateCache()
+    }
+
     override fun openNewChat(
         newChatMode: NewChatMode,
         onStateChange: (AutomationRunState) -> Unit,

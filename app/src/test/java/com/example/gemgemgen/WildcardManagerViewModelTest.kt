@@ -74,6 +74,33 @@ class WildcardManagerViewModelTest {
     }
 
     @Test
+    fun trimForInactiveTab_clearsCleanEditorBody() {
+        val viewModel = viewModel(
+            fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
+        )
+        assertEquals("black hair", viewModel.uiState.value.editingText)
+
+        viewModel.trimForInactiveTab()
+
+        assertEquals("hair.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals("", viewModel.uiState.value.editingText)
+        assertEquals("", viewModel.uiState.value.savedText)
+    }
+
+    @Test
+    fun onTabEntered_reloadsClearedCleanSelection() {
+        val viewModel = viewModel(
+            fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
+        )
+        viewModel.trimForInactiveTab()
+        assertEquals("", viewModel.uiState.value.editingText)
+
+        viewModel.onTabEntered()
+
+        assertEquals("black hair", viewModel.uiState.value.editingText)
+    }
+
+    @Test
     fun selectFile_withUnsavedChangesShowsPendingAction() {
         val fileManager = FakeWildcardFileManager(
             "hair.txt" to "black hair",

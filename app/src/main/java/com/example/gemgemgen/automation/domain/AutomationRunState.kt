@@ -5,8 +5,7 @@ sealed interface AutomationRunState {
     data class Running(
         val step: String,
         val currentIndex: Int? = null,
-        val totalCount: Int? = null,
-        val lastPrompt: String = ""
+        val totalCount: Int? = null
     ) : AutomationRunState
     data object Success : AutomationRunState
     data object Stopped : AutomationRunState

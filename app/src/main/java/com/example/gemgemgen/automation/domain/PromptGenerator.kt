@@ -52,11 +52,20 @@ class PromptGenerator(
             return GeneratedPrompt(
                 index = index,
                 basePrompt = basePrompt,
-                finalPrompt = tokenRegex.replace(basePrompt) { match ->
-                    replacements[match.value] ?: match.value
-                },
+                finalPrompt = applyReplacements(replacements),
                 replacements = replacements
             )
+        }
+
+        @Suppress("UNUSED_PARAMETER")
+        fun generateFinalPrompt(index: Int): String {
+            return applyReplacements(chooseReplacements())
+        }
+
+        private fun applyReplacements(replacements: Map<String, String>): String {
+            return tokenRegex.replace(basePrompt) { match ->
+                replacements[match.value] ?: match.value
+            }
         }
 
         private fun chooseReplacements(): Map<String, String> {

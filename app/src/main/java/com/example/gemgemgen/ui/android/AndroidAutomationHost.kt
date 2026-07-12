@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
@@ -41,21 +43,44 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mainViewModel: MainViewModel = viewModel(factory = container.mainViewModelFactory)
-    val analysisViewModel: AnalysisViewModel =
-        viewModel(factory = container.analysisViewModelFactory)
     val mainUiState by mainViewModel.uiState.collectAsState()
-    val analysisUiState by analysisViewModel.uiState.collectAsState()
     val automationBarUiState by mainViewModel.automationBarUiState.collectAsState()
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.AUTOMATION) }
     var shouldLoadWildcard by rememberSaveable { mutableStateOf(false) }
+    var shouldLoadAnalysis by rememberSaveable { mutableStateOf(false) }
+    val wildcardStoreOwner = remember { TabViewModelStoreOwner() }
+    val analysisStoreOwner = remember { TabViewModelStoreOwner() }
+    val analysisViewModel: AnalysisViewModel? = if (shouldLoadAnalysis) {
+        viewModel(
+            viewModelStoreOwner = analysisStoreOwner,
+            factory = container.analysisViewModelFactory
+        )
+    } else {
+        null
+    }
+    val analysisUiState = analysisViewModel?.uiState?.collectAsState()?.value
+        ?: AnalysisUiState()
+    val unusedAnalysisPromptState = remember { TextFieldState() }
+    val analysisPromptState = analysisViewModel?.sourcePromptTextFieldState
+        ?: unusedAnalysisPromptState
     val wildcardViewModel: WildcardManagerViewModel? = if (shouldLoadWildcard) {
-        viewModel(factory = container.wildcardViewModelFactory)
+        viewModel(
+            viewModelStoreOwner = wildcardStoreOwner,
+            factory = container.wildcardViewModelFactory
+        )
     } else {
         null
     }
     val wildcardUiState = wildcardViewModel?.uiState?.collectAsState()?.value
     val floatingBarController = remember(activity) {
         activity?.let(::FloatingAutomationBarController)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            wildcardStoreOwner.clear()
+            analysisStoreOwner.clear()
+        }
     }
 
     val wildcardFolderLauncher = rememberLauncherForActivityResult(
@@ -89,6 +114,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun runAutomation() {
+        analysisViewModel?.trimForInactiveTab()
+        wildcardViewModel?.trimForInactiveTab()
         when (mainViewModel.runAutomation()) {
             AutomationStartDecision.Started -> {
                 if (!mainViewModel.uiState.value.isRunning) return
@@ -143,21 +170,44 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         )
     }
 
+    LaunchedEffect(selectedTab, wildcardViewModel) {
+        if (selectedTab == MainTab.WILDCARD) {
+            wildcardViewModel?.onTabEntered()
+        }
+    }
+
     AutomationApp(
         selectedTab = selectedTab,
         mainUiState = mainUiState,
         automationBarUiState = automationBarUiState,
         promptTemplateState = mainViewModel.promptTemplateTextFieldState,
         analysisUiState = analysisUiState,
-        analysisPromptState = analysisViewModel.sourcePromptTextFieldState,
+        analysisPromptState = analysisPromptState,
         wildcardUiState = wildcardUiState,
         automationActions = AutomationAppActions(
-            onSelectTab = {
-                if (it != MainTab.AUTOMATION) {
+            onSelectTab = { tab ->
+                if (tab != MainTab.AUTOMATION) {
                     mainViewModel.cancelParagraphSelection()
                 }
-                if (it == MainTab.WILDCARD) shouldLoadWildcard = true
-                selectedTab = it
+                if (selectedTab == MainTab.ANALYSIS && tab != MainTab.ANALYSIS) {
+                    analysisViewModel?.trimForInactiveTab()
+                    shouldLoadAnalysis = false
+                    analysisStoreOwner.clear()
+                }
+                if (selectedTab == MainTab.WILDCARD && tab != MainTab.WILDCARD) {
+                    val dirty = wildcardViewModel?.uiState?.value?.hasUnsavedChanges == true
+                    if (dirty) {
+                        // Policy B: keep dirty editor; only drop undo buffers.
+                        wildcardViewModel?.trimForInactiveTab()
+                    } else {
+                        wildcardViewModel?.trimForInactiveTab()
+                        shouldLoadWildcard = false
+                        wildcardStoreOwner.clear()
+                    }
+                }
+                if (tab == MainTab.ANALYSIS) shouldLoadAnalysis = true
+                if (tab == MainTab.WILDCARD) shouldLoadWildcard = true
+                selectedTab = tab
             },
             onShowSettings = mainViewModel::showSettings,
             onClearFocus = { focusManager.clearFocus() },
@@ -186,33 +236,33 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         ),
         analysisActions = AnalysisAppActions(
             onClearFocus = { focusManager.clearFocus() },
-            onSourcePromptChange = analysisViewModel::onSourcePromptChange,
-            onCategorySelected = analysisViewModel::onCategorySelected,
-            onApplyManualSelection = analysisViewModel::applyManualSelection,
-            onClearTargetSegment = analysisViewModel::clearTargetSegment,
-            onAnalyzeAndMask = analysisViewModel::analyzeAndMask,
-            onGenerateTxt = analysisViewModel::generateTxt,
-            onCancelWork = analysisViewModel::cancelActiveWork,
-            onTxtCountChange = analysisViewModel::onTxtCountChange,
-            onToggleDirection = analysisViewModel::toggleDirection,
-            onCustomHintChange = analysisViewModel::onCustomHintChange,
-            onResultFileNameChange = analysisViewModel::onResultFileNameChange,
-            onCopyResults = analysisViewModel::copyGeneratedResults,
-            onSaveResults = { analysisViewModel.saveGeneratedResults() },
-            onConfirmOverwrite = analysisViewModel::confirmOverwrite,
-            onDismissOverwrite = analysisViewModel::dismissOverwrite,
-            onShowKeyDialog = analysisViewModel::showKeyDialog,
-            onDismissKeyDialog = analysisViewModel::dismissKeyDialog,
-            onKeyLabelChange = analysisViewModel::onKeyLabelChange,
-            onKeyValueChange = analysisViewModel::onKeyValueChange,
-            onModelSelected = analysisViewModel::onModelSelected,
-            onAddApiKey = analysisViewModel::addApiKey,
-            onDeleteApiKey = analysisViewModel::deleteApiKey,
-            onActivateApiKey = analysisViewModel::activateApiKey,
-            onStartEditApiKey = analysisViewModel::startEditingApiKey,
-            onEditKeyLabelChange = analysisViewModel::onEditingKeyLabelChange,
-            onCancelEditApiKey = analysisViewModel::cancelEditingApiKey,
-            onUpdateKeyLabel = analysisViewModel::updateApiKeyLabel
+            onSourcePromptChange = { analysisViewModel?.onSourcePromptChange(it) },
+            onCategorySelected = { analysisViewModel?.onCategorySelected(it) },
+            onApplyManualSelection = { analysisViewModel?.applyManualSelection() },
+            onClearTargetSegment = { analysisViewModel?.clearTargetSegment() },
+            onAnalyzeAndMask = { analysisViewModel?.analyzeAndMask() },
+            onGenerateTxt = { analysisViewModel?.generateTxt() },
+            onCancelWork = { analysisViewModel?.cancelActiveWork() },
+            onTxtCountChange = { analysisViewModel?.onTxtCountChange(it) },
+            onToggleDirection = { analysisViewModel?.toggleDirection(it) },
+            onCustomHintChange = { analysisViewModel?.onCustomHintChange(it) },
+            onResultFileNameChange = { analysisViewModel?.onResultFileNameChange(it) },
+            onCopyResults = { analysisViewModel?.copyGeneratedResults() },
+            onSaveResults = { analysisViewModel?.saveGeneratedResults() },
+            onConfirmOverwrite = { analysisViewModel?.confirmOverwrite() },
+            onDismissOverwrite = { analysisViewModel?.dismissOverwrite() },
+            onShowKeyDialog = { analysisViewModel?.showKeyDialog() },
+            onDismissKeyDialog = { analysisViewModel?.dismissKeyDialog() },
+            onKeyLabelChange = { analysisViewModel?.onKeyLabelChange(it) },
+            onKeyValueChange = { analysisViewModel?.onKeyValueChange(it) },
+            onModelSelected = { analysisViewModel?.onModelSelected(it) },
+            onAddApiKey = { analysisViewModel?.addApiKey() },
+            onDeleteApiKey = { analysisViewModel?.deleteApiKey(it) },
+            onActivateApiKey = { analysisViewModel?.activateApiKey(it) },
+            onStartEditApiKey = { analysisViewModel?.startEditingApiKey(it) },
+            onEditKeyLabelChange = { analysisViewModel?.onEditingKeyLabelChange(it) },
+            onCancelEditApiKey = { analysisViewModel?.cancelEditingApiKey() },
+            onUpdateKeyLabel = { analysisViewModel?.updateApiKeyLabel() }
         ),
         wildcardActions = wildcardViewModel?.let { viewModel ->
             WildcardAppActions(

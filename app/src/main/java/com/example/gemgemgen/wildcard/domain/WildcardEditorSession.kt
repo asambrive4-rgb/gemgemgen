@@ -38,4 +38,21 @@ data class WildcardEditorSession(
     }
 
     fun clear(): WildcardEditorSession = WildcardEditorSession()
+
+    /**
+     * Drops heavy buffers when the wildcard tab is not visible.
+     * Clean: clear body + undo (reload on re-enter). Dirty: clear undo only.
+     */
+    fun trimForInactiveTab(): WildcardEditorSession {
+        if (selectedFile == null) return this
+        return if (hasUnsavedChanges) {
+            if (undoStack.isEmpty()) this else copy(undoStack = emptyList())
+        } else {
+            if (savedText.isEmpty() && editingText.isEmpty() && undoStack.isEmpty()) {
+                this
+            } else {
+                copy(savedText = "", editingText = "", undoStack = emptyList())
+            }
+        }
+    }
 }

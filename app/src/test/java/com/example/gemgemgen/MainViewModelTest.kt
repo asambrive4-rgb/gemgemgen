@@ -547,8 +547,7 @@ class MainViewModelTest {
             AutomationRunState.Running(
                 step = "typing prompt",
                 currentIndex = 1,
-                totalCount = 2,
-                lastPrompt = "generated prompt"
+                totalCount = 2
             )
         )
         val viewModel = viewModel(
@@ -687,13 +686,10 @@ class MainViewModelTest {
             lastRunSnapshotStore = lastRunSnapshotStore,
             clipboardGateway = clipboardGateway,
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcards),
-            clock = { 1000L },
             promptGatewayProvider = PromptAutomationGatewayProvider { service },
             targetAppLauncher = TargetAppLauncher { true },
             dispatchers = dispatchers,
-            generatePrompt = { _, _, index ->
-                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
-            }
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
         )
     }
 

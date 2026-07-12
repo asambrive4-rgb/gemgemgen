@@ -30,14 +30,9 @@ class RunAutomationUseCaseTest {
                 loadedTokens = tokens
                 listOf(WildcardSet("__hair__", "hair.txt", listOf("black hair")))
             },
-            generatePrompt = { _, _, index ->
+            generateFinalPrompt = { _, _, index ->
                 generatedIndexes += index
-                GeneratedPrompt(
-                    index = index,
-                    basePrompt = "base",
-                    finalPrompt = "prompt $index",
-                    replacements = emptyMap()
-                )
+                "prompt $index"
             }
         )
 
@@ -83,9 +78,7 @@ class RunAutomationUseCaseTest {
                 loadCount += 1
                 emptyList()
             },
-            generatePrompt = { _, _, index ->
-                GeneratedPrompt(index, "plain prompt", "plain prompt", emptyMap())
-            }
+            generateFinalPrompt = { _, _, _ -> "plain prompt" }
         )
 
         automation.run(
@@ -109,9 +102,7 @@ class RunAutomationUseCaseTest {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(
             service = service,
-            generatePrompt = { _, _, index ->
-                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
-            }
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
         )
         val states = mutableListOf<AutomationRunState>()
 
@@ -136,9 +127,7 @@ class RunAutomationUseCaseTest {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(
             service = service,
-            generatePrompt = { _, _, index ->
-                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
-            }
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
         )
 
         automation.run(
@@ -176,9 +165,7 @@ class RunAutomationUseCaseTest {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(
             service = service,
-            generatePrompt = { _, _, index ->
-                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
-            }
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
         )
         val rejected = mutableListOf<AutomationRunState>()
 
@@ -216,9 +203,7 @@ class RunAutomationUseCaseTest {
         val service = FakePromptAutomationGateway(autoComplete = true)
         val automation = automation(
             service = service,
-            generatePrompt = { _, _, index ->
-                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
-            }
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
         )
         service.failOnPrompt = "prompt 1"
         val states = mutableListOf<AutomationRunState>()
@@ -247,9 +232,7 @@ class RunAutomationUseCaseTest {
                 launchedTargets += it
                 true
             },
-            generatePrompt = { _, _, index ->
-                GeneratedPrompt(index, "base", "prompt $index", emptyMap())
-            }
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
         )
 
         automation.run(
@@ -272,7 +255,7 @@ class RunAutomationUseCaseTest {
         loadWildcardSets: (Set<String>) -> List<WildcardSet> = { emptyList() },
         onGatewayRequest: (AutomationTargetApp) -> Unit = {},
         onLaunch: (AutomationTargetApp) -> Boolean = { true },
-        generatePrompt: (String, List<WildcardSet>, Int) -> GeneratedPrompt
+        generateFinalPrompt: (String, List<WildcardSet>, Int) -> String
     ): RunAutomationUseCase {
         defaultImeId = ORIGINAL_IME_ID
         return RunAutomationUseCase(
@@ -290,14 +273,13 @@ class RunAutomationUseCaseTest {
             lastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
             clipboardGateway = FakeClipboardGateway(),
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcardSets),
-            clock = { 1000L },
             promptGatewayProvider = PromptAutomationGatewayProvider { targetApp ->
                 onGatewayRequest(targetApp)
                 service
             },
             targetAppLauncher = TargetAppLauncher(onLaunch),
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
-            generatePrompt = generatePrompt
+            generateFinalPrompt = generateFinalPrompt
         )
     }
 

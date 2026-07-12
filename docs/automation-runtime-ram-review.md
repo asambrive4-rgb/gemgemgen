@@ -15,12 +15,11 @@
 
 **우선 최적화 축 (누적 RAM·안정성)**
 
-0. **P0 세션 잔여:** Handler session token · stale callback (§4.5-B)·(중기) Job 구조 — Phase1(단일 엔진·runState·서비스 끊김 finish)은 적용됨 (§4.6)  
-1. **P0 실행 중:** 트리 flatten · 스냅샷 캐시 (§4.1)  
-2. **P1 baseline:** 와일드카드 탭 한 번 연 뒤 편집 텍스트·undo Activity 상주 (§4.7)  
-3. **P2 baseline:** `AnalysisViewModel` 항상 생성·collect, 분석 결과가 자동화 중에도 유지 (§4.8)  
+**본 검토 로드맵(실용 범위) 완료.**  
+잔여 선택 과제: 자동화 Handler → suspend/Job 전면 이관(별 이니셔티브).
 
-- `lastPrompt` / `generateFinalPrompt` 는 P2 필드 정리 (§4.0·§4.2). `recycle()` 누수 해석 철회 (§4.1.1).
+- 적용: 세션 Phase1·2, 접근성 이벤트/package, 스냅샷 캐시, generateFinalPrompt/lastPrompt, 와일드카드 leave trim, 분석 lazy/trim, **tab-scoped ViewModelStore**.  
+- `recycle()` 누수 해석 철회 (§4.1.1).
 
 기능상 필수: 와일드카드 로드, 회차 문자열 생성, SET_TEXT, 재시도, 클립보드 템플릿 쓰기(의도), root 폴링 전송.
 
@@ -51,7 +50,7 @@ openNewChat → setPromptText(ACTION_SET_TEXT) → 입력 확인 → clickSendWh
 onStateChange(Running)
   → MainViewModel.handleAutomationState
        · main uiState: Running 중에는 coarse(첫 Running 유지)  ← 이미 완화됨
-       · automationBarUiState: 세부 step 전부 반영 (Running에 lastPrompt 필드도 실리지만 UI 미사용)
+       · automationBarUiState: 세부 step 전부 반영
   → FloatingAutomationBar / AutomationActionBar (실제 표시: step · currentIndex · totalCount)
 ```
 
@@ -72,6 +71,12 @@ onStateChange(Running)
 | 접근성 이벤트 수신 중단 | `eventTypes = 0` (이벤트 미사용·폴링 전송) |
 | 접근성 package 범위 | 전송 중 대상 앱만; idle·최근 앱 닫기 전 `packageNames = null` |
 | 프로세스 단일 자동화 엔진 (Phase1) | `ProcessAutomationHolder` + `runState` 공유; 서비스 끊김 → `onAccessibilityLost` finish |
+| 자동화 Handler run token (Phase2) | `AccessibilityPromptAutomation` 전송 콜백만 token 제거; closeGemini 큐와 분리 |
+| 노드 스냅샷 캐시 수명 | `AccessibilityNodeSnapshotCache` TTL 200ms·교체 시 clear; 전송 종료 시 `invalidateCache` |
+| 핫패스 `generateFinalPrompt` | 자동화는 final 문자열만; UI `lastPrompt` 필드 제거 |
+| 와일드카드 탭 leave trim | clean: 본문·undo 비움(재진입 reload); dirty: undo만 비움; 자동화 시작 시에도 trim |
+| 분석 탭 lazy + leave trim | `shouldLoadAnalysis`; candidates/cache/segment 해제, source·키 유지 |
+| 탭별 ViewModelStore | `TabViewModelStoreOwner` — 분석 leave 시 clear; 와일드카드는 clean leave 시 clear·dirty는 trim만 |
 
 ---
 
@@ -715,53 +720,36 @@ RAM 자체는 작음. “쓸데없는 동작” 정리 후보(가독성·유지�
 | 0 | 프로세스 단일 자동화 엔진 | Phase1 적용 | 배타성·runState 공유 | §3. `ProcessAutomationHolder` |
 | 0a | ViewModelStore clear 후 재실행 겹침 | 완화(단일 엔진) | 잔여: Handler token 없음 | §4.4 잔여 → Phase2 token |
 | 0b | 서비스 중단 시 finish 없음 | Phase1 적용 | `onAccessibilityLost` | §3 |
-| 0c | **`cancelCurrentRun` = Handler 전량 삭제** | 부분 | 타 작업·closeGemini 지연 손상 | **P0 잔여**. §4.5-B |
-| 1 | `lastPrompt`를 매 Running에 실음 | 아니오 (UI 미표시) | **낮음** (참조 공유; 내용 복제 아님) | **P2** |
-| 2 | 트리 전체 flatten + 32ms 재사용 캐시 | 탐색은 필요, 방식 개선 여지 | 높음(추정) | **P0** 실행 중. recycle 누수 아님 |
+| 0c | 자동화 cancel = 전역 Handler 삭제 | Phase2 완화 | run token만 제거 | §3. 서비스 destroy 시만 전량 삭제 |
+| 1 | `lastPrompt`를 매 Running에 실음 | 아니오 | 제거됨 | §3 |
+| 2 | 트리 flatten + 스냅샷 캐시 | 탐색 필요 | 완화 | §3. TTL 200ms·종료 시 clear |
 | 3 | 접근성 이벤트·package 범위 | 폴링 전송만 필수 | 완화됨 | §3. 전송 중 package 제한 + 닫기 시 해제 |
 | 4 | prepare 시 클립보드에 템플릿 기록 | 전송엔 불필요, **제품 의도(편의)** | 중(시스템) | **유지** (의도 확인됨) |
 | 5 | 템플릿 다중 필드 중복 참조 | 일부 필요 | 중 | 참조 공유로 완화 가능 |
-| 6 | 회차마다 `GeneratedPrompt` + `replacements` Map | 자동화는 **final만** 필요 | 임시 할당 (누적 아님) | **§4.2** 경량 API 타당 |
-| 6b | **와일드카드 탭 후 editor·undo Activity 상주** | 편집 UX용; 자동화엔 불필요 중복 | baseline↑ (무한 증가 아님) | **P1**. §4.7. `shouldLoad=false`만으론 clear 안 됨 |
-| 6c | **AnalysisViewModel 항상 생성·결과 상주** | 분석 UX; 자동화와 무관 | baseline↑ (누적 아님) | **P2**. §4.8. lazy/tab-scope/clear 후보 |
+| 6 | 회차마다 `GeneratedPrompt` wrapper | 분석 API용 유지 | 핫패스 완화 | `generateFinalPrompt` 적용 |
+| 6b | 와일드카드 탭 편집 상주 | 편집 UX | 완화 | leave trim + clean 시 tab-store clear |
+| 6c | 분석 VM·결과 상주 | 분석 UX | 완화 | lazy + leave trim + tab-store clear |
 | 7 | 입력 확인 full `contains` | 확인 로직 필요 | 할당 빈도 | 비교 방식 최적화 여지 |
-| 8 | CurrentRun 미사용 카운터 | 아니오 | 매우 낮음 | 정리용 |
+| 8 | CurrentRun 미사용 카운터 | 아니오 | 제거됨 | §3 |
 | 9 | 마커 1회 전송 | 제품 의도 가능 | 낮음(문자 짧음) | 시간 비용 위주 |
 | 10 | main uiState coarse Running | 이미 완화 | - | 유지 권장 |
 | 11 | 회차마다 프롬프트 **문자열** 생성 | 예 | 필요 (`finalPrompt`) | 유지. wrapper만 경량화 |
 
 ---
 
-## 7. 후속 개선 시 가이드 (구현하지 않음)
+## 7. 후속 개선 시 가이드
 
-기능 동등성을 깨지 않는 방향만 적습니다.
+**본 문서 로드맵 — 실용 범위 완료** (세션 Phase1·2, 접근성, 스냅샷, 필드 정리, 탭 leave/lazy/tab-store).
 
-**0순위 — 세션 잔여 (§4.5-B · Phase2)**
+**별 이니셔티브로 보류**
 
-1. ~~정책 A + 프로세스 단일 엔진 + runState + 서비스 끊김 finish~~ **Phase1 적용**  
-2. **Handler token per session** + stale session ID no-op (`removeCallbacksAndMessages(null)` 폐기)  
-3. (중기) suspend + **단일 Job** structured concurrency  
-
-**1순위 — 실행 중 트리 탐색·캐시 (§4.1)**
-
-4. flatten 축소 · 스냅샷 참조 수명 · stale 방지  
-
-**2순위 — 와일드카드 탭 baseline (§4.7, P1)**
-
-5. 탭 leave / 자동화 시작 전 editor·undo trim (저장·dirty 정책 분기)  
-6. (구조) tab-scoped `ViewModelStoreOwner` 로 Wildcard VM unload  
-
-**3순위 — 분석 탭 baseline (§4.8, P2)**
-
-7. Analysis VM lazy · candidates clear · inactive trim  
-
-**4순위 — 회차 할당 (§4.2) · 필드 정리 (P2)**
-
-8. `generateFinalPrompt` · `lastPrompt` UI 제거 · 미사용 CurrentRun 필드  
+1. 자동화 `AccessibilityPromptAutomation` Handler 체인 → **suspend + 단일 Job** structured concurrency  
+   - 이유: 재시도·확인 타이밍 전면 이관·실기기 회귀 큼. Phase1·2로 이중 실행·끊김 finish·cancel 범위는 이미 완화.  
+2. 입력 확인 full `contains` 완화 (기능 동등성 검증 필요)  
 
 **유지**
 
-9. prepare 클립보드 템플릿 쓰기 (의도)  
+3. prepare 클립보드 템플릿 쓰기 (의도)  
 
 레이어: domain/usecase 순수성 유지. Accessibility 탐색·Handler는 `automation/android`에 한정.
 
@@ -783,11 +771,8 @@ RAM 자체는 작음. “쓸데없는 동작” 정리 후보(가독성·유지�
 
 | 등급 | 후보 |
 |------|------|
-| **P0 세션 잔여** | Handler token / 전역 cancel 부작용 (§4.5-B). Phase1: 단일 엔진·runState·서비스 끊김 finish **적용** |
-| **P0 실행 중** | 트리 flatten · 스냅샷 잔류 · stale (§4.1) |
-| **P1 baseline** | 와일드카드 탭 상주 editor/undo + prepare 재로드 (§4.7) |
-| **P2 baseline** | AnalysisViewModel 항상 생성·candidates 등 상주 (§4.8) |
-| **P2 필드** | `generateFinalPrompt` (§4.2) · `lastPrompt` UI (§4.0) |
+| **완료(실용)** | 세션 Phase1·2, 접근성 이벤트/package, 스냅샷 캐시, 핫패스 필드, 탭 leave/lazy/**tab-scoped store** |
+| **보류(별도)** | 자동화 suspend/Job 전면 이관 |
 | **유지** | 폴링 전송·SET_TEXT, 클립보드 템플릿 쓰기(의도), 기존 `GeneratedPrompt` API |
 
-본 문서는 검토 결과 기록이며, **앱 동작 변경 코드는 포함하지 않습니다.**
+본 문서는 검토·후속 추적 기록입니다. 실용 범위 구현은 코드베이스에 반영되었습니다.

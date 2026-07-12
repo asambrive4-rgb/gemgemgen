@@ -60,7 +60,6 @@ class AndroidAppContainer(context: Context) {
                     lastRunSnapshotStore = lastRunSnapshotStore,
                     clipboardGateway = clipboardGateway,
                     wildcardSetRepository = AndroidWildcardSetRepository(appContext),
-                    clock = System::currentTimeMillis,
                     promptGatewayProvider = ActivePromptAutomationGatewayProvider,
                     targetAppLauncher = AndroidTargetAppLauncher(appContext)
                 )

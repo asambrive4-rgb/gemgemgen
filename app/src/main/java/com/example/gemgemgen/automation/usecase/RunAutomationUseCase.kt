@@ -2,7 +2,6 @@ package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
-import com.example.gemgemgen.automation.domain.GeneratedPrompt
 import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
@@ -24,12 +23,11 @@ class RunAutomationUseCase(
     lastRunSnapshotStore: LastRunSnapshotStore,
     clipboardGateway: ClipboardGateway,
     wildcardSetRepository: WildcardSetRepository,
-    private val clock: () -> Long,
     private val promptGatewayProvider: PromptAutomationGatewayProvider,
     private val targetAppLauncher: TargetAppLauncher,
     dispatchers: AppDispatchers = AppDispatchers(),
     promptGenerator: PromptGenerator = PromptGenerator(),
-    private val generatePrompt: ((String, List<WildcardSet>, Int) -> GeneratedPrompt)? = null,
+    private val generateFinalPrompt: ((String, List<WildcardSet>, Int) -> String)? = null,
     private val runPreparer: AutomationRunPreparer = AutomationRunPreparer(
         lastRunSnapshotStore = lastRunSnapshotStore,
         clipboardGateway = clipboardGateway,
@@ -74,7 +72,6 @@ class RunAutomationUseCase(
 
         startPreparedRun(
             preparedRun = preparedRun,
-            startedAtMillis = clock(),
             onStateChange = onStateChange
         )
     }
@@ -101,7 +98,6 @@ class RunAutomationUseCase(
 
     private fun startPreparedRun(
         preparedRun: PreparedAutomationRun,
-        startedAtMillis: Long,
         onStateChange: ((AutomationRunState) -> Unit)?
     ) {
         val request = preparedRun.request
@@ -135,14 +131,12 @@ class RunAutomationUseCase(
         }
 
         val run = CurrentRun(
-            startedAtMillis = startedAtMillis,
             imeSession = (imeSwitchResult as ImeSwitchResult.Success).session,
             promptGateway = promptGateway,
             promptTemplate = request.promptTemplate,
             repeatCount = preparedRun.repeatCount,
             wildcards = preparedRun.wildcards,
-            promptPlan = preparedRun.promptPlan,
-            targetApp = request.targetApp
+            promptPlan = preparedRun.promptPlan
         )
         currentRun = run
 
@@ -171,7 +165,6 @@ class RunAutomationUseCase(
             newChatMode = NewChatMode.Initial,
             onStateChange = childStateCallback(run, onStateChange),
             onDone = {
-                run.markerStatus = "성공"
                 sendNextPrompt(run, onStateChange)
             }
         )
@@ -188,19 +181,17 @@ class RunAutomationUseCase(
 
         val nextIndex = run.successCount + 1
         run.currentIndex = nextIndex
-        val generatedPrompt = generatePrompt?.invoke(run.promptTemplate, run.wildcards, nextIndex)
-            ?: run.promptPlan.generate(nextIndex)
+        val finalPrompt = generateFinalPrompt?.invoke(run.promptTemplate, run.wildcards, nextIndex)
+            ?: run.promptPlan.generateFinalPrompt(nextIndex)
 
-        run.lastPrompt = generatedPrompt.finalPrompt
         updateRunState(run, "프롬프트 생성 완료", onStateChange)
 
         run.promptGateway.sendPrompt(
-            prompt = generatedPrompt.finalPrompt,
+            prompt = finalPrompt,
             newChatMode = NewChatMode.Subsequent,
             onStateChange = childStateCallback(run, onStateChange),
             onDone = {
                 run.successCount += 1
-                run.completedCount += 1
                 sendNextPrompt(run, onStateChange)
             }
         )
@@ -213,10 +204,7 @@ class RunAutomationUseCase(
         return { state ->
             when (state) {
                 is AutomationRunState.Running -> updateRunState(run, state.step, onStateChange)
-                is AutomationRunState.Failure -> {
-                    run.failureCount += 1
-                    finishRun(run, state, onStateChange)
-                }
+                is AutomationRunState.Failure -> finishRun(run, state, onStateChange)
                 AutomationRunState.Success -> Unit
                 AutomationRunState.Stopped -> finishRun(run, state, onStateChange)
                 AutomationRunState.Idle -> emitState(state, onStateChange)
@@ -229,13 +217,11 @@ class RunAutomationUseCase(
         step: String,
         onStateChange: ((AutomationRunState) -> Unit)?
     ) {
-        run.lastStep = step
         emitState(
             AutomationRunState.Running(
                 step = step,
                 currentIndex = run.currentIndex.coerceAtMost(run.repeatCount),
-                totalCount = run.repeatCount,
-                lastPrompt = run.lastPrompt
+                totalCount = run.repeatCount
             ),
             onStateChange
         )
@@ -280,21 +266,14 @@ class RunAutomationUseCase(
     }
 
     private data class CurrentRun(
-        val startedAtMillis: Long,
         val imeSession: ImeSwitchSession,
         val promptGateway: PromptAutomationGateway,
         val promptTemplate: String,
         val repeatCount: Int,
         val wildcards: List<WildcardSet>,
         val promptPlan: PromptGenerator.CompiledPrompt,
-        val targetApp: AutomationTargetApp,
-        var markerStatus: String = "실패",
         var currentIndex: Int = 0,
-        var completedCount: Int = 0,
         var successCount: Int = 0,
-        var failureCount: Int = 0,
-        var lastStep: String = "시작",
-        var lastPrompt: String = "",
         var finished: Boolean = false
     )
 

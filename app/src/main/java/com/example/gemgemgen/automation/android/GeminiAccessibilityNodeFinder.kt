@@ -1,7 +1,6 @@
 package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect
-import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.core.AppDefaults
 
@@ -9,9 +8,11 @@ internal class GeminiAccessibilityNodeFinder(
     private val rootProvider: () -> AccessibilityNodeInfo?,
     private val inputResourceId: String
 ) {
-    private var cachedRoot: AccessibilityNodeInfo? = null
-    private var cachedNodes: List<AccessibilityNodeInfo> = emptyList()
-    private var cachedAtMillis: Long = 0L
+    private val snapshotCache = AccessibilityNodeSnapshotCache()
+
+    fun invalidateCache() {
+        snapshotCache.clear()
+    }
 
     fun findInputNode(): AccessibilityNodeInfo? {
         findNodeByViewId(inputResourceId)?.let { return it }
@@ -76,28 +77,16 @@ internal class GeminiAccessibilityNodeFinder(
     }
 
     private fun nodes(): List<AccessibilityNodeInfo> {
-        val root = rootProvider() ?: return emptyList()
-        val now = SystemClock.uptimeMillis()
-        if (root == cachedRoot && now - cachedAtMillis <= NODE_SNAPSHOT_CACHE_MS) {
-            return cachedNodes
-        }
-
-        return nodesIn(root).also {
-            cachedRoot = root
-            cachedNodes = it
-            cachedAtMillis = now
-        }
+        return snapshotCache.getOrLoad(rootProvider()) { root -> nodesIn(root) }
     }
 
     private fun nodesIn(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
-        return flattenNodes(root).filter { node -> node.isGeminiPackage() }
-    }
-
-    private fun flattenNodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
         val nodes = mutableListOf<AccessibilityNodeInfo>()
 
         fun visit(node: AccessibilityNodeInfo) {
-            nodes += node
+            if (node.isGeminiPackage()) {
+                nodes += node
+            }
             for (index in 0 until node.childCount) {
                 node.getChild(index)?.let(::visit)
             }
@@ -171,12 +160,9 @@ internal class GeminiAccessibilityNodeFinder(
         get() = width.toLong() * height.toLong()
 
     private companion object {
-        const val NODE_SNAPSHOT_CACHE_MS = 32L
-
         val GEMINI_ACCESSIBILITY_PACKAGES = setOf(
             AppDefaults.GEMINI_PACKAGE_NAME,
             AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME
         )
     }
 }
-

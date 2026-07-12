@@ -36,6 +36,26 @@ class WildcardManagerViewModel(
         }
     }
 
+    fun trimForInactiveTab() {
+        _uiState.update { state ->
+            val trimmed = state.editor.trimForInactiveTab()
+            if (trimmed == state.editor) {
+                state
+            } else {
+                state.copy(editor = trimmed, message = "", error = "")
+            }
+        }
+    }
+
+    fun onTabEntered() {
+        val state = uiState.value
+        val file = state.selectedFile ?: return
+        if (state.hasUnsavedChanges) return
+        if (state.editingText.isNotEmpty() || state.savedText.isNotEmpty()) return
+        if (state.isFileOperationInProgress) return
+        openFile(file, keepMessage = true)
+    }
+
     fun refreshFiles(openFirstFile: Boolean = false) {
         if (!beginFileOperation()) return
 

@@ -112,4 +112,23 @@ class PromptGeneratorTest {
             generated.map { it.replacements }
         )
     }
+
+    @Test
+    fun generateFinalPrompt_returnsReplacedStringWithoutWrapper() {
+        val compiledPrompt = PromptGenerator(Random(0)).compile(
+            basePrompt = "__color__ dress with __color__ ribbon",
+            wildcardSets = listOf(
+                WildcardSet(
+                    token = "__color__",
+                    fileName = "color.txt",
+                    items = listOf("red")
+                )
+            )
+        )
+
+        assertEquals(
+            "red dress with red ribbon",
+            compiledPrompt.generateFinalPrompt(index = 1)
+        )
+    }
 }

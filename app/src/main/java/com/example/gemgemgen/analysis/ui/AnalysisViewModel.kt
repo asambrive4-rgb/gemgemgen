@@ -291,6 +291,23 @@ class AnalysisViewModel(
         }
     }
 
+    fun trimForInactiveTab() {
+        runningJob?.cancel()
+        runningJob = null
+        analysisCache = null
+        _uiState.update {
+            it.copy(
+                generatedCandidates = emptyList(),
+                targetSegment = null,
+                status = AnalysisStatus.IDLE,
+                warning = "",
+                error = "",
+                message = "",
+                pendingOverwriteFileName = null
+            )
+        }
+    }
+
     fun onTxtCountChange(value: Int) {
         _uiState.update {
             it.copy(txtCount = AnalysisTxtCountPolicy.coerce(value))

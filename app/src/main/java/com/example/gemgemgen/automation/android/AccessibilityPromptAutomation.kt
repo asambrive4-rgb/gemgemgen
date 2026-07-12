@@ -13,27 +13,48 @@ internal abstract class AccessibilityPromptAutomation(
     protected val handler: Handler,
     private val targetAppName: String
 ) : PromptAutomationGateway {
+    private var activeRunToken: Any? = null
+
     override fun sendPrompt(
         prompt: String,
         newChatMode: NewChatMode,
         onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
-        handler.post {
+        clearActiveRunToken()
+        val token = Any()
+        activeRunToken = token
+
+        val guardedState: (AutomationRunState) -> Unit = guardedState@{ state ->
+            if (!isActiveRun(token)) return@guardedState
+            if (state is AutomationRunState.Failure || state is AutomationRunState.Stopped) {
+                clearRunToken(token)
+            }
+            onStateChange(state)
+        }
+        val guardedDone: () -> Unit = guardedDone@{
+            if (!isActiveRun(token)) return@guardedDone
+            clearRunToken(token)
+            onDone()
+        }
+
+        postOnRun(token) {
             openNewChat(
                 newChatMode = newChatMode,
-                onStateChange = onStateChange,
+                onStateChange = guardedState,
                 onDone = {
                     setPromptText(
                         prompt = prompt,
                         attempt = 1,
-                        onStateChange = onStateChange,
+                        runToken = token,
+                        onStateChange = guardedState,
                         onDone = {
                             clickSendWhenReady(
                                 prompt = prompt,
                                 attempt = 1,
-                                onStateChange = onStateChange,
-                                onDone = onDone
+                                runToken = token,
+                                onStateChange = guardedState,
+                                onDone = guardedDone
                             )
                         }
                     )
@@ -43,8 +64,11 @@ internal abstract class AccessibilityPromptAutomation(
     }
 
     override fun cancelCurrentRun() {
-        handler.removeCallbacksAndMessages(null)
+        clearActiveRunToken()
+        onRunFinished()
     }
+
+    protected open fun onRunFinished() = Unit
 
     protected abstract fun openNewChat(
         newChatMode: NewChatMode,
@@ -66,13 +90,16 @@ internal abstract class AccessibilityPromptAutomation(
         onStateChange: (AutomationRunState) -> Unit,
         retry: () -> Unit
     ) {
+        val token = activeRunToken
+        if (token == null) return
+
         val elapsedMillis = SystemClock.uptimeMillis() - startedAtMillis
         val retryWaitMillis = AutomationRetryWaitPolicy.nextDelayMillis(elapsedMillis)
 
         if (retryWaitMillis == null) {
             onStateChange(AutomationRunState.Failure(failureMessage))
         } else {
-            handler.postDelayed(retry, retryWaitMillis)
+            postDelayedOnRun(token, retryWaitMillis, retry)
         }
     }
 
@@ -84,10 +111,13 @@ internal abstract class AccessibilityPromptAutomation(
     private fun setPromptText(
         prompt: String,
         attempt: Int,
+        runToken: Any,
         startedAtMillis: Long = SystemClock.uptimeMillis(),
         onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
+        if (!isActiveRun(runToken)) return
+
         onStateChange(AutomationRunState.Running("입력창 찾는 중 (#$attempt)"))
 
         val inputNode = findInputNode()
@@ -101,24 +131,22 @@ internal abstract class AccessibilityPromptAutomation(
             }
             if (inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
                 onStateChange(AutomationRunState.Running("프롬프트 입력 반영 확인 중"))
-                handler.postDelayed(
-                    {
-                        if (isPromptTextApplied(prompt)) {
-                            onStateChange(AutomationRunState.Running("프롬프트 입력 완료"))
-                            onDone()
-                        } else {
-                            handlePromptInputFailure(
-                                prompt = prompt,
-                                attempt = attempt,
-                                startedAtMillis = startedAtMillis,
-                                failureMessage = "$targetAppName 프롬프트 입력 반영 실패",
-                                onStateChange = onStateChange,
-                                onDone = onDone
-                            )
-                        }
-                    },
-                    INPUT_CONFIRM_WAIT_MS
-                )
+                postDelayedOnRun(runToken, INPUT_CONFIRM_WAIT_MS) {
+                    if (isPromptTextApplied(prompt)) {
+                        onStateChange(AutomationRunState.Running("프롬프트 입력 완료"))
+                        onDone()
+                    } else {
+                        handlePromptInputFailure(
+                            prompt = prompt,
+                            attempt = attempt,
+                            runToken = runToken,
+                            startedAtMillis = startedAtMillis,
+                            failureMessage = "$targetAppName 프롬프트 입력 반영 실패",
+                            onStateChange = onStateChange,
+                            onDone = onDone
+                        )
+                    }
+                }
                 return
             }
         }
@@ -126,6 +154,7 @@ internal abstract class AccessibilityPromptAutomation(
         handlePromptInputFailure(
             prompt = prompt,
             attempt = attempt,
+            runToken = runToken,
             startedAtMillis = startedAtMillis,
             failureMessage = "$targetAppName 입력창 못 찾음",
             onStateChange = onStateChange,
@@ -136,11 +165,14 @@ internal abstract class AccessibilityPromptAutomation(
     private fun handlePromptInputFailure(
         prompt: String,
         attempt: Int,
+        runToken: Any,
         startedAtMillis: Long,
         failureMessage: String,
         onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
+        if (!isActiveRun(runToken)) return
+
         recoverFromInputFailure(onStateChange)
 
         retryOrFail(
@@ -151,6 +183,7 @@ internal abstract class AccessibilityPromptAutomation(
             setPromptText(
                 prompt = prompt,
                 attempt = attempt + 1,
+                runToken = runToken,
                 startedAtMillis = startedAtMillis,
                 onStateChange = onStateChange,
                 onDone = onDone
@@ -161,10 +194,13 @@ internal abstract class AccessibilityPromptAutomation(
     private fun clickSendWhenReady(
         prompt: String,
         attempt: Int,
+        runToken: Any,
         startedAtMillis: Long = SystemClock.uptimeMillis(),
         onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
+        if (!isActiveRun(runToken)) return
+
         onStateChange(AutomationRunState.Running("보내기 버튼 활성화 대기 중 (#$attempt)"))
 
         val node = findSendNode()
@@ -173,31 +209,29 @@ internal abstract class AccessibilityPromptAutomation(
             clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         ) {
             onStateChange(AutomationRunState.Running("보내기 클릭 후 전송 확인 중"))
-            handler.postDelayed(
-                {
-                    when (checkPromptInputAfterSend(prompt)) {
-                        PromptInputAfterSend.Empty -> onDone()
-                        PromptInputAfterSend.StillPresent,
-                        PromptInputAfterSend.Unknown -> {
-                            retryOrFail(
+            postDelayedOnRun(runToken, SEND_CONFIRM_WAIT_MS) {
+                when (checkPromptInputAfterSend(prompt)) {
+                    PromptInputAfterSend.Empty -> onDone()
+                    PromptInputAfterSend.StillPresent,
+                    PromptInputAfterSend.Unknown -> {
+                        retryOrFail(
+                            startedAtMillis = startedAtMillis,
+                            failureMessage =
+                                "$targetAppName 보내기 클릭 후 전송 완료를 확인하지 못함",
+                            onStateChange = onStateChange
+                        ) {
+                            clickSendWhenReady(
+                                prompt = prompt,
+                                attempt = attempt + 1,
+                                runToken = runToken,
                                 startedAtMillis = startedAtMillis,
-                                failureMessage =
-                                    "$targetAppName 보내기 클릭 후 전송 완료를 확인하지 못함",
-                                onStateChange = onStateChange
-                            ) {
-                                clickSendWhenReady(
-                                    prompt = prompt,
-                                    attempt = attempt + 1,
-                                    startedAtMillis = startedAtMillis,
-                                    onStateChange = onStateChange,
-                                    onDone = onDone
-                                )
-                            }
+                                onStateChange = onStateChange,
+                                onDone = onDone
+                            )
                         }
                     }
-                },
-                SEND_CONFIRM_WAIT_MS
-            )
+                }
+            }
             return
         }
 
@@ -213,6 +247,7 @@ internal abstract class AccessibilityPromptAutomation(
             clickSendWhenReady(
                 prompt = prompt,
                 attempt = attempt + 1,
+                runToken = runToken,
                 startedAtMillis = startedAtMillis,
                 onStateChange = onStateChange,
                 onDone = onDone
@@ -247,6 +282,36 @@ internal abstract class AccessibilityPromptAutomation(
         }
 
         return null
+    }
+
+    private fun isActiveRun(token: Any): Boolean = activeRunToken === token
+
+    private fun postOnRun(token: Any, block: () -> Unit) {
+        postDelayedOnRun(token, 0L, block)
+    }
+
+    private fun postDelayedOnRun(token: Any, delayMillis: Long, block: () -> Unit) {
+        handler.postDelayed(
+            {
+                if (!isActiveRun(token)) return@postDelayed
+                block()
+            },
+            token,
+            delayMillis
+        )
+    }
+
+    private fun clearRunToken(token: Any) {
+        if (activeRunToken !== token) return
+        activeRunToken = null
+        handler.removeCallbacksAndMessages(token)
+        onRunFinished()
+    }
+
+    private fun clearActiveRunToken() {
+        val token = activeRunToken ?: return
+        activeRunToken = null
+        handler.removeCallbacksAndMessages(token)
     }
 
     private enum class PromptInputAfterSend {

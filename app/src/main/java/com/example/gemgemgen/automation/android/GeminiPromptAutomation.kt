@@ -18,6 +18,10 @@ internal class GeminiPromptAutomation(
         inputResourceId = INPUT_RESOURCE_ID
     )
 
+    override fun onRunFinished() {
+        nodeFinder.invalidateCache()
+    }
+
     override fun openNewChat(
         newChatMode: NewChatMode,
         onStateChange: (AutomationRunState) -> Unit,
