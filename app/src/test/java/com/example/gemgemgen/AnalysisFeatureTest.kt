@@ -38,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -405,7 +406,7 @@ class AnalysisFeatureTest {
     }
 
     @Test
-    fun viewModel_trimForInactiveTab_clearsCandidatesAndKeepsSource() {
+    fun viewModel_trimForInactiveTab_keepsResultsAndSource() {
         val aiGateway = FakeAnalysisAiGateway(
             analyzeResponse = analysisJson(exactText = "blue dress"),
             generateResponse = """[{"text":"후보","explanation":"설명"}]"""
@@ -419,12 +420,16 @@ class AnalysisFeatureTest {
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
         viewModel.generateTxt()
         assertEquals(listOf("후보"), viewModel.uiState.value.generatedCandidates)
+        val segmentBefore = viewModel.uiState.value.targetSegment
+        assertNotNull(segmentBefore)
 
         viewModel.trimForInactiveTab()
 
-        assertEquals(emptyList<String>(), viewModel.uiState.value.generatedCandidates)
-        assertEquals(null, viewModel.uiState.value.targetSegment)
-        assertEquals(AnalysisStatus.IDLE, viewModel.uiState.value.status)
+        assertEquals(listOf("후보"), viewModel.uiState.value.generatedCandidates)
+        assertEquals(segmentBefore, viewModel.uiState.value.targetSegment)
+        assertEquals(AnalysisCategory.WOMEN_CLOTHING, viewModel.uiState.value.selectedCategory)
+        // 완료 상태(SUCCESS)는 유지. 진행 중일 때만 IDLE로 돌린다.
+        assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
         assertEquals(prompt, viewModel.sourcePromptTextFieldState.text.toString())
         assertEquals(prompt, viewModel.uiState.value.sourcePrompt)
     }

@@ -115,9 +115,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             mainViewModel.cancelParagraphSelection()
         }
         if (selectedTab == MainTab.ANALYSIS && tab != MainTab.ANALYSIS) {
+            // 결과·설정·타겟 구간은 유지. 진행 중 AI 작업만 취소.
             analysisViewModel?.trimForInactiveTab()
-            shouldLoadAnalysis = false
-            analysisStoreOwner.clear()
         }
         if (selectedTab == MainTab.WILDCARD && tab != MainTab.WILDCARD) {
             val dirty = wildcardViewModel?.uiState?.value?.hasUnsavedChanges == true

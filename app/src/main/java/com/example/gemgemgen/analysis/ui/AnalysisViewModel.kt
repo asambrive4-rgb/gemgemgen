@@ -457,18 +457,28 @@ class AnalysisViewModel(
         }
     }
 
+    /**
+     * 다른 탭으로 떠나거나 자동화를 시작할 때 호출.
+     * 생성 결과·원문·설정·타겟 구간·분석 캐시는 유지하고,
+     * 진행 중 AI 작업만 취소한다. (앱 종료 후 복원은 하지 않음)
+     */
     fun trimForInactiveTab() {
+        val hadRunningJob = runningJob != null
         runningJob?.cancel()
         runningJob = null
-        analysisCache = null
-        _uiState.update {
-            it.copy(
-                generatedCandidates = emptyList(),
-                targetSegment = null,
-                status = AnalysisStatus.IDLE,
-                warning = "",
-                error = "",
-                message = "",
+        _uiState.update { state ->
+            val wasBusy = state.status == AnalysisStatus.ANALYZING ||
+                state.status == AnalysisStatus.GENERATING
+            if (!hadRunningJob && !wasBusy && state.pendingOverwriteFileName == null) {
+                return@update state
+            }
+            state.copy(
+                status = if (wasBusy) AnalysisStatus.IDLE else state.status,
+                message = if (hadRunningJob || wasBusy) {
+                    "작업을 중지했습니다."
+                } else {
+                    state.message
+                },
                 pendingOverwriteFileName = null
             )
         }
