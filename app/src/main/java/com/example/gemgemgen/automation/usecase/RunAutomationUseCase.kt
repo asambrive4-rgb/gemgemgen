@@ -3,6 +3,7 @@ package com.example.gemgemgen.automation.usecase
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptGenerator
+import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.WildcardSet
@@ -38,6 +39,8 @@ class RunAutomationUseCase(
 ) {
     private var currentRun: CurrentRun? = null
     private var isPreparingRun = false
+    /** 준비 중이거나 실행 중일 때 목표 회차. 종료 시 null. */
+    private var sessionRepeatCount: Int? = null
     private val _runState = MutableStateFlow<AutomationRunState>(AutomationRunState.Idle)
     val runState: StateFlow<AutomationRunState> = _runState.asStateFlow()
 
@@ -52,9 +55,11 @@ class RunAutomationUseCase(
         }
 
         isPreparingRun = true
+        sessionRepeatCount = RepeatCountParser.parse(request.repeatCountText)
         val preparedRun = try {
             runPreparer.prepare(request)
         } catch (error: CancellationException) {
+            clearSessionRepeatCount()
             throw error
         } catch (error: Exception) {
             finishWithoutRun(
@@ -74,6 +79,37 @@ class RunAutomationUseCase(
             preparedRun = preparedRun,
             onStateChange = onStateChange
         )
+    }
+
+    /**
+     * 실행(또는 준비) 중 목표 생성 개수를 바꾼다.
+     * 이미 성공한 회차 미만으로는 줄이지 않으며, 적용된 개수를 반환한다.
+     * 세션이 없으면 null.
+     */
+    fun updateRepeatCount(requestedCount: Int): Int? {
+        val run = currentRun
+        if (run != null) {
+            val applied = requestedCount.coerceIn(
+                minimumValue = maxOf(1, run.successCount),
+                maximumValue = 999
+            )
+            if (run.repeatCount != applied) {
+                run.repeatCount = applied
+                sessionRepeatCount = applied
+                val step = (_runState.value as? AutomationRunState.Running)?.step
+                    ?.ifBlank { null }
+                    ?: "실행 중"
+                updateRunState(run, step, onStateChange = null)
+            } else {
+                sessionRepeatCount = applied
+            }
+            return applied
+        }
+
+        if (sessionRepeatCount == null) return null
+        val applied = requestedCount.coerceIn(1, 999)
+        sessionRepeatCount = applied
+        return applied
     }
 
     fun cancel(onStateChange: ((AutomationRunState) -> Unit)? = null) {
@@ -134,7 +170,7 @@ class RunAutomationUseCase(
             imeSession = (imeSwitchResult as ImeSwitchResult.Success).session,
             promptGateway = promptGateway,
             promptTemplate = request.promptTemplate,
-            repeatCount = preparedRun.repeatCount,
+            repeatCount = sessionRepeatCount ?: preparedRun.repeatCount,
             wildcards = preparedRun.wildcards,
             promptPlan = preparedRun.promptPlan
         )
@@ -247,6 +283,7 @@ class RunAutomationUseCase(
         }
 
         currentRun = null
+        clearSessionRepeatCount()
         emitState(finalState, onStateChange)
     }
 
@@ -254,7 +291,12 @@ class RunAutomationUseCase(
         state: AutomationRunState,
         onStateChange: ((AutomationRunState) -> Unit)?
     ) {
+        clearSessionRepeatCount()
         emitState(state, onStateChange)
+    }
+
+    private fun clearSessionRepeatCount() {
+        sessionRepeatCount = null
     }
 
     private fun emitState(
@@ -269,7 +311,7 @@ class RunAutomationUseCase(
         val imeSession: ImeSwitchSession,
         val promptGateway: PromptAutomationGateway,
         val promptTemplate: String,
-        val repeatCount: Int,
+        var repeatCount: Int,
         val wildcards: List<WildcardSet>,
         val promptPlan: PromptGenerator.CompiledPrompt,
         var currentIndex: Int = 0,

@@ -122,6 +122,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 floatingBarController?.showOrUpdate(
                     uiStateFlow = mainViewModel.automationBarUiState,
                     onCancelAutomation = mainViewModel::cancelAutomation,
+                    onRepeatCountChange = mainViewModel::onRepeatCountChange,
                     onAutomationFinished = {
                         floatingBarController?.hide()
                         bringMainActivityToFront()

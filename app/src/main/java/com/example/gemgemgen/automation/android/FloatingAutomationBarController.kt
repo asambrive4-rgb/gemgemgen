@@ -41,6 +41,7 @@ internal class FloatingAutomationBarController(
     fun showOrUpdate(
         uiStateFlow: StateFlow<AutomationBarUiState>,
         onCancelAutomation: () -> Unit,
+        onRepeatCountChange: (String) -> Unit,
         onAutomationFinished: () -> Unit
     ) {
         if (overlayView != null) return
@@ -62,6 +63,7 @@ internal class FloatingAutomationBarController(
             FloatingAutomationBarOverlay(
                 uiStateFlow = uiStateFlow,
                 onCancelAutomation = onCancelAutomation,
+                onRepeatCountChange = onRepeatCountChange,
                 onAutomationFinished = onAutomationFinished,
                 onDrag = ::moveBy,
                 onDragEnd = ::savePosition

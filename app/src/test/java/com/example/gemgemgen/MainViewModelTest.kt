@@ -479,6 +479,38 @@ class MainViewModelTest {
     }
 
     @Test
+    fun onRepeatCountChange_whileRunning_updatesEngineBadgeAndLastRunDefault() {
+        val snapshotStorage = FakeLastRunSnapshotStorage()
+        val holdingService = HoldingPromptAutomationGateway(
+            progressState = AutomationRunState.Running("전송 중", currentIndex = 1, totalCount = 5)
+        )
+        val snapshotStore = LastRunSnapshotStore(snapshotStorage)
+        val viewModel = viewModel(
+            lastRunSnapshotStore = snapshotStore,
+            automationRunner = automation(
+                lastRunSnapshotStore = snapshotStore,
+                service = holdingService
+            )
+        )
+
+        viewModel.onPromptTemplateChange("live prompt")
+        viewModel.onRepeatCountChange("5")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+        waitUntil { viewModel.uiState.value.isRunning }
+        waitUntil { holdingService.sentPrompts.isNotEmpty() }
+
+        viewModel.onRepeatCountChange("7")
+
+        assertEquals("7", viewModel.uiState.value.repeatCountText)
+        assertEquals("7", viewModel.automationBarUiState.value.repeatCountText)
+        val barState = viewModel.automationBarUiState.value.automationState
+        assertTrue(barState is AutomationRunState.Running)
+        assertEquals(7, (barState as AutomationRunState.Running).totalCount)
+        assertEquals("7", snapshotStorage.repeatCountText)
+        assertEquals("live prompt", snapshotStorage.promptTemplate)
+    }
+
+    @Test
     fun runAutomation_copiesPromptTemplateToClipboardWhenRunStarts() {
         val clipboardGateway = FakeClipboardGateway()
         val viewModel = viewModel(

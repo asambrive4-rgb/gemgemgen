@@ -19,6 +19,7 @@ import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.GeminiAppCloser
+import com.example.gemgemgen.automation.usecase.LastRunSnapshot
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
@@ -180,8 +181,39 @@ class MainViewModel(
 
     fun onRepeatCountChange(value: String) {
         val normalized = RepeatCountParser.normalizeInput(value)
-        _uiState.update { it.copy(repeatCountText = normalized) }
-        _automationBarUiState.update { it.copy(repeatCountText = normalized) }
+        if (_uiState.value.isRunning) {
+            if (normalized.isEmpty()) {
+                publishRepeatCountText(normalized)
+                return
+            }
+            val requested = RepeatCountParser.parse(normalized)
+            val applied = automation.updateRepeatCount(requested) ?: requested
+            val appliedText = applied.toString()
+            publishRepeatCountText(appliedText)
+            persistRepeatCountAsLastRunDefault(appliedText)
+            return
+        }
+        publishRepeatCountText(normalized)
+    }
+
+    private fun publishRepeatCountText(text: String) {
+        _uiState.update { it.copy(repeatCountText = text) }
+        _automationBarUiState.update { it.copy(repeatCountText = text) }
+    }
+
+    private fun persistRepeatCountAsLastRunDefault(repeatCountText: String) {
+        val state = _uiState.value
+        scope.launch {
+            withContext(dispatchers.io) {
+                lastRunSnapshotStore.save(
+                    LastRunSnapshot(
+                        promptTemplate = state.promptTemplate,
+                        repeatCountText = repeatCountText,
+                        targetApp = state.selectedTargetApp
+                    )
+                )
+            }
+        }
     }
 
     fun importPromptFromClipboard() {

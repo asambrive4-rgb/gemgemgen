@@ -23,6 +23,7 @@ import kotlin.math.min
 internal fun FloatingAutomationBarOverlay(
     uiStateFlow: StateFlow<AutomationBarUiState>,
     onCancelAutomation: () -> Unit,
+    onRepeatCountChange: (String) -> Unit,
     onAutomationFinished: () -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit
@@ -39,6 +40,7 @@ internal fun FloatingAutomationBarOverlay(
         FloatingAutomationBar(
             uiState = uiState,
             onCancelAutomation = onCancelAutomation,
+            onRepeatCountChange = onRepeatCountChange,
             onDrag = onDrag,
             onDragEnd = onDragEnd
         )
@@ -49,6 +51,7 @@ internal fun FloatingAutomationBarOverlay(
 private fun FloatingAutomationBar(
     uiState: AutomationBarUiState,
     onCancelAutomation: () -> Unit,
+    onRepeatCountChange: (String) -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit
 ) {
@@ -77,7 +80,7 @@ private fun FloatingAutomationBar(
         ) {
             AutomationActionBar(
                 repeatCountText = uiState.repeatCountText,
-                onRepeatCountChange = {},
+                onRepeatCountChange = onRepeatCountChange,
                 onRunMvp = {},
                 onCancelAutomation = onCancelAutomation,
                 canRun = false,

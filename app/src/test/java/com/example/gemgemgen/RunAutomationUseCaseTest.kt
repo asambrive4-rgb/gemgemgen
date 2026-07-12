@@ -248,6 +248,97 @@ class RunAutomationUseCaseTest {
         assertEquals(listOf(AutomationTargetApp.CHATGPT), launchedTargets)
     }
 
+    @Test
+    fun updateRepeatCount_midRun_increasesTargetAndContinuesSending() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = false)
+        val automation = automation(
+            service = service,
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
+        )
+
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "2",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+        // marker is pending; complete marker then first prompt
+        service.completeLatest()
+        service.completeLatest()
+
+        val applied = automation.updateRepeatCount(4)
+        assertEquals(4, applied)
+        val running = automation.runState.value as AutomationRunState.Running
+        assertEquals(4, running.totalCount)
+
+        service.completeLatest() // prompt 2
+        service.completeLatest() // prompt 3
+        service.completeLatest() // prompt 4
+
+        assertEquals(
+            listOf(
+                RunAutomationUseCase.MARKER_PROMPT,
+                "prompt 1",
+                "prompt 2",
+                "prompt 3",
+                "prompt 4"
+            ),
+            service.sentPrompts
+        )
+        assertEquals(AutomationRunState.Success, automation.runState.value)
+    }
+
+    @Test
+    fun updateRepeatCount_doesNotGoBelowAlreadySuccessfulCount() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = false)
+        val automation = automation(
+            service = service,
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
+        )
+
+        automation.run(
+            AutomationRunRequest(
+                promptTemplate = "base",
+                repeatCountText = "5",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+        service.completeLatest() // marker
+        service.completeLatest() // prompt 1
+        service.completeLatest() // prompt 2 → successCount = 2, prompt 3 pending
+
+        val applied = automation.updateRepeatCount(1)
+        assertEquals(2, applied)
+        val running = automation.runState.value as AutomationRunState.Running
+        assertEquals(2, running.totalCount)
+
+        service.completeLatest() // finish in-flight prompt 3, then stop at successCount >= 2
+        // After prompt 3 completes, successCount becomes 3 which is already >= 2, so ends.
+        // Wait: after prompt 2 complete, successCount=2, current is prompt 3 in flight.
+        // update to 2. When prompt 3 completes, successCount=3 >= 2, Success.
+        assertEquals(AutomationRunState.Success, automation.runState.value)
+        assertEquals(
+            listOf(
+                RunAutomationUseCase.MARKER_PROMPT,
+                "prompt 1",
+                "prompt 2",
+                "prompt 3"
+            ),
+            service.sentPrompts
+        )
+    }
+
+    @Test
+    fun updateRepeatCount_whenIdle_returnsNull() {
+        val automation = automation(
+            service = FakePromptAutomationGateway(autoComplete = true),
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
+        )
+
+        assertEquals(null, automation.updateRepeatCount(9))
+    }
+
     private var defaultImeId = ORIGINAL_IME_ID
 
     private fun automation(
@@ -290,6 +381,7 @@ class RunAutomationUseCaseTest {
         val newChatModes = mutableListOf<NewChatMode>()
         var failOnPrompt: String? = null
         var wasCancelled = false
+        private val pendingDone = ArrayDeque<() -> Unit>()
 
         override fun sendPrompt(
             prompt: String,
@@ -307,11 +399,20 @@ class RunAutomationUseCaseTest {
             }
             if (autoComplete) {
                 onDone()
+            } else {
+                pendingDone.addLast(onDone)
             }
+        }
+
+        fun completeLatest() {
+            val done = pendingDone.removeFirstOrNull()
+                ?: error("No pending prompt to complete. sent=${sentPrompts.size}")
+            done()
         }
 
         override fun cancelCurrentRun() {
             wasCancelled = true
+            pendingDone.clear()
         }
     }
 
