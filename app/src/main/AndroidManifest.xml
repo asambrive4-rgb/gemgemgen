@@ -11,6 +11,12 @@
     <queries>
         <package android:name="com.google.android.apps.bard" />
         <package android:name="com.openai.chatgpt" />
+        <package android:name="org.mozilla.firefox" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
     </queries>
 
     <application

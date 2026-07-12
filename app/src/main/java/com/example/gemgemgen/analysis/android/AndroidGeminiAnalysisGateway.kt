@@ -56,43 +56,54 @@ class AndroidGeminiAnalysisGateway : AnalysisAiGateway {
         userPrompt: String,
         responseSchema: JsonObject
     ): String {
-        val encodedKey = URLEncoder.encode(apiKey, Charsets.UTF_8.name())
-        val url = URL(
-            "https://generativelanguage.googleapis.com/v1beta/models/$modelId:generateContent?key=$encodedKey"
-        )
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = CONNECT_TIMEOUT_MILLIS
-            readTimeout = READ_TIMEOUT_MILLIS
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        }
+        return try {
+            val encodedKey = URLEncoder.encode(apiKey, Charsets.UTF_8.name())
+            val url = URL(
+                "https://generativelanguage.googleapis.com/v1beta/models/$modelId:generateContent?key=$encodedKey"
+            )
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = CONNECT_TIMEOUT_MILLIS
+                readTimeout = READ_TIMEOUT_MILLIS
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            }
 
-        val body = buildRequestBody(
-            systemInstruction = systemInstruction,
-            userPrompt = userPrompt,
-            responseSchema = responseSchema
-        )
-        OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-            writer.write(body.toString())
-        }
+            val body = buildRequestBody(
+                systemInstruction = systemInstruction,
+                userPrompt = userPrompt,
+                responseSchema = responseSchema
+            )
+            try {
+                OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                    writer.write(body.toString())
+                }
 
-        val responseCode = connection.responseCode
-        val responseText = if (responseCode in 200..299) {
-            connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-        } else {
-            connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                .orEmpty()
-        }
-        connection.disconnect()
+                val responseCode = connection.responseCode
+                val responseText = if (responseCode in 200..299) {
+                    connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                } else {
+                    connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                        .orEmpty()
+                }
 
-        if (responseCode !in 200..299) {
-            throw AnalysisException(errorMessage(responseText).ifBlank {
-                "Gemini 요청에 실패했습니다. 응답 코드: $responseCode"
-            })
-        }
+                if (responseCode !in 200..299) {
+                    throw AnalysisException(errorMessage(responseText).ifBlank {
+                        "Gemini 요청에 실패했습니다. 응답 코드: $responseCode"
+                    })
+                }
 
-        return extractCandidateText(responseText)
+                extractCandidateText(responseText)
+            } finally {
+                connection.disconnect()
+            }
+        } catch (error: AnalysisException) {
+            throw error
+        } catch (error: Exception) {
+            throw AnalysisException(
+                "Gemini 네트워크 요청에 실패했습니다: ${error.message ?: error.javaClass.simpleName}"
+            )
+        }
     }
 
     private fun buildRequestBody(

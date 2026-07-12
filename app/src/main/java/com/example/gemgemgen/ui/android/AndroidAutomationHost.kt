@@ -17,17 +17,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.ui.MainViewModel
+import com.example.gemgemgen.core.android.AndroidExternalBrowserLauncher
 import com.example.gemgemgen.ui.AnalysisAppActions
 import com.example.gemgemgen.ui.AutomationApp
 import com.example.gemgemgen.ui.AutomationAppActions
@@ -42,6 +46,11 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val activity = context as? ComponentActivity
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val windowInfo = LocalWindowInfo.current
+    val browserLauncher = remember(context) { AndroidExternalBrowserLauncher(context) }
+    val clearInputFocus = remember(focusManager) {
+        { focusManager.clearFocus(force = true) }
+    }
     val mainViewModel: MainViewModel = viewModel(factory = container.mainViewModelFactory)
     val mainUiState by mainViewModel.uiState.collectAsState()
     val automationBarUiState by mainViewModel.automationBarUiState.collectAsState()
@@ -151,11 +160,23 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 mainViewModel.refreshStatus()
-                focusManager.clearFocus()
+                // 멀티윈도우에서는 RESUME만으로 포커스가 안 풀릴 수 있어 force clear.
+                clearInputFocus()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // 스플릿/멀티윈도우: 다른 창을 탭해 우리 창이 포커스를 잃으면 커서·키보드 즉시 해제.
+    LaunchedEffect(windowInfo) {
+        snapshotFlow { windowInfo.isWindowFocused }
+            .distinctUntilChanged()
+            .collect { focused ->
+                if (!focused) {
+                    clearInputFocus()
+                }
+            }
     }
 
     DisposableEffect(floatingBarController) {
@@ -211,7 +232,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 selectedTab = tab
             },
             onShowSettings = mainViewModel::showSettings,
-            onClearFocus = { focusManager.clearFocus() },
+            onClearFocus = clearInputFocus,
             onHideSettings = mainViewModel::hideSettings,
             onConfirmAccessibilityPrompt = {
                 mainViewModel.confirmAccessibilityPrompt()
@@ -243,7 +264,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onCancelAutomation = mainViewModel::cancelAutomation
         ),
         analysisActions = AnalysisAppActions(
-            onClearFocus = { focusManager.clearFocus() },
+            onClearFocus = clearInputFocus,
             onSourcePromptChange = { analysisViewModel?.onSourcePromptChange(it) },
             onCategorySelected = { analysisViewModel?.onCategorySelected(it) },
             onApplyManualSelection = { analysisViewModel?.applyManualSelection() },
@@ -263,7 +284,25 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onDismissKeyDialog = { analysisViewModel?.dismissKeyDialog() },
             onKeyLabelChange = { analysisViewModel?.onKeyLabelChange(it) },
             onKeyValueChange = { analysisViewModel?.onKeyValueChange(it) },
-            onModelSelected = { analysisViewModel?.onModelSelected(it) },
+            onRoleProviderSelected = { role, provider ->
+                analysisViewModel?.onRoleProviderSelected(role, provider)
+            },
+            onRoleModelSelected = { role, modelId ->
+                analysisViewModel?.onRoleModelSelected(role, modelId)
+            },
+            onStartGrokLogin = { analysisViewModel?.startGrokLogin() },
+            onCancelGrokLogin = { analysisViewModel?.cancelGrokLogin() },
+            onLogoutGrok = { analysisViewModel?.logoutGrok() },
+            onOpenGrokLoginUrl = { url ->
+                val opened = browserLauncher.openUrlPreferFirefox(url)
+                if (!opened) {
+                    Toast.makeText(
+                        context,
+                        "브라우저를 열 수 없습니다. Firefox 설치 여부를 확인해 주세요.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
             onAddApiKey = { analysisViewModel?.addApiKey() },
             onDeleteApiKey = { analysisViewModel?.deleteApiKey(it) },
             onActivateApiKey = { analysisViewModel?.activateApiKey(it) },

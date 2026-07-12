@@ -13,6 +13,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
+import com.example.gemgemgen.analysis.usecase.AnalysisCredentialResolver
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.AnalysisWildcardSaveResult
 import com.example.gemgemgen.analysis.usecase.AnalyzePromptForCategoryUseCase
@@ -20,7 +21,12 @@ import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
+import com.example.gemgemgen.analysis.usecase.GrokAuthGateway
+import com.example.gemgemgen.analysis.usecase.GrokAuthRepository
+import com.example.gemgemgen.analysis.usecase.GrokAuthSession
+import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.core.AppDispatchers
@@ -77,9 +83,18 @@ class AnalysisFeatureTest {
         val aiGateway = FakeAnalysisAiGateway(
             generateResponse = """[{"text":"후보 하나","explanation":"설명"}]"""
         )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
         val result = GenerateAnalysisTxtUseCase(
             aiGateway = aiGateway,
-            apiKeyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            credentialResolver = AnalysisCredentialResolver(
+                apiKeyRepository = keyRepository,
+                grokAuth = ManageGrokAuthUseCase(
+                    gateway = FakeGrokAuthGateway(),
+                    repository = FakeGrokAuthRepository(),
+                    dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+                ),
+                dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+            ),
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         ).generate(
             sourcePrompt = "portrait with long hair",
@@ -169,7 +184,15 @@ class AnalysisFeatureTest {
         val resolve = ResolveAnalysisTargetUseCase(
             AnalyzePromptForCategoryUseCase(
                 aiGateway = aiGateway,
-                apiKeyRepository = keyRepository,
+                credentialResolver = AnalysisCredentialResolver(
+                    apiKeyRepository = keyRepository,
+                    grokAuth = ManageGrokAuthUseCase(
+                        gateway = FakeGrokAuthGateway(),
+                        repository = FakeGrokAuthRepository(),
+                        dispatchers = dispatchers
+                    ),
+                    dispatchers = dispatchers
+                ),
                 dispatchers = dispatchers
             )
         )
@@ -314,9 +337,19 @@ class AnalysisFeatureTest {
         keyRepository: GeminiApiKeyRepository
     ): AnalysisViewModel {
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        val grokAuth = ManageGrokAuthUseCase(
+            gateway = FakeGrokAuthGateway(),
+            repository = FakeGrokAuthRepository(),
+            dispatchers = dispatchers
+        )
+        val credentialResolver = AnalysisCredentialResolver(
+            apiKeyRepository = keyRepository,
+            grokAuth = grokAuth,
+            dispatchers = dispatchers
+        )
         val analyzePrompt = AnalyzePromptForCategoryUseCase(
             aiGateway = aiGateway,
-            apiKeyRepository = keyRepository,
+            credentialResolver = credentialResolver,
             dispatchers = dispatchers
         )
         val copyResults = CopyAnalysisResultsUseCase(
@@ -327,13 +360,14 @@ class AnalysisFeatureTest {
             resolveTarget = ResolveAnalysisTargetUseCase(analyzePrompt),
             generateTxtUseCase = GenerateAnalysisTxtUseCase(
                 aiGateway = aiGateway,
-                apiKeyRepository = keyRepository,
+                credentialResolver = credentialResolver,
                 dispatchers = dispatchers
             ),
             keyManager = ManageGeminiApiKeysUseCase(
                 repository = keyRepository,
                 dispatchers = dispatchers
             ),
+            grokAuth = grokAuth,
             copyResults = copyResults,
             saveWildcardFile = SaveAnalysisWildcardFileUseCase(
                 repository = FakeWildcardRepository(),
@@ -470,12 +504,35 @@ class AnalysisFeatureTest {
             records.replaceAll { if (it.id == id) it.copy(label = newLabel) else it }
         }
 
-        private var selectedModel: String = DEFAULT_ANALYSIS_MODEL
+        // 단위 테스트는 Gemini 키만 두는 경우가 많아 기본은 둘 다 Gemini.
+        private val roleProviders = mutableMapOf(
+            "masking" to "gemini",
+            "generation" to "gemini"
+        )
+        private val roleModels = mutableMapOf(
+            "masking" to DEFAULT_ANALYSIS_MODEL,
+            "generation" to DEFAULT_ANALYSIS_MODEL
+        )
 
-        override fun getSelectedModel(): String = selectedModel
+        override fun getRoleProvider(role: String): String =
+            roleProviders[role] ?: "gemini"
 
-        override fun setSelectedModel(modelId: String) {
-            selectedModel = modelId
+        override fun setRoleProvider(role: String, providerId: String) {
+            roleProviders[role] = providerId
+            val model = roleModels[role]
+            if (model == null ||
+                (providerId == "grok" && !model.startsWith("grok-")) ||
+                (providerId == "gemini" && !model.startsWith("gemini-"))
+            ) {
+                roleModels[role] = if (providerId == "grok") "grok-4.5" else DEFAULT_ANALYSIS_MODEL
+            }
+        }
+
+        override fun getRoleModel(role: String): String =
+            roleModels[role] ?: DEFAULT_ANALYSIS_MODEL
+
+        override fun setRoleModel(role: String, modelId: String) {
+            roleModels[role] = modelId
         }
     }
 
@@ -512,6 +569,42 @@ class AnalysisFeatureTest {
         }
 
         fun contentOf(fileName: String): String = contents.getValue(fileName)
+    }
+
+    private class FakeGrokAuthGateway : GrokAuthGateway {
+        override suspend fun startDeviceLogin(): GrokDeviceLoginChallenge {
+            return GrokDeviceLoginChallenge(
+                deviceCode = "device",
+                userCode = "USER-CODE",
+                verificationUri = "https://auth.x.ai/device",
+                verificationUriComplete = "https://auth.x.ai/device?user_code=USER-CODE",
+                expiresInSeconds = 900,
+                intervalSeconds = 5,
+                tokenEndpoint = "https://auth.x.ai/oauth2/token"
+            )
+        }
+
+        override suspend fun pollDeviceLogin(challenge: GrokDeviceLoginChallenge): GrokAuthSession? {
+            return null
+        }
+
+        override suspend fun refreshSession(session: GrokAuthSession): GrokAuthSession {
+            return session
+        }
+    }
+
+    private class FakeGrokAuthRepository(
+        private var session: GrokAuthSession? = null
+    ) : GrokAuthRepository {
+        override fun loadSession(): GrokAuthSession? = session
+
+        override fun saveSession(session: GrokAuthSession) {
+            this.session = session
+        }
+
+        override fun clearSession() {
+            session = null
+        }
     }
 
     private class FakeClipboard : ClipboardGateway {

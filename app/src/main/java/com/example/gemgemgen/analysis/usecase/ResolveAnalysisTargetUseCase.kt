@@ -1,6 +1,7 @@
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
@@ -38,7 +39,12 @@ class ResolveAnalysisTargetUseCase(
         source: String,
         category: AnalysisCategory
     ): AnalyzeAndMaskResult {
-        val report = analyzePrompt.analyze(source, category)
+        // 자동 마스킹 버튼 → 마스킹 모델
+        val report = analyzePrompt.analyze(
+            sourcePrompt = source,
+            category = category,
+            role = AnalysisModelRole.MASKING
+        )
         val autoTarget = AnalysisTargetSegmentPolicy.fromAutoReport(report, category)
             ?: throw AnalysisException(
                 "자동으로 변주 대상을 찾지 못했습니다. 원문에서 직접 구간을 선택해주세요."
@@ -62,8 +68,15 @@ class ResolveAnalysisTargetUseCase(
         existingTarget: AnalysisTargetSegment?,
         cache: AnalysisReportCache?
     ): EnsureTargetResult {
+        // 생성 전 재분석 → 생성 모델(기본 Grok)
         if (existingTarget?.source == AnalysisTargetSource.MANUAL && existingTarget.isValid) {
-            val report = getOrAnalyzeReport(source, category, existingTarget, cache)
+            val report = getOrAnalyzeReport(
+                source = source,
+                category = category,
+                targetSegment = existingTarget,
+                cache = cache,
+                role = AnalysisModelRole.GENERATION
+            )
             return EnsureTargetResult(
                 target = existingTarget,
                 report = report.report,
@@ -73,7 +86,13 @@ class ResolveAnalysisTargetUseCase(
             )
         }
 
-        val resolved = getOrAnalyzeReport(source, category, existingTarget, cache)
+        val resolved = getOrAnalyzeReport(
+            source = source,
+            category = category,
+            targetSegment = existingTarget,
+            cache = cache,
+            role = AnalysisModelRole.GENERATION
+        )
         val autoTarget = AnalysisTargetSegmentPolicy.fromAutoReport(resolved.report, category)
             ?: throw AnalysisException(
                 "자동으로 변주 대상을 찾지 못했습니다. 원문에서 직접 구간을 선택해주세요."
@@ -101,7 +120,8 @@ class ResolveAnalysisTargetUseCase(
         source: String,
         category: AnalysisCategory,
         targetSegment: AnalysisTargetSegment?,
-        cache: AnalysisReportCache?
+        cache: AnalysisReportCache?,
+        role: AnalysisModelRole
     ): CachedReport {
         if (cache != null &&
             cache.sourcePrompt == source &&
@@ -110,7 +130,11 @@ class ResolveAnalysisTargetUseCase(
         ) {
             return CachedReport(report = cache.report, cache = cache)
         }
-        val report = analyzePrompt.analyze(source, category)
+        val report = analyzePrompt.analyze(
+            sourcePrompt = source,
+            category = category,
+            role = role
+        )
         val nextCache = AnalysisReportCache(
             sourcePrompt = source,
             category = category,

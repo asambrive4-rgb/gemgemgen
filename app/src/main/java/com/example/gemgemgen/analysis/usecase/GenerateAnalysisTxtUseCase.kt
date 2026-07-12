@@ -1,12 +1,12 @@
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisPromptBuilder
 import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
-import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.withContext
 
@@ -17,7 +17,7 @@ data class AnalysisTxtGenerationResult(
 
 class GenerateAnalysisTxtUseCase(
     private val aiGateway: AnalysisAiGateway,
-    private val apiKeyRepository: GeminiApiKeyRepository,
+    private val credentialResolver: AnalysisCredentialResolver,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     suspend fun generate(
@@ -27,8 +27,7 @@ class GenerateAnalysisTxtUseCase(
         analysisReport: AnalysisReport,
         count: Int,
         selectedHints: List<String>,
-        customHint: String? = null,
-        modelId: String? = null
+        customHint: String? = null
     ): AnalysisTxtGenerationResult = withContext(dispatchers.io) {
         if (sourcePrompt.isBlank()) {
             throw AnalysisException("원본 프롬프트를 입력해주세요.")
@@ -36,9 +35,7 @@ class GenerateAnalysisTxtUseCase(
         if (!targetSegment.isValid) {
             throw AnalysisException("변주 대상 구간을 먼저 지정해주세요.")
         }
-        val apiKey = apiKeyRepository.activeKeyValue()
-            ?: throw AnalysisException("활성 Gemini API 키를 먼저 선택해주세요.")
-        val resolvedModelId = modelId ?: apiKeyRepository.getSelectedModel()
+        val credential = credentialResolver.resolveForRole(AnalysisModelRole.GENERATION)
         val normalizedCount = AnalysisTxtCountPolicy.coerce(count)
         val payload = AnalysisPromptBuilder.buildTxtPrompt(
             sourcePrompt = sourcePrompt,
@@ -50,8 +47,8 @@ class GenerateAnalysisTxtUseCase(
             customHint = customHint
         )
         val responseText = aiGateway.generateTxt(
-            apiKey = apiKey,
-            modelId = resolvedModelId,
+            apiKey = credential.accessTokenOrApiKey,
+            modelId = credential.modelId,
             payload = payload
         )
         val candidates = AnalysisResponseParser.parseTxtCandidates(responseText)

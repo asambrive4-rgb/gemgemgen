@@ -4,6 +4,8 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisModelRole
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisStartGate
 import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
@@ -14,7 +16,9 @@ import com.example.gemgemgen.analysis.usecase.AnalysisReportCache
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
+import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
@@ -31,12 +35,15 @@ class AnalysisViewModel(
     private val resolveTarget: ResolveAnalysisTargetUseCase,
     private val generateTxtUseCase: GenerateAnalysisTxtUseCase,
     private val keyManager: ManageGeminiApiKeysUseCase,
+    private val grokAuth: ManageGrokAuthUseCase,
     private val copyResults: CopyAnalysisResultsUseCase,
     private val saveWildcardFile: SaveAnalysisWildcardFileUseCase,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
     private var runningJob: Job? = null
+    private var grokLoginJob: Job? = null
+    private var pendingGrokChallenge: GrokDeviceLoginChallenge? = null
     private var analysisCache: AnalysisReportCache? = null
 
     private val _uiState = MutableStateFlow(AnalysisUiState())
@@ -45,7 +52,8 @@ class AnalysisViewModel(
 
     init {
         refreshKeys()
-        refreshSelectedModel()
+        refreshRoleSettings()
+        refreshGrokStatus()
     }
 
     fun onSourcePromptChange(value: String) {
@@ -159,11 +167,17 @@ class AnalysisViewModel(
             val gate = AnalysisStartPolicy.evaluateInputs(
                 source = source,
                 category = snapshot.selectedCategory,
-                hasActiveKey = snapshot.hasActiveKey
+                hasActiveKey = snapshot.hasMaskingCredential
             )
         ) {
             is AnalysisStartGate.Blocked -> {
-                showError(AnalysisUiText.startBlockedMessage(gate.reason))
+                showError(
+                    AnalysisUiText.startBlockedMessage(
+                        reason = gate.reason,
+                        provider = snapshot.maskingProvider,
+                        role = AnalysisModelRole.MASKING
+                    )
+                )
                 return
             }
             AnalysisStartGate.Allowed -> Unit
@@ -184,6 +198,11 @@ class AnalysisViewModel(
                 analysisCache = null
                 val result = resolveTarget.analyzeAndMask(source, category)
                 analysisCache = result.cache
+                rememberLastUsed(
+                    role = AnalysisModelRole.MASKING,
+                    provider = snapshot.maskingProvider,
+                    modelId = snapshot.maskingModel
+                )
                 _uiState.update {
                     it.copy(
                         sourcePrompt = source,
@@ -194,9 +213,14 @@ class AnalysisViewModel(
                         warning = result.warning
                     )
                 }
+                if (snapshot.maskingProvider == AnalysisProvider.GROK ||
+                    _uiState.value.usesGrok
+                ) {
+                    refreshGrokQuotaIfLoggedIn()
+                }
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: RuntimeException) {
+            } catch (error: Exception) {
                 analysisCache = null
                 showError(error.message ?: "분석에 실패했습니다.")
             }
@@ -210,11 +234,17 @@ class AnalysisViewModel(
             val gate = AnalysisStartPolicy.evaluateInputs(
                 source = source,
                 category = snapshot.selectedCategory,
-                hasActiveKey = snapshot.hasActiveKey
+                hasActiveKey = snapshot.hasGenerationCredential
             )
         ) {
             is AnalysisStartGate.Blocked -> {
-                showError(AnalysisUiText.startBlockedMessage(gate.reason))
+                showError(
+                    AnalysisUiText.startBlockedMessage(
+                        reason = gate.reason,
+                        provider = snapshot.generationProvider,
+                        role = AnalysisModelRole.GENERATION
+                    )
+                )
                 return
             }
             AnalysisStartGate.Allowed -> Unit
@@ -259,6 +289,11 @@ class AnalysisViewModel(
                     selectedHints = selectedHints,
                     customHint = _uiState.value.customHint
                 )
+                rememberLastUsed(
+                    role = AnalysisModelRole.GENERATION,
+                    provider = snapshot.generationProvider,
+                    modelId = snapshot.generationModel
+                )
                 _uiState.update {
                     it.copy(
                         sourcePrompt = source,
@@ -270,9 +305,14 @@ class AnalysisViewModel(
                         error = ""
                     )
                 }
+                if (snapshot.generationProvider == AnalysisProvider.GROK ||
+                    _uiState.value.usesGrok
+                ) {
+                    refreshGrokQuotaIfLoggedIn()
+                }
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: RuntimeException) {
+            } catch (error: Exception) {
                 analysisCache = null
                 showError(error.message ?: "TXT 생성에 실패했습니다.")
             }
@@ -524,17 +564,190 @@ class AnalysisViewModel(
         }
     }
 
-    fun onModelSelected(modelId: String) {
+    fun onRoleProviderSelected(role: AnalysisModelRole, provider: AnalysisProvider) {
+        if (_uiState.value.providerFor(role) == provider) return
+        analysisCache = null
         scope.launch {
-            keyManager.setSelectedModel(modelId)
-            _uiState.update { it.copy(selectedModel = modelId) }
+            val setting = keyManager.setRoleProvider(role, provider)
+            applyRoleSetting(setting.role, setting.provider, setting.modelId)
+            if (provider == AnalysisProvider.GROK) {
+                refreshGrokQuotaIfLoggedIn()
+            }
         }
     }
 
-    private fun refreshSelectedModel() {
+    fun onRoleModelSelected(role: AnalysisModelRole, modelId: String) {
+        if (_uiState.value.modelFor(role) == modelId) return
         scope.launch {
-            val model = keyManager.getSelectedModel()
-            _uiState.update { it.copy(selectedModel = model) }
+            val setting = keyManager.setRoleModel(role, modelId)
+            applyRoleSetting(setting.role, setting.provider, setting.modelId)
+        }
+    }
+
+    fun startGrokLogin() {
+        if (_uiState.value.isGrokLoginPolling) return
+        grokLoginJob?.cancel()
+        grokLoginJob = scope.launch {
+            try {
+                _uiState.update {
+                    it.copy(
+                        showGrokLoginDialog = true,
+                        isGrokLoginPolling = true,
+                        grokLoginUserCode = "",
+                        grokLoginVerificationUri = "",
+                        error = "",
+                        message = "Grok 로그인 준비 중..."
+                    )
+                }
+                val challenge = grokAuth.startDeviceLogin()
+                pendingGrokChallenge = challenge
+                _uiState.update {
+                    it.copy(
+                        grokLoginUserCode = challenge.userCode,
+                        grokLoginVerificationUri = challenge.verificationUriComplete
+                            ?: challenge.verificationUri,
+                        message = "Firefox에서 코드 승인 후 이 화면을 유지하세요."
+                    )
+                }
+                val status = grokAuth.awaitDeviceLogin(challenge)
+                pendingGrokChallenge = null
+                val quota = grokAuth.fetchQuota()
+                _uiState.update {
+                    it.copy(
+                        isGrokLoggedIn = status.isLoggedIn,
+                        grokAccountPreview = status.accountPreview,
+                        showGrokLoginDialog = false,
+                        isGrokLoginPolling = false,
+                        grokLoginUserCode = "",
+                        grokLoginVerificationUri = "",
+                        grokRemainingPercent = quota?.remainingPercent,
+                        message = "Grok 로그인에 성공했습니다.",
+                        error = ""
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                pendingGrokChallenge = null
+                _uiState.update {
+                    it.copy(
+                        isGrokLoginPolling = false,
+                        showGrokLoginDialog = false,
+                        grokLoginUserCode = "",
+                        grokLoginVerificationUri = ""
+                    )
+                }
+                showError(error.message ?: "Grok 로그인에 실패했습니다.")
+            }
+        }
+    }
+
+    fun cancelGrokLogin() {
+        grokLoginJob?.cancel()
+        grokLoginJob = null
+        pendingGrokChallenge = null
+        _uiState.update {
+            it.copy(
+                showGrokLoginDialog = false,
+                isGrokLoginPolling = false,
+                grokLoginUserCode = "",
+                grokLoginVerificationUri = "",
+                message = "Grok 로그인을 취소했습니다."
+            )
+        }
+    }
+
+    fun logoutGrok() {
+        scope.launch {
+            try {
+                analysisCache = null
+                val status = grokAuth.logout()
+                _uiState.update {
+                    it.copy(
+                        isGrokLoggedIn = status.isLoggedIn,
+                        grokAccountPreview = "",
+                        grokRemainingPercent = null,
+                        message = "Grok 로그아웃했습니다.",
+                        error = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "Grok 로그아웃에 실패했습니다.")
+            }
+        }
+    }
+
+    private fun refreshRoleSettings() {
+        scope.launch {
+            val masking = keyManager.getRoleSetting(AnalysisModelRole.MASKING)
+            val generation = keyManager.getRoleSetting(AnalysisModelRole.GENERATION)
+            _uiState.update {
+                it.copy(
+                    maskingProvider = masking.provider,
+                    maskingModel = masking.modelId,
+                    generationProvider = generation.provider,
+                    generationModel = generation.modelId
+                )
+            }
+        }
+    }
+
+    private fun applyRoleSetting(
+        role: AnalysisModelRole,
+        provider: AnalysisProvider,
+        modelId: String
+    ) {
+        _uiState.update {
+            when (role) {
+                AnalysisModelRole.MASKING -> it.copy(
+                    maskingProvider = provider,
+                    maskingModel = modelId,
+                    error = "",
+                    message = ""
+                )
+                AnalysisModelRole.GENERATION -> it.copy(
+                    generationProvider = provider,
+                    generationModel = modelId,
+                    error = "",
+                    message = ""
+                )
+            }
+        }
+    }
+
+    private suspend fun rememberLastUsed(
+        role: AnalysisModelRole,
+        provider: AnalysisProvider,
+        modelId: String
+    ) {
+        keyManager.rememberLastUsed(role, provider, modelId)
+    }
+
+    private fun refreshGrokStatus() {
+        scope.launch {
+            val status = grokAuth.status()
+            _uiState.update {
+                it.copy(
+                    isGrokLoggedIn = status.isLoggedIn,
+                    grokAccountPreview = status.accountPreview,
+                    grokRemainingPercent = if (status.isLoggedIn) {
+                        it.grokRemainingPercent
+                    } else {
+                        null
+                    }
+                )
+            }
+            if (status.isLoggedIn) {
+                refreshGrokQuotaIfLoggedIn()
+            }
+        }
+    }
+
+    private suspend fun refreshGrokQuotaIfLoggedIn() {
+        if (!_uiState.value.isGrokLoggedIn) return
+        val quota = grokAuth.fetchQuota()
+        _uiState.update {
+            it.copy(grokRemainingPercent = quota?.remainingPercent)
         }
     }
 

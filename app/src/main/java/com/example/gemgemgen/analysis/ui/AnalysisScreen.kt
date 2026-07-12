@@ -46,11 +46,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisModelRole
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH
+import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
@@ -80,7 +85,12 @@ internal fun AnalysisScreen(
     onDismissKeyDialog: () -> Unit,
     onKeyLabelChange: (String) -> Unit,
     onKeyValueChange: (String) -> Unit,
-    onModelSelected: (String) -> Unit,
+    onRoleProviderSelected: (AnalysisModelRole, AnalysisProvider) -> Unit,
+    onRoleModelSelected: (AnalysisModelRole, String) -> Unit,
+    onStartGrokLogin: () -> Unit,
+    onCancelGrokLogin: () -> Unit,
+    onLogoutGrok: () -> Unit,
+    onOpenGrokLoginUrl: (String) -> Unit,
     onAddApiKey: () -> Unit,
     onDeleteApiKey: (String) -> Unit,
     onActivateApiKey: (String) -> Unit,
@@ -103,15 +113,16 @@ internal fun AnalysisScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ApiKeyHeader(
-                    activePreview = uiState.activeKeyPreview,
-                    hasKeys = uiState.apiKeys.isNotEmpty(),
-                    selectedModel = uiState.selectedModel,
-                    onModelSelected = onModelSelected,
-                    onShowKeyDialog = onShowKeyDialog
+                    uiState = uiState,
+                    onRoleProviderSelected = onRoleProviderSelected,
+                    onRoleModelSelected = onRoleModelSelected,
+                    onShowKeyDialog = onShowKeyDialog,
+                    onStartGrokLogin = onStartGrokLogin,
+                    onLogoutGrok = onLogoutGrok
                 )
 
                 SourcePromptInputSection(
@@ -205,6 +216,16 @@ internal fun AnalysisScreen(
             onDismiss = onDismissOverwrite
         )
     }
+
+    if (uiState.showGrokLoginDialog) {
+        GrokLoginDialog(
+            userCode = uiState.grokLoginUserCode,
+            verificationUri = uiState.grokLoginVerificationUri,
+            isPolling = uiState.isGrokLoginPolling,
+            onOpenUrl = onOpenGrokLoginUrl,
+            onCancel = onCancelGrokLogin
+        )
+    }
 }
 
 @Composable
@@ -236,8 +257,8 @@ private fun ModelChip(
     ) {
         Text(
             text = label,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold
         )
     }
@@ -245,11 +266,12 @@ private fun ModelChip(
 
 @Composable
 private fun ApiKeyHeader(
-    activePreview: String,
-    hasKeys: Boolean,
-    selectedModel: String,
-    onModelSelected: (String) -> Unit,
-    onShowKeyDialog: () -> Unit
+    uiState: AnalysisUiState,
+    onRoleProviderSelected: (AnalysisModelRole, AnalysisProvider) -> Unit,
+    onRoleModelSelected: (AnalysisModelRole, String) -> Unit,
+    onShowKeyDialog: () -> Unit,
+    onStartGrokLogin: () -> Unit,
+    onLogoutGrok: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -257,44 +279,224 @@ private fun ApiKeyHeader(
         shape = MaterialTheme.shapes.small,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
     ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            RoleModelRow(
+                label = "자동 마스킹",
+                provider = uiState.maskingProvider,
+                modelId = uiState.maskingModel,
+                onProviderSelected = {
+                    onRoleProviderSelected(AnalysisModelRole.MASKING, it)
+                },
+                onModelSelected = {
+                    onRoleModelSelected(AnalysisModelRole.MASKING, it)
+                }
+            )
+            RoleModelRow(
+                label = "TXT 생성",
+                provider = uiState.generationProvider,
+                modelId = uiState.generationModel,
+                onProviderSelected = {
+                    onRoleProviderSelected(AnalysisModelRole.GENERATION, it)
+                },
+                onModelSelected = {
+                    onRoleModelSelected(AnalysisModelRole.GENERATION, it)
+                }
+            )
+            AuthActionsRow(
+                uiState = uiState,
+                onShowKeyDialog = onShowKeyDialog,
+                onStartGrokLogin = onStartGrokLogin,
+                onLogoutGrok = onLogoutGrok
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoleModelRow(
+    label: String,
+    provider: AnalysisProvider,
+    modelId: String,
+    onProviderSelected: (AnalysisProvider) -> Unit,
+    onModelSelected: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(onClick = onShowKeyDialog) {
-                    Text("키 관리")
+                ModelChip(
+                    label = "Gemini",
+                    selected = provider == AnalysisProvider.GEMINI,
+                    onClick = { onProviderSelected(AnalysisProvider.GEMINI) }
+                )
+                ModelChip(
+                    label = "Grok",
+                    selected = provider == AnalysisProvider.GROK,
+                    onClick = { onProviderSelected(AnalysisProvider.GROK) }
+                )
+            }
+            when (provider) {
+                AnalysisProvider.GEMINI -> {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ModelChip(
+                            label = "3.5 Flash",
+                            selected = modelId == MODEL_GEMINI_3_5_FLASH,
+                            onClick = { onModelSelected(MODEL_GEMINI_3_5_FLASH) }
+                        )
+                        ModelChip(
+                            label = "3.1 Lite",
+                            selected = modelId == MODEL_GEMINI_3_1_FLASH_LITE,
+                            onClick = { onModelSelected(MODEL_GEMINI_3_1_FLASH_LITE) }
+                        )
+                    }
                 }
-                if (activePreview.isNotBlank()) {
-                    Text(
-                        text = "($activePreview)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                AnalysisProvider.GROK -> {
+                    ModelChip(
+                        label = "Grok 4.5",
+                        selected = modelId == MODEL_GROK_4_5,
+                        onClick = { onModelSelected(MODEL_GROK_4_5) }
                     )
                 }
             }
+        }
+    }
+}
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ModelChip(
-                    label = "3.5 Flash",
-                    selected = selectedModel == "gemini-3.5-flash",
-                    onClick = { onModelSelected("gemini-3.5-flash") }
-                )
-                ModelChip(
-                    label = "3.1 Flash-Lite",
-                    selected = selectedModel == "gemini-3.1-flash-lite",
-                    onClick = { onModelSelected("gemini-3.1-flash-lite") }
+@Composable
+private fun AuthActionsRow(
+    uiState: AnalysisUiState,
+    onShowKeyDialog: () -> Unit,
+    onStartGrokLogin: () -> Unit,
+    onLogoutGrok: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (uiState.usesGemini) {
+            CompactOutlinedButton(text = "키 관리", onClick = onShowKeyDialog)
+            if (uiState.geminiKeyPreview.isNotBlank()) {
+                Text(
+                    text = "(${uiState.geminiKeyPreview})",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
+        if (uiState.usesGrok) {
+            if (uiState.isGrokLoggedIn) {
+                CompactOutlinedButton(text = "Grok 로그아웃", onClick = onLogoutGrok)
+                if (uiState.grokAccountPreview.isNotBlank()) {
+                    Text(
+                        text = "(${uiState.grokAccountPreview})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                uiState.grokRemainingPercent?.let { remaining ->
+                    Text(
+                        text = "남은 ${remaining}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                CompactOutlinedButton(text = "Grok 로그인", onClick = onStartGrokLogin)
+            }
+        }
     }
+}
+
+@Composable
+private fun CompactOutlinedButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        // Material3 기본 MinHeight(40dp)보다 낮게 고정해 헤더 세로를 줄인다.
+        modifier = Modifier.height(32.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium
+        )
+    }
+}
+
+@Composable
+private fun GrokLoginDialog(
+    userCode: String,
+    verificationUri: String,
+    isPolling: Boolean,
+    onOpenUrl: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Grok 로그인") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (userCode.isBlank()) {
+                    Text("로그인 코드를 준비하는 중...")
+                } else {
+                    Text("Firefox에서 아래 코드를 승인하세요.")
+                    Text(
+                        text = userCode,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    if (verificationUri.isNotBlank()) {
+                        Text(
+                            text = verificationUri,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (isPolling) {
+                        Text(
+                            text = "승인 대기 중...",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (verificationUri.isNotBlank()) {
+                TextButton(onClick = { onOpenUrl(verificationUri) }) {
+                    Text("Firefox에서 열기")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text("취소")
+            }
+        }
+    )
 }
 
 @Composable
@@ -302,7 +504,7 @@ private fun SourcePromptInputSection(
     sourcePromptState: TextFieldState,
     onSourcePromptChange: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = "원문 입력",
             style = MaterialTheme.typography.titleSmall,
@@ -312,7 +514,9 @@ private fun SourcePromptInputSection(
             state = sourcePromptState,
             onValueChange = onSourcePromptChange,
             modifier = Modifier.fillMaxWidth(),
-            minLines = 6,
+            // 기본 maxLines(18)의 약 2/3 높이로 제한해 세로 공간을 줄인다.
+            minLines = 4,
+            maxLines = 12,
             placeholder = "분석과 변주의 대상이 되는 전체 이미지 프롬프트를 입력하세요."
         )
     }

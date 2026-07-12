@@ -1,5 +1,7 @@
 package com.example.gemgemgen.analysis.usecase
 
+import com.example.gemgemgen.analysis.domain.AnalysisModelRole
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.withContext
 
@@ -8,6 +10,12 @@ data class GeminiApiKeySummary(
     val label: String,
     val preview: String,
     val isActive: Boolean
+)
+
+data class AnalysisRoleModelSetting(
+    val role: AnalysisModelRole,
+    val provider: AnalysisProvider,
+    val modelId: String
 )
 
 class ManageGeminiApiKeysUseCase(
@@ -52,12 +60,41 @@ class ManageGeminiApiKeysUseCase(
             repository.listKeys().map { it.toSummary() }
         }
 
-    suspend fun getSelectedModel(): String = withContext(dispatchers.io) {
-        repository.getSelectedModel()
+    suspend fun getRoleSetting(role: AnalysisModelRole): AnalysisRoleModelSetting =
+        withContext(dispatchers.io) {
+            val provider = AnalysisProvider.fromStorage(
+                repository.getRoleProvider(role.storageValue)
+            )
+            val modelId = repository.getRoleModel(role.storageValue)
+            AnalysisRoleModelSetting(role = role, provider = provider, modelId = modelId)
+        }
+
+    suspend fun setRoleProvider(
+        role: AnalysisModelRole,
+        provider: AnalysisProvider
+    ): AnalysisRoleModelSetting = withContext(dispatchers.io) {
+        repository.setRoleProvider(role.storageValue, provider.storageValue)
+        getRoleSetting(role)
     }
 
-    suspend fun setSelectedModel(modelId: String) = withContext(dispatchers.io) {
-        repository.setSelectedModel(modelId)
+    suspend fun setRoleModel(
+        role: AnalysisModelRole,
+        modelId: String
+    ): AnalysisRoleModelSetting = withContext(dispatchers.io) {
+        repository.setRoleModel(role.storageValue, modelId)
+        getRoleSetting(role)
+    }
+
+    /**
+     * 단계에 실제로 쓴 조합을 최근 사용으로 저장.
+     */
+    suspend fun rememberLastUsed(
+        role: AnalysisModelRole,
+        provider: AnalysisProvider,
+        modelId: String
+    ) = withContext(dispatchers.io) {
+        repository.setRoleProvider(role.storageValue, provider.storageValue)
+        repository.setRoleModel(role.storageValue, modelId)
     }
 
     private fun GeminiApiKeyRecord.toSummary(): GeminiApiKeySummary {

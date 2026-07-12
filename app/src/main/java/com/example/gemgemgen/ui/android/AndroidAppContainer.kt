@@ -4,12 +4,19 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.gemgemgen.analysis.android.AndroidEncryptedGeminiApiKeyRepository
+import com.example.gemgemgen.analysis.android.AndroidEncryptedGrokAuthRepository
 import com.example.gemgemgen.analysis.android.AndroidGeminiAnalysisGateway
+import com.example.gemgemgen.analysis.android.AndroidGrokAnalysisGateway
+import com.example.gemgemgen.analysis.android.AndroidGrokBillingGateway
+import com.example.gemgemgen.analysis.android.AndroidGrokOAuthGateway
+import com.example.gemgemgen.analysis.android.RoutingAnalysisAiGateway
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
+import com.example.gemgemgen.analysis.usecase.AnalysisCredentialResolver
 import com.example.gemgemgen.analysis.usecase.AnalyzePromptForCategoryUseCase
 import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
@@ -43,8 +50,20 @@ class AndroidAppContainer(context: Context) {
         SharedPreferencesLastRunSnapshotRepository(appContext)
     )
     private val clipboardGateway = AndroidClipboardGateway(appContext)
-    private val analysisAiGateway = AndroidGeminiAnalysisGateway()
     private val geminiApiKeyRepository = AndroidEncryptedGeminiApiKeyRepository(appContext)
+    private val analysisAiGateway = RoutingAnalysisAiGateway(
+        gemini = AndroidGeminiAnalysisGateway(),
+        grok = AndroidGrokAnalysisGateway()
+    )
+    private val grokAuthManager = ManageGrokAuthUseCase(
+        gateway = AndroidGrokOAuthGateway(),
+        repository = AndroidEncryptedGrokAuthRepository(appContext),
+        billingGateway = AndroidGrokBillingGateway()
+    )
+    private val analysisCredentialResolver = AnalysisCredentialResolver(
+        apiKeyRepository = geminiApiKeyRepository,
+        grokAuth = grokAuthManager
+    )
 
     val mainViewModelFactory: ViewModelProvider.Factory = factory<MainViewModel> {
         MainViewModel(
@@ -93,16 +112,17 @@ class AndroidAppContainer(context: Context) {
     val analysisViewModelFactory: ViewModelProvider.Factory = factory<AnalysisViewModel> {
         val analyzePrompt = AnalyzePromptForCategoryUseCase(
             aiGateway = analysisAiGateway,
-            apiKeyRepository = geminiApiKeyRepository
+            credentialResolver = analysisCredentialResolver
         )
         val copyResults = CopyAnalysisResultsUseCase(clipboardGateway)
         AnalysisViewModel(
             resolveTarget = ResolveAnalysisTargetUseCase(analyzePrompt),
             generateTxtUseCase = GenerateAnalysisTxtUseCase(
                 aiGateway = analysisAiGateway,
-                apiKeyRepository = geminiApiKeyRepository
+                credentialResolver = analysisCredentialResolver
             ),
             keyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository),
+            grokAuth = grokAuthManager,
             copyResults = copyResults,
             saveWildcardFile = SaveAnalysisWildcardFileUseCase(
                 repository = AndroidWildcardFileRepository(appContext),

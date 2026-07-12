@@ -4,6 +4,8 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.example.gemgemgen.analysis.domain.AnalysisModelRole
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
 import java.security.KeyStore
@@ -82,13 +84,81 @@ class AndroidEncryptedGeminiApiKeyRepository(
         )
     }
 
-    override fun getSelectedModel(): String {
-        return prefs.getString(KEY_SELECTED_MODEL, "gemini-3.5-flash") ?: "gemini-3.5-flash"
+    override fun getRoleProvider(role: String): String {
+        val analysisRole = AnalysisModelRole.fromStorage(role)
+        val key = roleProviderKey(analysisRole.storageValue)
+        val stored = prefs.getString(key, null)
+        if (!stored.isNullOrBlank()) {
+            return AnalysisProvider.fromStorage(stored).storageValue
+        }
+        // 구버전 단일 프로바이더 마이그레이션
+        val legacy = prefs.getString(KEY_SELECTED_PROVIDER, null)
+        if (!legacy.isNullOrBlank()) {
+            val migrated = AnalysisProvider.fromStorage(legacy).storageValue
+            prefs.edit().putString(key, migrated).apply()
+            return migrated
+        }
+        return AnalysisModelRole.defaultProvider(analysisRole).storageValue
     }
 
-    override fun setSelectedModel(modelId: String) {
-        prefs.edit().putString(KEY_SELECTED_MODEL, modelId).apply()
+    override fun setRoleProvider(role: String, providerId: String) {
+        val analysisRole = AnalysisModelRole.fromStorage(role)
+        val provider = AnalysisProvider.fromStorage(providerId)
+        val modelKey = roleModelKey(analysisRole.storageValue)
+        val currentModel = prefs.getString(modelKey, null)
+        val editor = prefs.edit()
+            .putString(roleProviderKey(analysisRole.storageValue), provider.storageValue)
+        if (currentModel.isNullOrBlank() ||
+            !AnalysisProvider.isModelForProvider(currentModel, provider)
+        ) {
+            editor.putString(
+                modelKey,
+                if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
+                    AnalysisModelRole.defaultModel(analysisRole)
+                } else {
+                    AnalysisProvider.defaultModel(provider)
+                }
+            )
+        }
+        editor.apply()
     }
+
+    override fun getRoleModel(role: String): String {
+        val analysisRole = AnalysisModelRole.fromStorage(role)
+        val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
+        val modelKey = roleModelKey(analysisRole.storageValue)
+        val stored = prefs.getString(modelKey, null)
+        if (!stored.isNullOrBlank() && AnalysisProvider.isModelForProvider(stored, provider)) {
+            return stored
+        }
+        // 구버전 단일 모델 마이그레이션
+        val legacy = prefs.getString(KEY_SELECTED_MODEL, null)
+        if (!legacy.isNullOrBlank() && AnalysisProvider.isModelForProvider(legacy, provider)) {
+            prefs.edit().putString(modelKey, legacy).apply()
+            return legacy
+        }
+        return if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
+            AnalysisModelRole.defaultModel(analysisRole)
+        } else {
+            AnalysisProvider.defaultModel(provider)
+        }
+    }
+
+    override fun setRoleModel(role: String, modelId: String) {
+        val analysisRole = AnalysisModelRole.fromStorage(role)
+        val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
+        val normalized = if (AnalysisProvider.isModelForProvider(modelId, provider)) {
+            modelId
+        } else if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
+            AnalysisModelRole.defaultModel(analysisRole)
+        } else {
+            AnalysisProvider.defaultModel(provider)
+        }
+        prefs.edit().putString(roleModelKey(analysisRole.storageValue), normalized).apply()
+    }
+
+    private fun roleProviderKey(role: String): String = "${KEY_ROLE_PROVIDER_PREFIX}$role"
+    private fun roleModelKey(role: String): String = "${KEY_ROLE_MODEL_PREFIX}$role"
 
     private fun readRecords(): List<GeminiApiKeyRecord> {
         val raw = prefs.getString(KEY_RECORDS, null) ?: return emptyList()
@@ -188,6 +258,9 @@ class AndroidEncryptedGeminiApiKeyRepository(
         const val PREFS_NAME = "gemgemgen_analysis_api_keys"
         const val KEY_RECORDS = "records"
         const val KEY_SELECTED_MODEL = "selected_model_id"
+        const val KEY_SELECTED_PROVIDER = "selected_provider_id"
+        const val KEY_ROLE_PROVIDER_PREFIX = "role_provider_"
+        const val KEY_ROLE_MODEL_PREFIX = "role_model_"
         const val ANDROID_KEY_STORE = "AndroidKeyStore"
         const val KEY_ALIAS = "gemgemgen_analysis_api_key"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

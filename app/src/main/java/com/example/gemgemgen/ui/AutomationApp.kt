@@ -3,6 +3,8 @@ package com.example.gemgemgen.ui
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisModelRole
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.ui.AnalysisScreen
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
@@ -89,7 +91,12 @@ internal data class AnalysisAppActions(
     val onDismissKeyDialog: () -> Unit,
     val onKeyLabelChange: (String) -> Unit,
     val onKeyValueChange: (String) -> Unit,
-    val onModelSelected: (String) -> Unit,
+    val onRoleProviderSelected: (AnalysisModelRole, AnalysisProvider) -> Unit,
+    val onRoleModelSelected: (AnalysisModelRole, String) -> Unit,
+    val onStartGrokLogin: () -> Unit,
+    val onCancelGrokLogin: () -> Unit,
+    val onLogoutGrok: () -> Unit,
+    val onOpenGrokLoginUrl: (String) -> Unit,
     val onAddApiKey: () -> Unit,
     val onDeleteApiKey: (String) -> Unit,
     val onActivateApiKey: (String) -> Unit,
@@ -179,7 +186,12 @@ internal fun AutomationApp(
                     onDismissKeyDialog = analysisActions.onDismissKeyDialog,
                     onKeyLabelChange = analysisActions.onKeyLabelChange,
                     onKeyValueChange = analysisActions.onKeyValueChange,
-                    onModelSelected = analysisActions.onModelSelected,
+                    onRoleProviderSelected = analysisActions.onRoleProviderSelected,
+                    onRoleModelSelected = analysisActions.onRoleModelSelected,
+                    onStartGrokLogin = analysisActions.onStartGrokLogin,
+                    onCancelGrokLogin = analysisActions.onCancelGrokLogin,
+                    onLogoutGrok = analysisActions.onLogoutGrok,
+                    onOpenGrokLoginUrl = analysisActions.onOpenGrokLoginUrl,
                     onAddApiKey = analysisActions.onAddApiKey,
                     onDeleteApiKey = analysisActions.onDeleteApiKey,
                     onActivateApiKey = analysisActions.onActivateApiKey,

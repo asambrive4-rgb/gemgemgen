@@ -33,6 +33,11 @@ interface GeminiApiKeyRepository {
     fun activateKey(id: String)
     fun activeKeyValue(): String?
     fun updateKeyLabel(id: String, newLabel: String)
-    fun getSelectedModel(): String
-    fun setSelectedModel(modelId: String)
+
+    /** 단계(마스킹/생성)별 프로바이더. role = masking | generation */
+    fun getRoleProvider(role: String): String
+    fun setRoleProvider(role: String, providerId: String)
+    /** 단계별 모델 id */
+    fun getRoleModel(role: String): String
+    fun setRoleModel(role: String, modelId: String)
 }
