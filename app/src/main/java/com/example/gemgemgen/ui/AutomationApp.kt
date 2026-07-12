@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.ui.AnalysisScreen
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
+import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.automation.ui.AutomationScreen
@@ -75,6 +76,7 @@ internal data class AnalysisAppActions(
     val onCancelWork: () -> Unit,
     val onTxtCountChange: (Int) -> Unit,
     val onToggleDirection: (String) -> Unit,
+    val onCustomHintChange: (String) -> Unit,
     val onResultFileNameChange: (String) -> Unit,
     val onCopyResults: () -> Unit,
     val onSaveResults: () -> Unit,
@@ -84,9 +86,14 @@ internal data class AnalysisAppActions(
     val onDismissKeyDialog: () -> Unit,
     val onKeyLabelChange: (String) -> Unit,
     val onKeyValueChange: (String) -> Unit,
+    val onModelSelected: (String) -> Unit,
     val onAddApiKey: () -> Unit,
     val onDeleteApiKey: (String) -> Unit,
-    val onActivateApiKey: (String) -> Unit
+    val onActivateApiKey: (String) -> Unit,
+    val onStartEditApiKey: (GeminiApiKeySummary) -> Unit,
+    val onEditKeyLabelChange: (String) -> Unit,
+    val onCancelEditApiKey: () -> Unit,
+    val onUpdateKeyLabel: () -> Unit
 )
 
 @Composable
@@ -154,6 +161,7 @@ internal fun AutomationApp(
                     onCancelWork = analysisActions.onCancelWork,
                     onTxtCountChange = analysisActions.onTxtCountChange,
                     onToggleDirection = analysisActions.onToggleDirection,
+                    onCustomHintChange = analysisActions.onCustomHintChange,
                     onResultFileNameChange = analysisActions.onResultFileNameChange,
                     onCopyResults = analysisActions.onCopyResults,
                     onSaveResults = analysisActions.onSaveResults,
@@ -163,9 +171,14 @@ internal fun AutomationApp(
                     onDismissKeyDialog = analysisActions.onDismissKeyDialog,
                     onKeyLabelChange = analysisActions.onKeyLabelChange,
                     onKeyValueChange = analysisActions.onKeyValueChange,
+                    onModelSelected = analysisActions.onModelSelected,
                     onAddApiKey = analysisActions.onAddApiKey,
                     onDeleteApiKey = analysisActions.onDeleteApiKey,
-                    onActivateApiKey = analysisActions.onActivateApiKey
+                    onActivateApiKey = analysisActions.onActivateApiKey,
+                    onStartEditApiKey = analysisActions.onStartEditApiKey,
+                    onEditKeyLabelChange = analysisActions.onEditKeyLabelChange,
+                    onCancelEditApiKey = analysisActions.onCancelEditApiKey,
+                    onUpdateKeyLabel = analysisActions.onUpdateKeyLabel
                 )
             },
             MainTabPage(MainTab.WILDCARD) {

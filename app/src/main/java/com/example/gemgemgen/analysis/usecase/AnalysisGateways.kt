@@ -32,4 +32,7 @@ interface GeminiApiKeyRepository {
     fun deleteKey(id: String)
     fun activateKey(id: String)
     fun activeKeyValue(): String?
+    fun updateKeyLabel(id: String, newLabel: String)
+    fun getSelectedModel(): String
+    fun setSelectedModel(modelId: String)
 }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -59,22 +60,28 @@ fun AppMultilineTextField(
     var replacementText by remember { mutableStateOf("") }
     var paragraphTapRequestId by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(state, onValueChange) {
+    // Host가 매 리컴포즈마다 새 람다를 넘기더라도 debounce 구독이 재시작되지 않게 한다.
+    val onValueChangeLatest by rememberUpdatedState(onValueChange)
+    val onDeleteSelectedParagraphLatest by rememberUpdatedState(onDeleteSelectedParagraph)
+    val onReplaceSelectedParagraphLatest by rememberUpdatedState(onReplaceSelectedParagraph)
+    val onParagraphOffsetSelectedLatest by rememberUpdatedState(onParagraphOffsetSelected)
+
+    LaunchedEffect(state) {
         snapshotFlow { state.text.toString() }
             .distinctUntilChanged()
             .debounce(TEXT_CHANGE_DEBOUNCE_MILLIS)
-            .collect { onValueChange(it) }
+            .collect { onValueChangeLatest(it) }
     }
 
     LaunchedEffect(deleteRequestId) {
         if (deleteRequestId > 0) {
-            onDeleteSelectedParagraph()
+            onDeleteSelectedParagraphLatest()
         }
     }
 
     LaunchedEffect(replaceRequestId) {
         if (replaceRequestId > 0) {
-            onReplaceSelectedParagraph(replacementText)
+            onReplaceSelectedParagraphLatest(replacementText)
         }
     }
 
@@ -82,7 +89,7 @@ fun AppMultilineTextField(
         if (paragraphTapRequestId > 0) {
             // The text field updates its cursor from the same tap. Read it after that update settles.
             yield()
-            onParagraphOffsetSelected(state.selection.end)
+            onParagraphOffsetSelectedLatest(state.selection.end)
         }
     }
 

@@ -168,7 +168,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             },
             onTargetAppSelected = mainViewModel::onTargetAppSelected,
-            onPromptTemplateChange = mainViewModel::onPromptTemplateChange,
+            onPromptTemplateChange = mainViewModel::onPromptTemplateFromEditor,
             onUndoPromptEdit = mainViewModel::undoPromptEdit,
             onToggleParagraphSelectionMode =
                 mainViewModel::toggleParagraphSelectionMode,
@@ -195,6 +195,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onCancelWork = analysisViewModel::cancelActiveWork,
             onTxtCountChange = analysisViewModel::onTxtCountChange,
             onToggleDirection = analysisViewModel::toggleDirection,
+            onCustomHintChange = analysisViewModel::onCustomHintChange,
             onResultFileNameChange = analysisViewModel::onResultFileNameChange,
             onCopyResults = analysisViewModel::copyGeneratedResults,
             onSaveResults = { analysisViewModel.saveGeneratedResults() },
@@ -204,9 +205,14 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onDismissKeyDialog = analysisViewModel::dismissKeyDialog,
             onKeyLabelChange = analysisViewModel::onKeyLabelChange,
             onKeyValueChange = analysisViewModel::onKeyValueChange,
+            onModelSelected = analysisViewModel::onModelSelected,
             onAddApiKey = analysisViewModel::addApiKey,
             onDeleteApiKey = analysisViewModel::deleteApiKey,
-            onActivateApiKey = analysisViewModel::activateApiKey
+            onActivateApiKey = analysisViewModel::activateApiKey,
+            onStartEditApiKey = analysisViewModel::startEditingApiKey,
+            onEditKeyLabelChange = analysisViewModel::onEditingKeyLabelChange,
+            onCancelEditApiKey = analysisViewModel::cancelEditingApiKey,
+            onUpdateKeyLabel = analysisViewModel::updateApiKeyLabel
         ),
         wildcardActions = wildcardViewModel?.let { viewModel ->
             WildcardAppActions(

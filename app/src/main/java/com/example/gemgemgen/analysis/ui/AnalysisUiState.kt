@@ -19,13 +19,17 @@ data class AnalysisUiState(
     val txtCount: Int = AnalysisTxtCountPolicy.DEFAULT_COUNT,
     val directions: List<AnalysisDirection> = AnalysisDummyDirections.values,
     val selectedDirectionIds: Set<String> = emptySet(),
+    val customHint: String = "",
     val generatedCandidates: List<String> = emptyList(),
     val resultFileName: String = "analysis-wildcard-results.txt",
     val pendingOverwriteFileName: String? = null,
     val showKeyDialog: Boolean = false,
     val apiKeys: List<GeminiApiKeySummary> = emptyList(),
     val keyLabelInput: String = "",
-    val keyValueInput: String = ""
+    val keyValueInput: String = "",
+    val editingApiKey: GeminiApiKeySummary? = null,
+    val editingKeyLabelInput: String = "",
+    val selectedModel: String = "gemini-3.5-flash"
 ) {
     val canAnalyze: Boolean
         get() = sourcePrompt.isNotBlank() &&

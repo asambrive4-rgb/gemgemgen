@@ -16,6 +16,7 @@ import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
+import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -35,7 +36,7 @@ class AnalysisViewModel(
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
     private var runningJob: Job? = null
-    private var analysisReport: AnalysisReport? = null
+    private var analysisCache: AnalysisCache? = null
 
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
@@ -43,29 +44,61 @@ class AnalysisViewModel(
 
     init {
         refreshKeys()
+        refreshSelectedModel()
     }
 
     fun onSourcePromptChange(value: String) {
+        val state = _uiState.value
+        if (state.sourcePrompt == value) return
+
+        // 분석 캐시는 항상 무효화. 실제 원문은 TextField + currentSourcePrompt() 가 기준.
+        analysisCache = null
+
+        val blanknessChanged = state.sourcePrompt.isBlank() != value.isBlank()
+        val segment = state.targetSegment
+        val segmentStillValid = segment == null || isSegmentStillValid(value, segment)
+        val nextSegment = if (segmentStillValid) segment else null
+        val shouldClearCandidates = state.generatedCandidates.isNotEmpty()
+
+        // 핫패스: canAnalyze 경계·구간 무효·결과 정리가 없으면 화면 state 방출 생략
+        val needsUiUpdate = blanknessChanged ||
+            nextSegment != segment ||
+            shouldClearCandidates
+        if (!needsUiUpdate) return
+
         _uiState.update {
-            if (it.sourcePrompt == value) {
-                it
-            } else {
-                analysisReport = null
-                it.copy(
-                    sourcePrompt = value,
-                    targetSegment = null,
-                    generatedCandidates = emptyList(),
-                    error = "",
-                    message = "",
-                    warning = "",
-                    status = AnalysisStatus.IDLE
-                )
-            }
+            it.copy(
+                sourcePrompt = value,
+                targetSegment = nextSegment,
+                generatedCandidates = if (shouldClearCandidates) {
+                    emptyList()
+                } else {
+                    it.generatedCandidates
+                },
+                error = "",
+                message = if (nextSegment != segment) "" else it.message,
+                warning = "",
+                status = if (it.status == AnalysisStatus.ERROR) {
+                    AnalysisStatus.IDLE
+                } else {
+                    it.status
+                }
+            )
         }
     }
 
+    private fun isSegmentStillValid(source: String, segment: AnalysisTargetSegment): Boolean {
+        if (segment.startIndex < 0 ||
+            segment.endIndex > source.length ||
+            segment.startIndex > segment.endIndex
+        ) {
+            return false
+        }
+        return source.substring(segment.startIndex, segment.endIndex) == segment.text
+    }
+
     fun onCategorySelected(category: AnalysisCategory) {
-        analysisReport = null
+        analysisCache = null
         _uiState.update {
             it.copy(
                 selectedCategory = category,
@@ -93,6 +126,7 @@ class AnalysisViewModel(
             return
         }
         val selectedText = source.substring(start, end)
+        analysisCache = null
         _uiState.update {
             it.copy(
                 sourcePrompt = source,
@@ -115,6 +149,7 @@ class AnalysisViewModel(
     }
 
     fun clearTargetSegment() {
+        analysisCache = null
         _uiState.update {
             it.copy(
                 targetSegment = null,
@@ -153,12 +188,18 @@ class AnalysisViewModel(
                 )
             }
             try {
+                analysisCache = null
                 val report = analyzePrompt.analyze(source, category)
                 val autoTarget = autoTargetFrom(report, category)
                     ?: throw AnalysisException(
                         "자동으로 변주 대상을 찾지 못했습니다. 원문에서 직접 구간을 선택해주세요."
                     )
-                analysisReport = report
+                analysisCache = AnalysisCache(
+                    sourcePrompt = source,
+                    category = category,
+                    targetSegment = autoTarget,
+                    report = report
+                )
                 _uiState.update {
                     it.copy(
                         sourcePrompt = source,
@@ -172,6 +213,7 @@ class AnalysisViewModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: RuntimeException) {
+                analysisCache = null
                 showError(error.message ?: "분석에 실패했습니다.")
             }
         }
@@ -205,8 +247,7 @@ class AnalysisViewModel(
             }
             try {
                 val target = ensureTargetSegment(source, category)
-                val report = analysisReport ?: analyzePrompt.analyze(source, category)
-                    .also { analysisReport = it }
+                val report = getOrAnalyzeReport(source, category, target)
                 val selectedHints = _uiState.value.directions
                     .filter { it.id in _uiState.value.selectedDirectionIds }
                     .map { it.hint }
@@ -216,7 +257,8 @@ class AnalysisViewModel(
                     targetSegment = target,
                     analysisReport = report,
                     count = _uiState.value.txtCount,
-                    selectedHints = selectedHints
+                    selectedHints = selectedHints,
+                    customHint = _uiState.value.customHint
                 )
                 _uiState.update {
                     it.copy(
@@ -232,6 +274,7 @@ class AnalysisViewModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: RuntimeException) {
+                analysisCache = null
                 showError(error.message ?: "TXT 생성에 실패했습니다.")
             }
         }
@@ -251,6 +294,14 @@ class AnalysisViewModel(
     fun onTxtCountChange(value: Int) {
         _uiState.update {
             it.copy(txtCount = AnalysisTxtCountPolicy.coerce(value))
+        }
+    }
+
+    fun onCustomHintChange(value: String) {
+        if (value.length <= 100) {
+            _uiState.update {
+                it.copy(customHint = value)
+            }
         }
     }
 
@@ -305,14 +356,39 @@ class AnalysisViewModel(
                                 message = "같은 이름의 파일이 있습니다."
                             )
                         }
-                    is AnalysisWildcardSaveResult.Success ->
-                        _uiState.update {
-                            it.copy(
-                                pendingOverwriteFileName = null,
-                                message = "${result.fileName} 파일로 저장했습니다.",
-                                error = ""
-                            )
+                    is AnalysisWildcardSaveResult.Success -> {
+                        val sourceText = sourcePromptTextFieldState.text.toString()
+                        val targetSegment = state.targetSegment
+                        val cleanName = result.fileName.removeSuffix(".txt").removeSuffix(".TXT")
+                        val replacement = "__${cleanName}__"
+                        
+                        val replacedText = if (targetSegment != null) {
+                            val start = targetSegment.startIndex.coerceIn(0, sourceText.length)
+                            val end = targetSegment.endIndex.coerceIn(start, sourceText.length)
+                            sourceText.replaceRange(start, end, replacement)
+                        } else {
+                            sourceText
                         }
+                        
+                        try {
+                            copyResults.copyText(replacedText)
+                            _uiState.update {
+                                it.copy(
+                                    pendingOverwriteFileName = null,
+                                    message = "${result.fileName} 파일로 저장하고, 치환된 원문을 클립보드에 복사했습니다.",
+                                    error = ""
+                                )
+                            }
+                        } catch (copyError: RuntimeException) {
+                            _uiState.update {
+                                it.copy(
+                                    pendingOverwriteFileName = null,
+                                    message = "${result.fileName} 파일로 저장했습니다. (클립보드 복사 실패: ${copyError.message})",
+                                    error = ""
+                                )
+                            }
+                        }
+                    }
                 }
             } catch (error: RuntimeException) {
                 showError(error.message ?: "와일드카드 파일 저장에 실패했습니다.")
@@ -355,6 +431,7 @@ class AnalysisViewModel(
         val state = _uiState.value
         scope.launch {
             try {
+                analysisCache = null
                 val keys = keyManager.addKey(
                     label = state.keyLabelInput,
                     rawKey = state.keyValueInput
@@ -377,6 +454,7 @@ class AnalysisViewModel(
     fun deleteApiKey(id: String) {
         scope.launch {
             try {
+                analysisCache = null
                 val keys = keyManager.deleteKey(id)
                 _uiState.update {
                     it.copy(apiKeys = keys, message = "API 키를 삭제했습니다.", error = "")
@@ -390,6 +468,7 @@ class AnalysisViewModel(
     fun activateApiKey(id: String) {
         scope.launch {
             try {
+                analysisCache = null
                 val keys = keyManager.activateKey(id)
                 _uiState.update {
                     it.copy(apiKeys = keys, message = "활성 API 키를 선택했습니다.", error = "")
@@ -397,6 +476,66 @@ class AnalysisViewModel(
             } catch (error: RuntimeException) {
                 showError(error.message ?: "API 키 선택에 실패했습니다.")
             }
+        }
+    }
+
+    fun startEditingApiKey(key: GeminiApiKeySummary) {
+        _uiState.update {
+            it.copy(
+                editingApiKey = key,
+                editingKeyLabelInput = key.label
+            )
+        }
+    }
+
+    fun onEditingKeyLabelChange(value: String) {
+        _uiState.update { it.copy(editingKeyLabelInput = value) }
+    }
+
+    fun cancelEditingApiKey() {
+        _uiState.update {
+            it.copy(
+                editingApiKey = null,
+                editingKeyLabelInput = ""
+            )
+        }
+    }
+
+    fun updateApiKeyLabel() {
+        val state = _uiState.value
+        val keyToEdit = state.editingApiKey ?: return
+        scope.launch {
+            try {
+                val keys = keyManager.updateKeyLabel(
+                    id = keyToEdit.id,
+                    newLabel = state.editingKeyLabelInput
+                )
+                _uiState.update {
+                    it.copy(
+                        apiKeys = keys,
+                        editingApiKey = null,
+                        editingKeyLabelInput = "",
+                        message = "API 키 이름을 수정했습니다.",
+                        error = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "API 키 이름 수정에 실패했습니다.")
+            }
+        }
+    }
+
+    fun onModelSelected(modelId: String) {
+        scope.launch {
+            keyManager.setSelectedModel(modelId)
+            _uiState.update { it.copy(selectedModel = modelId) }
+        }
+    }
+
+    private fun refreshSelectedModel() {
+        scope.launch {
+            val model = keyManager.getSelectedModel()
+            _uiState.update { it.copy(selectedModel = model) }
         }
     }
 
@@ -413,22 +552,22 @@ class AnalysisViewModel(
     ): AnalysisTargetSegment {
         val existingTarget = _uiState.value.targetSegment
         if (existingTarget?.source == AnalysisTargetSource.MANUAL && existingTarget.isValid) {
-            if (analysisReport == null) {
-                analysisReport = analyzePrompt.analyze(source, category)
-            }
+            getOrAnalyzeReport(source, category, existingTarget)
             return existingTarget
         }
-        val report = analysisReport ?: analyzePrompt.analyze(source, category)
-            .also { analysisReport = it }
+        val report = getOrAnalyzeReport(source, category, existingTarget)
         val autoTarget = autoTargetFrom(report, category)
             ?: throw AnalysisException(
                 "자동으로 변주 대상을 찾지 못했습니다. 원문에서 직접 구간을 선택해주세요."
             )
-        _uiState.update {
-            it.copy(
-                targetSegment = autoTarget,
-                warning = report.warnings.firstOrNull().orEmpty()
-            )
+        if (existingTarget != autoTarget) {
+            _uiState.update {
+                it.copy(
+                    targetSegment = autoTarget,
+                    warning = report.warnings.firstOrNull().orEmpty()
+                )
+            }
+            analysisCache = analysisCache?.copy(targetSegment = autoTarget)
         }
         return autoTarget
     }
@@ -461,6 +600,34 @@ class AnalysisViewModel(
         return _uiState.value.apiKeys.any { it.isActive }
     }
 
+    private suspend fun getOrAnalyzeReport(
+        source: String,
+        category: AnalysisCategory,
+        targetSegment: AnalysisTargetSegment?
+    ): AnalysisReport {
+        val cached = analysisCache
+        if (cached != null &&
+            cached.sourcePrompt == source &&
+            cached.category == category &&
+            cached.targetSegment == targetSegment
+        ) {
+            return cached.report
+        }
+        try {
+            val report = analyzePrompt.analyze(source, category)
+            analysisCache = AnalysisCache(
+                sourcePrompt = source,
+                category = category,
+                targetSegment = targetSegment,
+                report = report
+            )
+            return report
+        } catch (e: Exception) {
+            analysisCache = null
+            throw e
+        }
+    }
+
     private fun showError(message: String) {
         _uiState.update {
             it.copy(
@@ -472,3 +639,10 @@ class AnalysisViewModel(
         }
     }
 }
+
+private data class AnalysisCache(
+    val sourcePrompt: String,
+    val category: AnalysisCategory,
+    val targetSegment: AnalysisTargetSegment?,
+    val report: AnalysisReport
+)

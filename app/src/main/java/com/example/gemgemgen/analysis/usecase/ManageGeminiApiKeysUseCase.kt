@@ -45,6 +45,21 @@ class ManageGeminiApiKeysUseCase(
             repository.listKeys().map { it.toSummary() }
         }
 
+    suspend fun updateKeyLabel(id: String, newLabel: String): List<GeminiApiKeySummary> =
+        withContext(dispatchers.io) {
+            val normalizedLabel = newLabel.trim().ifBlank { "Gemini API 키" }
+            repository.updateKeyLabel(id, normalizedLabel)
+            repository.listKeys().map { it.toSummary() }
+        }
+
+    suspend fun getSelectedModel(): String = withContext(dispatchers.io) {
+        repository.getSelectedModel()
+    }
+
+    suspend fun setSelectedModel(modelId: String) = withContext(dispatchers.io) {
+        repository.setSelectedModel(modelId)
+    }
+
     private fun GeminiApiKeyRecord.toSummary(): GeminiApiKeySummary {
         return GeminiApiKeySummary(
             id = id,

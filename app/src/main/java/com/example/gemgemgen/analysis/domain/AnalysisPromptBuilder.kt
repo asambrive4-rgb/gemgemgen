@@ -72,7 +72,8 @@ Find the target segment and analyze the visual constraints. Return strict JSON.
         targetSegment: AnalysisTargetSegment,
         analysisReport: AnalysisReport,
         count: Int,
-        selectedHints: List<String>
+        selectedHints: List<String>,
+        customHint: String? = null
     ): AnalysisTxtPromptPayload {
         val avoidRules = analysisReport.categoryConstraints.avoid
             .takeIf { it.isNotEmpty() }
@@ -101,7 +102,9 @@ Critical rules:
 5. If lower body or floor is cropped or unclear, do not describe shoes, socks, floor tiles, ground, or pavement details.
 6. For location/background, include layout-aware structure, not short lazy place names.
 7. For human categories, avoid injecting unrelated location details.
-8. Return strict JSON array only.
+8. Match the level of detail and descriptive length of the user's direction hints. If the hints are highly detailed and long, generate outputs that are correspondingly rich and descriptive, rather than summarizing them into short 1-2 sentences.
+9. Respect the style and format of the user's hints naturally (e.g., matching the overall tone or structure), but do not restrict the phrasing too strictly if it harms expression quality.
+10. Return strict JSON array only.
 
 Context:
 - Viewpoint: ${analysisReport.visualContext.viewpoint}
@@ -124,6 +127,7 @@ Replace this segment:
 
 Category: "${category.label}"
 ${if (hintText.isBlank()) "" else "Selected dummy direction hints:\n$hintText"}
+${if (customHint.isNullOrBlank()) "" else "Custom user direction hint:\n$customHint"}
 
 Generate exactly $count unique Korean wildcard fragments as a JSON array.
         """.trimIndent()

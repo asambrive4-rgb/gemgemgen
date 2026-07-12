@@ -27,7 +27,8 @@ class GenerateAnalysisTxtUseCase(
         analysisReport: AnalysisReport,
         count: Int,
         selectedHints: List<String>,
-        modelId: String = DEFAULT_ANALYSIS_MODEL
+        customHint: String? = null,
+        modelId: String? = null
     ): AnalysisTxtGenerationResult = withContext(dispatchers.io) {
         if (sourcePrompt.isBlank()) {
             throw AnalysisException("원본 프롬프트를 입력해주세요.")
@@ -37,6 +38,7 @@ class GenerateAnalysisTxtUseCase(
         }
         val apiKey = apiKeyRepository.activeKeyValue()
             ?: throw AnalysisException("활성 Gemini API 키를 먼저 선택해주세요.")
+        val resolvedModelId = modelId ?: apiKeyRepository.getSelectedModel()
         val normalizedCount = AnalysisTxtCountPolicy.coerce(count)
         val payload = AnalysisPromptBuilder.buildTxtPrompt(
             sourcePrompt = sourcePrompt,
@@ -44,11 +46,12 @@ class GenerateAnalysisTxtUseCase(
             targetSegment = targetSegment,
             analysisReport = analysisReport,
             count = normalizedCount,
-            selectedHints = selectedHints
+            selectedHints = selectedHints,
+            customHint = customHint
         )
         val responseText = aiGateway.generateTxt(
             apiKey = apiKey,
-            modelId = modelId,
+            modelId = resolvedModelId,
             payload = payload
         )
         val candidates = AnalysisResponseParser.parseTxtCandidates(responseText)

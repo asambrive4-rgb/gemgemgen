@@ -159,6 +159,50 @@ class AnalysisFeatureTest {
         assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
     }
 
+    @Test
+    fun viewModel_cachingAndInvalidation() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"후보","explanation":"설명"}]"""
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        val prompt = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        
+        // 1. 자동 마스킹 실행 (최초 1차 분석 API 호출)
+        viewModel.analyzeAndMask()
+        assertEquals(1, aiGateway.analyzeCallCount)
+
+        // 2. TXT 생성 실행 (캐시 재사용되어 1 유지)
+        viewModel.generateTxt()
+        assertEquals(1, aiGateway.analyzeCallCount)
+
+        // 3. 한 번 더 TXT 생성 실행 (캐시 재사용되어 1 유지)
+        viewModel.generateTxt()
+        assertEquals(1, aiGateway.analyzeCallCount)
+
+        // 4. 카테고리 변경 -> 캐시 무효화 -> 1차 분석 다시 수행 (호출 횟수 2)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
+        viewModel.generateTxt()
+        assertEquals(2, aiGateway.analyzeCallCount)
+
+        // 5. 수동 마스킹 지정 -> 캐시 무효화 -> 1차 분석 다시 수행 (호출 횟수 3)
+        viewModel.sourcePromptTextFieldState.edit {
+            selection = TextRange(0, "red hair".length)
+        }
+        viewModel.applyManualSelection()
+        viewModel.generateTxt()
+        assertEquals(3, aiGateway.analyzeCallCount)
+
+        // 6. 동일한 수동 마스킹에서 다시 TXT 생성 실행 (캐시 재사용되어 3 유지)
+        viewModel.generateTxt()
+        assertEquals(3, aiGateway.analyzeCallCount)
+    }
+
     private fun analysisViewModel(
         aiGateway: AnalysisAiGateway,
         keyRepository: GeminiApiKeyRepository
@@ -237,11 +281,14 @@ class AnalysisFeatureTest {
         private val analyzeResponse: String = analysisJsonStatic("long hair"),
         private val generateResponse: String = "[]"
     ) : AnalysisAiGateway {
+        var analyzeCallCount = 0
+
         override suspend fun analyze(
             apiKey: String,
             modelId: String,
             payload: AnalysisPromptPayload
         ): String {
+            analyzeCallCount++
             assertEquals(DEFAULT_ANALYSIS_MODEL, modelId)
             return analyzeResponse
         }
@@ -308,6 +355,18 @@ class AnalysisFeatureTest {
 
         override fun activeKeyValue(): String? {
             return records.firstOrNull { it.isActive }?.let { rawKeys[it.id] }
+        }
+
+        override fun updateKeyLabel(id: String, newLabel: String) {
+            records.replaceAll { if (it.id == id) it.copy(label = newLabel) else it }
+        }
+
+        private var selectedModel: String = DEFAULT_ANALYSIS_MODEL
+
+        override fun getSelectedModel(): String = selectedModel
+
+        override fun setSelectedModel(modelId: String) {
+            selectedModel = modelId
         }
     }
 

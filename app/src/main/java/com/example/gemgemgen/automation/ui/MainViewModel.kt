@@ -67,6 +67,8 @@ class MainViewModel(
     private val promptUndoHistory = PromptUndoHistory()
     private var promptUndoDebounceJob: Job? = null
     private var ignoredPromptChangeText: String? = null
+    /** TextField / 비즈니스 로직용 최신 프롬프트. 타이핑 중 uiState 전체 방출을 줄이기 위해 분리. */
+    private var promptTemplateValue: String = ""
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
     val promptTemplateTextFieldState = TextFieldState()
@@ -80,19 +82,49 @@ class MainViewModel(
     }
 
     fun onPromptTemplateChange(value: String) {
-        val previous = _uiState.value.promptTemplate
-        if (!promptTemplateTextFieldState.text.contentEquals(value)) {
+        onPromptTemplateChange(value, updateTextFieldState = true)
+    }
+
+    /**
+     * 텍스트 필드 debounce 경로 전용. [updateTextFieldState] = false 와 같으며
+     * 메서드 레퍼런스로 넘길 수 있어 Host 람다 재생성으로 인한 구독 재시작을 줄인다.
+     */
+    fun onPromptTemplateFromEditor(value: String) {
+        onPromptTemplateChange(value, updateTextFieldState = false)
+    }
+
+    fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean) {
+        val previous = promptTemplateValue
+        if (updateTextFieldState && !promptTemplateTextFieldState.text.contentEquals(value)) {
             promptTemplateTextFieldState.setTextAndPlaceCursorAtEnd(value)
-        }
-        _uiState.update {
-            if (it.promptTemplate == value) it else it.copy(promptTemplate = value)
         }
         if (ignoredPromptChangeText == value) {
             ignoredPromptChangeText = null
+            promptTemplateValue = value
+            // 외부에서 필드를 맞춘 경우(붙여넣기/삭제 등)에는 state도 즉시 동기화한다.
+            publishPromptTemplateToUiState(value, force = true)
             return
         }
-        if (previous != value) {
-            schedulePromptTypingUndo(previous)
+        if (previous == value) {
+            return
+        }
+        promptTemplateValue = value
+        schedulePromptTypingUndo(previous)
+        // 타이핑(필드→VM): 빈/비어 있지 않음 경계일 때만 uiState 방출.
+        // 테스트·직접 호출(updateTextFieldState=true): 기존처럼 즉시 반영.
+        publishPromptTemplateToUiState(value, force = updateTextFieldState)
+    }
+
+    private fun publishPromptTemplateToUiState(value: String, force: Boolean) {
+        _uiState.update { state ->
+            if (state.promptTemplate == value) {
+                state
+            } else if (!force && state.promptTemplate.isBlank() == value.isBlank()) {
+                // 같은 blankness면 hasPromptTemplate/canRun 이 변하지 않음 → 전체 화면 리컴포즈 생략
+                state
+            } else {
+                state.copy(promptTemplate = value)
+            }
         }
     }
 
@@ -152,6 +184,7 @@ class MainViewModel(
             replace(range.start, range.endExclusive, "")
             selection = TextRange(range.start)
         }
+        promptTemplateValue = newText
         _uiState.update {
             it.copy(
                 promptTemplate = newText,
@@ -241,6 +274,7 @@ class MainViewModel(
             }
 
             val newText = promptTemplateTextFieldState.text.toString()
+            promptTemplateValue = newText
             _uiState.update {
                 it.copy(
                     promptTemplate = newText,
@@ -366,6 +400,7 @@ class MainViewModel(
         commitPendingPromptUndo()
         val previous = promptUndoHistory.popUndo() ?: return
         applyPromptTemplateText(previous)
+        promptTemplateValue = previous
         _uiState.update {
             it.copy(
                 promptTemplate = previous,
@@ -474,14 +509,17 @@ class MainViewModel(
             val lastRunSnapshot = withContext(dispatchers.io) {
                 lastRunSnapshotStore.load()
             }
+            val current = _uiState.value
+            val defaultRepeatCountText = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
+            val restoredPrompt = if (current.promptTemplate.isBlank()) {
+                lastRunSnapshot?.promptTemplate.orEmpty()
+            } else {
+                current.promptTemplate
+            }
+            promptTemplateValue = restoredPrompt
             _uiState.update {
-                val defaultRepeatCountText = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
                 it.copy(
-                    promptTemplate = if (it.promptTemplate.isBlank()) {
-                        lastRunSnapshot?.promptTemplate.orEmpty()
-                    } else {
-                        it.promptTemplate
-                    },
+                    promptTemplate = restoredPrompt,
                     repeatCountText = if (it.repeatCountText == defaultRepeatCountText) {
                         lastRunSnapshot?.repeatCountText
                             ?.ifBlank { defaultRepeatCountText }
@@ -492,7 +530,7 @@ class MainViewModel(
                     selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp
                 )
             }
-            applyPromptTemplateText(uiState.value.promptTemplate)
+            applyPromptTemplateText(promptTemplateValue)
             val restoredState = uiState.value
             _automationBarUiState.value = AutomationBarUiState(
                 repeatCountText = restoredState.repeatCountText,
@@ -547,6 +585,7 @@ class MainViewModel(
             replace(start, endExclusive, replacement)
             selection = TextRange(start + replacement.length)
         }
+        promptTemplateValue = newText
         _uiState.update {
             it.copy(
                 promptTemplate = newText,
@@ -563,6 +602,7 @@ class MainViewModel(
 
         recordImmediatePromptUndo(currentText)
         applyPromptTemplateText(replacement)
+        promptTemplateValue = replacement
         _uiState.update {
             it.copy(
                 promptTemplate = replacement,
@@ -581,10 +621,20 @@ class MainViewModel(
         }
     }
 
+    /**
+     * 실행·복사 등 최신 문자열이 필요할 때 TextField → 내부 값·uiState 를 맞춘다.
+     * Undo 스냅샷은 잡지 않는다(타이핑 중 state 미방출 보정용).
+     */
     private fun syncPromptTemplateFromTextField() {
         val currentText = promptTemplateTextFieldState.text.toString()
-        if (_uiState.value.promptTemplate != currentText) {
-            onPromptTemplateChange(currentText)
+        if (promptTemplateValue == currentText &&
+            _uiState.value.promptTemplate == currentText
+        ) {
+            return
+        }
+        promptTemplateValue = currentText
+        _uiState.update {
+            if (it.promptTemplate == currentText) it else it.copy(promptTemplate = currentText)
         }
     }
 
@@ -605,7 +655,7 @@ class MainViewModel(
     }
 
     private fun commitPendingPromptUndo() {
-        promptUndoHistory.commitPendingTyping(_uiState.value.promptTemplate)
+        promptUndoHistory.commitPendingTyping(promptTemplateValue)
         promptUndoDebounceJob?.cancel()
         promptUndoDebounceJob = null
         updatePromptUndoAvailability()

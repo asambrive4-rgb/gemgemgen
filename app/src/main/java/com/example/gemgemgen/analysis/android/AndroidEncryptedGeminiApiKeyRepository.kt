@@ -70,6 +70,26 @@ class AndroidEncryptedGeminiApiKeyRepository(
         return decrypt(activeRecord.encryptedValue)
     }
 
+    override fun updateKeyLabel(id: String, newLabel: String) {
+        writeRecords(
+            readRecords().map { record ->
+                if (record.id == id) {
+                    record.copy(label = newLabel)
+                } else {
+                    record
+                }
+            }
+        )
+    }
+
+    override fun getSelectedModel(): String {
+        return prefs.getString(KEY_SELECTED_MODEL, "gemini-3.5-flash") ?: "gemini-3.5-flash"
+    }
+
+    override fun setSelectedModel(modelId: String) {
+        prefs.edit().putString(KEY_SELECTED_MODEL, modelId).apply()
+    }
+
     private fun readRecords(): List<GeminiApiKeyRecord> {
         val raw = prefs.getString(KEY_RECORDS, null) ?: return emptyList()
         return runCatching {
@@ -152,7 +172,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
             .build()
-        keyGenerator.init(spec)
+            keyGenerator.init(spec)
         return keyGenerator.generateKey()
     }
 
@@ -167,6 +187,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
     private companion object {
         const val PREFS_NAME = "gemgemgen_analysis_api_keys"
         const val KEY_RECORDS = "records"
+        const val KEY_SELECTED_MODEL = "selected_model_id"
         const val ANDROID_KEY_STORE = "AndroidKeyStore"
         const val KEY_ALIAS = "gemgemgen_analysis_api_key"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

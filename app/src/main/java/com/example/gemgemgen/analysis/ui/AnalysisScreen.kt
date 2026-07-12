@@ -3,12 +3,23 @@ package com.example.gemgemgen.analysis.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
@@ -19,6 +30,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -28,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -40,6 +53,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.ui.AppMultilineTextField
+import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import kotlin.math.roundToInt
 
 @Composable
@@ -56,6 +70,7 @@ internal fun AnalysisScreen(
     onCancelWork: () -> Unit,
     onTxtCountChange: (Int) -> Unit,
     onToggleDirection: (String) -> Unit,
+    onCustomHintChange: (String) -> Unit,
     onResultFileNameChange: (String) -> Unit,
     onCopyResults: () -> Unit,
     onSaveResults: () -> Unit,
@@ -65,56 +80,98 @@ internal fun AnalysisScreen(
     onDismissKeyDialog: () -> Unit,
     onKeyLabelChange: (String) -> Unit,
     onKeyValueChange: (String) -> Unit,
+    onModelSelected: (String) -> Unit,
     onAddApiKey: () -> Unit,
     onDeleteApiKey: (String) -> Unit,
-    onActivateApiKey: (String) -> Unit
+    onActivateApiKey: (String) -> Unit,
+    onStartEditApiKey: (GeminiApiKeySummary) -> Unit,
+    onEditKeyLabelChange: (String) -> Unit,
+    onCancelEditApiKey: () -> Unit,
+    onUpdateKeyLabel: () -> Unit
 ) {
-    Scaffold(modifier = Modifier.fillMaxWidth()) { innerPadding ->
-        Column(
+    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+
+    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+        Box(
             modifier = Modifier
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .fillMaxSize()
+                .imePadding()
+                .clearFocusOnOutsideTap(onClearFocus)
         ) {
-            ApiKeyHeader(
-                activePreview = uiState.activeKeyPreview,
-                hasKeys = uiState.apiKeys.isNotEmpty(),
-                onShowKeyDialog = onShowKeyDialog
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ApiKeyHeader(
+                    activePreview = uiState.activeKeyPreview,
+                    hasKeys = uiState.apiKeys.isNotEmpty(),
+                    selectedModel = uiState.selectedModel,
+                    onModelSelected = onModelSelected,
+                    onShowKeyDialog = onShowKeyDialog
+                )
 
-            SourcePromptSection(
-                sourcePromptState = sourcePromptState,
-                uiState = uiState,
-                onSourcePromptChange = onSourcePromptChange,
-                onCategorySelected = onCategorySelected,
-                onApplyManualSelection = onApplyManualSelection,
-                onClearTargetSegment = onClearTargetSegment,
-                onAnalyzeAndMask = onAnalyzeAndMask,
-                onGenerateTxt = onGenerateTxt,
-                onCancelWork = onCancelWork,
-                onClearFocus = onClearFocus
-            )
+                SourcePromptInputSection(
+                    sourcePromptState = sourcePromptState,
+                    onSourcePromptChange = onSourcePromptChange
+                )
 
-            DirectionSection(
-                directions = uiState.directions,
-                selectedIds = uiState.selectedDirectionIds,
-                onToggleDirection = onToggleDirection
-            )
+                TargetSegmentPanel(
+                    targetSegment = uiState.targetSegment,
+                    onClearTargetSegment = onClearTargetSegment
+                )
 
-            CountSection(
-                count = uiState.txtCount,
-                onCountChange = onTxtCountChange
-            )
+                DirectionSection(
+                    directions = uiState.directions,
+                    selectedIds = uiState.selectedDirectionIds,
+                    onToggleDirection = onToggleDirection
+                )
 
-            FeedbackSection(uiState)
+                CustomHintSection(
+                    customHint = uiState.customHint,
+                    onCustomHintChange = onCustomHintChange
+                )
 
-            ResultSection(
-                uiState = uiState,
-                onResultFileNameChange = onResultFileNameChange,
-                onCopyResults = onCopyResults,
-                onSaveResults = onSaveResults
-            )
+                CountSection(
+                    count = uiState.txtCount,
+                    onCountChange = onTxtCountChange
+                )
+
+                FeedbackSection(uiState)
+
+                ResultSection(
+                    uiState = uiState,
+                    onResultFileNameChange = onResultFileNameChange
+                )
+
+                // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
+                Spacer(modifier = Modifier.height(if (isKeyboardVisible) 240.dp else 140.dp))
+            }
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                tonalElevation = 3.dp,
+                shadowElevation = 8.dp
+            ) {
+                StickyBottomActionPanel(
+                    uiState = uiState,
+                    onCategorySelected = onCategorySelected,
+                    onApplyManualSelection = onApplyManualSelection,
+                    onClearTargetSegment = onClearTargetSegment,
+                    onAnalyzeAndMask = onAnalyzeAndMask,
+                    onGenerateTxt = onGenerateTxt,
+                    onCancelWork = onCancelWork,
+                    onClearFocus = onClearFocus,
+                    onCopyResults = onCopyResults,
+                    onSaveResults = onSaveResults
+                )
+            }
         }
     }
 
@@ -126,7 +183,18 @@ internal fun AnalysisScreen(
             onKeyValueChange = onKeyValueChange,
             onAdd = onAddApiKey,
             onDelete = onDeleteApiKey,
-            onActivate = onActivateApiKey
+            onActivate = onActivateApiKey,
+            onStartEdit = onStartEditApiKey
+        )
+    }
+
+    uiState.editingApiKey?.let { editingKey ->
+        EditKeyLabelDialog(
+            originalLabel = editingKey.label,
+            currentValue = uiState.editingKeyLabelInput,
+            onValueChange = onEditKeyLabelChange,
+            onDismiss = onCancelEditApiKey,
+            onConfirm = onUpdateKeyLabel
         )
     }
 
@@ -140,9 +208,47 @@ internal fun AnalysisScreen(
 }
 
 @Composable
+private fun ModelChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = containerColor,
+        contentColor = contentColor,
+        border = if (selected) {
+            null
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+        },
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
 private fun ApiKeyHeader(
     activePreview: String,
     hasKeys: Boolean,
+    selectedModel: String,
+    onModelSelected: (String) -> Unit,
     onShowKeyDialog: () -> Unit
 ) {
     Surface(
@@ -156,42 +262,45 @@ private fun ApiKeyHeader(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Gemini API 키",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = when {
-                        activePreview.isNotBlank() -> "활성 키: $activePreview"
-                        hasKeys -> "활성 키를 선택해주세요."
-                        else -> "키를 추가해야 분석 생성이 가능합니다."
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(onClick = onShowKeyDialog) {
+                    Text("키 관리")
+                }
+                if (activePreview.isNotBlank()) {
+                    Text(
+                        text = "($activePreview)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            OutlinedButton(onClick = onShowKeyDialog) {
-                Text("키 관리")
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ModelChip(
+                    label = "3.5 Flash",
+                    selected = selectedModel == "gemini-3.5-flash",
+                    onClick = { onModelSelected("gemini-3.5-flash") }
+                )
+                ModelChip(
+                    label = "3.1 Flash-Lite",
+                    selected = selectedModel == "gemini-3.1-flash-lite",
+                    onClick = { onModelSelected("gemini-3.1-flash-lite") }
+                )
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SourcePromptSection(
+private fun SourcePromptInputSection(
     sourcePromptState: TextFieldState,
-    uiState: AnalysisUiState,
-    onSourcePromptChange: (String) -> Unit,
-    onCategorySelected: (AnalysisCategory) -> Unit,
-    onApplyManualSelection: () -> Unit,
-    onClearTargetSegment: () -> Unit,
-    onAnalyzeAndMask: () -> Unit,
-    onGenerateTxt: () -> Unit,
-    onCancelWork: () -> Unit,
-    onClearFocus: () -> Unit
+    onSourcePromptChange: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -206,16 +315,41 @@ private fun SourcePromptSection(
             minLines = 6,
             placeholder = "분석과 변주의 대상이 되는 전체 이미지 프롬프트를 입력하세요."
         )
+    }
+}
 
-        Text(
-            text = "카테고리 선택",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold
-        )
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StickyBottomActionPanel(
+    uiState: AnalysisUiState,
+    onCategorySelected: (AnalysisCategory) -> Unit,
+    onApplyManualSelection: () -> Unit,
+    onClearTargetSegment: () -> Unit,
+    onAnalyzeAndMask: () -> Unit,
+    onGenerateTxt: () -> Unit,
+    onCancelWork: () -> Unit,
+    onClearFocus: () -> Unit,
+    onCopyResults: () -> Unit,
+    onSaveResults: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
         FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            Text(
+                text = "카테고리:",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 2.dp)
+            )
             AnalysisCategory.entries.forEach { category ->
                 CategoryChip(
                     category = category,
@@ -226,44 +360,80 @@ private fun SourcePromptSection(
             }
         }
 
-        TargetSegmentPanel(
-            targetSegment = uiState.targetSegment,
-            onClearTargetSegment = onClearTargetSegment
-        )
-
-        FlowRow(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(
-                onClick = {
-                    onApplyManualSelection()
-                    onClearFocus()
-                },
-                enabled = !uiState.isBusy
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("선택 구간 지정")
+                if (uiState.generatedCandidates.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = onCopyResults,
+                        enabled = uiState.canCopyOrSave,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                    ) {
+                        Text("목록 복사", style = MaterialTheme.typography.labelSmall)
+                    }
+                    Button(
+                        onClick = onSaveResults,
+                        enabled = uiState.canCopyOrSave,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                    ) {
+                        Text("와일드카드 파일 저장", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
-            OutlinedButton(
-                onClick = if (uiState.status == AnalysisStatus.ANALYZING) {
-                    onCancelWork
-                } else {
-                    onAnalyzeAndMask
-                },
-                enabled = uiState.canAnalyze || uiState.status == AnalysisStatus.ANALYZING
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(if (uiState.status == AnalysisStatus.ANALYZING) "중지" else "자동 분석")
-            }
-            Button(
-                onClick = if (uiState.status == AnalysisStatus.GENERATING) {
-                    onCancelWork
-                } else {
-                    onGenerateTxt
-                },
-                enabled = uiState.canGenerate || uiState.status == AnalysisStatus.GENERATING
-            ) {
-                Text(if (uiState.status == AnalysisStatus.GENERATING) "중지" else "TXT 생성")
+                OutlinedButton(
+                    onClick = {
+                        onApplyManualSelection()
+                        onClearFocus()
+                    },
+                    enabled = !uiState.isBusy,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                ) {
+                    Text("선택 구간 지정", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(
+                    onClick = if (uiState.status == AnalysisStatus.ANALYZING) {
+                        onCancelWork
+                    } else {
+                        onAnalyzeAndMask
+                    },
+                    enabled = uiState.canAnalyze || uiState.status == AnalysisStatus.ANALYZING,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                ) {
+                    Text(
+                        text = if (uiState.status == AnalysisStatus.ANALYZING) "중지" else "자동 분석",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                Button(
+                    onClick = if (uiState.status == AnalysisStatus.GENERATING) {
+                        onCancelWork
+                    } else {
+                        onGenerateTxt
+                    },
+                    enabled = uiState.canGenerate || uiState.status == AnalysisStatus.GENERATING,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                ) {
+                    Text(
+                        text = if (uiState.status == AnalysisStatus.GENERATING) "중지" else "TXT 생성",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
     }
@@ -299,8 +469,8 @@ private fun CategoryChip(
     ) {
         Text(
             text = category.label,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold
         )
     }
@@ -311,14 +481,7 @@ private fun TargetSegmentPanel(
     targetSegment: AnalysisTargetSegment?,
     onClearTargetSegment: () -> Unit
 ) {
-    if (targetSegment == null) {
-        Text(
-            text = "기본은 자동 마스킹입니다. 직접 고르려면 원문에서 구간을 선택한 뒤 선택 구간 지정을 누르세요.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        return
-    }
+    if (targetSegment == null) return
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -358,7 +521,6 @@ private fun TargetSegmentPanel(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DirectionSection(
     directions: List<AnalysisDirection>,
@@ -376,16 +538,30 @@ private fun DirectionSection(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            directions.forEach { direction ->
-                DirectionChip(
-                    direction = direction,
-                    selected = direction.id in selectedIds,
-                    onClick = { onToggleDirection(direction.id) }
-                )
+        
+        val rows = directions.chunked(2)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            rows.forEach { rowItems ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    rowItems.forEach { direction ->
+                        DirectionChip(
+                            direction = direction,
+                            selected = direction.id in selectedIds,
+                            onClick = { onToggleDirection(direction.id) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        )
+                    }
+                    if (rowItems.size < 2) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
@@ -395,11 +571,11 @@ private fun DirectionSection(
 private fun DirectionChip(
     direction: AnalysisDirection,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.small,
         color = if (selected) {
@@ -499,9 +675,7 @@ private fun FeedbackSection(uiState: AnalysisUiState) {
 @Composable
 private fun ResultSection(
     uiState: AnalysisUiState,
-    onResultFileNameChange: (String) -> Unit,
-    onCopyResults: () -> Unit,
-    onSaveResults: () -> Unit
+    onResultFileNameChange: (String) -> Unit
 ) {
     if (uiState.generatedCandidates.isEmpty()) return
 
@@ -517,7 +691,7 @@ private fun ResultSection(
             onValueChange = {},
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 160.dp),
+                .heightIn(min = 160.dp, max = 200.dp),
             readOnly = true,
             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
         )
@@ -529,38 +703,6 @@ private fun ResultSection(
             label = { Text("저장할 와일드카드 파일명") },
             placeholder = { Text("옷.txt") }
         )
-        FlowRowCompat(
-            canCopyOrSave = uiState.canCopyOrSave,
-            onCopyResults = onCopyResults,
-            onSaveResults = onSaveResults
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FlowRowCompat(
-    canCopyOrSave: Boolean,
-    onCopyResults: () -> Unit,
-    onSaveResults: () -> Unit
-) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        OutlinedButton(
-            onClick = onCopyResults,
-            enabled = canCopyOrSave
-        ) {
-            Text("목록 복사")
-        }
-        Button(
-            onClick = onSaveResults,
-            enabled = canCopyOrSave
-        ) {
-            Text("와일드카드 파일 저장")
-        }
     }
 }
 
@@ -572,7 +714,8 @@ private fun ApiKeyDialog(
     onKeyValueChange: (String) -> Unit,
     onAdd: () -> Unit,
     onDelete: (String) -> Unit,
-    onActivate: (String) -> Unit
+    onActivate: (String) -> Unit,
+    onStartEdit: (GeminiApiKeySummary) -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -621,7 +764,8 @@ private fun ApiKeyDialog(
                         ApiKeyRow(
                             key = key,
                             onActivate = onActivate,
-                            onDelete = onDelete
+                            onDelete = onDelete,
+                            onEdit = onStartEdit
                         )
                     }
                 }
@@ -639,7 +783,8 @@ private fun ApiKeyDialog(
 private fun ApiKeyRow(
     key: GeminiApiKeySummary,
     onActivate: (String) -> Unit,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    onEdit: (GeminiApiKeySummary) -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -660,12 +805,20 @@ private fun ApiKeyRow(
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedButton(
                     onClick = { onActivate(key.id) },
                     enabled = !key.isActive
                 ) {
                     Text(if (key.isActive) "활성" else "활성화")
+                }
+                OutlinedButton(
+                    onClick = { onEdit(key) }
+                ) {
+                    Text("이름 수정")
                 }
                 TextButton(onClick = { onDelete(key.id) }) {
                     Text("삭제")
@@ -698,4 +851,72 @@ private fun OverwriteDialog(
             }
         }
     )
+}
+
+@Composable
+private fun EditKeyLabelDialog(
+    originalLabel: String,
+    currentValue: String,
+    onValueChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("API 키 이름 수정") },
+        text = {
+            OutlinedTextField(
+                value = currentValue,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("새 키 이름") },
+                placeholder = { Text(originalLabel) }
+            )
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("저장")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("취소")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CustomHintSection(
+    customHint: String,
+    onCustomHintChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "추가 요청사항 (선택)",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "${customHint.length}/100",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        OutlinedTextField(
+            value = customHint,
+            onValueChange = onCustomHintChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = false,
+            minLines = 1,
+            maxLines = 3,
+            placeholder = { Text("예: 더 밝은 톤으로, 디테일한 묘사 추가 등") }
+        )
+    }
 }

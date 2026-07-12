@@ -18,13 +18,14 @@ class AnalyzePromptForCategoryUseCase(
     suspend fun analyze(
         sourcePrompt: String,
         category: AnalysisCategory,
-        modelId: String = DEFAULT_ANALYSIS_MODEL
+        modelId: String? = null
     ): AnalysisReport = withContext(dispatchers.io) {
         if (sourcePrompt.isBlank()) {
             throw AnalysisException("원본 프롬프트를 입력해주세요.")
         }
         val apiKey = apiKeyRepository.activeKeyValue()
             ?: throw AnalysisException("활성 Gemini API 키를 먼저 선택해주세요.")
+        val resolvedModelId = modelId ?: apiKeyRepository.getSelectedModel()
 
         val payload = AnalysisPromptBuilder.buildAnalysisPrompt(
             sourcePrompt = sourcePrompt,
@@ -32,7 +33,7 @@ class AnalyzePromptForCategoryUseCase(
         )
         val responseText = aiGateway.analyze(
             apiKey = apiKey,
-            modelId = modelId,
+            modelId = resolvedModelId,
             payload = payload
         )
         AnalysisResponseParser.parseReport(responseText, sourcePrompt)

@@ -14,6 +14,10 @@ class CopyAnalysisResultsUseCase(
     suspend fun copy(candidates: List<String>) = withContext(dispatchers.io) {
         clipboardGateway.writeText(candidates.joinToString(separator = "\n"))
     }
+
+    suspend fun copyText(text: String) = withContext(dispatchers.io) {
+        clipboardGateway.writeText(text)
+    }
 }
 
 sealed class AnalysisWildcardSaveResult {
