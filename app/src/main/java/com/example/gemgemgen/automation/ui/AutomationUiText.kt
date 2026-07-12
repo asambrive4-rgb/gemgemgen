@@ -1,9 +1,28 @@
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
+import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
+import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
+import com.example.gemgemgen.automation.domain.PromptParagraphMessageKey
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 
 object AutomationUiText {
+    fun paragraphMessage(key: PromptParagraphMessageKey): String {
+        return when (key) {
+            PromptParagraphMessageKey.None -> ""
+            PromptParagraphMessageKey.Guide ->
+                "바꿀 문단을 터치하세요. 직접 입력은 제한되며 삭제키는 사용할 수 있습니다."
+            PromptParagraphMessageKey.Selected ->
+                "문단이 선택되었습니다. 가져오기 또는 삭제키를 사용하세요."
+            PromptParagraphMessageKey.EmptyParagraph ->
+                "빈 줄은 선택할 수 없습니다. 텍스트가 있는 문단을 터치하세요."
+            PromptParagraphMessageKey.SelectFirst ->
+                "먼저 바꿀 문단을 선택하세요."
+            PromptParagraphMessageKey.EmptyClipboard ->
+                "클립보드가 비어 있어 선택한 문단을 바꾸지 않았습니다."
+        }
+    }
+
     fun statusText(automationState: AutomationRunState): String {
         return when (automationState) {
             AutomationRunState.Idle -> "자동화 대기 중"
@@ -27,25 +46,48 @@ object AutomationUiText {
     }
 
     fun geminiRestartUnavailableMessage(state: MainUiState): String {
-        return when {
-            state.isRunning -> "자동화 중에는 Gemini를 재시작할 수 없습니다."
-            state.isClosingGemini -> "Gemini 재시작이 이미 진행 중입니다."
-            !state.environmentStatus.isGeminiInstalled -> "Gemini 앱이 설치되어 있지 않습니다."
-            !state.environmentStatus.isAccessibilityServiceEnabled ->
-                "접근성 서비스를 먼저 켜주세요."
-            else -> "Gemini 재시작을 지금 실행할 수 없습니다."
-        }
+        return geminiRestartUnavailableMessage(blockReasonFor(state))
     }
 
     fun geminiTerminateUnavailableMessage(state: MainUiState): String {
-        return when {
-            state.isRunning -> "자동화 중에는 Gemini를 종료할 수 없습니다."
-            state.isClosingGemini -> "Gemini 종료가 이미 진행 중입니다."
-            !state.environmentStatus.isGeminiInstalled -> "Gemini 앱이 설치되어 있지 않습니다."
-            !state.environmentStatus.isAccessibilityServiceEnabled ->
+        return geminiTerminateUnavailableMessage(blockReasonFor(state))
+    }
+
+    fun geminiRestartUnavailableMessage(reason: GeminiAppControlBlockReason?): String {
+        return when (reason) {
+            GeminiAppControlBlockReason.AutomationRunning ->
+                "자동화 중에는 Gemini를 재시작할 수 없습니다."
+            GeminiAppControlBlockReason.AlreadyInProgress ->
+                "Gemini 재시작이 이미 진행 중입니다."
+            GeminiAppControlBlockReason.GeminiNotInstalled ->
+                "Gemini 앱이 설치되어 있지 않습니다."
+            GeminiAppControlBlockReason.AccessibilityDisabled ->
                 "접근성 서비스를 먼저 켜주세요."
-            else -> "Gemini 종료를 지금 실행할 수 없습니다."
+            null -> "Gemini 재시작을 지금 실행할 수 없습니다."
         }
+    }
+
+    fun geminiTerminateUnavailableMessage(reason: GeminiAppControlBlockReason?): String {
+        return when (reason) {
+            GeminiAppControlBlockReason.AutomationRunning ->
+                "자동화 중에는 Gemini를 종료할 수 없습니다."
+            GeminiAppControlBlockReason.AlreadyInProgress ->
+                "Gemini 종료가 이미 진행 중입니다."
+            GeminiAppControlBlockReason.GeminiNotInstalled ->
+                "Gemini 앱이 설치되어 있지 않습니다."
+            GeminiAppControlBlockReason.AccessibilityDisabled ->
+                "접근성 서비스를 먼저 켜주세요."
+            null -> "Gemini 종료를 지금 실행할 수 없습니다."
+        }
+    }
+
+    private fun blockReasonFor(state: MainUiState): GeminiAppControlBlockReason? {
+        return GeminiAppControlPolicy.blockReason(
+            isGeminiInstalled = state.environmentStatus.isGeminiInstalled,
+            isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
+            isAutomationRunning = state.isRunning,
+            isClosingInProgress = state.isClosingGemini
+        )
     }
 
     fun geminiRestartResultMessage(result: CloseGeminiAppResult): String {

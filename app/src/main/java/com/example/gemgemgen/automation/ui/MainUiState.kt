@@ -2,6 +2,7 @@ package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
@@ -37,9 +38,10 @@ data class MainUiState(
         get() = hasRunRequirements && !isRunning
 
     val canCloseGemini: Boolean
-        get() = environmentStatus.isGeminiInstalled &&
-            environmentStatus.isAccessibilityServiceEnabled &&
-            !isRunning &&
-            !isClosingGemini
-
+        get() = GeminiAppControlPolicy.canClose(
+            isGeminiInstalled = environmentStatus.isGeminiInstalled,
+            isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
+            isAutomationRunning = isRunning,
+            isClosingInProgress = isClosingGemini
+        )
 }

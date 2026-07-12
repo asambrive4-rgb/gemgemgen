@@ -4,6 +4,8 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisStartGate
+import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
@@ -152,19 +154,21 @@ class AnalysisViewModel(
 
     fun analyzeAndMask() {
         val snapshot = _uiState.value
-        val category = snapshot.selectedCategory ?: run {
-            showError("카테고리를 선택해주세요.")
-            return
-        }
         val source = currentSourcePrompt()
-        if (source.isBlank()) {
-            showError("원본 프롬프트를 입력해주세요.")
-            return
+        when (
+            val gate = AnalysisStartPolicy.evaluateInputs(
+                source = source,
+                category = snapshot.selectedCategory,
+                hasActiveKey = snapshot.hasActiveKey
+            )
+        ) {
+            is AnalysisStartGate.Blocked -> {
+                showError(AnalysisUiText.startBlockedMessage(gate.reason))
+                return
+            }
+            AnalysisStartGate.Allowed -> Unit
         }
-        if (!hasActiveKey()) {
-            showError("활성 Gemini API 키를 먼저 선택해주세요.")
-            return
-        }
+        val category = checkNotNull(snapshot.selectedCategory)
 
         runningJob?.cancel()
         runningJob = scope.launch {
@@ -201,19 +205,21 @@ class AnalysisViewModel(
 
     fun generateTxt() {
         val snapshot = _uiState.value
-        val category = snapshot.selectedCategory ?: run {
-            showError("카테고리를 선택해주세요.")
-            return
-        }
         val source = currentSourcePrompt()
-        if (source.isBlank()) {
-            showError("원본 프롬프트를 입력해주세요.")
-            return
+        when (
+            val gate = AnalysisStartPolicy.evaluateInputs(
+                source = source,
+                category = snapshot.selectedCategory,
+                hasActiveKey = snapshot.hasActiveKey
+            )
+        ) {
+            is AnalysisStartGate.Blocked -> {
+                showError(AnalysisUiText.startBlockedMessage(gate.reason))
+                return
+            }
+            AnalysisStartGate.Allowed -> Unit
         }
-        if (!hasActiveKey()) {
-            showError("활성 Gemini API 키를 먼저 선택해주세요.")
-            return
-        }
+        val category = checkNotNull(snapshot.selectedCategory)
 
         runningJob?.cancel()
         runningJob = scope.launch {
@@ -545,10 +551,6 @@ class AnalysisViewModel(
             _uiState.update { it.copy(sourcePrompt = text) }
         }
         return text
-    }
-
-    private fun hasActiveKey(): Boolean {
-        return _uiState.value.apiKeys.any { it.isActive }
     }
 
     private fun showError(message: String) {

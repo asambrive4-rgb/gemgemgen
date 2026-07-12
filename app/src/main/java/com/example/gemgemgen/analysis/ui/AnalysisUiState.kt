@@ -3,6 +3,7 @@ package com.example.gemgemgen.analysis.ui
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
+import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
@@ -31,17 +32,24 @@ data class AnalysisUiState(
     val editingKeyLabelInput: String = "",
     val selectedModel: String = "gemini-3.5-flash"
 ) {
+    val hasActiveKey: Boolean
+        get() = apiKeys.any { it.isActive }
+
     val canAnalyze: Boolean
-        get() = sourcePrompt.isNotBlank() &&
-            selectedCategory != null &&
-            apiKeys.any { it.isActive } &&
-            status != AnalysisStatus.GENERATING
+        get() = AnalysisStartPolicy.canAnalyze(
+            source = sourcePrompt,
+            category = selectedCategory,
+            hasActiveKey = hasActiveKey,
+            status = status
+        )
 
     val canGenerate: Boolean
-        get() = sourcePrompt.isNotBlank() &&
-            selectedCategory != null &&
-            apiKeys.any { it.isActive } &&
-            status != AnalysisStatus.ANALYZING
+        get() = AnalysisStartPolicy.canGenerate(
+            source = sourcePrompt,
+            category = selectedCategory,
+            hasActiveKey = hasActiveKey,
+            status = status
+        )
 
     val canCopyOrSave: Boolean
         get() = generatedCandidates.isNotEmpty() &&
