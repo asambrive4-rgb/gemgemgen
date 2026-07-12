@@ -12,6 +12,8 @@ import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
+import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
+import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.AnalysisWildcardSaveResult
 import com.example.gemgemgen.analysis.usecase.AnalyzePromptForCategoryUseCase
 import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
@@ -19,6 +21,7 @@ import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
@@ -103,9 +106,12 @@ class AnalysisFeatureTest {
     @Test
     fun saveWildcardFile_whenDuplicateExistsAsksForOverwrite() = runBlocking {
         val repository = FakeWildcardRepository("옷.txt" to "old")
+        val clipboard = RecordingClipboard()
+        val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         val useCase = SaveAnalysisWildcardFileUseCase(
             repository = repository,
-            dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+            copyResults = CopyAnalysisResultsUseCase(clipboard, dispatchers),
+            dispatchers = dispatchers
         )
 
         val exists = useCase.save("옷", listOf("new"), overwrite = false)
@@ -115,6 +121,81 @@ class AnalysisFeatureTest {
         val saved = useCase.save("옷", listOf("new"), overwrite = true)
         assertEquals(AnalysisWildcardSaveResult.Success("옷.txt"), saved)
         assertEquals("new", repository.contentOf("옷.txt"))
+    }
+
+    @Test
+    fun saveAndPrepareReplacedSource_writesFileReplacesSpanAndCopies() = runBlocking {
+        val repository = FakeWildcardRepository()
+        val clipboard = RecordingClipboard()
+        val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        val useCase = SaveAnalysisWildcardFileUseCase(
+            repository = repository,
+            copyResults = CopyAnalysisResultsUseCase(clipboard, dispatchers),
+            dispatchers = dispatchers
+        )
+        val source = "red hair and blue dress"
+        val segment = AnalysisTargetSegment(
+            text = "red hair",
+            startIndex = 0,
+            endIndex = 8,
+            source = AnalysisTargetSource.MANUAL,
+            category = AnalysisCategory.WOMEN_HAIRSTYLE
+        )
+
+        val result = useCase.saveAndPrepareReplacedSource(
+            fileNameInput = "hair",
+            candidates = listOf("black hair", "blonde hair"),
+            overwrite = false,
+            sourcePrompt = source,
+            targetSegment = segment
+        )
+
+        val success = result as AnalysisSaveAndReplaceResult.Success
+        assertEquals("hair.txt", success.fileName)
+        assertEquals("__hair__ and blue dress", success.replacedSource)
+        assertTrue(success.clipboardCopied)
+        assertEquals("black hair\nblonde hair", repository.contentOf("hair.txt"))
+        assertEquals("__hair__ and blue dress", clipboard.writtenText)
+    }
+
+    @Test
+    fun resolveTarget_reusesCacheUntilCategoryChanges() = runBlocking {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"후보","explanation":"설명"}]"""
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        val resolve = ResolveAnalysisTargetUseCase(
+            AnalyzePromptForCategoryUseCase(
+                aiGateway = aiGateway,
+                apiKeyRepository = keyRepository,
+                dispatchers = dispatchers
+            )
+        )
+        val source = "red hair and blue dress"
+        val category = AnalysisCategory.WOMEN_CLOTHING
+
+        val masked = resolve.analyzeAndMask(source, category)
+        assertEquals(1, aiGateway.analyzeCallCount)
+
+        val first = resolve.ensureForGeneration(
+            source = source,
+            category = category,
+            existingTarget = masked.targetSegment,
+            cache = masked.cache
+        )
+        assertEquals(1, aiGateway.analyzeCallCount)
+        assertEquals(masked.targetSegment, first.target)
+
+        val afterCategoryChange = resolve.ensureForGeneration(
+            source = source,
+            category = AnalysisCategory.WOMEN_HAIRSTYLE,
+            existingTarget = null,
+            cache = first.cache
+        )
+        assertEquals(2, aiGateway.analyzeCallCount)
+        assertEquals(AnalysisTargetSource.AUTO, afterCategoryChange.target.source)
     }
 
     @Test
@@ -233,12 +314,17 @@ class AnalysisFeatureTest {
         keyRepository: GeminiApiKeyRepository
     ): AnalysisViewModel {
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        val analyzePrompt = AnalyzePromptForCategoryUseCase(
+            aiGateway = aiGateway,
+            apiKeyRepository = keyRepository,
+            dispatchers = dispatchers
+        )
+        val copyResults = CopyAnalysisResultsUseCase(
+            clipboardGateway = FakeClipboard(),
+            dispatchers = dispatchers
+        )
         return AnalysisViewModel(
-            analyzePrompt = AnalyzePromptForCategoryUseCase(
-                aiGateway = aiGateway,
-                apiKeyRepository = keyRepository,
-                dispatchers = dispatchers
-            ),
+            resolveTarget = ResolveAnalysisTargetUseCase(analyzePrompt),
             generateTxtUseCase = GenerateAnalysisTxtUseCase(
                 aiGateway = aiGateway,
                 apiKeyRepository = keyRepository,
@@ -248,12 +334,10 @@ class AnalysisFeatureTest {
                 repository = keyRepository,
                 dispatchers = dispatchers
             ),
-            copyResults = CopyAnalysisResultsUseCase(
-                clipboardGateway = FakeClipboard(),
-                dispatchers = dispatchers
-            ),
+            copyResults = copyResults,
             saveWildcardFile = SaveAnalysisWildcardFileUseCase(
                 repository = FakeWildcardRepository(),
+                copyResults = copyResults,
                 dispatchers = dispatchers
             ),
             coroutineScope = CoroutineScope(Dispatchers.Unconfined)
@@ -433,6 +517,16 @@ class AnalysisFeatureTest {
     private class FakeClipboard : ClipboardGateway {
         override fun readText(): String = ""
         override fun writeText(text: String) = Unit
+    }
+
+    private class RecordingClipboard : ClipboardGateway {
+        var writtenText: String = ""
+            private set
+
+        override fun readText(): String = writtenText
+        override fun writeText(text: String) {
+            writtenText = text
+        }
     }
 
     private companion object {

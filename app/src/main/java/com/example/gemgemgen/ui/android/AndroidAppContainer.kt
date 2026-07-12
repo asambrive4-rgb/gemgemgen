@@ -10,6 +10,7 @@ import com.example.gemgemgen.analysis.usecase.AnalyzePromptForCategoryUseCase
 import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
@@ -86,19 +87,22 @@ class AndroidAppContainer(context: Context) {
     }
 
     val analysisViewModelFactory: ViewModelProvider.Factory = factory<AnalysisViewModel> {
+        val analyzePrompt = AnalyzePromptForCategoryUseCase(
+            aiGateway = analysisAiGateway,
+            apiKeyRepository = geminiApiKeyRepository
+        )
+        val copyResults = CopyAnalysisResultsUseCase(clipboardGateway)
         AnalysisViewModel(
-            analyzePrompt = AnalyzePromptForCategoryUseCase(
-                aiGateway = analysisAiGateway,
-                apiKeyRepository = geminiApiKeyRepository
-            ),
+            resolveTarget = ResolveAnalysisTargetUseCase(analyzePrompt),
             generateTxtUseCase = GenerateAnalysisTxtUseCase(
                 aiGateway = analysisAiGateway,
                 apiKeyRepository = geminiApiKeyRepository
             ),
             keyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository),
-            copyResults = CopyAnalysisResultsUseCase(clipboardGateway),
+            copyResults = copyResults,
             saveWildcardFile = SaveAnalysisWildcardFileUseCase(
-                AndroidWildcardFileRepository(appContext)
+                repository = AndroidWildcardFileRepository(appContext),
+                copyResults = copyResults
             )
         )
     }
