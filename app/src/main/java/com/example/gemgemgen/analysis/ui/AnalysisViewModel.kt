@@ -5,8 +5,10 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStartGate
 import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
@@ -89,6 +91,16 @@ class AnalysisViewModel(
                 } else {
                     it.generatedCandidates
                 },
+                resultPresentation = if (shouldClearCandidates) {
+                    AnalysisResultPresentation.NONE
+                } else {
+                    it.resultPresentation
+                },
+                selectedCandidateIndex = if (shouldClearCandidates) {
+                    null
+                } else {
+                    it.selectedCandidateIndex
+                },
                 error = "",
                 message = if (nextSegment != segment) "" else it.message,
                 warning = "",
@@ -134,16 +146,19 @@ class AnalysisViewModel(
         val segmentStillValid = segment == null ||
             AnalysisTargetSegmentPolicy.isStillValid(value, segment)
         val nextSegment = if (segmentStillValid) segment else null
+        val clearCandidates = state.generatedCandidates.isNotEmpty()
 
         _uiState.update {
             it.copy(
                 sourcePrompt = value,
                 targetSegment = nextSegment,
-                generatedCandidates = if (it.generatedCandidates.isNotEmpty()) {
-                    emptyList()
+                generatedCandidates = if (clearCandidates) emptyList() else it.generatedCandidates,
+                resultPresentation = if (clearCandidates) {
+                    AnalysisResultPresentation.NONE
                 } else {
-                    it.generatedCandidates
+                    it.resultPresentation
                 },
+                selectedCandidateIndex = if (clearCandidates) null else it.selectedCandidateIndex,
                 error = "",
                 message = if (nextSegment != segment) "" else it.message,
                 warning = "",
@@ -163,6 +178,8 @@ class AnalysisViewModel(
                 selectedCategory = category,
                 targetSegment = null,
                 generatedCandidates = emptyList(),
+                resultPresentation = AnalysisResultPresentation.NONE,
+                selectedCandidateIndex = null,
                 error = "",
                 message = "",
                 warning = "",
@@ -196,6 +213,8 @@ class AnalysisViewModel(
                         sourcePrompt = source,
                         targetSegment = result.segment,
                         generatedCandidates = emptyList(),
+                        resultPresentation = AnalysisResultPresentation.NONE,
+                        selectedCandidateIndex = null,
                         error = "",
                         message = "수동 마스킹 구간을 지정했습니다.",
                         warning = "",
@@ -212,6 +231,8 @@ class AnalysisViewModel(
             it.copy(
                 targetSegment = null,
                 generatedCandidates = emptyList(),
+                resultPresentation = AnalysisResultPresentation.NONE,
+                selectedCandidateIndex = null,
                 message = "마스킹 구간을 해제했습니다.",
                 warning = "",
                 error = ""
@@ -273,6 +294,8 @@ class AnalysisViewModel(
                         sourcePrompt = source,
                         targetSegment = result.targetSegment,
                         generatedCandidates = emptyList(),
+                        resultPresentation = AnalysisResultPresentation.NONE,
+                        selectedCandidateIndex = null,
                         status = AnalysisStatus.IDLE,
                         message = "자동 마스킹 구간을 찾았습니다.",
                         warning = result.warning
@@ -292,7 +315,35 @@ class AnalysisViewModel(
         }
     }
 
+    /** 「생성」모드: 고정 개수 후보를 카드로 보여 준다. */
+    fun generate() {
+        startGeneration(
+            count = AnalysisGenerationCountPolicy.FIXED_COUNT,
+            presentation = AnalysisResultPresentation.CARDS,
+            generatingMessage = "후보 생성 중...",
+            failureFallback = "생성에 실패했습니다.",
+            updateResultFileName = false
+        )
+    }
+
+    /** 「TXT 생성」모드: 슬라이더 개수 후보를 목록으로 보여 주고 파일 저장에 쓴다. */
     fun generateTxt() {
+        startGeneration(
+            count = AnalysisTxtCountPolicy.coerce(_uiState.value.txtCount),
+            presentation = AnalysisResultPresentation.TXT,
+            generatingMessage = "프롬프트 목록 생성 중...",
+            failureFallback = "TXT 생성에 실패했습니다.",
+            updateResultFileName = true
+        )
+    }
+
+    private fun startGeneration(
+        count: Int,
+        presentation: AnalysisResultPresentation,
+        generatingMessage: String,
+        failureFallback: String,
+        updateResultFileName: Boolean
+    ) {
         val snapshot = _uiState.value
         val source = currentSourcePrompt()
         val directionInput = currentDirectionInput(snapshot)
@@ -356,7 +407,7 @@ class AnalysisViewModel(
                     message = if (needsMaskingAnalysis) {
                         "자동 마스킹 중..."
                     } else {
-                        "프롬프트 목록 생성 중..."
+                        generatingMessage
                     },
                     warning = ""
                 )
@@ -382,7 +433,7 @@ class AnalysisViewModel(
                 // 마스킹 단계가 끝났으면 생성 단계 문구로 전환
                 if (needsMaskingAnalysis) {
                     _uiState.update {
-                        it.copy(message = "프롬프트 목록 생성 중...")
+                        it.copy(message = generatingMessage)
                     }
                 }
                 val result = generateTxtUseCase.generate(
@@ -390,7 +441,7 @@ class AnalysisViewModel(
                     category = category,
                     targetSegment = ensured.target,
                     analysisReport = ensured.report,
-                    count = _uiState.value.txtCount,
+                    count = count,
                     selectedHints = directionInput.selectedHints,
                     customHint = directionInput.customHint
                 )
@@ -411,9 +462,18 @@ class AnalysisViewModel(
                         sourcePrompt = source,
                         targetSegment = ensured.target,
                         generatedCandidates = result.candidates,
-                        // 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
-                        // 사용자가 이전에 수정했더라도 이번 생성 카테고리 기준으로 덮어쓴다.
-                        resultFileName = category.defaultWildcardSaveFileName(),
+                        resultPresentation = if (result.candidates.isEmpty()) {
+                            AnalysisResultPresentation.NONE
+                        } else {
+                            presentation
+                        },
+                        selectedCandidateIndex = null,
+                        // TXT 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
+                        resultFileName = if (updateResultFileName) {
+                            category.defaultWildcardSaveFileName()
+                        } else {
+                            it.resultFileName
+                        },
                         status = AnalysisStatus.SUCCESS,
                         message = "${result.candidates.size}개 후보를 생성했습니다.",
                         warning = result.warning,
@@ -432,13 +492,65 @@ class AnalysisViewModel(
                 throw error
             } catch (error: Exception) {
                 analysisCache = null
-                showError(error.message ?: "TXT 생성에 실패했습니다.")
+                showError(error.message ?: failureFallback)
             }
         }
     }
 
     /**
-     * TXT 생성 시 캐시로 분석 결과를 재사용하지 못하면 마스킹 모델 분석이 필요하다.
+     * 「생성」카드 탭: 후보 조각을 클립보드에 복사하고 원문 마스킹 구간에 반영한다.
+     */
+    fun applyCandidate(index: Int) {
+        val state = _uiState.value
+        if (state.resultPresentation != AnalysisResultPresentation.CARDS) return
+        if (state.isBusy) return
+        val candidate = state.generatedCandidates.getOrNull(index) ?: return
+        val segment = state.targetSegment
+        if (segment == null || !segment.isValid) {
+            showError("마스킹 구간이 없어 원문에 반영할 수 없습니다.")
+            return
+        }
+        val source = sourcePromptTextFieldState.text.toString()
+        if (!AnalysisTargetSegmentPolicy.isStillValid(source, segment)) {
+            showError("마스킹 구간이 원문과 맞지 않아 교체할 수 없습니다.")
+            return
+        }
+
+        scope.launch {
+            try {
+                copyResults.copyText(candidate)
+                val replaced = AnalysisTargetSegmentPolicy.replaceSegmentWithText(
+                    source = source,
+                    segment = segment,
+                    replacement = candidate
+                )
+                val nextSegment = AnalysisTargetSegmentPolicy.segmentAfterReplacement(
+                    previous = segment,
+                    replacement = candidate
+                )
+                // 원문이 바뀌므로 분석 캐시는 무효. 후보 목록은 유지해 다른 카드도 고를 수 있게 한다.
+                analysisCache = null
+                if (sourcePromptTextFieldState.text.toString() != replaced) {
+                    sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(replaced)
+                }
+                _uiState.update {
+                    it.copy(
+                        sourcePrompt = replaced,
+                        targetSegment = nextSegment,
+                        selectedCandidateIndex = index,
+                        message = "후보를 복사하고 원문에 반영했습니다.",
+                        error = "",
+                        warning = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "후보 적용에 실패했습니다.")
+            }
+        }
+    }
+
+    /**
+     * 생성 시 캐시로 분석 결과를 재사용하지 못하면 마스킹 모델 분석이 필요하다.
      * (ResolveAnalysisTargetUseCase.getOrAnalyzeReport 캐시 조건과 동일)
      * 칩·추가 요구사항이 바뀌면 variationGoal이 달라지므로 재분석한다.
      */
@@ -544,7 +656,9 @@ class AnalysisViewModel(
     }
 
     fun copyGeneratedResults() {
-        val candidates = _uiState.value.generatedCandidates
+        val state = _uiState.value
+        if (state.resultPresentation != AnalysisResultPresentation.TXT) return
+        val candidates = state.generatedCandidates
         if (candidates.isEmpty()) return
         scope.launch {
             try {
@@ -565,6 +679,7 @@ class AnalysisViewModel(
         onSuccess: ((replacedSource: String) -> Unit)? = null
     ) {
         val state = _uiState.value
+        if (state.resultPresentation != AnalysisResultPresentation.TXT) return
         val candidates = state.generatedCandidates
         if (candidates.isEmpty()) return
         scope.launch {

@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,8 +47,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
+import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
@@ -56,6 +60,7 @@ import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.ui.AppMultilineTextField
+import com.example.gemgemgen.ui.blockMainTabSwipe
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import kotlin.math.roundToInt
 
@@ -70,12 +75,14 @@ internal fun AnalysisScreen(
     onApplyManualSelection: () -> Unit,
     onClearTargetSegment: () -> Unit,
     onAnalyzeAndMask: () -> Unit,
+    onGenerate: () -> Unit,
     onGenerateTxt: () -> Unit,
     onCancelWork: () -> Unit,
     onTxtCountChange: (Int) -> Unit,
     onToggleDirection: (String) -> Unit,
     onCustomHintChange: (String) -> Unit,
     onResultFileNameChange: (String) -> Unit,
+    onApplyCandidate: (Int) -> Unit,
     onCopyResults: () -> Unit,
     onSaveResults: () -> Unit,
     onConfirmOverwrite: () -> Unit,
@@ -124,14 +131,12 @@ internal fun AnalysisScreen(
                     onLogoutGrok = onLogoutGrok
                 )
 
-                SourcePromptInputSection(
+                SourcePromptAndMaskingRow(
                     sourcePromptState = sourcePromptState,
                     onSourcePromptChange = onSourcePromptChange,
-                    onImportFromAutomation = onImportFromAutomation
-                )
-
-                TargetSegmentPanel(
+                    onImportFromAutomation = onImportFromAutomation,
                     targetSegment = uiState.targetSegment,
+                    isAnalyzing = uiState.status == AnalysisStatus.ANALYZING,
                     onClearTargetSegment = onClearTargetSegment
                 )
 
@@ -155,7 +160,8 @@ internal fun AnalysisScreen(
 
                 ResultSection(
                     uiState = uiState,
-                    onResultFileNameChange = onResultFileNameChange
+                    onResultFileNameChange = onResultFileNameChange,
+                    onApplyCandidate = onApplyCandidate
                 )
 
                 // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
@@ -176,6 +182,7 @@ internal fun AnalysisScreen(
                     onApplyManualSelection = onApplyManualSelection,
                     onClearTargetSegment = onClearTargetSegment,
                     onAnalyzeAndMask = onAnalyzeAndMask,
+                    onGenerate = onGenerate,
                     onGenerateTxt = onGenerateTxt,
                     onCancelWork = onCancelWork,
                     onClearFocus = onClearFocus,
@@ -505,39 +512,109 @@ private fun GrokLoginDialog(
     )
 }
 
+/**
+ * 원문 입력(좌)과 마스킹 결과(우)를 50:50으로 나란히 배치한다.
+ * 분석 생성 탭에서는 프롬프트를 거의 수정하지 않으므로 입력 폭을 줄이고,
+ * 비는 오른쪽에 마스킹 구간을 항상 보여 원문과 바로 비교할 수 있게 한다.
+ *
+ * 좌·우 헤더 높이(32dp)와 본문 하단을 맞춰 단차가 생기지 않게 한다.
+ */
 @Composable
-private fun SourcePromptInputSection(
+private fun SourcePromptAndMaskingRow(
     sourcePromptState: TextFieldState,
     onSourcePromptChange: (String) -> Unit,
-    onImportFromAutomation: () -> Unit
+    onImportFromAutomation: () -> Unit,
+    targetSegment: AnalysisTargetSegment?,
+    isAnalyzing: Boolean,
+    onClearTargetSegment: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Max),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        // 왼쪽: 헤더 + 원문 입력 (행 높이 기준)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = "원문 입력",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            CompactOutlinedButton(
-                text = "자동화에서 가져오기",
-                onClick = onImportFromAutomation
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(SectionHeaderHeight),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "원문 입력",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                CompactOutlinedButton(
+                    text = "가져오기",
+                    onClick = onImportFromAutomation
+                )
+            }
+            AppMultilineTextField(
+                state = sourcePromptState,
+                onValueChange = onSourcePromptChange,
+                modifier = Modifier.fillMaxWidth(),
+                // 분석 생성에서는 편집이 드물어 높이를 고정한다. 넘치면 칸 안에서 스크롤.
+                minLines = 4,
+                maxLines = 4,
+                placeholder = "분석과 변주의 대상이 되는 전체 이미지 프롬프트를 입력하세요."
             )
         }
-        AppMultilineTextField(
-            state = sourcePromptState,
-            onValueChange = onSourcePromptChange,
-            modifier = Modifier.fillMaxWidth(),
-            // 기본 maxLines(18)의 약 2/3 높이로 제한해 세로 공간을 줄인다.
-            minLines = 4,
-            maxLines = 12,
-            placeholder = "분석과 변주의 대상이 되는 전체 이미지 프롬프트를 입력하세요."
-        )
+        // 오른쪽: 동일 헤더 높이 + 본문이 왼쪽 입력 높이까지 늘어남
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(SectionHeaderHeight),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = when {
+                        targetSegment == null -> "마스킹 결과"
+                        targetSegment.source == AnalysisTargetSource.MANUAL -> "수동 마스킹"
+                        else -> "자동 마스킹"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                if (targetSegment != null) {
+                    TextButton(
+                        onClick = onClearTargetSegment,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.height(SectionHeaderHeight)
+                    ) {
+                        Text("해제", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+            TargetSegmentBody(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                targetSegment = targetSegment,
+                isAnalyzing = isAnalyzing
+            )
+        }
     }
 }
+
+/** 좌·우 섹션 제목 줄 공통 높이 (단차 정렬용). CompactOutlinedButton과 동일. */
+private val SectionHeaderHeight = 32.dp
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -547,6 +624,7 @@ private fun StickyBottomActionPanel(
     onApplyManualSelection: () -> Unit,
     onClearTargetSegment: () -> Unit,
     onAnalyzeAndMask: () -> Unit,
+    onGenerate: () -> Unit,
     onGenerateTxt: () -> Unit,
     onCancelWork: () -> Unit,
     onClearFocus: () -> Unit,
@@ -583,7 +661,9 @@ private fun StickyBottomActionPanel(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (uiState.generatedCandidates.isNotEmpty()) {
+                if (uiState.resultPresentation == AnalysisResultPresentation.TXT &&
+                    uiState.generatedCandidates.isNotEmpty()
+                ) {
                     OutlinedButton(
                         onClick = onCopyResults,
                         enabled = uiState.canCopyOrSave,
@@ -633,20 +713,31 @@ private fun StickyBottomActionPanel(
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
-                Button(
-                    onClick = if (uiState.status == AnalysisStatus.GENERATING) {
-                        onCancelWork
-                    } else {
-                        onGenerateTxt
-                    },
-                    enabled = uiState.canGenerate || uiState.status == AnalysisStatus.GENERATING,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                ) {
-                    Text(
-                        text = if (uiState.status == AnalysisStatus.GENERATING) "중지" else "TXT 생성",
-                        style = MaterialTheme.typography.labelMedium
-                    )
+                if (uiState.status == AnalysisStatus.GENERATING) {
+                    Button(
+                        onClick = onCancelWork,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
+                    ) {
+                        Text("중지", style = MaterialTheme.typography.labelMedium)
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onGenerate,
+                        enabled = uiState.canGenerate,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
+                    ) {
+                        Text("생성", style = MaterialTheme.typography.labelMedium)
+                    }
+                    Button(
+                        onClick = onGenerateTxt,
+                        enabled = uiState.canGenerate,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
+                    ) {
+                        Text("TXT 생성", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         }
@@ -690,46 +781,56 @@ private fun CategoryChip(
     }
 }
 
+/** 마스킹 결과 본문 카드. 부모에서 높이를 채우도록 넘겨 원문 입력과 하단을 맞춘다. */
 @Composable
-private fun TargetSegmentPanel(
+private fun TargetSegmentBody(
     targetSegment: AnalysisTargetSegment?,
-    onClearTargetSegment: () -> Unit
+    isAnalyzing: Boolean,
+    modifier: Modifier = Modifier
 ) {
-    if (targetSegment == null) return
-
+    val hasSegment = targetSegment != null
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-        shape = MaterialTheme.shapes.small
+        modifier = modifier,
+        color = if (hasSegment) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        },
+        shape = MaterialTheme.shapes.small,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
     ) {
-        Row(
-            modifier = Modifier.padding(10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (targetSegment.source == AnalysisTargetSource.MANUAL) {
-                        "수동 마스킹"
-                    } else {
-                        "자동 마스킹"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
+            if (targetSegment != null) {
                 Text(
                     text = "\"${targetSegment.text}\"",
                     style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
                 )
                 Text(
                     text = "신뢰도 ${((targetSegment.confidence * 100).roundToInt()).coerceIn(0, 100)}%",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            TextButton(onClick = onClearTargetSegment) {
-                Text("해제")
+            } else {
+                Text(
+                    text = if (isAnalyzing) {
+                        "자동 마스킹 분석 중..."
+                    } else {
+                        "자동 분석 후 마스킹 구간이 여기에 표시됩니다."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -829,7 +930,9 @@ private fun CountSection(
             },
             valueRange = AnalysisTxtCountPolicy.MIN_COUNT.toFloat()..
                 AnalysisTxtCountPolicy.MAX_COUNT.toFloat(),
-            steps = 27
+            steps = 27,
+            // 가로 드래그가 탭 스와이프와 겹치지 않도록 분리
+            modifier = Modifier.blockMainTabSwipe()
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -839,6 +942,11 @@ private fun CountSection(
             Text("기본 50", style = MaterialTheme.typography.labelSmall)
             Text("150", style = MaterialTheme.typography.labelSmall)
         }
+        Text(
+            text = "TXT 생성에만 적용 · 생성은 ${AnalysisGenerationCountPolicy.FIXED_COUNT}개 고정",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -866,30 +974,120 @@ private fun FeedbackSection(uiState: AnalysisUiState) {
 @Composable
 private fun ResultSection(
     uiState: AnalysisUiState,
-    onResultFileNameChange: (String) -> Unit
+    onResultFileNameChange: (String) -> Unit,
+    onApplyCandidate: (Int) -> Unit
 ) {
     if (uiState.generatedCandidates.isEmpty()) return
 
+    when (uiState.resultPresentation) {
+        AnalysisResultPresentation.CARDS -> {
+            CardResultSection(
+                candidates = uiState.generatedCandidates,
+                selectedIndex = uiState.selectedCandidateIndex,
+                enabled = !uiState.isBusy,
+                onApplyCandidate = onApplyCandidate
+            )
+        }
+        AnalysisResultPresentation.TXT -> {
+            TxtResultSection(
+                candidates = uiState.generatedCandidates,
+                resultFileName = uiState.resultFileName,
+                onResultFileNameChange = onResultFileNameChange
+            )
+        }
+        AnalysisResultPresentation.NONE -> Unit
+    }
+}
+
+@Composable
+private fun CardResultSection(
+    candidates: List<String>,
+    selectedIndex: Int?,
+    enabled: Boolean,
+    onApplyCandidate: (Int) -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
         Text(
-            text = "생성 결과 ${uiState.generatedCandidates.size}개",
+            text = "생성 결과 ${candidates.size}개",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "카드를 누르면 복사하고 원문 구간에 반영합니다.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        candidates.forEachIndexed { index, candidate ->
+            val selected = selectedIndex == index
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = enabled) { onApplyCandidate(index) },
+                shape = MaterialTheme.shapes.medium,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                },
+                border = BorderStroke(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                    }
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "${index + 1}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = candidate,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TxtResultSection(
+    candidates: List<String>,
+    resultFileName: String,
+    onResultFileNameChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        HorizontalDivider()
+        Text(
+            text = "생성 결과 ${candidates.size}개",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
         )
         OutlinedTextField(
-            value = uiState.generatedCandidates.joinToString(separator = "\n"),
+            value = candidates.joinToString(separator = "\n"),
             onValueChange = {},
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 160.dp, max = 200.dp),
+                .heightIn(min = 160.dp, max = 200.dp)
+                .blockMainTabSwipe(),
             readOnly = true,
             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
         )
         OutlinedTextField(
-            value = uiState.resultFileName,
+            value = resultFileName,
             onValueChange = onResultFileNameChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .blockMainTabSwipe(),
             singleLine = true,
             label = { Text("저장할 와일드카드 파일명") },
             placeholder = { Text("옷.txt") }
@@ -1103,7 +1301,9 @@ private fun CustomHintSection(
         OutlinedTextField(
             value = customHint,
             onValueChange = onCustomHintChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .blockMainTabSwipe(),
             singleLine = false,
             minLines = 1,
             maxLines = 3,

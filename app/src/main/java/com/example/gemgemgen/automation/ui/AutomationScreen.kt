@@ -27,6 +27,12 @@ import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 
+/** 스크롤 본문·키보드 하단 고정 패널이 같은 가로 폭을 쓰도록 공통 패딩 */
+private val AutomationScreenContentPadding = 8.dp
+
+/** 액션 줄·시작 바·섹션 사이 간격 */
+private val AutomationScreenSectionSpacing = 5.dp
+
 @Composable
 internal fun AutomationScreen(
     uiState: MainUiState,
@@ -41,6 +47,7 @@ internal fun AutomationScreen(
     onOpenAccessibilitySettings: () -> Unit,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
+    onWildcardTokenSuggestionClick: (String) -> Unit = {},
     onUndoPromptEdit: () -> Unit,
     onToggleParagraphSelectionMode: () -> Unit,
     onParagraphOffsetSelected: (Int) -> Unit,
@@ -70,8 +77,8 @@ internal fun AutomationScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(AutomationScreenContentPadding),
+                verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
             ) {
 
                 PromptSection(
@@ -87,9 +94,11 @@ internal fun AutomationScreen(
                     geminiCloseMessage = uiState.geminiCloseMessage,
                     selectedParagraphRange = uiState.selectedParagraphRange,
                     paragraphSelectionMessage = uiState.paragraphSelectionMessage,
+                    wildcardTokenCandidates = uiState.wildcardTokenCandidates,
                     showPromptActions = !isKeyboardVisible,
                     onTargetAppSelected = onTargetAppSelected,
                     onPromptTemplateChange = onPromptTemplateChange,
+                    onWildcardTokenSuggestionClick = onWildcardTokenSuggestionClick,
                     onCloseGeminiApp = onCloseGeminiApp,
                     onTerminateGeminiApp = onTerminateGeminiApp,
                     onTerminateSelfApp = onTerminateSelfApp,
@@ -130,8 +139,8 @@ internal fun AutomationScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(AutomationScreenContentPadding),
+                        verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
                     ) {
                         PromptActionRow(
                             canCloseGemini = uiState.canCloseGemini,

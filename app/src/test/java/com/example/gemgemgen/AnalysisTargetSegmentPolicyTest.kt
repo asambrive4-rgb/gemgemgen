@@ -131,4 +131,25 @@ class AnalysisTargetSegmentPolicyTest {
         )
         assertEquals(source, replaced)
     }
+
+    @Test
+    fun replaceSegmentWithText_replacesSpanWithFragment() {
+        val replaced = AnalysisTargetSegmentPolicy.replaceSegmentWithText(
+            source = source,
+            segment = hairSegment,
+            replacement = "black wavy hair"
+        )
+        assertEquals("black wavy hair and blue dress", replaced)
+    }
+
+    @Test
+    fun segmentAfterReplacement_keepsStartAndUpdatesEnd() {
+        val next = AnalysisTargetSegmentPolicy.segmentAfterReplacement(
+            previous = hairSegment,
+            replacement = "black wavy hair"
+        )
+        assertEquals("black wavy hair", next.text)
+        assertEquals(hairSegment.startIndex, next.startIndex)
+        assertEquals(hairSegment.startIndex + "black wavy hair".length, next.endIndex)
+    }
 }

@@ -6,7 +6,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisPromptBuilder
 import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
-import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.withContext
 
@@ -20,6 +19,11 @@ class GenerateAnalysisTxtUseCase(
     private val credentialResolver: AnalysisCredentialResolver,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
+    /**
+     * @param count 호출측에서 모드별 정책으로 정규화한 개수.
+     *  (TXT: [com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy],
+     *   생성: [com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy])
+     */
     suspend fun generate(
         sourcePrompt: String,
         category: AnalysisCategory,
@@ -36,7 +40,7 @@ class GenerateAnalysisTxtUseCase(
             throw AnalysisException("변주 대상 구간을 먼저 지정해주세요.")
         }
         val credential = credentialResolver.resolveForRole(AnalysisModelRole.GENERATION)
-        val normalizedCount = AnalysisTxtCountPolicy.coerce(count)
+        val normalizedCount = count.coerceAtLeast(1)
         val payload = AnalysisPromptBuilder.buildTxtPrompt(
             sourcePrompt = sourcePrompt,
             category = category,

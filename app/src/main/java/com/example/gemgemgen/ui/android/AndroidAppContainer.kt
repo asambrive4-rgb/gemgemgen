@@ -96,7 +96,8 @@ class AndroidAppContainer(context: Context) {
             ),
             checkAutomationStart = CheckAutomationStartUseCase(
                 AndroidOverlayPermissionGateway(appContext)
-            )
+            ),
+            wildcardFileRepository = AndroidWildcardFileRepository(appContext)
         )
     }
 

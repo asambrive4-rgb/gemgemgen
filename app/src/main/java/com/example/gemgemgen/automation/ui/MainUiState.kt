@@ -5,6 +5,7 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.SelfAppControlPolicy
+import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
@@ -25,7 +26,9 @@ data class MainUiState(
     val paragraphSelectionMessage: String = "",
     val canUndoPromptEdit: Boolean = false,
     val isClosingGemini: Boolean = false,
-    val geminiCloseMessage: String = ""
+    val geminiCloseMessage: String = "",
+    /** 와일드카드 파일 기반 토큰 추천 후보 (입력창 위 칩용). */
+    val wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
 ) {
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()

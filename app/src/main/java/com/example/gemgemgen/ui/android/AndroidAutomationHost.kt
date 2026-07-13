@@ -131,6 +131,10 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
         if (tab == MainTab.ANALYSIS) shouldLoadAnalysis = true
         if (tab == MainTab.WILDCARD) shouldLoadWildcard = true
+        // 와일드카드 탭에서 파일 추가/이름변경 후 돌아와도 추천 목록이 갱신되게 한다.
+        if (tab == MainTab.AUTOMATION) {
+            mainViewModel.refreshWildcardTokenCandidates()
+        }
         selectedTab = tab
     }
 
@@ -253,6 +257,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             },
             onTargetAppSelected = mainViewModel::onTargetAppSelected,
             onPromptTemplateChange = mainViewModel::onPromptTemplateFromEditor,
+            onWildcardTokenSuggestionClick = mainViewModel::applyWildcardTokenSuggestion,
             onUndoPromptEdit = mainViewModel::undoPromptEdit,
             onToggleParagraphSelectionMode =
                 mainViewModel::toggleParagraphSelectionMode,
@@ -281,12 +286,14 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onApplyManualSelection = { analysisViewModel?.applyManualSelection() },
             onClearTargetSegment = { analysisViewModel?.clearTargetSegment() },
             onAnalyzeAndMask = { analysisViewModel?.analyzeAndMask() },
+            onGenerate = { analysisViewModel?.generate() },
             onGenerateTxt = { analysisViewModel?.generateTxt() },
             onCancelWork = { analysisViewModel?.cancelActiveWork() },
             onTxtCountChange = { analysisViewModel?.onTxtCountChange(it) },
             onToggleDirection = { analysisViewModel?.toggleDirection(it) },
             onCustomHintChange = { analysisViewModel?.onCustomHintChange(it) },
             onResultFileNameChange = { analysisViewModel?.onResultFileNameChange(it) },
+            onApplyCandidate = { analysisViewModel?.applyCandidate(it) },
             onCopyResults = { analysisViewModel?.copyGeneratedResults() },
             onSaveResults = {
                 analysisViewModel?.saveGeneratedResults(

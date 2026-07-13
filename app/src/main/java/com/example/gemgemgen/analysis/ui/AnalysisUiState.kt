@@ -5,6 +5,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
@@ -26,6 +27,10 @@ data class AnalysisUiState(
     val selectedDirectionIds: Set<String> = emptySet(),
     val customHint: String = "",
     val generatedCandidates: List<String> = emptyList(),
+    /** 마지막 생성 결과의 표시 방식. 후보가 비면 [AnalysisResultPresentation.NONE]. */
+    val resultPresentation: AnalysisResultPresentation = AnalysisResultPresentation.NONE,
+    /** 「생성」카드 모드에서 사용자가 적용한 후보 인덱스. 없으면 null. */
+    val selectedCandidateIndex: Int? = null,
     val resultFileName: String = "analysis-wildcard-results.txt",
     val pendingOverwriteFileName: String? = null,
     val showKeyDialog: Boolean = false,
@@ -84,7 +89,8 @@ data class AnalysisUiState(
         )
 
     val canCopyOrSave: Boolean
-        get() = generatedCandidates.isNotEmpty() &&
+        get() = resultPresentation == AnalysisResultPresentation.TXT &&
+            generatedCandidates.isNotEmpty() &&
             status != AnalysisStatus.ANALYZING &&
             status != AnalysisStatus.GENERATING
 

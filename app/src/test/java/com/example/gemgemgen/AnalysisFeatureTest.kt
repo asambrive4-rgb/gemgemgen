@@ -3,7 +3,9 @@ package com.example.gemgemgen
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.ui.text.TextRange
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
+import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
@@ -171,6 +173,60 @@ class AnalysisFeatureTest {
 
         assertEquals(listOf("후보 하나"), result.candidates)
         assertTrue(result.warning.contains("적은"))
+    }
+
+    @Test
+    fun generate_withCardCount_requestsExactlySixCandidates() = runBlocking {
+        val aiGateway = FakeAnalysisAiGateway(
+            generateResponse = """
+                [
+                  {"text":"a","explanation":""},
+                  {"text":"b","explanation":""},
+                  {"text":"c","explanation":""},
+                  {"text":"d","explanation":""},
+                  {"text":"e","explanation":""},
+                  {"text":"f","explanation":""},
+                  {"text":"g","explanation":""}
+                ]
+            """.trimIndent()
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val result = GenerateAnalysisTxtUseCase(
+            aiGateway = aiGateway,
+            credentialResolver = AnalysisCredentialResolver(
+                apiKeyRepository = keyRepository,
+                grokAuth = ManageGrokAuthUseCase(
+                    gateway = FakeGrokAuthGateway(),
+                    repository = FakeGrokAuthRepository(),
+                    dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+                ),
+                dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+            ),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        ).generate(
+            sourcePrompt = "portrait with long hair",
+            category = AnalysisCategory.WOMEN_HAIRSTYLE,
+            targetSegment = AnalysisTargetSegment(
+                text = "long hair",
+                startIndex = 14,
+                endIndex = 23,
+                source = AnalysisTargetSource.AUTO,
+                category = AnalysisCategory.WOMEN_HAIRSTYLE
+            ),
+            analysisReport = AnalysisResponseParser.parseReport(
+                analysisJson(exactText = "long hair"),
+                "portrait with long hair"
+            ),
+            count = AnalysisGenerationCountPolicy.FIXED_COUNT,
+            selectedHints = emptyList()
+        )
+
+        assertEquals(AnalysisGenerationCountPolicy.FIXED_COUNT, aiGateway.lastGenerateCount)
+        assertEquals(
+            listOf("a", "b", "c", "d", "e", "f"),
+            result.candidates
+        )
+        assertEquals("", result.warning)
     }
 
     @Test
@@ -390,7 +446,78 @@ class AnalysisFeatureTest {
         assertEquals(AnalysisTargetSource.MANUAL, viewModel.uiState.value.targetSegment?.source)
         assertEquals("red hair", viewModel.uiState.value.targetSegment?.text)
         assertEquals(listOf("수동 후보"), viewModel.uiState.value.generatedCandidates)
+        assertEquals(AnalysisResultPresentation.TXT, viewModel.uiState.value.resultPresentation)
         assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun viewModel_generate_usesCardPresentationAndFixedCount() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """
+                [
+                  {"text":"후보1","explanation":""},
+                  {"text":"후보2","explanation":""},
+                  {"text":"후보3","explanation":""},
+                  {"text":"후보4","explanation":""},
+                  {"text":"후보5","explanation":""},
+                  {"text":"후보6","explanation":""}
+                ]
+            """.trimIndent()
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        val prompt = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.onTxtCountChange(50)
+        viewModel.generate()
+
+        assertEquals(AnalysisGenerationCountPolicy.FIXED_COUNT, aiGateway.lastGenerateCount)
+        assertEquals(AnalysisResultPresentation.CARDS, viewModel.uiState.value.resultPresentation)
+        assertEquals(6, viewModel.uiState.value.generatedCandidates.size)
+        assertFalse(viewModel.uiState.value.canCopyOrSave)
+    }
+
+    @Test
+    fun viewModel_applyCandidate_copiesAndReplacesSourceSegment() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """
+                [
+                  {"text":"검은 원피스","explanation":""},
+                  {"text":"흰 셔츠","explanation":""}
+                ]
+            """.trimIndent()
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val clipboard = RecordingClipboard()
+        val viewModel = analysisViewModel(aiGateway, keyRepository, clipboard)
+        val prompt = "red hair and blue dress"
+        val dressStart = prompt.indexOf("blue dress")
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.sourcePromptTextFieldState.edit {
+            selection = TextRange(dressStart, prompt.length)
+        }
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.applyManualSelection()
+        viewModel.generate()
+
+        viewModel.applyCandidate(0)
+
+        assertEquals("검은 원피스", clipboard.writtenText)
+        assertEquals(
+            "red hair and 검은 원피스",
+            viewModel.sourcePromptTextFieldState.text.toString()
+        )
+        assertEquals(0, viewModel.uiState.value.selectedCandidateIndex)
+        assertEquals("검은 원피스", viewModel.uiState.value.targetSegment?.text)
+        assertEquals(2, viewModel.uiState.value.generatedCandidates.size)
+        assertEquals(AnalysisResultPresentation.CARDS, viewModel.uiState.value.resultPresentation)
     }
 
     @Test
@@ -420,6 +547,7 @@ class AnalysisFeatureTest {
         viewModel.generateTxt()
 
         assertEquals("여성의상.txt", viewModel.uiState.value.resultFileName)
+        assertEquals(AnalysisResultPresentation.TXT, viewModel.uiState.value.resultPresentation)
 
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
         viewModel.generateTxt()
@@ -684,6 +812,7 @@ class AnalysisFeatureTest {
         private val generateResponse: String = "[]"
     ) : AnalysisAiGateway {
         var analyzeCallCount = 0
+        var lastGenerateCount: Int? = null
         val analyzeModelIds = mutableListOf<String>()
         val generateModelIds = mutableListOf<String>()
 
@@ -703,6 +832,11 @@ class AnalysisFeatureTest {
             payload: AnalysisTxtPromptPayload
         ): String {
             generateModelIds += modelId
+            lastGenerateCount = Regex("""Generate exactly (\d+)""")
+                .find(payload.systemInstruction)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
             assertFalse(payload.systemInstruction.contains("fallback", ignoreCase = true))
             return generateResponse
         }

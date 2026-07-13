@@ -13,6 +13,7 @@ import com.example.gemgemgen.automation.domain.PromptTextMutation
 import com.example.gemgemgen.automation.domain.PromptTypingChange
 import com.example.gemgemgen.automation.domain.PromptUndoHistory
 import com.example.gemgemgen.automation.domain.RepeatCountParser
+import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
@@ -27,8 +28,10 @@ import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
+import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
 import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
+import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -69,6 +72,7 @@ class MainViewModel(
     ),
     private val checkAutomationStart: CheckAutomationStartUseCase =
         CheckAutomationStartUseCase(OverlayPermissionGateway { true }),
+    private val wildcardFileRepository: WildcardFileRepository = EmptyWildcardFileRepository,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
@@ -288,6 +292,60 @@ class MainViewModel(
         }
     }
 
+    /**
+     * 추천 칩 탭: 커서 기준 현재 단어를 와일드카드 토큰으로 교체.
+     * Undo 가능. 실행 중·문단 선택 모드에서는 무시.
+     */
+    fun applyWildcardTokenSuggestion(token: String) {
+        val state = _uiState.value
+        if (state.isRunning || state.isParagraphSelectionMode) return
+        if (token.isBlank()) return
+        if (state.wildcardTokenCandidates.none { it.token == token }) return
+
+        val currentText = promptTemplateTextFieldState.text.toString()
+        val selection = promptTemplateTextFieldState.selection
+        if (selection.min != selection.max) return
+
+        val replacement = WildcardTokenAutocomplete.replaceWordAtCursor(
+            text = currentText,
+            cursor = selection.max,
+            token = token
+        ) ?: return
+        if (replacement.newText == currentText) return
+
+        recordImmediatePromptUndo(currentText)
+        ignoredPromptChangeText = replacement.newText
+        val cursorAfter = replacement.cursorAfter.coerceIn(0, replacement.newText.length)
+        promptTemplateTextFieldState.edit {
+            replace(0, length, replacement.newText)
+            this.selection = TextRange(cursorAfter)
+        }
+        promptTemplateValue = replacement.newText
+        promptEditorSession = promptEditorSession.withText(replacement.newText)
+        _uiState.update {
+            it.copy(
+                promptTemplate = replacement.newText,
+                canUndoPromptEdit = hasPromptUndo()
+            )
+        }
+    }
+
+    /** 와일드카드 폴더의 txt 파일명으로 추천 후보를 다시 읽는다. */
+    fun refreshWildcardTokenCandidates() {
+        scope.launch {
+            val candidates = withContext(dispatchers.io) {
+                loadWildcardTokenCandidates()
+            }
+            _uiState.update { state ->
+                if (state.wildcardTokenCandidates == candidates) {
+                    state
+                } else {
+                    state.copy(wildcardTokenCandidates = candidates)
+                }
+            }
+        }
+    }
+
     fun replaceSelectedPromptParagraph(replacement: String) {
         syncEditorTextFromCurrent()
         when (val result = promptEditorSession.prepareReplaceSelected(replacement)) {
@@ -448,15 +506,25 @@ class MainViewModel(
 
     fun refreshStatus() {
         scope.launch {
-            val report = withContext(dispatchers.io) {
-                checkEnvironmentStatus.check()
+            val (report, candidates) = withContext(dispatchers.io) {
+                checkEnvironmentStatus.check() to loadWildcardTokenCandidates()
             }
             _uiState.update {
                 it.copy(
                     environmentStatus = report.status,
-                    environmentSetupInfo = report.setupInfo
+                    environmentSetupInfo = report.setupInfo,
+                    wildcardTokenCandidates = candidates
                 )
             }
+        }
+    }
+
+    private fun loadWildcardTokenCandidates(): List<WildcardTokenAutocomplete.Candidate> {
+        return try {
+            val fileNames = wildcardFileRepository.listFiles().map { it.fileName }
+            WildcardTokenAutocomplete.candidatesFromFileNames(fileNames)
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
@@ -748,5 +816,16 @@ class MainViewModel(
 
     private companion object {
         const val PROMPT_UNDO_DEBOUNCE_MILLIS = 700L
+
+        private object EmptyWildcardFileRepository : WildcardFileRepository {
+            override fun listFiles(): List<WildcardTextFile> = emptyList()
+            override fun readFile(file: WildcardTextFile): String = ""
+            override fun createFile(fileName: String): WildcardTextFile =
+                WildcardTextFile(id = fileName, fileName = fileName)
+            override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile =
+                file.copy(fileName = newName)
+            override fun writeFile(file: WildcardTextFile, text: String) = Unit
+            override fun deleteFile(file: WildcardTextFile) = Unit
+        }
     }
 }

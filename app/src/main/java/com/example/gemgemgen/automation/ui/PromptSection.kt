@@ -2,6 +2,7 @@ package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
@@ -33,20 +35,21 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.gemgemgen.R
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
+import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.ui.AppMultilineTextField
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -64,9 +67,11 @@ internal fun PromptSection(
     geminiCloseMessage: String,
     selectedParagraphRange: PromptParagraphRange?,
     paragraphSelectionMessage: String,
+    wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
     showPromptActions: Boolean = true,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
+    onWildcardTokenSuggestionClick: (String) -> Unit = {},
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
     onTerminateSelfApp: () -> Unit,
@@ -79,6 +84,29 @@ internal fun PromptSection(
     onCopyPromptToClipboard: () -> Unit,
     onPasteFromClipboard: () -> Unit
 ) {
+    // TextFieldState 스냅샷 구독 — 텍스트·커서 변경 시 추천 재계산
+    val fieldText = promptTemplateState.text.toString()
+    val selection = promptTemplateState.selection
+    val suggestionTokens = remember(
+        fieldText,
+        selection,
+        wildcardTokenCandidates,
+        isParagraphSelectionMode,
+        isTargetSelectionEnabled
+    ) {
+        if (isParagraphSelectionMode || !isTargetSelectionEnabled) {
+            emptyList()
+        } else if (selection.min != selection.max) {
+            emptyList()
+        } else {
+            WildcardTokenAutocomplete.suggestions(
+                text = fieldText,
+                cursor = selection.max,
+                candidates = wildcardTokenCandidates
+            )
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -105,6 +133,13 @@ internal fun PromptSection(
                     )
                 }
             }
+        }
+
+        if (suggestionTokens.isNotEmpty()) {
+            WildcardTokenSuggestionBar(
+                tokens = suggestionTokens,
+                onTokenClick = onWildcardTokenSuggestionClick
+            )
         }
 
         AppMultilineTextField(
@@ -173,8 +208,8 @@ internal fun PromptActionRow(
 ) {
     FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.5.dp, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(2.5.dp)
     ) {
         // 섬 1: 앱 자체 종료(왼쪽) + Gemini 종료/재시작
         ActionIsland {
@@ -349,6 +384,37 @@ internal fun PromptActionRow(
 }
 
 @Composable
+private fun WildcardTokenSuggestionBar(
+    tokens: List<String>,
+    onTokenClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        tokens.forEach { token ->
+            SuggestionChip(
+                onClick = { onTokenClick(token) },
+                label = {
+                    Text(
+                        text = token,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                modifier = Modifier.semantics {
+                    contentDescription = "와일드카드 $token 삽입"
+                }
+            )
+        }
+    }
+}
+
+@Composable
 private fun ActionIsland(
     modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit
@@ -361,7 +427,7 @@ private fun ActionIsland(
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.5.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content
         )

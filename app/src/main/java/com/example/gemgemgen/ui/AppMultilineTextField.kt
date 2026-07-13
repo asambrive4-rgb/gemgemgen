@@ -147,7 +147,10 @@ fun AppMultilineTextField(
 
     OutlinedTextField(
         state = state,
-        modifier = modifier.then(paragraphTapModifier),
+        // 메인 탭 좌우 스와이프와 분리 — 입력칸 위 제스처는 탭 전환에 쓰지 않는다.
+        modifier = modifier
+            .blockMainTabSwipe()
+            .then(paragraphTapModifier),
         enabled = enabled,
         placeholder = {
             if (placeholder.isNotBlank()) {

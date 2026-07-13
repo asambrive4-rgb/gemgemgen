@@ -8,6 +8,16 @@ enum class AnalysisStatus {
     ERROR
 }
 
+/** 생성 결과 표시 방식. 마지막 생성 모드에 따라 UI를 분기한다. */
+enum class AnalysisResultPresentation {
+    /** 결과 없음 */
+    NONE,
+    /** 「생성」모드: 카드 목록 */
+    CARDS,
+    /** 「TXT 생성」모드: 줄 단위 목록 + 파일 저장 */
+    TXT
+}
+
 enum class AnalysisTargetSource {
     AUTO,
     MANUAL
