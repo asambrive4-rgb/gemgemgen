@@ -255,7 +255,13 @@ class AnalysisViewModel(
             }
             try {
                 analysisCache = null
-                val result = resolveTarget.analyzeAndMask(source, category)
+                val directionInput = currentDirectionInput()
+                val result = resolveTarget.analyzeAndMask(
+                    source = source,
+                    category = category,
+                    selectedHints = directionInput.selectedHints,
+                    customHint = directionInput.customHint
+                )
                 analysisCache = result.cache
                 rememberLastUsed(
                     role = AnalysisModelRole.MASKING,
@@ -289,11 +295,14 @@ class AnalysisViewModel(
     fun generateTxt() {
         val snapshot = _uiState.value
         val source = currentSourcePrompt()
+        val directionInput = currentDirectionInput(snapshot)
         val needsMaskingAnalysis = willNeedMaskingAnalysis(
             source = source,
             category = snapshot.selectedCategory,
             existingTarget = snapshot.targetSegment,
-            cache = analysisCache
+            cache = analysisCache,
+            selectedHints = directionInput.selectedHints,
+            customHint = directionInput.customHint
         )
         // 캐시 미스 등으로 구간 분석이 필요하면 마스킹 자격증명도 먼저 확인
         if (needsMaskingAnalysis) {
@@ -357,7 +366,9 @@ class AnalysisViewModel(
                     source = source,
                     category = category,
                     existingTarget = _uiState.value.targetSegment,
-                    cache = analysisCache
+                    cache = analysisCache,
+                    selectedHints = directionInput.selectedHints,
+                    customHint = directionInput.customHint
                 )
                 analysisCache = ensured.cache
                 if (ensured.targetChanged) {
@@ -374,17 +385,14 @@ class AnalysisViewModel(
                         it.copy(message = "프롬프트 목록 생성 중...")
                     }
                 }
-                val selectedHints = _uiState.value.directions
-                    .filter { it.id in _uiState.value.selectedDirectionIds }
-                    .map { it.hint }
                 val result = generateTxtUseCase.generate(
                     sourcePrompt = source,
                     category = category,
                     targetSegment = ensured.target,
                     analysisReport = ensured.report,
                     count = _uiState.value.txtCount,
-                    selectedHints = selectedHints,
-                    customHint = _uiState.value.customHint
+                    selectedHints = directionInput.selectedHints,
+                    customHint = directionInput.customHint
                 )
                 if (ensured.didAnalyze) {
                     rememberLastUsed(
@@ -432,18 +440,40 @@ class AnalysisViewModel(
     /**
      * TXT 생성 시 캐시로 분석 결과를 재사용하지 못하면 마스킹 모델 분석이 필요하다.
      * (ResolveAnalysisTargetUseCase.getOrAnalyzeReport 캐시 조건과 동일)
+     * 칩·추가 요구사항이 바뀌면 variationGoal이 달라지므로 재분석한다.
      */
     private fun willNeedMaskingAnalysis(
         source: String,
         category: AnalysisCategory?,
         existingTarget: AnalysisTargetSegment?,
-        cache: AnalysisReportCache?
+        cache: AnalysisReportCache?,
+        selectedHints: List<String>,
+        customHint: String
     ): Boolean {
         if (category == null) return false
         return cache == null ||
             cache.sourcePrompt != source ||
             cache.category != category ||
-            cache.targetSegment != existingTarget
+            cache.targetSegment != existingTarget ||
+            cache.selectedHints != selectedHints ||
+            cache.customHint != customHint
+    }
+
+    private data class DirectionInput(
+        val selectedHints: List<String>,
+        val customHint: String
+    )
+
+    private fun currentDirectionInput(
+        state: AnalysisUiState = _uiState.value
+    ): DirectionInput {
+        val selectedHints = state.directions
+            .filter { it.id in state.selectedDirectionIds }
+            .map { it.hint }
+        return DirectionInput(
+            selectedHints = selectedHints,
+            customHint = state.customHint.trim()
+        )
     }
 
     fun cancelActiveWork() {

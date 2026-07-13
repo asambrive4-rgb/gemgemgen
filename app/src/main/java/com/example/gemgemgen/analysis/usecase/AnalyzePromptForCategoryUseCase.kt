@@ -1,6 +1,7 @@
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisCategoryRules
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisPromptBuilder
 import com.example.gemgemgen.analysis.domain.AnalysisReport
@@ -18,22 +19,33 @@ class AnalyzePromptForCategoryUseCase(
     suspend fun analyze(
         sourcePrompt: String,
         category: AnalysisCategory,
-        role: AnalysisModelRole = AnalysisModelRole.MASKING
+        role: AnalysisModelRole = AnalysisModelRole.MASKING,
+        selectedHints: List<String> = emptyList(),
+        customHint: String? = null
     ): AnalysisReport = withContext(dispatchers.io) {
         if (sourcePrompt.isBlank()) {
             throw AnalysisException("원본 프롬프트를 입력해주세요.")
         }
         val credential = credentialResolver.resolveForRole(role)
+        val normalizedCustomHint = customHint?.trim().orEmpty()
 
         val payload = AnalysisPromptBuilder.buildAnalysisPrompt(
             sourcePrompt = sourcePrompt,
-            category = category
+            category = category,
+            selectedHints = selectedHints,
+            customHint = normalizedCustomHint.ifBlank { null }
         )
         val responseText = aiGateway.analyze(
             apiKey = credential.accessTokenOrApiKey,
             modelId = credential.modelId,
             payload = payload
         )
-        AnalysisResponseParser.parseReport(responseText, sourcePrompt)
+        val report = AnalysisResponseParser.parseReport(responseText, sourcePrompt)
+        if (report.variationGoal.isNotBlank()) {
+            report
+        } else {
+            // 모델이 variationGoal을 비우면 카테고리 기본 Goal로만 폴백
+            report.copy(variationGoal = AnalysisCategoryRules.ruleFor(category).goal)
+        }
     }
 }

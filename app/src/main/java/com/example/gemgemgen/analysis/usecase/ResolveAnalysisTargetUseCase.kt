@@ -11,7 +11,11 @@ data class AnalysisReportCache(
     val sourcePrompt: String,
     val category: AnalysisCategory,
     val targetSegment: AnalysisTargetSegment?,
-    val report: AnalysisReport
+    val report: AnalysisReport,
+    /** Goal 추론에 쓰인 방향 칩 hint 목록 (순서 유지) */
+    val selectedHints: List<String> = emptyList(),
+    /** Goal 추론에 쓰인 사용자 추가 요구사항 */
+    val customHint: String = ""
 )
 
 data class AnalyzeAndMaskResult(
@@ -39,13 +43,18 @@ class ResolveAnalysisTargetUseCase(
 ) {
     suspend fun analyzeAndMask(
         source: String,
-        category: AnalysisCategory
+        category: AnalysisCategory,
+        selectedHints: List<String> = emptyList(),
+        customHint: String? = null
     ): AnalyzeAndMaskResult {
-        // 자동 마스킹 버튼 → 마스킹 모델
+        val normalizedCustomHint = customHint?.trim().orEmpty()
+        // 자동 마스킹 버튼 → 마스킹 모델 (칩/추가요구가 있으면 Goal에 반영)
         val report = analyzePrompt.analyze(
             sourcePrompt = source,
             category = category,
-            role = AnalysisModelRole.MASKING
+            role = AnalysisModelRole.MASKING,
+            selectedHints = selectedHints,
+            customHint = normalizedCustomHint.ifBlank { null }
         )
         val autoTarget = AnalysisTargetSegmentPolicy.fromAutoReport(report, category)
             ?: throw AnalysisException(
@@ -55,7 +64,9 @@ class ResolveAnalysisTargetUseCase(
             sourcePrompt = source,
             category = category,
             targetSegment = autoTarget,
-            report = report
+            report = report,
+            selectedHints = selectedHints,
+            customHint = normalizedCustomHint
         )
         return AnalyzeAndMaskResult(
             cache = cache,
@@ -68,16 +79,22 @@ class ResolveAnalysisTargetUseCase(
         source: String,
         category: AnalysisCategory,
         existingTarget: AnalysisTargetSegment?,
-        cache: AnalysisReportCache?
+        cache: AnalysisReportCache?,
+        selectedHints: List<String> = emptyList(),
+        customHint: String? = null
     ): EnsureTargetResult {
+        val normalizedCustomHint = customHint?.trim().orEmpty()
         // TXT 생성 전 구간 분석/재분석은 항상 마스킹 모델 사용
+        // 칩·추가요구가 바뀌면 Goal이 달라지므로 캐시 키에 포함
         if (existingTarget?.source == AnalysisTargetSource.MANUAL && existingTarget.isValid) {
             val report = getOrAnalyzeReport(
                 source = source,
                 category = category,
                 targetSegment = existingTarget,
                 cache = cache,
-                role = AnalysisModelRole.MASKING
+                role = AnalysisModelRole.MASKING,
+                selectedHints = selectedHints,
+                customHint = normalizedCustomHint
             )
             return EnsureTargetResult(
                 target = existingTarget,
@@ -94,7 +111,9 @@ class ResolveAnalysisTargetUseCase(
             category = category,
             targetSegment = existingTarget,
             cache = cache,
-            role = AnalysisModelRole.MASKING
+            role = AnalysisModelRole.MASKING,
+            selectedHints = selectedHints,
+            customHint = normalizedCustomHint
         )
         val autoTarget = AnalysisTargetSegmentPolicy.fromAutoReport(resolved.report, category)
             ?: throw AnalysisException(
@@ -125,25 +144,33 @@ class ResolveAnalysisTargetUseCase(
         category: AnalysisCategory,
         targetSegment: AnalysisTargetSegment?,
         cache: AnalysisReportCache?,
-        role: AnalysisModelRole
+        role: AnalysisModelRole,
+        selectedHints: List<String>,
+        customHint: String
     ): CachedReport {
         if (cache != null &&
             cache.sourcePrompt == source &&
             cache.category == category &&
-            cache.targetSegment == targetSegment
+            cache.targetSegment == targetSegment &&
+            cache.selectedHints == selectedHints &&
+            cache.customHint == customHint
         ) {
             return CachedReport(report = cache.report, cache = cache, didAnalyze = false)
         }
         val report = analyzePrompt.analyze(
             sourcePrompt = source,
             category = category,
-            role = role
+            role = role,
+            selectedHints = selectedHints,
+            customHint = customHint.ifBlank { null }
         )
         val nextCache = AnalysisReportCache(
             sourcePrompt = source,
             category = category,
             targetSegment = targetSegment,
-            report = report
+            report = report,
+            selectedHints = selectedHints,
+            customHint = customHint
         )
         return CachedReport(report = report, cache = nextCache, didAnalyze = true)
     }

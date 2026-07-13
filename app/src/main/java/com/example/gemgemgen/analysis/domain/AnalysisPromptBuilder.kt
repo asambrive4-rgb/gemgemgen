@@ -22,16 +22,19 @@ data class AnalysisTxtPromptPayload(
 object AnalysisPromptBuilder {
     fun buildAnalysisPrompt(
         sourcePrompt: String,
-        category: AnalysisCategory
+        category: AnalysisCategory,
+        selectedHints: List<String> = emptyList(),
+        customHint: String? = null
     ): AnalysisPromptPayload {
         val rule = AnalysisCategoryRules.ruleFor(category)
         val specialRule = specialAnalyticRule(category)
+        val directionHintsText = formatDirectionHints(selectedHints)
+        val customHintText = customHint?.trim().orEmpty().ifBlank { "NONE" }
         val systemInstruction = """
 You are a high-fidelity image prompt engineering expert.
 Analyze a full image prompt for one target variation category.
 
 Category: ${category.label}
-- Goal: ${rule.goal}
 - Required: ${rule.required}
 - Avoid: ${rule.avoid}
 - Variables: ${rule.variables}
@@ -46,7 +49,15 @@ Goals:
 3. Analyze viewpoint, distance, visible scope, camera angle, visible elements, hidden or unclear elements.
 4. Analyze spatial layout: subject placement, foreground, midground, background, left/center/right, above/below, behind/beside subject, fixed anchors, mutable zones.
 5. Return category constraints: allowed and avoid.
-6. Keep the response strict JSON only.
+6. Infer variationGoal: one clear Korean sentence describing what replacement fragments should achieve for this category.
+   Base variationGoal on ALL of:
+   (a) the visual/spatial analysis of the source prompt,
+   (b) selected direction chips if any (length, detail, lineage shift, erotic edge, outfit-fits-location, etc.),
+   (c) the custom user direction if any.
+   Do NOT default to a fixed short/practical style unless the source and user directions actually imply that.
+   If chips or custom text ask for more length or denser detail, variationGoal must reflect that.
+   If chips or custom text ask for a lineage/genre shift or situational edge, variationGoal must reflect that.
+7. Keep the response strict JSON only.
         """.trimIndent()
 
         val userPrompt = """
@@ -56,7 +67,13 @@ Target prompt:
 Target category:
 "${category.label}"
 
-Find the target segment and analyze the visual constraints. Return strict JSON.
+Selected direction chips:
+$directionHintsText
+
+Custom user direction:
+$customHintText
+
+Find the target segment, analyze the visual constraints, and set variationGoal from analysis + chips + custom direction. Return strict JSON.
         """.trimIndent()
 
         return AnalysisPromptPayload(
@@ -89,10 +106,16 @@ Find the target segment and analyze the visual constraints. Return strict JSON.
             ?.joinToString(separator = "\n")
             .orEmpty()
         val layoutText = spatialLayoutText(analysisReport.spatialLayout)
+        val variationGoal = analysisReport.variationGoal.trim().ifBlank {
+            AnalysisCategoryRules.ruleFor(category).goal
+        }
 
         val systemInstruction = """
 You generate Korean wildcard candidate fragments for image prompts.
 Generate exactly $count Korean fragments that can replace "${targetSegment.text}" for "${category.label}".
+
+Variation goal (from analysis; follow this as the primary creative objective):
+$variationGoal
 
 Critical rules:
 1. Output only Korean wildcard fragments in the "text" field.
@@ -104,9 +127,11 @@ Critical rules:
 7. For human categories, avoid injecting unrelated location details.
 8. Match the level of detail and descriptive length of the user's direction hints. If the hints are highly detailed and long, generate outputs that are correspondingly rich and descriptive, rather than summarizing them into short 1-2 sentences.
 9. Respect the style and format of the user's hints naturally (e.g., matching the overall tone or structure), but do not restrict the phrasing too strictly if it harms expression quality.
-10. Return strict JSON array only.
+10. Prefer the Variation goal above when choosing length, lineage, tone, and emphasis; still obey camera/crop and allowed/avoid constraints.
+11. Return strict JSON array only.
 
 Context:
+- Variation goal: $variationGoal
 - Viewpoint: ${analysisReport.visualContext.viewpoint}
 - Distance: ${analysisReport.visualContext.distance}
 - Visible scope: ${analysisReport.visualContext.visibleScope}
@@ -137,6 +162,13 @@ Generate exactly $count unique Korean wildcard fragments as a JSON array.
             userPrompt = userPrompt,
             responseSchema = txtResponseSchema()
         )
+    }
+
+    private fun formatDirectionHints(selectedHints: List<String>): String {
+        if (selectedHints.isEmpty()) return "NONE"
+        return selectedHints
+            .mapIndexed { index, hint -> "Option ${index + 1}: \"$hint\"" }
+            .joinToString(separator = "\n")
     }
 
     private fun specialAnalyticRule(category: AnalysisCategory): String {
@@ -242,6 +274,10 @@ Generate exactly $count unique Korean wildcard fragments as a JSON array.
                     ),
                     "required" to arr("allowed", "avoid")
                 ),
+                "variationGoal" to stringSchema(
+                    "One clear Korean sentence: the variation goal for replacement fragments, " +
+                        "based on visual analysis, selected direction chips, and custom user direction."
+                ),
                 "warnings" to stringArraySchema()
             ),
             "required" to arr(
@@ -249,6 +285,7 @@ Generate exactly $count unique Korean wildcard fragments as a JSON array.
                 "visualContext",
                 "spatialLayout",
                 "categoryConstraints",
+                "variationGoal",
                 "warnings"
             )
         )

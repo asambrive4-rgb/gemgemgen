@@ -73,6 +73,60 @@ class AnalysisFeatureTest {
     }
 
     @Test
+    fun parseReport_readsVariationGoalFromModel() {
+        val report = AnalysisResponseParser.parseReport(
+            jsonText = analysisJson(
+                exactText = "blue dress",
+                variationGoal = "디테일과 분량을 늘린 여성 의상 조각 생성"
+            ),
+            sourcePrompt = "blue dress"
+        )
+        assertEquals("디테일과 분량을 늘린 여성 의상 조각 생성", report.variationGoal)
+    }
+
+    @Test
+    fun buildAnalysisPrompt_doesNotHardcodeCategoryGoal_andIncludesChips() {
+        val payload = com.example.gemgemgen.analysis.domain.AnalysisPromptBuilder.buildAnalysisPrompt(
+            sourcePrompt = "흰색 린넨 셔츠",
+            category = AnalysisCategory.WOMEN_CLOTHING,
+            selectedHints = listOf("Keep the same concept and write longer"),
+            customHint = "레이스 디테일 추가"
+        )
+        assertFalse(payload.systemInstruction.contains("- Goal: 짧고 실용적인"))
+        assertTrue(payload.systemInstruction.contains("Infer variationGoal"))
+        assertTrue(payload.userPrompt.contains("Keep the same concept and write longer"))
+        assertTrue(payload.userPrompt.contains("레이스 디테일 추가"))
+        assertTrue(payload.userPrompt.contains("Selected direction chips:"))
+    }
+
+    @Test
+    fun buildTxtPrompt_includesVariationGoalFromReport() {
+        val report = AnalysisResponseParser.parseReport(
+            jsonText = analysisJson(
+                exactText = "blue dress",
+                variationGoal = "같은 계열 안에서 다른 종류로 바꾼 짧은 의상 조각"
+            ),
+            sourcePrompt = "blue dress"
+        )
+        val payload = com.example.gemgemgen.analysis.domain.AnalysisPromptBuilder.buildTxtPrompt(
+            sourcePrompt = "blue dress",
+            category = AnalysisCategory.WOMEN_CLOTHING,
+            targetSegment = AnalysisTargetSegment(
+                text = "blue dress",
+                startIndex = 0,
+                endIndex = 10,
+                source = AnalysisTargetSource.AUTO,
+                category = AnalysisCategory.WOMEN_CLOTHING
+            ),
+            analysisReport = report,
+            count = 10,
+            selectedHints = emptyList()
+        )
+        assertTrue(payload.systemInstruction.contains("같은 계열 안에서 다른 종류로 바꾼 짧은 의상 조각"))
+        assertTrue(payload.systemInstruction.contains("Variation goal"))
+    }
+
+    @Test
     fun countPolicy_clampsToSliderRange() {
         assertEquals(AnalysisTxtCountPolicy.MIN_COUNT, AnalysisTxtCountPolicy.coerce(1))
         assertEquals(50, AnalysisTxtCountPolicy.coerce(50))
@@ -214,18 +268,30 @@ class AnalysisFeatureTest {
         assertEquals(masked.targetSegment, first.target)
         assertFalse(first.didAnalyze)
 
+        // 칩이 바뀌면 variationGoal 기준이 달라지므로 재분석
+        val afterHintChange = resolve.ensureForGeneration(
+            source = source,
+            category = category,
+            existingTarget = masked.targetSegment,
+            cache = first.cache,
+            selectedHints = listOf("expand length and richness")
+        )
+        assertEquals(2, aiGateway.analyzeCallCount)
+        assertTrue(afterHintChange.didAnalyze)
+
         val afterCategoryChange = resolve.ensureForGeneration(
             source = source,
             category = AnalysisCategory.WOMEN_HAIRSTYLE,
             existingTarget = null,
-            cache = first.cache
+            cache = afterHintChange.cache,
+            selectedHints = listOf("expand length and richness")
         )
-        assertEquals(2, aiGateway.analyzeCallCount)
+        assertEquals(3, aiGateway.analyzeCallCount)
         assertTrue(afterCategoryChange.didAnalyze)
         assertEquals(AnalysisTargetSource.AUTO, afterCategoryChange.target.source)
         // 재분석도 마스킹 역할 모델(테스트 기본값)을 사용
         assertEquals(
-            listOf(DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_MODEL),
+            listOf(DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_MODEL),
             aiGateway.analyzeModelIds
         )
     }
@@ -567,7 +633,10 @@ class AnalysisFeatureTest {
         )
     }
 
-    private fun analysisJson(exactText: String): String {
+    private fun analysisJson(
+        exactText: String,
+        variationGoal: String = "테스트용 변주 목표"
+    ): String {
         return """
             {
               "targetSegment": {
@@ -604,6 +673,7 @@ class AnalysisFeatureTest {
                 "allowed": [],
                 "avoid": []
               },
+              "variationGoal": "$variationGoal",
               "warnings": []
             }
         """.trimIndent()
@@ -838,6 +908,7 @@ class AnalysisFeatureTest {
                     "allowed": [],
                     "avoid": []
                   },
+                  "variationGoal": "테스트용 변주 목표",
                   "warnings": []
                 }
             """.trimIndent()

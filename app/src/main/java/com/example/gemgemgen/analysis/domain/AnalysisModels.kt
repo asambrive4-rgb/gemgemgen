@@ -72,6 +72,12 @@ data class AnalysisReport(
     val visualContext: AnalysisVisualContext = AnalysisVisualContext(),
     val spatialLayout: AnalysisSpatialLayout = AnalysisSpatialLayout(),
     val categoryConstraints: AnalysisCategoryConstraints = AnalysisCategoryConstraints(),
+    /**
+     * 1단계 분석 모델이 정한 변주 Goal.
+     * 원문 시각/공간 분석 + 선택 방향 칩 + 사용자 추가 요구사항을 반영한다.
+     * 비어 있으면 생성 단계에서 카테고리 폴백 Goal을 쓴다.
+     */
+    val variationGoal: String = "",
     val warnings: List<String> = emptyList()
 )
 

@@ -28,6 +28,7 @@ object AnalysisResponseParser {
                 avoid = it["avoid"].strings()
             )
         } ?: AnalysisCategoryConstraints()
+        val variationGoal = root["variationGoal"].stringOrBlank().trim()
         val warnings = root["warnings"].strings()
 
         return AnalysisReport(
@@ -35,6 +36,7 @@ object AnalysisResponseParser {
             visualContext = visualContext,
             spatialLayout = spatialLayout,
             categoryConstraints = constraints,
+            variationGoal = variationGoal,
             warnings = warnings
         )
     }
