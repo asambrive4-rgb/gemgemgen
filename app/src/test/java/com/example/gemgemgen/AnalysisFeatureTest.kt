@@ -1,7 +1,6 @@
 package com.example.gemgemgen
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
-import androidx.compose.ui.text.TextRange
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
@@ -425,27 +424,24 @@ class AnalysisFeatureTest {
     }
 
     @Test
-    fun viewModel_manualMaskOverridesAutoMaskForGeneration() {
+    fun viewModel_generateTxt_runsAutoMaskThenGeneration() {
         val aiGateway = FakeAnalysisAiGateway(
             analyzeResponse = analysisJson(exactText = "blue dress"),
-            generateResponse = """[{"text":"수동 후보","explanation":"설명"}]"""
+            generateResponse = """[{"text":"자동 후보","explanation":"설명"}]"""
         )
         val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
         val viewModel = analysisViewModel(aiGateway, keyRepository)
         val prompt = "red hair and blue dress"
 
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
-        viewModel.sourcePromptTextFieldState.edit {
-            selection = TextRange(0, "red hair".length)
-        }
         viewModel.onSourcePromptChange(prompt)
-        viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
-        viewModel.applyManualSelection()
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
         viewModel.generateTxt()
 
-        assertEquals(AnalysisTargetSource.MANUAL, viewModel.uiState.value.targetSegment?.source)
-        assertEquals("red hair", viewModel.uiState.value.targetSegment?.text)
-        assertEquals(listOf("수동 후보"), viewModel.uiState.value.generatedCandidates)
+        assertEquals(1, aiGateway.analyzeCallCount)
+        assertEquals(AnalysisTargetSource.AUTO, viewModel.uiState.value.targetSegment?.source)
+        assertEquals("blue dress", viewModel.uiState.value.targetSegment?.text)
+        assertEquals(listOf("자동 후보"), viewModel.uiState.value.generatedCandidates)
         assertEquals(AnalysisResultPresentation.TXT, viewModel.uiState.value.resultPresentation)
         assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
     }
@@ -496,15 +492,10 @@ class AnalysisFeatureTest {
         val clipboard = RecordingClipboard()
         val viewModel = analysisViewModel(aiGateway, keyRepository, clipboard)
         val prompt = "red hair and blue dress"
-        val dressStart = prompt.indexOf("blue dress")
 
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
-        viewModel.sourcePromptTextFieldState.edit {
-            selection = TextRange(dressStart, prompt.length)
-        }
         viewModel.onSourcePromptChange(prompt)
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
-        viewModel.applyManualSelection()
         viewModel.generate()
 
         viewModel.applyCandidate(0)
@@ -568,33 +559,26 @@ class AnalysisFeatureTest {
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
         viewModel.onSourcePromptChange(prompt)
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
-        
-        // 1. 자동 마스킹 실행 (최초 1차 분석 API 호출)
-        viewModel.analyzeAndMask()
-        assertEquals(1, aiGateway.analyzeCallCount)
 
-        // 2. TXT 생성 실행 (캐시 재사용되어 1 유지)
+        // 1. TXT 생성 → 내부 자동 마스킹으로 최초 1차 분석 API 호출
         viewModel.generateTxt()
         assertEquals(1, aiGateway.analyzeCallCount)
 
-        // 3. 한 번 더 TXT 생성 실행 (캐시 재사용되어 1 유지)
+        // 2. 한 번 더 TXT 생성 (캐시 재사용되어 1 유지)
         viewModel.generateTxt()
         assertEquals(1, aiGateway.analyzeCallCount)
 
-        // 4. 카테고리 변경 -> 캐시 무효화 -> 1차 분석 다시 수행 (호출 횟수 2)
+        // 3. 카테고리 변경 → 캐시 무효화 → 1차 분석 다시 수행
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
         viewModel.generateTxt()
         assertEquals(2, aiGateway.analyzeCallCount)
 
-        // 5. 수동 마스킹 지정 -> 캐시 무효화 -> 1차 분석 다시 수행 (호출 횟수 3)
-        viewModel.sourcePromptTextFieldState.edit {
-            selection = TextRange(0, "red hair".length)
-        }
-        viewModel.applyManualSelection()
+        // 4. 마스킹 해제 후 다시 생성 → 분석 재수행
+        viewModel.clearTargetSegment()
         viewModel.generateTxt()
         assertEquals(3, aiGateway.analyzeCallCount)
 
-        // 6. 동일한 수동 마스킹에서 다시 TXT 생성 실행 (캐시 재사용되어 3 유지)
+        // 5. 동일 상태에서 다시 TXT 생성 (캐시 재사용)
         viewModel.generateTxt()
         assertEquals(3, aiGateway.analyzeCallCount)
     }
@@ -645,19 +629,20 @@ class AnalysisFeatureTest {
 
     @Test
     fun importSourcePromptFromAutomation_clearsInvalidTargetSegment() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "red dress"),
+            generateResponse = """[{"text":"후보","explanation":"설명"}]"""
+        )
         val viewModel = analysisViewModel(
-            aiGateway = FakeAnalysisAiGateway(),
+            aiGateway = aiGateway,
             keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
         )
         val original = "red dress blue sky"
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
         viewModel.onSourcePromptChange(original)
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
-        // 원문에 있던 구간을 수동으로 지정한 뒤 가져오기로 원문을 바꾸면 구간이 비워져야 한다.
-        viewModel.sourcePromptTextFieldState.edit {
-            selection = TextRange(0, "red dress".length)
-        }
-        viewModel.applyManualSelection()
+        // 생성으로 자동 마스킹 구간을 만든 뒤, 가져오기로 원문을 바꾸면 구간이 비워져야 한다.
+        viewModel.generateTxt()
         assertTrue(viewModel.uiState.value.targetSegment != null)
 
         viewModel.importSourcePromptFromAutomation("completely different text")
@@ -686,7 +671,7 @@ class AnalysisFeatureTest {
     fun saveGeneratedResults_invokesOnSuccessWithReplacedSourceAndKeepsClipboard() {
         val clipboard = RecordingClipboard()
         val aiGateway = FakeAnalysisAiGateway(
-            analyzeResponse = analysisJson(exactText = "blue dress"),
+            analyzeResponse = analysisJson(exactText = "red hair"),
             generateResponse = """[{"text":"후보","explanation":"설명"}]"""
         )
         val viewModel = analysisViewModel(
@@ -696,12 +681,8 @@ class AnalysisFeatureTest {
         )
         val prompt = "red hair and blue dress"
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
-        viewModel.sourcePromptTextFieldState.edit {
-            selection = TextRange(0, "red hair".length)
-        }
         viewModel.onSourcePromptChange(prompt)
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
-        viewModel.applyManualSelection()
         viewModel.generateTxt()
         viewModel.onResultFileNameChange("hair")
 

@@ -20,8 +20,11 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,26 +72,47 @@ internal fun MainTabbedScreen(
         pageCount = { loopPageCount }
     )
     val onSelectTabLatest = rememberUpdatedState(onSelectTab)
+    val selectedTabLatest = rememberUpdatedState(selectedTab)
+    // tabs 리스트는 매 리컴포즈마다 새로 생기므로 내용만 최신으로 구독한다.
+    val tabsLatest = rememberUpdatedState(tabs)
+    // 탭 클릭으로 스크롤 중일 때 settledPage → onSelectTab 피드백을 막아 왕복 튕김 방지
+    var programmaticScroll by remember { mutableStateOf(false) }
 
     ProvideTabSwipeBlocker {
         val swipeBlocker = LocalTabSwipeBlocker.current
 
-        // Pager가 멈춘 페이지 → 탭 선택(selectMainTab 부수효과 포함)
-        LaunchedEffect(pagerState, tabs) {
+        // Pager가 멈춘 페이지 → 탭 선택 (스와이프·프로그램 스크롤 완료 후)
+        // keys에 tabs를 넣지 않는다: 매 리컴포즈 재시작 시 이전 settled 탭으로 되돌아가는 버그 방지
+        LaunchedEffect(pagerState, pageCount) {
             snapshotFlow { pagerState.settledPage }
-                .map { page -> tabs[tabIndexOf(page)].tab }
+                .map { page -> tabsLatest.value[tabIndexOf(page)].tab }
                 .distinctUntilChanged()
-                .collect { tab -> onSelectTabLatest.value(tab) }
+                .collect { tab ->
+                    if (programmaticScroll) return@collect
+                    if (tab == selectedTabLatest.value) return@collect
+                    onSelectTabLatest.value(tab)
+                }
         }
 
         // 탭 클릭·핸드오프 등 외부 selectedTab 변경 → Pager 위치 동기화
         LaunchedEffect(selectedTab, pageCount) {
-            val targetIndex = tabs.indexOfFirst { it.tab == selectedTab }
+            val targetIndex = tabsLatest.value.indexOfFirst { it.tab == selectedTab }
                 .takeIf { it >= 0 }
                 ?: return@LaunchedEffect
-            if (tabIndexOf(pagerState.settledPage) != targetIndex) {
-                val targetPage = pageForTabIndex(targetIndex, pagerState.currentPage)
+            if (tabIndexOf(pagerState.settledPage) == targetIndex) return@LaunchedEffect
+
+            programmaticScroll = true
+            try {
+                // 스크롤 중간 currentPage 기준이 아니라 settled 근처 블록에서 목표 페이지 계산
+                val nearPage = if (pagerState.isScrollInProgress) {
+                    pagerState.currentPage
+                } else {
+                    pagerState.settledPage
+                }
+                val targetPage = pageForTabIndex(targetIndex, nearPage)
                 pagerState.animateScrollToPage(targetPage)
+            } finally {
+                programmaticScroll = false
             }
         }
 
@@ -108,8 +132,10 @@ internal fun MainTabbedScreen(
                             Tab(
                                 selected = selectedTab == page.tab,
                                 onClick = {
-                                    // VM 로딩 등은 즉시, 페이지 애니메이션은 selectedTab 동기화
-                                    onSelectTab(page.tab)
+                                    if (page.tab != selectedTab) {
+                                        // VM 로딩 등은 즉시, 페이지 애니메이션은 selectedTab 동기화
+                                        onSelectTab(page.tab)
+                                    }
                                 },
                                 modifier = Modifier.height(38.dp),
                                 text = {
@@ -147,7 +173,7 @@ internal fun MainTabbedScreen(
             ) { page ->
                 val tabIndex = tabIndexOf(page)
                 Box(modifier = Modifier.fillMaxSize()) {
-                    tabs[tabIndex].content()
+                    tabsLatest.value[tabIndex].content()
                 }
             }
         }

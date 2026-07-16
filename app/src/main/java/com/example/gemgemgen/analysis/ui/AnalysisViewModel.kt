@@ -15,7 +15,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
-import com.example.gemgemgen.analysis.domain.ManualTargetSegmentResult
 import com.example.gemgemgen.analysis.usecase.AnalysisReportCache
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
@@ -188,43 +187,6 @@ class AnalysisViewModel(
         }
     }
 
-    fun applyManualSelection() {
-        val source = sourcePromptTextFieldState.text.toString()
-        val category = _uiState.value.selectedCategory ?: run {
-            showError("카테고리를 먼저 선택해주세요.")
-            return
-        }
-        val selection = sourcePromptTextFieldState.selection
-        when (
-            val result = AnalysisTargetSegmentPolicy.fromManual(
-                source = source,
-                start = selection.min,
-                end = selection.max,
-                category = category
-            )
-        ) {
-            ManualTargetSegmentResult.EmptySelection -> {
-                showError("원문에서 바꾸고 싶은 구간을 선택해주세요.")
-            }
-            is ManualTargetSegmentResult.Success -> {
-                analysisCache = null
-                _uiState.update {
-                    it.copy(
-                        sourcePrompt = source,
-                        targetSegment = result.segment,
-                        generatedCandidates = emptyList(),
-                        resultPresentation = AnalysisResultPresentation.NONE,
-                        selectedCandidateIndex = null,
-                        error = "",
-                        message = "수동 마스킹 구간을 지정했습니다.",
-                        warning = "",
-                        status = AnalysisStatus.IDLE
-                    )
-                }
-            }
-        }
-    }
-
     fun clearTargetSegment() {
         analysisCache = null
         _uiState.update {
@@ -237,81 +199,6 @@ class AnalysisViewModel(
                 warning = "",
                 error = ""
             )
-        }
-    }
-
-    fun analyzeAndMask() {
-        val snapshot = _uiState.value
-        val source = currentSourcePrompt()
-        when (
-            val gate = AnalysisStartPolicy.evaluateInputs(
-                source = source,
-                category = snapshot.selectedCategory,
-                hasActiveKey = snapshot.hasMaskingCredential
-            )
-        ) {
-            is AnalysisStartGate.Blocked -> {
-                showError(
-                    AnalysisUiText.startBlockedMessage(
-                        reason = gate.reason,
-                        provider = snapshot.maskingProvider,
-                        role = AnalysisModelRole.MASKING
-                    )
-                )
-                return
-            }
-            AnalysisStartGate.Allowed -> Unit
-        }
-        val category = checkNotNull(snapshot.selectedCategory)
-
-        runningJob?.cancel()
-        runningJob = scope.launch {
-            _uiState.update {
-                it.copy(
-                    status = AnalysisStatus.ANALYZING,
-                    error = "",
-                    message = "자동 마스킹 분석 중...",
-                    warning = ""
-                )
-            }
-            try {
-                analysisCache = null
-                val directionInput = currentDirectionInput()
-                val result = resolveTarget.analyzeAndMask(
-                    source = source,
-                    category = category,
-                    selectedHints = directionInput.selectedHints,
-                    customHint = directionInput.customHint
-                )
-                analysisCache = result.cache
-                rememberLastUsed(
-                    role = AnalysisModelRole.MASKING,
-                    provider = snapshot.maskingProvider,
-                    modelId = snapshot.maskingModel
-                )
-                _uiState.update {
-                    it.copy(
-                        sourcePrompt = source,
-                        targetSegment = result.targetSegment,
-                        generatedCandidates = emptyList(),
-                        resultPresentation = AnalysisResultPresentation.NONE,
-                        selectedCandidateIndex = null,
-                        status = AnalysisStatus.IDLE,
-                        message = "자동 마스킹 구간을 찾았습니다.",
-                        warning = result.warning
-                    )
-                }
-                if (snapshot.maskingProvider == AnalysisProvider.GROK ||
-                    _uiState.value.usesGrok
-                ) {
-                    refreshGrokQuotaIfLoggedIn()
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                analysisCache = null
-                showError(error.message ?: "분석에 실패했습니다.")
-            }
         }
     }
 

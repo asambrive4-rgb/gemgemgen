@@ -283,9 +283,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 )
             },
             onCategorySelected = { analysisViewModel?.onCategorySelected(it) },
-            onApplyManualSelection = { analysisViewModel?.applyManualSelection() },
             onClearTargetSegment = { analysisViewModel?.clearTargetSegment() },
-            onAnalyzeAndMask = { analysisViewModel?.analyzeAndMask() },
             onGenerate = { analysisViewModel?.generate() },
             onGenerateTxt = { analysisViewModel?.generateTxt() },
             onCancelWork = { analysisViewModel?.cancelActiveWork() },

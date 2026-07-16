@@ -6,7 +6,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
-import com.example.gemgemgen.analysis.domain.ManualTargetSegmentResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -19,7 +18,7 @@ class AnalysisTargetSegmentPolicyTest {
         text = "red hair",
         startIndex = 0,
         endIndex = 8,
-        source = AnalysisTargetSource.MANUAL,
+        source = AnalysisTargetSource.AUTO,
         category = AnalysisCategory.WOMEN_HAIRSTYLE
     )
 
@@ -42,33 +41,6 @@ class AnalysisTargetSegmentPolicyTest {
     fun isStillValid_indexOutOfRange_returnsFalse() {
         val bad = hairSegment.copy(endIndex = 999)
         assertFalse(AnalysisTargetSegmentPolicy.isStillValid(source, bad))
-    }
-
-    @Test
-    fun fromManual_validSelection_returnsSuccess() {
-        val result = AnalysisTargetSegmentPolicy.fromManual(
-            source = source,
-            start = 0,
-            end = 8,
-            category = AnalysisCategory.WOMEN_HAIRSTYLE
-        )
-        val success = result as ManualTargetSegmentResult.Success
-        assertEquals("red hair", success.segment.text)
-        assertEquals(0, success.segment.startIndex)
-        assertEquals(8, success.segment.endIndex)
-        assertEquals(AnalysisTargetSource.MANUAL, success.segment.source)
-        assertEquals(AnalysisCategory.WOMEN_HAIRSTYLE, success.segment.category)
-    }
-
-    @Test
-    fun fromManual_emptySelection_returnsEmptySelection() {
-        val result = AnalysisTargetSegmentPolicy.fromManual(
-            source = source,
-            start = 3,
-            end = 3,
-            category = AnalysisCategory.WOMEN_HAIRSTYLE
-        )
-        assertEquals(ManualTargetSegmentResult.EmptySelection, result)
     }
 
     @Test

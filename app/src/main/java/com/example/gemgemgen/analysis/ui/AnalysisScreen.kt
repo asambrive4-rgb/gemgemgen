@@ -2,6 +2,7 @@ package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,8 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -72,9 +75,7 @@ internal fun AnalysisScreen(
     onSourcePromptChange: (String) -> Unit,
     onImportFromAutomation: () -> Unit,
     onCategorySelected: (AnalysisCategory) -> Unit,
-    onApplyManualSelection: () -> Unit,
     onClearTargetSegment: () -> Unit,
-    onAnalyzeAndMask: () -> Unit,
     onGenerate: () -> Unit,
     onGenerateTxt: () -> Unit,
     onCancelWork: () -> Unit,
@@ -165,7 +166,7 @@ internal fun AnalysisScreen(
                 )
 
                 // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
-                Spacer(modifier = Modifier.height(if (isKeyboardVisible) 240.dp else 140.dp))
+                Spacer(modifier = Modifier.height(if (isKeyboardVisible) 260.dp else 160.dp))
             }
 
             Surface(
@@ -179,13 +180,9 @@ internal fun AnalysisScreen(
                 StickyBottomActionPanel(
                     uiState = uiState,
                     onCategorySelected = onCategorySelected,
-                    onApplyManualSelection = onApplyManualSelection,
-                    onClearTargetSegment = onClearTargetSegment,
-                    onAnalyzeAndMask = onAnalyzeAndMask,
                     onGenerate = onGenerate,
                     onGenerateTxt = onGenerateTxt,
                     onCancelWork = onCancelWork,
-                    onClearFocus = onClearFocus,
                     onCopyResults = onCopyResults,
                     onSaveResults = onSaveResults
                 )
@@ -616,31 +613,31 @@ private fun SourcePromptAndMaskingRow(
 /** 좌·우 섹션 제목 줄 공통 높이 (단차 정렬용). CompactOutlinedButton과 동일. */
 private val SectionHeaderHeight = 32.dp
 
-@OptIn(ExperimentalLayoutApi::class)
+/** 하단 주 액션(TXT 생성 / 생성) 높이 */
+private val PrimaryActionButtonHeight = 56.dp
+
 @Composable
 private fun StickyBottomActionPanel(
     uiState: AnalysisUiState,
     onCategorySelected: (AnalysisCategory) -> Unit,
-    onApplyManualSelection: () -> Unit,
-    onClearTargetSegment: () -> Unit,
-    onAnalyzeAndMask: () -> Unit,
     onGenerate: () -> Unit,
     onGenerateTxt: () -> Unit,
     onCancelWork: () -> Unit,
-    onClearFocus: () -> Unit,
     onCopyResults: () -> Unit,
     onSaveResults: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 2.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             AnalysisCategory.entries.forEach { category ->
                 CategoryChip(
@@ -652,92 +649,80 @@ private fun StickyBottomActionPanel(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        if (uiState.resultPresentation == AnalysisResultPresentation.TXT &&
+            uiState.generatedCandidates.isNotEmpty()
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (uiState.resultPresentation == AnalysisResultPresentation.TXT &&
-                    uiState.generatedCandidates.isNotEmpty()
+                OutlinedButton(
+                    onClick = onCopyResults,
+                    enabled = uiState.canCopyOrSave,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = onCopyResults,
-                        enabled = uiState.canCopyOrSave,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                    ) {
-                        Text("목록 복사", style = MaterialTheme.typography.labelMedium)
-                    }
-                    Button(
-                        onClick = onSaveResults,
-                        enabled = uiState.canCopyOrSave,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                    ) {
-                        Text("와일드카드 파일 저장", style = MaterialTheme.typography.labelMedium)
-                    }
+                    Text("목록 복사", style = MaterialTheme.typography.labelMedium)
+                }
+                Button(
+                    onClick = onSaveResults,
+                    enabled = uiState.canCopyOrSave,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
+                ) {
+                    Text("와일드카드 파일 저장", style = MaterialTheme.typography.labelMedium)
                 }
             }
+        }
 
+        if (uiState.status == AnalysisStatus.GENERATING) {
+            Button(
+                onClick = onCancelWork,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(PrimaryActionButtonHeight)
+            ) {
+                Text("중지", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            }
+        } else {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(
-                    onClick = {
-                        onApplyManualSelection()
-                        onClearFocus()
-                    },
-                    enabled = !uiState.isBusy,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                ) {
-                    Text("선택 구간 지정", style = MaterialTheme.typography.labelMedium)
-                }
-                OutlinedButton(
-                    onClick = if (uiState.status == AnalysisStatus.ANALYZING) {
-                        onCancelWork
-                    } else {
-                        onAnalyzeAndMask
-                    },
-                    enabled = uiState.canAnalyze || uiState.status == AnalysisStatus.ANALYZING,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
+                Button(
+                    onClick = onGenerateTxt,
+                    enabled = uiState.canGenerate,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(PrimaryActionButtonHeight)
                 ) {
                     Text(
-                        text = if (uiState.status == AnalysisStatus.ANALYZING) "중지" else "자동 분석",
-                        style = MaterialTheme.typography.labelMedium
+                        text = "TXT 생성",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-                if (uiState.status == AnalysisStatus.GENERATING) {
-                    Button(
-                        onClick = onCancelWork,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                    ) {
-                        Text("중지", style = MaterialTheme.typography.labelMedium)
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = onGenerate,
-                        enabled = uiState.canGenerate,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                    ) {
-                        Text("생성", style = MaterialTheme.typography.labelMedium)
-                    }
-                    Button(
-                        onClick = onGenerateTxt,
-                        enabled = uiState.canGenerate,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                    ) {
-                        Text("TXT 생성", style = MaterialTheme.typography.labelMedium)
-                    }
+                FilledTonalButton(
+                    onClick = onGenerate,
+                    enabled = uiState.canGenerate,
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(PrimaryActionButtonHeight)
+                ) {
+                    Text(
+                        text = "생성",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

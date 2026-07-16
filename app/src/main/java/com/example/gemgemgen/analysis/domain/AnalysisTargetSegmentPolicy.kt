@@ -2,11 +2,6 @@ package com.example.gemgemgen.analysis.domain
 
 import com.example.gemgemgen.wildcard.domain.WildcardFileParser
 
-sealed class ManualTargetSegmentResult {
-    data class Success(val segment: AnalysisTargetSegment) : ManualTargetSegmentResult()
-    data object EmptySelection : ManualTargetSegmentResult()
-}
-
 /**
  * Rules for creating, validating, and substituting analysis target segments.
  * No Android/Compose dependencies.
@@ -20,31 +15,6 @@ object AnalysisTargetSegmentPolicy {
             return false
         }
         return source.substring(segment.startIndex, segment.endIndex) == segment.text
-    }
-
-    fun fromManual(
-        source: String,
-        start: Int,
-        end: Int,
-        category: AnalysisCategory
-    ): ManualTargetSegmentResult {
-        val safeStart = start.coerceIn(0, source.length)
-        val safeEnd = end.coerceIn(safeStart, source.length)
-        if (safeStart == safeEnd) {
-            return ManualTargetSegmentResult.EmptySelection
-        }
-        val selectedText = source.substring(safeStart, safeEnd)
-        return ManualTargetSegmentResult.Success(
-            AnalysisTargetSegment(
-                text = selectedText,
-                startIndex = safeStart,
-                endIndex = safeEnd,
-                source = AnalysisTargetSource.MANUAL,
-                category = category,
-                confidence = 1.0,
-                reason = "사용자가 직접 선택한 구간입니다."
-            )
-        )
     }
 
     fun fromAutoReport(
