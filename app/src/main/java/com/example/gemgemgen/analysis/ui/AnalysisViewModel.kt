@@ -35,6 +35,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private data class CandidateAutomationSession(
+    val originalSource: String,
+    val targetSegment: AnalysisTargetSegment,
+    val appliedCandidate: String,
+    val automationSegmentStartIndex: Int
+) {
+    fun matches(source: String, segment: AnalysisTargetSegment): Boolean {
+        return originalSource == source &&
+            targetSegment.text == segment.text &&
+            targetSegment.startIndex == segment.startIndex &&
+            targetSegment.endIndex == segment.endIndex
+    }
+}
+
 class AnalysisViewModel(
     private val resolveTarget: ResolveAnalysisTargetUseCase,
     private val generateTxtUseCase: GenerateAnalysisTxtUseCase,
@@ -50,6 +64,7 @@ class AnalysisViewModel(
     private var grokLoginJob: Job? = null
     private var pendingGrokChallenge: GrokDeviceLoginChallenge? = null
     private var analysisCache: AnalysisReportCache? = null
+    private var candidateAutomationSession: CandidateAutomationSession? = null
 
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
@@ -354,7 +369,10 @@ class AnalysisViewModel(
                         } else {
                             presentation
                         },
-                        selectedCandidateIndex = null,
+                        selectedCandidateIndex = candidateAutomationSession
+                            ?.appliedCandidate
+                            ?.let(result.candidates::indexOf)
+                            ?.takeIf { it >= 0 },
                         // TXT 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
                         resultFileName = if (updateResultFileName) {
                             category.defaultWildcardSaveFileName()
@@ -385,16 +403,24 @@ class AnalysisViewModel(
     }
 
     /**
-     * 「생성」카드 탭: 후보 조각을 클립보드에 복사하고 원문 마스킹 구간에 반영한다.
+     * 「생성」카드 탭: 후보를 복사하고 자동화 프롬프트의 대상 구간에 반영한다.
+     * 분석 원문은 다음 후보를 비교할 기준이므로 변경하지 않는다.
      */
-    fun applyCandidate(index: Int) {
+    fun applyCandidate(
+        index: Int,
+        applyToAutomation: (
+            expectedSegment: String,
+            replacement: String,
+            preferredStartIndex: Int
+        ) -> Int?
+    ) {
         val state = _uiState.value
         if (state.resultPresentation != AnalysisResultPresentation.CARDS) return
         if (state.isBusy) return
         val candidate = state.generatedCandidates.getOrNull(index) ?: return
         val segment = state.targetSegment
         if (segment == null || !segment.isValid) {
-            showError("마스킹 구간이 없어 원문에 반영할 수 없습니다.")
+            showError("마스킹 구간이 없어 자동화 프롬프트에 반영할 수 없습니다.")
             return
         }
         val source = sourcePromptTextFieldState.text.toString()
@@ -403,29 +429,41 @@ class AnalysisViewModel(
             return
         }
 
+        val currentSession = candidateAutomationSession
+        if (currentSession != null && !currentSession.matches(source, segment)) {
+            showError("분석 원문이 변경되었습니다. 자동화 프롬프트를 원본으로 되돌린 뒤 다시 적용해 주세요.")
+            return
+        }
+
+        val expectedSegment = currentSession?.appliedCandidate ?: segment.text
+        val preferredStartIndex = currentSession?.automationSegmentStartIndex ?: segment.startIndex
+
         scope.launch {
             try {
                 copyResults.copyText(candidate)
-                val replaced = AnalysisTargetSegmentPolicy.replaceSegmentWithText(
-                    source = source,
-                    segment = segment,
-                    replacement = candidate
+                val appliedStartIndex = applyToAutomation(
+                    expectedSegment,
+                    candidate,
+                    preferredStartIndex
                 )
-                val nextSegment = AnalysisTargetSegmentPolicy.segmentAfterReplacement(
-                    previous = segment,
-                    replacement = candidate
-                )
-                // 원문이 바뀌므로 분석 캐시는 무효. 후보 목록은 유지해 다른 카드도 고를 수 있게 한다.
-                analysisCache = null
-                if (sourcePromptTextFieldState.text.toString() != replaced) {
-                    sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(replaced)
+                if (appliedStartIndex == null) {
+                    showError(
+                        "후보는 복사했지만 자동화 프롬프트에서 교체할 구간을 찾지 못했습니다. " +
+                            "자동화에서 원문을 다시 가져와 주세요."
+                    )
+                    return@launch
                 }
+                candidateAutomationSession = CandidateAutomationSession(
+                    originalSource = currentSession?.originalSource ?: source,
+                    targetSegment = currentSession?.targetSegment ?: segment,
+                    appliedCandidate = candidate,
+                    automationSegmentStartIndex = appliedStartIndex
+                )
                 _uiState.update {
                     it.copy(
-                        sourcePrompt = replaced,
-                        targetSegment = nextSegment,
                         selectedCandidateIndex = index,
-                        message = "후보를 복사하고 원문에 반영했습니다.",
+                        hasAppliedCandidateToAutomation = true,
+                        message = "후보를 복사하고 자동화 프롬프트에 반영했습니다.",
                         error = "",
                         warning = ""
                     )
@@ -433,6 +471,63 @@ class AnalysisViewModel(
             } catch (error: RuntimeException) {
                 showError(error.message ?: "후보 적용에 실패했습니다.")
             }
+        }
+    }
+
+    /** 오른쪽 복사 버튼: 자동화 프롬프트를 바꾸지 않고 선택한 후보만 복사한다. */
+    fun copyCandidate(index: Int) {
+        val state = _uiState.value
+        if (state.resultPresentation != AnalysisResultPresentation.CARDS) return
+        if (state.isBusy) return
+        val candidate = state.generatedCandidates.getOrNull(index) ?: return
+
+        scope.launch {
+            try {
+                copyResults.copyText(candidate)
+                _uiState.update {
+                    it.copy(
+                        message = "${index + 1}번 후보를 복사했습니다.",
+                        error = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "후보 복사에 실패했습니다.")
+            }
+        }
+    }
+
+    /** 자동화 프롬프트에 마지막으로 적용한 후보를 최초 분석 원문으로 복원한다. */
+    fun restoreOriginalPrompt(
+        restoreInAutomation: (
+            expectedSegment: String,
+            originalSegment: String,
+            preferredStartIndex: Int
+        ) -> Int?
+    ) {
+        if (_uiState.value.isBusy) return
+        val session = candidateAutomationSession ?: return
+        val restoredStartIndex = restoreInAutomation(
+            session.appliedCandidate,
+            session.targetSegment.text,
+            session.automationSegmentStartIndex
+        )
+        if (restoredStartIndex == null) {
+            showError(
+                "자동화 프롬프트에서 복원할 구간을 찾지 못했습니다. " +
+                    "자동화에서 원문을 다시 가져와 주세요."
+            )
+            return
+        }
+
+        candidateAutomationSession = null
+        _uiState.update {
+            it.copy(
+                selectedCandidateIndex = null,
+                hasAppliedCandidateToAutomation = false,
+                message = "자동화 프롬프트를 원본으로 되돌렸습니다.",
+                error = "",
+                warning = ""
+            )
         }
     }
 
@@ -482,6 +577,46 @@ class AnalysisViewModel(
             it.copy(
                 status = AnalysisStatus.IDLE,
                 message = "작업을 중지했습니다."
+            )
+        }
+    }
+
+    fun requestResetSession() {
+        if (!_uiState.value.canResetSession) return
+        _uiState.update { it.copy(showResetConfirmation = true) }
+    }
+
+    fun dismissResetSession() {
+        _uiState.update { it.copy(showResetConfirmation = false) }
+    }
+
+    /** 계정·모델 설정과 자동화 프롬프트는 보존하고 현재 분석 작업만 초기화한다. */
+    fun confirmResetSession() {
+        runningJob?.cancel()
+        runningJob = null
+        analysisCache = null
+        candidateAutomationSession = null
+        sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("")
+
+        _uiState.update {
+            it.copy(
+                sourcePrompt = "",
+                selectedCategory = null,
+                targetSegment = null,
+                status = AnalysisStatus.IDLE,
+                error = "",
+                message = "",
+                warning = "",
+                txtCount = AnalysisTxtCountPolicy.DEFAULT_COUNT,
+                selectedDirectionIds = emptySet(),
+                customHint = "",
+                generatedCandidates = emptyList(),
+                resultPresentation = AnalysisResultPresentation.NONE,
+                selectedCandidateIndex = null,
+                hasAppliedCandidateToAutomation = false,
+                resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
+                pendingOverwriteFileName = null,
+                showResetConfirmation = false
             )
         }
     }

@@ -12,6 +12,7 @@ import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
+import com.example.gemgemgen.analysis.ui.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.usecase.AnalysisCredentialResolver
@@ -478,7 +479,7 @@ class AnalysisFeatureTest {
     }
 
     @Test
-    fun viewModel_applyCandidate_copiesAndReplacesSourceSegment() {
+    fun viewModel_applyCandidate_copiesAndReplacesAutomationWithoutChangingSource() {
         val aiGateway = FakeAnalysisAiGateway(
             analyzeResponse = analysisJson(exactText = "blue dress"),
             generateResponse = """
@@ -498,17 +499,226 @@ class AnalysisFeatureTest {
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
         viewModel.generate()
 
-        viewModel.applyCandidate(0)
+        var automationPrompt = "quality, $prompt"
+        viewModel.applyCandidate(0) { expectedSegment, replacement, _ ->
+            val start = automationPrompt.indexOf(expectedSegment)
+            if (start < 0) {
+                null
+            } else {
+                automationPrompt = automationPrompt.replaceRange(
+                    start,
+                    start + expectedSegment.length,
+                    replacement
+                )
+                start
+            }
+        }
 
         assertEquals("검은 원피스", clipboard.writtenText)
-        assertEquals(
-            "red hair and 검은 원피스",
-            viewModel.sourcePromptTextFieldState.text.toString()
-        )
+        assertEquals(prompt, viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals(prompt, viewModel.uiState.value.sourcePrompt)
+        assertEquals("quality, red hair and 검은 원피스", automationPrompt)
         assertEquals(0, viewModel.uiState.value.selectedCandidateIndex)
-        assertEquals("검은 원피스", viewModel.uiState.value.targetSegment?.text)
+        assertEquals("blue dress", viewModel.uiState.value.targetSegment?.text)
+        assertTrue(viewModel.uiState.value.hasAppliedCandidateToAutomation)
         assertEquals(2, viewModel.uiState.value.generatedCandidates.size)
         assertEquals(AnalysisResultPresentation.CARDS, viewModel.uiState.value.resultPresentation)
+    }
+
+    @Test
+    fun viewModel_applyCandidate_replacesPreviousCandidateAndRestoresOriginal() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """
+                [
+                  {"text":"검은 원피스","explanation":""},
+                  {"text":"흰 셔츠","explanation":""}
+                ]
+            """.trimIndent()
+        )
+        val clipboard = RecordingClipboard()
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            clipboardGateway = clipboard
+        )
+        val original = "red hair and blue dress"
+        var automationPrompt = original
+        val replaceSegment = { expected: String, replacement: String, _: Int ->
+            val start = automationPrompt.indexOf(expected)
+            if (start < 0) {
+                null
+            } else {
+                automationPrompt = automationPrompt.replaceRange(
+                    start,
+                    start + expected.length,
+                    replacement
+                )
+                start
+            }
+        }
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
+        viewModel.onSourcePromptChange(original)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.generate()
+
+        viewModel.applyCandidate(0, replaceSegment)
+        automationPrompt = "quality, $automationPrompt"
+        viewModel.applyCandidate(1, replaceSegment)
+
+        assertEquals("quality, red hair and 흰 셔츠", automationPrompt)
+        assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals("흰 셔츠", clipboard.writtenText)
+        assertEquals(1, viewModel.uiState.value.selectedCandidateIndex)
+
+        viewModel.restoreOriginalPrompt(replaceSegment)
+
+        assertEquals("quality, $original", automationPrompt)
+        assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals(null, viewModel.uiState.value.selectedCandidateIndex)
+        assertFalse(viewModel.uiState.value.hasAppliedCandidateToAutomation)
+        assertEquals("흰 셔츠", clipboard.writtenText)
+    }
+
+    @Test
+    fun viewModel_applyCandidate_doesNotOverwriteUnexpectedAutomationPrompt() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"검은 원피스","explanation":""}]"""
+        )
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        )
+        val original = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
+        viewModel.onSourcePromptChange(original)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.generate()
+        viewModel.applyCandidate(0) { _, _, _ -> null }
+
+        assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals(null, viewModel.uiState.value.selectedCandidateIndex)
+        assertFalse(viewModel.uiState.value.hasAppliedCandidateToAutomation)
+        assertTrue(viewModel.uiState.value.error.contains("교체할 구간을 찾지 못했습니다"))
+    }
+
+    @Test
+    fun viewModel_copyCandidate_copiesOnlyCandidateWithoutApplyingIt() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"검은 원피스","explanation":""}]"""
+        )
+        val clipboard = RecordingClipboard()
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            clipboardGateway = clipboard
+        )
+        val original = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
+        viewModel.onSourcePromptChange(original)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.generate()
+
+        viewModel.copyCandidate(0)
+
+        assertEquals("검은 원피스", clipboard.writtenText)
+        assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals(null, viewModel.uiState.value.selectedCandidateIndex)
+        assertFalse(viewModel.uiState.value.hasAppliedCandidateToAutomation)
+        assertEquals("1번 후보를 복사했습니다.", viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun viewModel_resetSession_requiresConfirmationAndClearsOnlyAnalysisSession() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"검은 원피스","explanation":""}]"""
+        )
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        )
+        val original = "red hair and blue dress"
+        var automationPrompt = original
+        val directionId = viewModel.uiState.value.directions.first().id
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
+        viewModel.onSourcePromptChange(original)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.onTxtCountChange(37)
+        viewModel.toggleDirection(directionId)
+        viewModel.onCustomHintChange("새로운 분위기")
+        viewModel.onResultFileNameChange("custom.txt")
+        viewModel.generate()
+        viewModel.applyCandidate(0) { expected, replacement, _ ->
+            val start = automationPrompt.indexOf(expected)
+            automationPrompt = automationPrompt.replaceRange(
+                start,
+                start + expected.length,
+                replacement
+            )
+            start
+        }
+
+        val apiKeysBeforeReset = viewModel.uiState.value.apiKeys
+        val maskingProviderBeforeReset = viewModel.uiState.value.maskingProvider
+        val generationProviderBeforeReset = viewModel.uiState.value.generationProvider
+        val maskingModelBeforeReset = viewModel.uiState.value.maskingModel
+        val generationModelBeforeReset = viewModel.uiState.value.generationModel
+        assertTrue(viewModel.uiState.value.canResetSession)
+
+        viewModel.requestResetSession()
+
+        assertTrue(viewModel.uiState.value.showResetConfirmation)
+        assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
+
+        viewModel.dismissResetSession()
+
+        assertFalse(viewModel.uiState.value.showResetConfirmation)
+        assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
+
+        viewModel.requestResetSession()
+        viewModel.confirmResetSession()
+
+        val resetState = viewModel.uiState.value
+        assertEquals("", viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals("", resetState.sourcePrompt)
+        assertEquals(null, resetState.selectedCategory)
+        assertEquals(null, resetState.targetSegment)
+        assertEquals(AnalysisStatus.IDLE, resetState.status)
+        assertEquals(AnalysisTxtCountPolicy.DEFAULT_COUNT, resetState.txtCount)
+        assertTrue(resetState.selectedDirectionIds.isEmpty())
+        assertEquals("", resetState.customHint)
+        assertTrue(resetState.generatedCandidates.isEmpty())
+        assertEquals(AnalysisResultPresentation.NONE, resetState.resultPresentation)
+        assertEquals(null, resetState.selectedCandidateIndex)
+        assertFalse(resetState.hasAppliedCandidateToAutomation)
+        assertEquals(DEFAULT_ANALYSIS_RESULT_FILE_NAME, resetState.resultFileName)
+        assertFalse(resetState.showResetConfirmation)
+        assertFalse(resetState.canResetSession)
+        assertEquals("red hair and 검은 원피스", automationPrompt)
+        assertEquals(apiKeysBeforeReset, resetState.apiKeys)
+        assertEquals(maskingProviderBeforeReset, resetState.maskingProvider)
+        assertEquals(generationProviderBeforeReset, resetState.generationProvider)
+        assertEquals(maskingModelBeforeReset, resetState.maskingModel)
+        assertEquals(generationModelBeforeReset, resetState.generationModel)
+    }
+
+    @Test
+    fun viewModel_resetSession_doesNotOpenConfirmationForEmptySession() {
+        val viewModel = analysisViewModel(
+            aiGateway = FakeAnalysisAiGateway(),
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        )
+
+        viewModel.requestResetSession()
+
+        assertFalse(viewModel.uiState.value.showResetConfirmation)
     }
 
     @Test

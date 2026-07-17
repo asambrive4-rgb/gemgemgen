@@ -9,6 +9,7 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptEditorSession
 import com.example.gemgemgen.automation.domain.PromptParagraphActionResult
+import com.example.gemgemgen.automation.domain.PromptSegmentEditPolicy
 import com.example.gemgemgen.automation.domain.PromptTextMutation
 import com.example.gemgemgen.automation.domain.PromptTypingChange
 import com.example.gemgemgen.automation.domain.PromptUndoHistory
@@ -245,6 +246,35 @@ class MainViewModel(
     /** 외부(분석 저장 등)에서 프롬프트 템플릿 전체를 교체한다. Undo 가능. */
     fun replacePromptTemplateEntirely(replacement: String) {
         replaceWholePromptTemplate(replacement)
+    }
+
+    /** 현재 프롬프트의 나머지 내용은 보존하고 일치하는 대상 구간만 교체한다. */
+    fun replacePromptTemplateSegment(
+        expectedSegment: String,
+        replacement: String,
+        preferredStartIndex: Int
+    ): Int? {
+        syncPromptTemplateFromTextField()
+        val currentText = promptTemplateValue
+        val edit = PromptSegmentEditPolicy.replace(
+            currentText = currentText,
+            expectedSegment = expectedSegment,
+            replacement = replacement,
+            preferredStartIndex = preferredStartIndex
+        ) ?: return null
+
+        recordImmediatePromptUndo(currentText)
+        ignoredPromptChangeText = edit.updatedText
+        promptTemplateTextFieldState.edit {
+            replace(edit.startIndex, edit.previousEndIndex, replacement)
+            selection = TextRange(edit.replacementEndIndex)
+        }
+        promptTemplateValue = edit.updatedText
+        publishEditorSession(
+            session = promptEditorSession.afterWholeReplace(edit.updatedText),
+            canUndoPromptEdit = hasPromptUndo()
+        )
+        return edit.startIndex
     }
 
     fun copyPromptToClipboard() {

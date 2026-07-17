@@ -22,14 +22,20 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -79,11 +85,16 @@ internal fun AnalysisScreen(
     onGenerate: () -> Unit,
     onGenerateTxt: () -> Unit,
     onCancelWork: () -> Unit,
+    onRequestResetSession: () -> Unit,
+    onConfirmResetSession: () -> Unit,
+    onDismissResetSession: () -> Unit,
     onTxtCountChange: (Int) -> Unit,
     onToggleDirection: (String) -> Unit,
     onCustomHintChange: (String) -> Unit,
     onResultFileNameChange: (String) -> Unit,
     onApplyCandidate: (Int) -> Unit,
+    onCopyCandidate: (Int) -> Unit,
+    onRestoreOriginalPrompt: () -> Unit,
     onCopyResults: () -> Unit,
     onSaveResults: () -> Unit,
     onConfirmOverwrite: () -> Unit,
@@ -162,7 +173,9 @@ internal fun AnalysisScreen(
                 ResultSection(
                     uiState = uiState,
                     onResultFileNameChange = onResultFileNameChange,
-                    onApplyCandidate = onApplyCandidate
+                    onApplyCandidate = onApplyCandidate,
+                    onCopyCandidate = onCopyCandidate,
+                    onRestoreOriginalPrompt = onRestoreOriginalPrompt
                 )
 
                 // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
@@ -183,6 +196,7 @@ internal fun AnalysisScreen(
                     onGenerate = onGenerate,
                     onGenerateTxt = onGenerateTxt,
                     onCancelWork = onCancelWork,
+                    onRequestResetSession = onRequestResetSession,
                     onCopyResults = onCopyResults,
                     onSaveResults = onSaveResults
                 )
@@ -200,6 +214,13 @@ internal fun AnalysisScreen(
             onDelete = onDeleteApiKey,
             onActivate = onActivateApiKey,
             onStartEdit = onStartEditApiKey
+        )
+    }
+
+    if (uiState.showResetConfirmation) {
+        ResetAnalysisSessionDialog(
+            onConfirm = onConfirmResetSession,
+            onDismiss = onDismissResetSession
         )
     }
 
@@ -623,6 +644,7 @@ private fun StickyBottomActionPanel(
     onGenerate: () -> Unit,
     onGenerateTxt: () -> Unit,
     onCancelWork: () -> Unit,
+    onRequestResetSession: () -> Unit,
     onCopyResults: () -> Unit,
     onSaveResults: () -> Unit
 ) {
@@ -676,22 +698,37 @@ private fun StickyBottomActionPanel(
             }
         }
 
-        if (uiState.status == AnalysisStatus.GENERATING) {
-            Button(
-                onClick = onCancelWork,
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(PrimaryActionButtonHeight)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = onRequestResetSession,
+                enabled = uiState.canResetSession,
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.size(PrimaryActionButtonHeight)
             ) {
-                Text("중지", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Icon(
+                    imageVector = Icons.Default.RestartAlt,
+                    contentDescription = "분석 세션 비우기"
+                )
             }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            if (uiState.status == AnalysisStatus.GENERATING) {
+                Button(
+                    onClick = onCancelWork,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(PrimaryActionButtonHeight)
+                ) {
+                    Text(
+                        text = "중지",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
                 Button(
                     onClick = onGenerateTxt,
                     enabled = uiState.canGenerate,
@@ -727,6 +764,33 @@ private fun StickyBottomActionPanel(
             }
         }
     }
+}
+
+@Composable
+private fun ResetAnalysisSessionDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("분석 세션 비우기") },
+        text = {
+            Text(
+                "원문, 카테고리, 마스킹, 생성 결과와 변주 조건이 모두 지워집니다. " +
+                    "자동화 프롬프트와 계정 설정은 유지됩니다."
+            )
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("비우기")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("취소")
+            }
+        }
+    )
 }
 
 @Composable
@@ -960,7 +1024,9 @@ private fun FeedbackSection(uiState: AnalysisUiState) {
 private fun ResultSection(
     uiState: AnalysisUiState,
     onResultFileNameChange: (String) -> Unit,
-    onApplyCandidate: (Int) -> Unit
+    onApplyCandidate: (Int) -> Unit,
+    onCopyCandidate: (Int) -> Unit,
+    onRestoreOriginalPrompt: () -> Unit
 ) {
     if (uiState.generatedCandidates.isEmpty()) return
 
@@ -969,8 +1035,11 @@ private fun ResultSection(
             CardResultSection(
                 candidates = uiState.generatedCandidates,
                 selectedIndex = uiState.selectedCandidateIndex,
+                canRestoreOriginal = uiState.hasAppliedCandidateToAutomation,
                 enabled = !uiState.isBusy,
-                onApplyCandidate = onApplyCandidate
+                onApplyCandidate = onApplyCandidate,
+                onCopyCandidate = onCopyCandidate,
+                onRestoreOriginalPrompt = onRestoreOriginalPrompt
             )
         }
         AnalysisResultPresentation.TXT -> {
@@ -988,8 +1057,11 @@ private fun ResultSection(
 private fun CardResultSection(
     candidates: List<String>,
     selectedIndex: Int?,
+    canRestoreOriginal: Boolean,
     enabled: Boolean,
-    onApplyCandidate: (Int) -> Unit
+    onApplyCandidate: (Int) -> Unit,
+    onCopyCandidate: (Int) -> Unit,
+    onRestoreOriginalPrompt: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
@@ -999,16 +1071,23 @@ private fun CardResultSection(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "카드를 누르면 복사하고 원문 구간에 반영합니다.",
+            text = "카드 본문을 누르면 자동화 프롬프트에 반영하고, 오른쪽 버튼을 누르면 해당 후보만 복사합니다.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (canRestoreOriginal) {
+            OutlinedButton(
+                onClick = onRestoreOriginalPrompt,
+                enabled = enabled
+            ) {
+                Text("원본으로 되돌리기")
+            }
+        }
         candidates.forEachIndexed { index, candidate ->
             val selected = selectedIndex == index
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = enabled) { onApplyCandidate(index) },
+                    .fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
                 color = if (selected) {
                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
@@ -1024,20 +1103,37 @@ private fun CardResultSection(
                     }
                 )
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "${index + 1}",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = candidate,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(enabled = enabled) { onApplyCandidate(index) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = candidate,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    IconButton(
+                        onClick = { onCopyCandidate(index) },
+                        enabled = enabled
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "${index + 1}번 후보 복사"
+                        )
+                    }
                 }
             }
         }

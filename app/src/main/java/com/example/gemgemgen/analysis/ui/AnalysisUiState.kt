@@ -14,6 +14,8 @@ import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 
+const val DEFAULT_ANALYSIS_RESULT_FILE_NAME = "analysis-wildcard-results.txt"
+
 data class AnalysisUiState(
     val sourcePrompt: String = "",
     val selectedCategory: AnalysisCategory? = null,
@@ -29,10 +31,13 @@ data class AnalysisUiState(
     val generatedCandidates: List<String> = emptyList(),
     /** 마지막 생성 결과의 표시 방식. 후보가 비면 [AnalysisResultPresentation.NONE]. */
     val resultPresentation: AnalysisResultPresentation = AnalysisResultPresentation.NONE,
-    /** 「생성」카드 모드에서 사용자가 적용한 후보 인덱스. 없으면 null. */
+    /** 「생성」카드 모드에서 자동화 프롬프트에 적용한 후보 인덱스. 없으면 null. */
     val selectedCandidateIndex: Int? = null,
-    val resultFileName: String = "analysis-wildcard-results.txt",
+    /** 자동화 프롬프트에 적용한 후보가 있어 원본 복원이 가능한지 여부. */
+    val hasAppliedCandidateToAutomation: Boolean = false,
+    val resultFileName: String = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
     val pendingOverwriteFileName: String? = null,
+    val showResetConfirmation: Boolean = false,
     val showKeyDialog: Boolean = false,
     val apiKeys: List<GeminiApiKeySummary> = emptyList(),
     val keyLabelInput: String = "",
@@ -99,6 +104,23 @@ data class AnalysisUiState(
 
     val isBusy: Boolean
         get() = status == AnalysisStatus.ANALYZING || status == AnalysisStatus.GENERATING
+
+    val canResetSession: Boolean
+        get() = sourcePrompt.isNotEmpty() ||
+            selectedCategory != null ||
+            targetSegment != null ||
+            generatedCandidates.isNotEmpty() ||
+            selectedDirectionIds.isNotEmpty() ||
+            customHint.isNotEmpty() ||
+            txtCount != AnalysisTxtCountPolicy.DEFAULT_COUNT ||
+            resultFileName != DEFAULT_ANALYSIS_RESULT_FILE_NAME ||
+            selectedCandidateIndex != null ||
+            hasAppliedCandidateToAutomation ||
+            pendingOverwriteFileName != null ||
+            error.isNotEmpty() ||
+            message.isNotEmpty() ||
+            warning.isNotEmpty() ||
+            isBusy
 
     fun providerFor(role: AnalysisModelRole): AnalysisProvider {
         return when (role) {

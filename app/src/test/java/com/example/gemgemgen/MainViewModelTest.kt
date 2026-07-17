@@ -112,6 +112,46 @@ class MainViewModelTest {
     }
 
     @Test
+    fun replacePromptTemplateSegment_preservesOtherEditsAndSupportsUndo() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("quality, red hair and blue dress, masterpiece")
+
+        val replacedStart = viewModel.replacePromptTemplateSegment(
+            expectedSegment = "blue dress",
+            replacement = "검은 원피스",
+            preferredStartIndex = 13
+        )
+
+        assertEquals(22, replacedStart)
+        assertEquals(
+            "quality, red hair and 검은 원피스, masterpiece",
+            viewModel.uiState.value.promptTemplate
+        )
+
+        viewModel.undoPromptEdit()
+
+        assertEquals(
+            "quality, red hair and blue dress, masterpiece",
+            viewModel.uiState.value.promptTemplate
+        )
+    }
+
+    @Test
+    fun replacePromptTemplateSegment_doesNotChangePromptWhenSegmentIsMissing() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("사용자가 수정한 프롬프트")
+
+        val replacedStart = viewModel.replacePromptTemplateSegment(
+            expectedSegment = "blue dress",
+            replacement = "검은 원피스",
+            preferredStartIndex = 13
+        )
+
+        assertEquals(null, replacedStart)
+        assertEquals("사용자가 수정한 프롬프트", viewModel.uiState.value.promptTemplate)
+    }
+
+    @Test
     fun onPromptTemplateChange_withSameText_preservesSelection() {
         val viewModel = viewModel()
         viewModel.onPromptTemplateChange("abcdef")

@@ -287,11 +287,25 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onGenerate = { analysisViewModel?.generate() },
             onGenerateTxt = { analysisViewModel?.generateTxt() },
             onCancelWork = { analysisViewModel?.cancelActiveWork() },
+            onRequestResetSession = { analysisViewModel?.requestResetSession() },
+            onConfirmResetSession = { analysisViewModel?.confirmResetSession() },
+            onDismissResetSession = { analysisViewModel?.dismissResetSession() },
             onTxtCountChange = { analysisViewModel?.onTxtCountChange(it) },
             onToggleDirection = { analysisViewModel?.toggleDirection(it) },
             onCustomHintChange = { analysisViewModel?.onCustomHintChange(it) },
             onResultFileNameChange = { analysisViewModel?.onResultFileNameChange(it) },
-            onApplyCandidate = { analysisViewModel?.applyCandidate(it) },
+            onApplyCandidate = { index ->
+                analysisViewModel?.applyCandidate(
+                    index = index,
+                    applyToAutomation = mainViewModel::replacePromptTemplateSegment
+                )
+            },
+            onCopyCandidate = { index -> analysisViewModel?.copyCandidate(index) },
+            onRestoreOriginalPrompt = {
+                analysisViewModel?.restoreOriginalPrompt(
+                    restoreInAutomation = mainViewModel::replacePromptTemplateSegment
+                )
+            },
             onCopyResults = { analysisViewModel?.copyGeneratedResults() },
             onSaveResults = {
                 analysisViewModel?.saveGeneratedResults(
