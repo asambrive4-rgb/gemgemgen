@@ -30,7 +30,7 @@ internal data class AutomationAppActions(
     val onPromptTemplateChange: (String) -> Unit,
     val onWildcardTokenSuggestionClick: (String) -> Unit,
     val onUndoPromptEdit: () -> Unit,
-    val onToggleParagraphSelectionMode: () -> Unit,
+    val onInsertSystemInstruction: () -> Unit,
     val onParagraphOffsetSelected: (Int) -> Unit,
     val onDeleteSelectedParagraph: () -> Unit,
     val onReplaceSelectedParagraph: (String) -> Unit,
@@ -151,8 +151,8 @@ internal fun AutomationApp(
                     onWildcardTokenSuggestionClick =
                         automationActions.onWildcardTokenSuggestionClick,
                     onUndoPromptEdit = automationActions.onUndoPromptEdit,
-                    onToggleParagraphSelectionMode =
-                        automationActions.onToggleParagraphSelectionMode,
+                    onInsertSystemInstruction =
+                        automationActions.onInsertSystemInstruction,
                     onParagraphOffsetSelected =
                         automationActions.onParagraphOffsetSelected,
                     onDeleteSelectedParagraph =

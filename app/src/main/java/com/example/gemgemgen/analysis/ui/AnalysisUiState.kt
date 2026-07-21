@@ -10,7 +10,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 
@@ -45,7 +45,7 @@ data class AnalysisUiState(
     val editingApiKey: GeminiApiKeySummary? = null,
     val editingKeyLabelInput: String = "",
     val maskingProvider: AnalysisProvider = AnalysisProvider.GEMINI,
-    val maskingModel: String = MODEL_GEMINI_3_1_FLASH_LITE,
+    val maskingModel: String = MODEL_GEMINI_3_5_FLASH_LITE,
     val generationProvider: AnalysisProvider = AnalysisProvider.GROK,
     val generationModel: String = MODEL_GROK_4_5,
     val isGrokLoggedIn: Boolean = false,

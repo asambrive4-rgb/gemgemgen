@@ -259,8 +259,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onPromptTemplateChange = mainViewModel::onPromptTemplateFromEditor,
             onWildcardTokenSuggestionClick = mainViewModel::applyWildcardTokenSuggestion,
             onUndoPromptEdit = mainViewModel::undoPromptEdit,
-            onToggleParagraphSelectionMode =
-                mainViewModel::toggleParagraphSelectionMode,
+            onInsertSystemInstruction = mainViewModel::insertSystemInstruction,
             onParagraphOffsetSelected = mainViewModel::selectPromptParagraphAt,
             onDeleteSelectedParagraph = mainViewModel::deleteSelectedPromptParagraph,
             onReplaceSelectedParagraph = mainViewModel::replaceSelectedPromptParagraph,

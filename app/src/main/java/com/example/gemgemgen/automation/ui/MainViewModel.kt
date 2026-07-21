@@ -14,6 +14,7 @@ import com.example.gemgemgen.automation.domain.PromptTextMutation
 import com.example.gemgemgen.automation.domain.PromptTypingChange
 import com.example.gemgemgen.automation.domain.PromptUndoHistory
 import com.example.gemgemgen.automation.domain.RepeatCountParser
+import com.example.gemgemgen.automation.domain.SystemInstructionPrompt
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
@@ -320,6 +321,36 @@ class MainViewModel(
                 )
             }
         }
+    }
+
+    /**
+     * 프롬프트 템플릿 맨 앞에 System Instruction을 붙인다.
+     * 본문이 있으면 SI와 본문 사이에 빈 줄 1개. Undo 가능. 실행 중에는 무시.
+     * 연속 탭 시 SI가 다시 앞에 붙는다.
+     */
+    fun insertSystemInstruction() {
+        if (_uiState.value.isRunning) return
+        syncPromptTemplateFromTextField()
+        val currentText = promptTemplateValue
+        val newText = SystemInstructionPrompt.prependTo(currentText)
+        if (currentText == newText) return
+
+        recordImmediatePromptUndo(currentText)
+        ignoredPromptChangeText = newText
+        val cursorAfter = if (currentText.isEmpty()) {
+            SystemInstructionPrompt.text.length
+        } else {
+            SystemInstructionPrompt.text.length + 2
+        }
+        promptTemplateTextFieldState.edit {
+            replace(0, length, newText)
+            selection = TextRange(cursorAfter.coerceIn(0, newText.length))
+        }
+        promptTemplateValue = newText
+        publishEditorSession(
+            session = promptEditorSession.afterWholeReplace(newText),
+            canUndoPromptEdit = hasPromptUndo()
+        )
     }
 
     /**

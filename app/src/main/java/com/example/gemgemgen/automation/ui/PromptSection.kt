@@ -31,7 +31,6 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -76,7 +75,7 @@ internal fun PromptSection(
     onTerminateGeminiApp: () -> Unit,
     onTerminateSelfApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
-    onToggleParagraphSelectionMode: () -> Unit,
+    onInsertSystemInstruction: () -> Unit,
     onParagraphOffsetSelected: (Int) -> Unit,
     onDeleteSelectedParagraph: () -> Unit,
     onReplaceSelectedParagraph: (String) -> Unit,
@@ -164,12 +163,11 @@ internal fun PromptSection(
                 canUndoPromptEdit = canUndoPromptEdit,
                 canCopyPrompt = canCopyPrompt,
                 isTargetSelectionEnabled = isTargetSelectionEnabled,
-                isParagraphSelectionMode = isParagraphSelectionMode,
                 onCloseGeminiApp = onCloseGeminiApp,
                 onTerminateGeminiApp = onTerminateGeminiApp,
                 onTerminateSelfApp = onTerminateSelfApp,
                 onUndoPromptEdit = onUndoPromptEdit,
-                onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
+                onInsertSystemInstruction = onInsertSystemInstruction,
                 onImportFromClipboard = onImportFromClipboard,
                 onCopyPromptToClipboard = onCopyPromptToClipboard,
                 onPasteFromClipboard = onPasteFromClipboard
@@ -195,12 +193,11 @@ internal fun PromptActionRow(
     canUndoPromptEdit: Boolean,
     canCopyPrompt: Boolean,
     isTargetSelectionEnabled: Boolean,
-    isParagraphSelectionMode: Boolean,
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
     onTerminateSelfApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
-    onToggleParagraphSelectionMode: () -> Unit,
+    onInsertSystemInstruction: () -> Unit,
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
     onPasteFromClipboard: () -> Unit,
@@ -290,8 +287,23 @@ internal fun PromptActionRow(
             }
         }
 
-        // 섬 2: Undo 문단 선택
+        // 섬 2: SI 삽입 + Undo
         ActionIsland {
+            OutlinedButton(
+                onClick = onInsertSystemInstruction,
+                enabled = isTargetSelectionEnabled,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .height(28.dp)
+                    .semantics { contentDescription = "[SI 삽입]" },
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Text(
+                    text = "[SI 삽입]",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             OutlinedButton(
                 onClick = onUndoPromptEdit,
                 enabled = canUndoPromptEdit && isTargetSelectionEnabled,
@@ -303,38 +315,6 @@ internal fun PromptActionRow(
                     imageVector = Icons.AutoMirrored.Filled.Undo,
                     contentDescription = "Undo",
                     modifier = Modifier.size(16.dp)
-                )
-            }
-            OutlinedButton(
-                onClick = onToggleParagraphSelectionMode,
-                enabled = isTargetSelectionEnabled,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                modifier = Modifier.height(28.dp),
-                border = BorderStroke(
-                    1.dp,
-                    if (isParagraphSelectionMode) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outline
-                    }
-                ),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = if (isParagraphSelectionMode) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                    contentColor = if (isParagraphSelectionMode) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
-                )
-            ) {
-                Text(
-                    text = "문단 선택",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
                 )
             }
         }

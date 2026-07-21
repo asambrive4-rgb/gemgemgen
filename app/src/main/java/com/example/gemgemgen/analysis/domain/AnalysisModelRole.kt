@@ -23,7 +23,7 @@ enum class AnalysisModelRole(val storageValue: String) {
 
         fun defaultModel(role: AnalysisModelRole): String {
             return when (role) {
-                MASKING -> MODEL_GEMINI_3_1_FLASH_LITE
+                MASKING -> MODEL_GEMINI_3_5_FLASH_LITE
                 GENERATION -> MODEL_GROK_4_5
             }
         }

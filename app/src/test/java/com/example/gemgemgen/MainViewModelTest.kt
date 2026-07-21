@@ -90,6 +90,68 @@ class MainViewModelTest {
     }
 
     @Test
+    fun insertSystemInstruction_prependsToEmptyPrompt() {
+        val viewModel = viewModel()
+
+        viewModel.insertSystemInstruction()
+
+        assertEquals(
+            SystemInstructionPrompt.text,
+            viewModel.uiState.value.promptTemplate
+        )
+        assertEquals(
+            SystemInstructionPrompt.text,
+            viewModel.promptTemplateTextFieldState.text.toString()
+        )
+        assertEquals(
+            TextRange(SystemInstructionPrompt.text.length),
+            viewModel.promptTemplateTextFieldState.selection
+        )
+        assertTrue(viewModel.uiState.value.canUndoPromptEdit)
+    }
+
+    @Test
+    fun insertSystemInstruction_prependsWithBlankLineBeforeExistingBody() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("user body")
+
+        viewModel.insertSystemInstruction()
+
+        val expected = SystemInstructionPrompt.text + "\n\n" + "user body"
+        assertEquals(expected, viewModel.uiState.value.promptTemplate)
+        assertEquals(
+            expected,
+            viewModel.promptTemplateTextFieldState.text.toString()
+        )
+        assertEquals(
+            TextRange(SystemInstructionPrompt.text.length + 2),
+            viewModel.promptTemplateTextFieldState.selection
+        )
+    }
+
+    @Test
+    fun insertSystemInstruction_doubleTapPrependsAgainAndUndoRestores() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("body")
+
+        viewModel.insertSystemInstruction()
+        val once = viewModel.uiState.value.promptTemplate
+        viewModel.insertSystemInstruction()
+        val twice = viewModel.uiState.value.promptTemplate
+
+        assertEquals(
+            SystemInstructionPrompt.text + "\n\n" + once,
+            twice
+        )
+
+        viewModel.undoPromptEdit()
+        assertEquals(once, viewModel.uiState.value.promptTemplate)
+
+        viewModel.undoPromptEdit()
+        assertEquals("body", viewModel.uiState.value.promptTemplate)
+    }
+
+    @Test
     fun copyPromptToClipboard_writesPromptTemplate() {
         val clipboardGateway = FakeClipboardGateway()
         val viewModel = viewModel(clipboardGateway = clipboardGateway)
