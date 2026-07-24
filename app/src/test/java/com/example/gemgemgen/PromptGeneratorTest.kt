@@ -11,6 +11,8 @@ import com.example.gemgemgen.ui.*
 import com.example.gemgemgen.wildcard.domain.*
 import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Random
 
@@ -129,6 +131,123 @@ class PromptGeneratorTest {
         assertEquals(
             "red dress with red ribbon",
             compiledPrompt.generateFinalPrompt(index = 1)
+        )
+    }
+
+    @Test
+    fun generate_expandsDynamicPromptWithTwoOptions() {
+        val generated = PromptGenerator(Random(0)).generate(
+            basePrompt = "a <cat|dog> on the sofa",
+            wildcardSets = emptyList(),
+            repeatCount = 1
+        ).single()
+
+        assertTrue(
+            generated.finalPrompt == "a cat on the sofa" ||
+                generated.finalPrompt == "a dog on the sofa"
+        )
+        assertFalse(generated.finalPrompt.contains('<'))
+        assertFalse(generated.finalPrompt.contains('|'))
+    }
+
+    @Test
+    fun generate_expandsDynamicPromptWithThreeOrMoreOptions() {
+        val results = PromptGenerator(Random(1)).generate(
+            basePrompt = "wear a <red|blue|green> dress",
+            wildcardSets = emptyList(),
+            repeatCount = 30
+        ).map { it.finalPrompt }.toSet()
+
+        assertTrue(results.contains("wear a red dress"))
+        assertTrue(results.contains("wear a blue dress"))
+        assertTrue(results.contains("wear a green dress"))
+        assertEquals(3, results.size)
+    }
+
+    @Test
+    fun generate_keepsAngleBracketsWithoutPipeAsLiteral() {
+        val generated = PromptGenerator(Random(0)).generate(
+            basePrompt = "tag <red> and value",
+            wildcardSets = emptyList(),
+            repeatCount = 1
+        ).single()
+
+        assertEquals("tag <red> and value", generated.finalPrompt)
+    }
+
+    @Test
+    fun generate_trimsDynamicOptionsAndAllowsEmptyOption() {
+        val results = PromptGenerator(Random(2)).generate(
+            basePrompt = "prefix< A | >suffix",
+            wildcardSets = emptyList(),
+            repeatCount = 40
+        ).map { it.finalPrompt }.toSet()
+
+        assertTrue(results.contains("prefixAsuffix"))
+        assertTrue(results.contains("prefixsuffix"))
+    }
+
+    @Test
+    fun generate_picksIndependentValuesForSeparateDynamicSegments() {
+        val results = PromptGenerator(Random(3)).generate(
+            basePrompt = "<a|b> and <a|b>",
+            wildcardSets = emptyList(),
+            repeatCount = 50
+        ).map { it.finalPrompt }.toSet()
+
+        // 위치마다 독립 선택이므로 혼합 결과도 나와야 한다.
+        assertTrue(results.any { it == "a and b" || it == "b and a" })
+    }
+
+    @Test
+    fun generate_appliesWildcardsBeforeDynamicPrompts() {
+        val generated = PromptGenerator(Random(0)).generate(
+            basePrompt = "<__color__|navy> shirt",
+            wildcardSets = listOf(
+                WildcardSet(
+                    token = "__color__",
+                    fileName = "color.txt",
+                    items = listOf("crimson")
+                )
+            ),
+            repeatCount = 20
+        ).map { it.finalPrompt }.toSet()
+
+        // 와일드카드 먼저 → <crimson|navy> → 둘 중 하나
+        assertTrue(generated.all { it == "crimson shirt" || it == "navy shirt" })
+        assertTrue(generated.contains("crimson shirt") || generated.contains("navy shirt"))
+    }
+
+    @Test
+    fun generate_combinesWildcardTokenAndDynamicInSamePrompt() {
+        val generated = PromptGenerator(Random(0)).generate(
+            basePrompt = "__hair__ with <smile|serious> face",
+            wildcardSets = listOf(
+                WildcardSet(
+                    token = "__hair__",
+                    fileName = "hair.txt",
+                    items = listOf("short black hair")
+                )
+            ),
+            repeatCount = 1
+        ).single()
+
+        assertTrue(
+            generated.finalPrompt == "short black hair with smile face" ||
+                generated.finalPrompt == "short black hair with serious face"
+        )
+        assertEquals(mapOf("__hair__" to "short black hair"), generated.replacements)
+    }
+
+    @Test
+    fun expandDynamicPrompts_leavesUnclosedOrEmptyAngleBrackets() {
+        assertEquals(
+            "open <a|b still open",
+            PromptGenerator.expandDynamicPrompts("open <a|b still open", Random(0))
+        )
+        assertEquals(
+            "empty <> here",
+            PromptGenerator.expandDynamicPrompts("empty <> here", Random(0))
         )
     }
 }

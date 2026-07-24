@@ -63,9 +63,11 @@ class PromptGenerator(
         }
 
         private fun applyReplacements(replacements: Map<String, String>): String {
-            return tokenRegex.replace(basePrompt) { match ->
+            // 1) 와일드카드 토큰 치환 → 2) 다이나믹 <A|B|…> 선택
+            val afterWildcards = tokenRegex.replace(basePrompt) { match ->
                 replacements[match.value] ?: match.value
             }
+            return expandDynamicPrompts(afterWildcards, random)
         }
 
         private fun chooseReplacements(): Map<String, String> {
@@ -82,6 +84,25 @@ class PromptGenerator(
 
     companion object {
         private val tokenRegex = Regex("__[^\\s]+?__")
+
+        /**
+         * 중첩 없는 `<…>` 구간. 안에 `|` 가 있을 때만 후보 중 하나를 고른다.
+         * `|` 가 없으면 원문 유지. 옵션은 trim 하며 빈 문자열 후보도 허용한다.
+         */
+        private val dynamicSegmentRegex = Regex("<([^<>]+)>")
+
+        internal fun expandDynamicPrompts(text: String, random: Random): String {
+            if (text.isEmpty() || !text.contains('<')) return text
+
+            return dynamicSegmentRegex.replace(text) { match ->
+                val inner = match.groupValues[1]
+                if (!inner.contains('|')) {
+                    match.value
+                } else {
+                    val options = inner.split('|').map { it.trim() }
+                    options[random.nextInt(options.size)]
+                }
+            }
+        }
     }
 }
-
