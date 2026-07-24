@@ -224,6 +224,101 @@ class WildcardManagerViewModelTest {
         assertTrue(viewModel.uiState.value.fileItems.single().isSelected)
     }
 
+    @Test
+    fun composeDynamicPrompt_copiesSelectedLinesToClipboard() {
+        val clipboardGateway = FakeClipboardGateway()
+        val viewModel = viewModel(
+            fileManager = FakeWildcardFileManager(
+                "hair.txt" to "black hair\nsilver hair\ngold hair"
+            ),
+            clipboardGateway = clipboardGateway
+        )
+
+        viewModel.enterLineSelectionMode()
+        assertTrue(viewModel.uiState.value.isLineSelectionMode)
+        assertEquals(
+            listOf("black hair", "silver hair", "gold hair"),
+            viewModel.uiState.value.selectableLines
+        )
+
+        viewModel.toggleLineSelection(0)
+        viewModel.toggleLineSelection(2)
+        viewModel.composeDynamicPromptToClipboard()
+
+        assertEquals("<black hair|gold hair>", clipboardGateway.writtenText)
+        assertEquals(
+            "다이나믹 프롬프트를 클립보드에 복사했습니다.",
+            viewModel.uiState.value.message
+        )
+        assertTrue(viewModel.uiState.value.isLineSelectionMode)
+        assertEquals(setOf(0, 2), viewModel.uiState.value.selectedLineIndices)
+    }
+
+    @Test
+    fun composeDynamicPrompt_allowsSingleLine() {
+        val clipboardGateway = FakeClipboardGateway()
+        val viewModel = viewModel(
+            fileManager = FakeWildcardFileManager("hair.txt" to "only one"),
+            clipboardGateway = clipboardGateway
+        )
+
+        viewModel.enterLineSelectionMode()
+        viewModel.toggleLineSelection(0)
+        viewModel.composeDynamicPromptToClipboard()
+
+        assertEquals("<only one>", clipboardGateway.writtenText)
+    }
+
+    @Test
+    fun composeDynamicPrompt_rejectsSyntaxChars() {
+        val clipboardGateway = FakeClipboardGateway()
+        val viewModel = viewModel(
+            fileManager = FakeWildcardFileManager("hair.txt" to "a|b\nok"),
+            clipboardGateway = clipboardGateway
+        )
+
+        viewModel.enterLineSelectionMode()
+        viewModel.selectAllLines()
+        viewModel.composeDynamicPromptToClipboard()
+
+        assertEquals("| 또는 <> 가 있는 줄은 다이나믹에 넣을 수 없습니다.", viewModel.uiState.value.error)
+        assertEquals("", clipboardGateway.writtenText)
+    }
+
+    @Test
+    fun selectFile_exitsLineSelectionMode() {
+        val fileManager = FakeWildcardFileManager(
+            "a.txt" to "one",
+            "b.txt" to "two"
+        )
+        val viewModel = viewModel(fileManager = fileManager)
+        val aFile = viewModel.uiState.value.files.first { it.fileName == "a.txt" }
+        val bFile = viewModel.uiState.value.files.first { it.fileName == "b.txt" }
+
+        viewModel.selectFile(aFile)
+        viewModel.enterLineSelectionMode()
+        viewModel.toggleLineSelection(0)
+        assertTrue(viewModel.uiState.value.isLineSelectionMode)
+
+        viewModel.selectFile(bFile)
+
+        assertFalse(viewModel.uiState.value.isLineSelectionMode)
+        assertTrue(viewModel.uiState.value.selectedLineIndices.isEmpty())
+        assertEquals("b.txt", viewModel.uiState.value.selectedFile?.fileName)
+    }
+
+    @Test
+    fun enterLineSelectionMode_usesUnsavedEditingText() {
+        val viewModel = viewModel(
+            fileManager = FakeWildcardFileManager("hair.txt" to "old")
+        )
+
+        viewModel.onTextChange("old\nnew line")
+        viewModel.enterLineSelectionMode()
+
+        assertEquals(listOf("old", "new line"), viewModel.uiState.value.selectableLines)
+    }
+
     private fun viewModel(
         fileManager: FakeWildcardFileManager = FakeWildcardFileManager(),
         clipboardText: String = "",

@@ -39,7 +39,9 @@ import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardSetRepository
+import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
+import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
 import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
@@ -102,11 +104,19 @@ class AndroidAppContainer(context: Context) {
     }
 
     val wildcardViewModelFactory: ViewModelProvider.Factory = factory<WildcardManagerViewModel> {
+        val wildcardFileRepository = AndroidWildcardFileRepository(appContext)
+        val analysisKeyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository)
         WildcardManagerViewModel(
-            manageWildcardFiles = ManageWildcardFilesUseCase(
-                AndroidWildcardFileRepository(appContext)
+            manageWildcardFiles = ManageWildcardFilesUseCase(wildcardFileRepository),
+            wildcardClipboard = WildcardClipboardUseCase(clipboardGateway),
+            classifyWildcardLines = ClassifyWildcardLinesUseCase(
+                aiGateway = analysisAiGateway,
+                credentialResolver = analysisCredentialResolver
             ),
-            wildcardClipboard = WildcardClipboardUseCase(clipboardGateway)
+            saveWildcardClassifyResult = SaveWildcardClassifyResultUseCase(
+                repository = wildcardFileRepository
+            ),
+            analysisKeyManager = analysisKeyManager
         )
     }
 

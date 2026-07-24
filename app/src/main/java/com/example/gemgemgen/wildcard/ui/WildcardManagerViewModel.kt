@@ -2,13 +2,23 @@ package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.gemgemgen.analysis.domain.AnalysisModelRole
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.analysis.usecase.AnalysisException
+import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName
+import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer
 import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
 import com.example.gemgemgen.wildcard.domain.WildcardTextEditResult
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
+import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
+import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
+import com.example.gemgemgen.wildcard.usecase.WildcardClassifySaveResult
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardPasteResult
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,8 +28,12 @@ import kotlinx.coroutines.launch
 class WildcardManagerViewModel(
     private val manageWildcardFiles: ManageWildcardFilesUseCase,
     private val wildcardClipboard: WildcardClipboardUseCase,
+    private val classifyWildcardLines: ClassifyWildcardLinesUseCase? = null,
+    private val saveWildcardClassifyResult: SaveWildcardClassifyResultUseCase? = null,
+    private val analysisKeyManager: ManageGeminiApiKeysUseCase? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
+    private var classifyJob: Job? = null
     private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardManagerUiState())
     val uiState: StateFlow<WildcardManagerUiState> = _uiState.asStateFlow()
@@ -37,13 +51,426 @@ class WildcardManagerViewModel(
     }
 
     fun trimForInactiveTab() {
+        classifyJob?.cancel()
+        classifyJob = null
         _uiState.update { state ->
             val trimmed = state.editor.trimForInactiveTab()
-            if (trimmed == state.editor) {
+            if (
+                trimmed == state.editor &&
+                !state.isLineSelectionMode &&
+                !state.showClassifyCriteriaDialog &&
+                !state.isClassifying &&
+                state.classifyPreview == null
+            ) {
                 state
             } else {
-                state.copy(editor = trimmed, message = "", error = "")
+                state.copy(
+                    editor = trimmed,
+                    isLineSelectionMode = false,
+                    selectedLineIndices = emptySet(),
+                    showClassifyCriteriaDialog = false,
+                    isClassifying = false,
+                    classifyPreview = null,
+                    classifySaveEntries = emptyList(),
+                    classifyOverwriteConflicts = emptyList(),
+                    message = "",
+                    error = ""
+                )
             }
+        }
+    }
+
+    fun enterLineSelectionMode() {
+        val state = uiState.value
+        if (state.isFileOperationInProgress) return
+        if (state.selectedFile == null) {
+            showError("먼저 txt 파일을 선택하거나 새로 만들어주세요.")
+            return
+        }
+        if (state.isLineSelectionMode) return
+
+        _uiState.update {
+            it.copy(
+                isLineSelectionMode = true,
+                selectedLineIndices = emptySet(),
+                message = "",
+                error = ""
+            )
+        }
+    }
+
+    fun exitLineSelectionMode() {
+        if (!uiState.value.isLineSelectionMode) return
+        _uiState.update {
+            it.copy(
+                isLineSelectionMode = false,
+                selectedLineIndices = emptySet(),
+                message = "",
+                error = ""
+            )
+        }
+    }
+
+    fun toggleLineSelection(index: Int) {
+        val state = uiState.value
+        if (!state.isLineSelectionMode || state.isFileOperationInProgress) return
+        if (index !in state.selectableLines.indices) return
+
+        _uiState.update {
+            val next = if (index in it.selectedLineIndices) {
+                it.selectedLineIndices - index
+            } else {
+                it.selectedLineIndices + index
+            }
+            it.copy(
+                selectedLineIndices = next,
+                message = "",
+                error = ""
+            )
+        }
+    }
+
+    fun selectAllLines() {
+        val state = uiState.value
+        if (!state.isLineSelectionMode || state.isFileOperationInProgress) return
+        val lines = state.selectableLines
+        if (lines.isEmpty()) return
+
+        _uiState.update {
+            it.copy(
+                selectedLineIndices = lines.indices.toSet(),
+                message = "",
+                error = ""
+            )
+        }
+    }
+
+    fun deselectAllLines() {
+        val state = uiState.value
+        if (!state.isLineSelectionMode || state.isFileOperationInProgress) return
+
+        _uiState.update {
+            it.copy(
+                selectedLineIndices = emptySet(),
+                message = "",
+                error = ""
+            )
+        }
+    }
+
+    fun composeDynamicPromptToClipboard() {
+        if (uiState.value.isFileOperationInProgress) return
+        val state = uiState.value
+        if (!state.isLineSelectionMode) return
+
+        when (
+            val result = WildcardDynamicPromptComposer.composeFromIndices(
+                allLines = state.selectableLines,
+                selectedIndices = state.selectedLineIndices
+            )
+        ) {
+            WildcardDynamicPromptComposer.ComposeResult.NoSelection -> {
+                showError("한 줄 이상 선택하세요.")
+            }
+            is WildcardDynamicPromptComposer.ComposeResult.InvalidCharacters -> {
+                showError("| 또는 <> 가 있는 줄은 다이나믹에 넣을 수 없습니다.")
+            }
+            is WildcardDynamicPromptComposer.ComposeResult.Success -> {
+                scope.launch {
+                    if (!wildcardClipboard.copy(result.dynamicPrompt)) {
+                        showError("클립보드에 복사하지 못했습니다.")
+                        return@launch
+                    }
+                    _uiState.update {
+                        it.copy(
+                            message = "다이나믹 프롬프트를 클립보드에 복사했습니다.",
+                            error = ""
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun requestClassify() {
+        val state = uiState.value
+        if (!state.canRequestClassify) {
+            when {
+                state.selectedFile == null ->
+                    showError("먼저 txt 파일을 선택해주세요.")
+                state.selectableLines.isEmpty() ->
+                    showError("분류할 줄이 없습니다.")
+                !state.canModifyFiles ->
+                    showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
+                classifyWildcardLines == null ->
+                    showError("분류 기능을 사용할 수 없습니다.")
+                else -> Unit
+            }
+            return
+        }
+        if (classifyWildcardLines == null) {
+            showError("분류 기능을 사용할 수 없습니다.")
+            return
+        }
+
+        scope.launch {
+            val generationSetting = analysisKeyManager
+                ?.getRoleSetting(AnalysisModelRole.GENERATION)
+            _uiState.update {
+                it.copy(
+                    showClassifyCriteriaDialog = true,
+                    classifyCriteria = it.classifyCriteria,
+                    classifyPreview = null,
+                    classifySaveEntries = emptyList(),
+                    classifyOverwriteConflicts = emptyList(),
+                    classifyProvider = generationSetting?.provider ?: it.classifyProvider,
+                    classifyModelId = generationSetting?.modelId ?: it.classifyModelId,
+                    isLineSelectionMode = false,
+                    selectedLineIndices = emptySet(),
+                    message = "",
+                    error = ""
+                )
+            }
+        }
+    }
+
+    fun onClassifyCriteriaChange(value: String) {
+        _uiState.update { it.copy(classifyCriteria = value, error = "") }
+    }
+
+    fun onClassifyProviderSelected(provider: AnalysisProvider) {
+        val keyManager = analysisKeyManager ?: run {
+            _uiState.update {
+                it.copy(
+                    classifyProvider = provider,
+                    classifyModelId = AnalysisProvider.defaultModel(provider),
+                    error = ""
+                )
+            }
+            return
+        }
+        scope.launch {
+            try {
+                val setting = keyManager.setRoleProvider(AnalysisModelRole.GENERATION, provider)
+                _uiState.update {
+                    it.copy(
+                        classifyProvider = setting.provider,
+                        classifyModelId = setting.modelId,
+                        error = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "모델을 바꾸지 못했습니다.")
+            }
+        }
+    }
+
+    fun onClassifyModelSelected(modelId: String) {
+        val keyManager = analysisKeyManager ?: run {
+            _uiState.update { it.copy(classifyModelId = modelId, error = "") }
+            return
+        }
+        scope.launch {
+            try {
+                val setting = keyManager.setRoleModel(AnalysisModelRole.GENERATION, modelId)
+                _uiState.update {
+                    it.copy(
+                        classifyProvider = setting.provider,
+                        classifyModelId = setting.modelId,
+                        error = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "모델을 바꾸지 못했습니다.")
+            }
+        }
+    }
+
+    fun dismissClassifyCriteriaDialog() {
+        if (uiState.value.isClassifying) return
+        _uiState.update {
+            it.copy(
+                showClassifyCriteriaDialog = false,
+                error = ""
+            )
+        }
+    }
+
+    fun runClassify() {
+        val classify = classifyWildcardLines ?: run {
+            showError("분류 기능을 사용할 수 없습니다.")
+            return
+        }
+        val state = uiState.value
+        if (!state.canRunClassify) {
+            if (state.classifyCriteria.isBlank()) {
+                showError("분류 기준을 입력해주세요.")
+            }
+            return
+        }
+
+        val editingText = state.editingText
+        val criteria = state.classifyCriteria
+        classifyJob?.cancel()
+        classifyJob = scope.launch {
+            _uiState.update {
+                it.copy(
+                    isClassifying = true,
+                    showClassifyCriteriaDialog = false,
+                    // 다시 분류 시 이전 미리보기는 잠시 숨김
+                    classifyPreview = null,
+                    classifySaveEntries = emptyList(),
+                    classifyOverwriteConflicts = emptyList(),
+                    message = "분류 중…",
+                    error = ""
+                )
+            }
+            try {
+                val result = classify.classify(
+                    editingText = editingText,
+                    criteria = criteria
+                )
+                val entries = WildcardClassifyFileName.buildSaveEntries(result.savableGroups)
+                val dropNote = if (result.droppedLineCount > 0) {
+                    " · 미배정 ${result.droppedLineCount}줄(저장 안 함)"
+                } else {
+                    ""
+                }
+                _uiState.update {
+                    it.copy(
+                        isClassifying = false,
+                        classifyPreview = result,
+                        classifySaveEntries = entries,
+                        classifyOverwriteConflicts = emptyList(),
+                        classifyCriteria = result.criteria,
+                        message = "분류 미리보기: ${entries.size}개 파일$dropNote",
+                        error = ""
+                    )
+                }
+            } catch (error: AnalysisException) {
+                _uiState.update {
+                    it.copy(
+                        isClassifying = false,
+                        showClassifyCriteriaDialog = true,
+                        message = "",
+                        error = error.message ?: "분류에 실패했습니다."
+                    )
+                }
+            } catch (error: RuntimeException) {
+                _uiState.update {
+                    it.copy(
+                        isClassifying = false,
+                        showClassifyCriteriaDialog = true,
+                        message = "",
+                        error = error.message ?: "분류에 실패했습니다."
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissClassifyPreview() {
+        if (uiState.value.isClassifying) return
+        _uiState.update {
+            it.copy(
+                classifyPreview = null,
+                classifySaveEntries = emptyList(),
+                classifyOverwriteConflicts = emptyList(),
+                message = "",
+                error = ""
+            )
+        }
+    }
+
+    fun onClassifyFileNameChange(index: Int, value: String) {
+        _uiState.update { state ->
+            val entries = state.classifySaveEntries.toMutableList()
+            if (index !in entries.indices) return@update state
+            entries[index] = entries[index].copy(fileNameInput = value)
+            state.copy(classifySaveEntries = entries, error = "")
+        }
+    }
+
+    fun onToggleClassifyFileNameEdit(index: Int) {
+        _uiState.update { state ->
+            val entries = state.classifySaveEntries.toMutableList()
+            if (index !in entries.indices) return@update state
+            val current = entries[index]
+            entries[index] = current.copy(isEditingFileName = !current.isEditingFileName)
+            state.copy(classifySaveEntries = entries, error = "")
+        }
+    }
+
+    fun saveClassifyResult(overwrite: Boolean = false) {
+        val saveUseCase = saveWildcardClassifyResult ?: run {
+            showError("분류 저장 기능을 사용할 수 없습니다.")
+            return
+        }
+        val entries = uiState.value.classifySaveEntries
+        if (entries.isEmpty()) {
+            showError("저장할 그룹이 없습니다.")
+            return
+        }
+        if (uiState.value.isFileOperationInProgress || uiState.value.isClassifying) return
+        if (!uiState.value.canModifyFiles) {
+            showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
+            return
+        }
+        if (!beginFileOperation()) return
+
+        scope.launch {
+            try {
+                when (val result = saveUseCase.save(entries, overwrite = overwrite)) {
+                    is WildcardClassifySaveResult.Success -> {
+                        val workspace = manageWildcardFiles.refreshWorkspace(
+                            selectedFile = uiState.value.selectedFile,
+                            openFirstFile = false
+                        )
+                        _uiState.update {
+                            it.copy(
+                                files = workspace.files,
+                                classifyPreview = null,
+                                classifySaveEntries = emptyList(),
+                                classifyOverwriteConflicts = emptyList(),
+                                message = "${result.savedFileNames.size}개 파일로 저장했습니다.",
+                                error = ""
+                            )
+                        }
+                    }
+                    is WildcardClassifySaveResult.FileExists -> {
+                        _uiState.update {
+                            it.copy(
+                                classifyOverwriteConflicts = result.conflictingFileNames,
+                                message = "",
+                                error = "같은 이름의 파일이 있습니다. 덮어쓸까요?"
+                            )
+                        }
+                    }
+                    WildcardClassifySaveResult.NothingToSave -> {
+                        showError("저장할 그룹이 없습니다.")
+                    }
+                    is WildcardClassifySaveResult.InvalidFileName -> {
+                        showError("파일 이름이 올바르지 않습니다: ${result.groupName}")
+                    }
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "분류 결과를 저장하지 못했습니다.")
+            } finally {
+                endFileOperation()
+            }
+        }
+    }
+
+    fun confirmClassifyOverwrite() {
+        saveClassifyResult(overwrite = true)
+    }
+
+    fun dismissClassifyOverwrite() {
+        _uiState.update {
+            it.copy(
+                classifyOverwriteConflicts = emptyList(),
+                error = ""
+            )
         }
     }
 
@@ -75,9 +502,12 @@ class WildcardManagerViewModel(
                         openedFile != null -> it.editor.rename(openedFile)
                         else -> it.editor
                     }
+                    val clearedSelection = openedFile != null && openedText != null
                     it.copy(
                         files = workspace.files,
                         editor = editor,
+                        isLineSelectionMode = if (clearedSelection) false else it.isLineSelectionMode,
+                        selectedLineIndices = if (clearedSelection) emptySet() else it.selectedLineIndices,
                         message = if (openedFile != null && openedText != null) {
                             "${openedFile.fileName} 열기 완료"
                         } else {
@@ -103,12 +533,21 @@ class WildcardManagerViewModel(
     }
 
     fun onFolderChanged() {
+        classifyJob?.cancel()
+        classifyJob = null
         _uiState.update {
             it.copy(
                 files = emptyList(),
                 editor = WildcardEditorSession(),
                 isFileOperationInProgress = false,
                 pendingAction = null,
+                isLineSelectionMode = false,
+                selectedLineIndices = emptySet(),
+                showClassifyCriteriaDialog = false,
+                isClassifying = false,
+                classifyPreview = null,
+                classifySaveEntries = emptyList(),
+                classifyOverwriteConflicts = emptyList(),
                 message = "wildcard 폴더를 선택했습니다.",
                 error = ""
             )
@@ -217,6 +656,8 @@ class WildcardManagerViewModel(
                         editor = it.editor.open(createdFile, workspace.selectedText.orEmpty()),
                         showNewFileDialog = false,
                         newFileName = "",
+                        isLineSelectionMode = false,
+                        selectedLineIndices = emptySet(),
                         message = "${createdFile.fileName} 생성 완료",
                         error = ""
                     )
@@ -361,7 +802,9 @@ class WildcardManagerViewModel(
                             editor = it.editor.open(
                                 nextFile,
                                 workspace.selectedText.orEmpty()
-                            )
+                            ),
+                            isLineSelectionMode = false,
+                            selectedLineIndices = emptySet()
                         )
                     }
                 }
@@ -527,6 +970,13 @@ class WildcardManagerViewModel(
             _uiState.update {
                 it.copy(
                     editor = it.editor.open(file, text),
+                    isLineSelectionMode = false,
+                    selectedLineIndices = emptySet(),
+                    showClassifyCriteriaDialog = false,
+                    isClassifying = false,
+                    classifyPreview = null,
+                    classifySaveEntries = emptyList(),
+                    classifyOverwriteConflicts = emptyList(),
                     message = if (keepMessage) it.message else "${file.fileName} 열기 완료",
                     error = ""
                 )
@@ -589,9 +1039,18 @@ class WildcardManagerViewModel(
     }
 
     private fun clearSelectedFile(message: String) {
+        classifyJob?.cancel()
+        classifyJob = null
         _uiState.update {
             it.copy(
                 editor = it.editor.clear(),
+                isLineSelectionMode = false,
+                selectedLineIndices = emptySet(),
+                showClassifyCriteriaDialog = false,
+                isClassifying = false,
+                classifyPreview = null,
+                classifySaveEntries = emptyList(),
+                classifyOverwriteConflicts = emptyList(),
                 message = message,
                 error = ""
             )
@@ -629,6 +1088,8 @@ class WildcardManagerViewModel(
             it.copy(
                 files = emptyList(),
                 editor = it.editor.clear(),
+                isLineSelectionMode = false,
+                selectedLineIndices = emptySet(),
                 error = error.message ?: "파일 목록을 불러오지 못했습니다."
             )
         }
