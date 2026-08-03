@@ -3,6 +3,7 @@ package com.example.gemgemgen
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
+import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.ui.AutomationUiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -54,6 +55,19 @@ class AutomationUiTextTest {
             AutomationUiText.selfAppTerminateUnavailableMessage(
                 SelfAppControlBlockReason.AccessibilityDisabled
             )
+        )
+    }
+
+    @Test
+    fun memoryCleanupResultMessages_includeOutcome() {
+        assertTrue(
+            AutomationUiText.memoryCleanupResultMessage(MemoryCleanupResult.Success)
+                .contains("메모리 정리")
+        )
+        assertTrue(
+            AutomationUiText.memoryCleanupResultMessage(
+                MemoryCleanupResult.Failure("failed")
+            ).contains("failed")
         )
     }
 }

@@ -12,6 +12,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
+import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.core.AppDefaults
@@ -21,6 +22,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 class GeminiAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var closeAppCompletion: ((CloseGeminiAppResult) -> Unit)? = null
+    private var memoryCleanupToken: Any? = null
+    private var memoryCleanupCompletion: ((MemoryCleanupResult) -> Unit)? = null
+    private var memoryCleanupAutomation: DeviceCareMemoryAutomation? = null
+    private var previousMemoryPackageRestriction: Array<String>? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
     private val geminiAutomation by lazy {
@@ -44,6 +49,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
+        finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 중단되었습니다."))
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
         handler.removeCallbacksAndMessages(null)
@@ -51,6 +57,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 종료되었습니다."))
         if (activeService == this) {
             activeService = null
         }
@@ -77,6 +84,54 @@ class GeminiAccessibilityService : AccessibilityService() {
             taskTitle = GEMINI_TASK_TITLE,
             closeDescription = GEMINI_CLOSE_DESCRIPTION
         )
+    }
+
+    internal suspend fun cleanDeviceMemory(
+        launchDashboard: () -> Boolean
+    ): MemoryCleanupResult {
+        if (
+            memoryCleanupToken != null ||
+            closeAppCompletion != null ||
+            ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
+        ) {
+            return MemoryCleanupResult.InProgress
+        }
+
+        return suspendCancellableCoroutine { continuation ->
+            val token = Any()
+            memoryCleanupToken = token
+            memoryCleanupCompletion = completion@{ result ->
+                if (memoryCleanupToken !== token) return@completion
+                memoryCleanupToken = null
+                memoryCleanupCompletion = null
+                memoryCleanupAutomation?.cancel()
+                memoryCleanupAutomation = null
+                restoreMemoryPackageRestriction()
+                if (continuation.isActive) {
+                    continuation.resume(result)
+                }
+            }
+
+            handler.post {
+                if (memoryCleanupToken !== token) return@post
+                previousMemoryPackageRestriction = serviceInfo?.packageNames?.copyOf()
+                restrictPackagesToDeviceCare()
+                memoryCleanupAutomation = DeviceCareMemoryAutomation(
+                    handler = handler,
+                    rootProvider = { rootInActiveWindow },
+                    currentPackageProvider = {
+                        rootInActiveWindow?.packageName?.toString()
+                    },
+                    performBack = { performGlobalAction(GLOBAL_ACTION_BACK) },
+                    launchDashboard = launchDashboard,
+                    onFinished = { result -> finishMemoryCleanup(token, result) }
+                )
+                memoryCleanupAutomation?.start()
+            }
+            continuation.invokeOnCancellation {
+                handler.post { cancelMemoryCleanup(token) }
+            }
+        }
     }
 
     /**
@@ -134,8 +189,18 @@ class GeminiAccessibilityService : AccessibilityService() {
         applyAccessibilitySubscription(packageNamesFor(targetApp))
     }
 
+    private fun restrictPackagesToDeviceCare() {
+        applyAccessibilitySubscription(arrayOf(DEVICE_CARE_PACKAGE_NAME))
+    }
+
     private fun clearPackageRestriction() {
         applyAccessibilitySubscription(packageNames = null)
+    }
+
+    private fun restoreMemoryPackageRestriction() {
+        val previousPackageRestriction = previousMemoryPackageRestriction
+        previousMemoryPackageRestriction = null
+        applyAccessibilitySubscription(previousPackageRestriction)
     }
 
     private fun applyAccessibilitySubscription(packageNames: Array<String>?) {
@@ -344,6 +409,25 @@ class GeminiAccessibilityService : AccessibilityService() {
         completion(result)
     }
 
+    private fun finishMemoryCleanup(result: MemoryCleanupResult) {
+        val token = memoryCleanupToken ?: return
+        finishMemoryCleanup(token, result)
+    }
+
+    private fun finishMemoryCleanup(token: Any, result: MemoryCleanupResult) {
+        if (memoryCleanupToken !== token) return
+        memoryCleanupCompletion?.invoke(result)
+    }
+
+    private fun cancelMemoryCleanup(token: Any) {
+        if (memoryCleanupToken !== token) return
+        memoryCleanupToken = null
+        memoryCleanupCompletion = null
+        memoryCleanupAutomation?.cancel()
+        memoryCleanupAutomation = null
+        restoreMemoryPackageRestriction()
+    }
+
     companion object {
         var activeService: GeminiAccessibilityService? = null
             private set
@@ -358,5 +442,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         private const val CARD_CLOSE_WAIT_MS = 450L
         private const val MAX_TASK_CLOSE_CLICKS = 10
         private const val TITLE_ANCESTOR_SEARCH_DEPTH = 4
+        private const val DEVICE_CARE_PACKAGE_NAME = "com.samsung.android.lool"
     }
 }

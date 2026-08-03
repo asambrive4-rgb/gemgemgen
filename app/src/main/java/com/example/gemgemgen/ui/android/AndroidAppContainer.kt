@@ -20,6 +20,7 @@ import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
+import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
 import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.android.AndroidImeSettings
@@ -28,6 +29,7 @@ import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
 import com.example.gemgemgen.automation.android.ProcessAutomationHolder
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
+import com.example.gemgemgen.automation.usecase.CleanDeviceMemoryUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.ImeManager
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
@@ -95,6 +97,9 @@ class AndroidAppContainer(context: Context) {
             ),
             terminateSelfApp = CloseGeminiAppUseCase(
                 AndroidSelfAppCloser(appContext)
+            ),
+            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(
+                AndroidMemoryCleanupGateway(appContext)
             ),
             checkAutomationStart = CheckAutomationStartUseCase(
                 AndroidOverlayPermissionGateway(appContext)

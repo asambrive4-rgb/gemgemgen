@@ -7,6 +7,7 @@ import com.example.gemgemgen.automation.domain.PromptParagraphMessageKey
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
 import com.example.gemgemgen.automation.domain.SelfAppControlPolicy
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
+import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 
 object AutomationUiText {
     fun accessibilityPromptTitle(): String = "접근성 서비스 필요"
@@ -54,6 +55,35 @@ object AutomationUiText {
 
     fun unknownCloseErrorMessage(error: Throwable): String {
         return error.message ?: "알 수 없는 오류가 발생했습니다."
+    }
+
+    fun memoryCleanupStartingText(): String = "메모리 정리 중..."
+
+    fun memoryCleanupCanceledText(): String = "메모리 정리를 취소했습니다."
+
+    fun unknownMemoryCleanupErrorMessage(error: Throwable): String {
+        return error.message ?: "메모리 정리 중 알 수 없는 오류가 발생했습니다."
+    }
+
+    fun memoryCleanupUnavailableMessage(state: MainUiState): String {
+        return when {
+            state.isRunning -> "자동화 실행 중에는 메모리를 정리할 수 없습니다."
+            state.isCleaningMemory -> "메모리 정리가 이미 진행 중입니다."
+            state.isClosingGemini -> "Gemini 종료/재시작 중에는 메모리를 정리할 수 없습니다."
+            !state.environmentStatus.isAccessibilityServiceEnabled ->
+                "접근성 서비스를 먼저 켜주세요."
+            else -> "메모리 정리를 지금 실행할 수 없습니다."
+        }
+    }
+
+    fun memoryCleanupResultMessage(result: MemoryCleanupResult): String {
+        return when (result) {
+            MemoryCleanupResult.Success -> "메모리 정리를 완료했습니다."
+            MemoryCleanupResult.AccessibilityUnavailable ->
+                "접근성 서비스가 켜져 있지 않습니다."
+            MemoryCleanupResult.InProgress -> "메모리 정리가 이미 진행 중입니다."
+            is MemoryCleanupResult.Failure -> "메모리 정리 실패: ${result.message}"
+        }
     }
 
     fun geminiRestartUnavailableMessage(state: MainUiState): String {
@@ -113,7 +143,7 @@ object AutomationUiText {
             isGeminiInstalled = state.environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = state.isRunning,
-            isClosingInProgress = state.isClosingGemini
+            isClosingInProgress = state.isClosingGemini || state.isCleaningMemory
         )
     }
 
@@ -121,7 +151,7 @@ object AutomationUiText {
         return SelfAppControlPolicy.blockReason(
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = state.isRunning,
-            isClosingInProgress = state.isClosingGemini
+            isClosingInProgress = state.isClosingGemini || state.isCleaningMemory
         )
     }
 

@@ -21,9 +21,12 @@ import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
+import com.example.gemgemgen.automation.usecase.CleanDeviceMemoryUseCase
 import com.example.gemgemgen.automation.usecase.GeminiAppCloser
 import com.example.gemgemgen.automation.usecase.LastRunSnapshot
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
+import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
+import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
@@ -69,6 +72,13 @@ class MainViewModel(
         object : GeminiAppCloser {
             override suspend fun closeGeminiApp(): CloseGeminiAppResult {
                 return CloseGeminiAppResult.AccessibilityUnavailable
+            }
+        }
+    ),
+    private val cleanDeviceMemoryUseCase: CleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(
+        object : MemoryCleanupGateway {
+            override suspend fun cleanMemory(): MemoryCleanupResult {
+                return MemoryCleanupResult.AccessibilityUnavailable
             }
         }
     ),
@@ -547,6 +557,51 @@ class MainViewModel(
                 it.copy(
                     isClosingGemini = false,
                     geminiCloseMessage = AutomationUiText.selfAppTerminateResultMessage(result)
+                )
+            }
+        }
+    }
+
+    fun cleanDeviceMemory() {
+        val state = _uiState.value
+        if (!state.canCleanMemory) {
+            _uiState.update {
+                it.copy(
+                    memoryCleanupMessage = AutomationUiText.memoryCleanupUnavailableMessage(it)
+                )
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                isCleaningMemory = true,
+                memoryCleanupMessage = AutomationUiText.memoryCleanupStartingText()
+            )
+        }
+        scope.launch {
+            val result = try {
+                withContext(dispatchers.io) {
+                    cleanDeviceMemoryUseCase.clean()
+                }
+            } catch (error: CancellationException) {
+                _uiState.update {
+                    it.copy(
+                        isCleaningMemory = false,
+                        memoryCleanupMessage = AutomationUiText.memoryCleanupCanceledText()
+                    )
+                }
+                throw error
+            } catch (error: Exception) {
+                MemoryCleanupResult.Failure(
+                    AutomationUiText.unknownMemoryCleanupErrorMessage(error)
+                )
+            }
+
+            _uiState.update {
+                it.copy(
+                    isCleaningMemory = false,
+                    memoryCleanupMessage = AutomationUiText.memoryCleanupResultMessage(result)
                 )
             }
         }

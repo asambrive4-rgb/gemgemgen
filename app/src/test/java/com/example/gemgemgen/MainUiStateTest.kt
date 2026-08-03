@@ -79,6 +79,52 @@ class MainUiStateTest {
                 isClosingGemini = true
             ).canCloseGemini
         )
+
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment(),
+                isCleaningMemory = true
+            ).canCloseGemini
+        )
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment(),
+                isCleaningMemory = true
+            ).canCloseSelfApp
+        )
+    }
+
+    @Test
+    fun canCleanMemory_requiresAccessibilityAndNoConcurrentWork() {
+        assertTrue(
+            MainUiState(environmentStatus = readyEnvironment()).canCleanMemory
+        )
+
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment().copy(
+                    isAccessibilityServiceEnabled = false
+                )
+            ).canCleanMemory
+        )
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment(),
+                automationState = AutomationRunState.Running("running")
+            ).canCleanMemory
+        )
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment(),
+                isCleaningMemory = true
+            ).canCleanMemory
+        )
+        assertFalse(
+            MainUiState(
+                environmentStatus = readyEnvironment(),
+                isClosingGemini = true
+            ).canCleanMemory
+        )
     }
 
     @Test

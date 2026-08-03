@@ -34,11 +34,16 @@ import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -64,6 +69,9 @@ internal fun PromptSection(
     canCloseSelfApp: Boolean,
     isClosingGemini: Boolean,
     geminiCloseMessage: String,
+    canCleanMemory: Boolean,
+    isCleaningMemory: Boolean,
+    memoryCleanupMessage: String,
     selectedParagraphRange: PromptParagraphRange?,
     paragraphSelectionMessage: String,
     wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
@@ -73,6 +81,7 @@ internal fun PromptSection(
     onWildcardTokenSuggestionClick: (String) -> Unit = {},
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
+    onCleanDeviceMemory: () -> Unit,
     onTerminateSelfApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
     onInsertSystemInstruction: () -> Unit,
@@ -160,11 +169,14 @@ internal fun PromptSection(
                 canCloseGemini = canCloseGemini,
                 canCloseSelfApp = canCloseSelfApp,
                 isClosingGemini = isClosingGemini,
+                canCleanMemory = canCleanMemory,
+                isCleaningMemory = isCleaningMemory,
                 canUndoPromptEdit = canUndoPromptEdit,
                 canCopyPrompt = canCopyPrompt,
                 isTargetSelectionEnabled = isTargetSelectionEnabled,
                 onCloseGeminiApp = onCloseGeminiApp,
                 onTerminateGeminiApp = onTerminateGeminiApp,
+                onCleanDeviceMemory = onCleanDeviceMemory,
                 onTerminateSelfApp = onTerminateSelfApp,
                 onUndoPromptEdit = onUndoPromptEdit,
                 onInsertSystemInstruction = onInsertSystemInstruction,
@@ -181,6 +193,13 @@ internal fun PromptSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (memoryCleanupMessage.isNotBlank()) {
+            Text(
+                text = memoryCleanupMessage,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -190,11 +209,14 @@ internal fun PromptActionRow(
     canCloseGemini: Boolean,
     canCloseSelfApp: Boolean,
     isClosingGemini: Boolean,
+    canCleanMemory: Boolean,
+    isCleaningMemory: Boolean,
     canUndoPromptEdit: Boolean,
     canCopyPrompt: Boolean,
     isTargetSelectionEnabled: Boolean,
     onCloseGeminiApp: () -> Unit,
     onTerminateGeminiApp: () -> Unit,
+    onCleanDeviceMemory: () -> Unit,
     onTerminateSelfApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
     onInsertSystemInstruction: () -> Unit,
@@ -203,6 +225,8 @@ internal fun PromptActionRow(
     onPasteFromClipboard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var geminiMenuExpanded by remember { mutableStateOf(false) }
+
     FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(2.5.dp, Alignment.End),
@@ -235,8 +259,9 @@ internal fun PromptActionRow(
                     )
                 }
             }
-            OutlinedButton(
-                onClick = onTerminateGeminiApp,
+            Box {
+                OutlinedButton(
+                onClick = { geminiMenuExpanded = true },
                 enabled = canCloseGemini && !isClosingGemini,
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
@@ -259,27 +284,42 @@ internal fun PromptActionRow(
                         fontWeight = FontWeight.Bold
                     )
                 }
+                }
+                DropdownMenu(
+                    expanded = geminiMenuExpanded,
+                    onDismissRequest = { geminiMenuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("종료만") },
+                        onClick = {
+                            geminiMenuExpanded = false
+                            onTerminateGeminiApp()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("재시작") },
+                        onClick = {
+                            geminiMenuExpanded = false
+                            onCloseGeminiApp()
+                        }
+                    )
+                }
             }
             OutlinedButton(
-                onClick = onCloseGeminiApp,
-                enabled = canCloseGemini && !isClosingGemini,
+                onClick = onCleanDeviceMemory,
+                enabled = canCleanMemory && !isClosingGemini && !isCleaningMemory,
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
                     .height(28.dp)
-                    .semantics { contentDescription = "Gemini 앱 재시작" },
+                    .semantics { contentDescription = "메모리 정리" },
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Image(
-                        imageVector = GeminiGradientLogo,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
                     Text(
-                        text = "재시작",
+                        text = "메모리 정리",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )

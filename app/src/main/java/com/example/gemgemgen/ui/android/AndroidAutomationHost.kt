@@ -11,7 +11,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,8 +52,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         { focusManager.clearFocus(force = true) }
     }
     val mainViewModel: MainViewModel = viewModel(factory = container.mainViewModelFactory)
-    val mainUiState by mainViewModel.uiState.collectAsState()
-    val automationBarUiState by mainViewModel.automationBarUiState.collectAsState()
+    val mainUiState by mainViewModel.uiState.collectAsStateWithLifecycle()
+    val automationBarUiState by mainViewModel.automationBarUiState.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.AUTOMATION) }
     var shouldLoadWildcard by rememberSaveable { mutableStateOf(false) }
     var shouldLoadAnalysis by rememberSaveable { mutableStateOf(false) }
@@ -67,7 +67,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     } else {
         null
     }
-    val analysisUiState = analysisViewModel?.uiState?.collectAsState()?.value
+    val analysisUiState = analysisViewModel?.uiState?.collectAsStateWithLifecycle()?.value
         ?: AnalysisUiState()
     val unusedAnalysisPromptState = remember { TextFieldState() }
     val analysisPromptState = analysisViewModel?.sourcePromptTextFieldState
@@ -80,7 +80,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     } else {
         null
     }
-    val wildcardUiState = wildcardViewModel?.uiState?.collectAsState()?.value
+    val wildcardUiState = wildcardViewModel?.uiState?.collectAsStateWithLifecycle()?.value
     val floatingBarController = remember(activity) {
         activity?.let(::FloatingAutomationBarController)
     }
@@ -268,6 +268,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onPasteFromClipboard = mainViewModel::pastePromptFromClipboard,
             onCloseGeminiApp = mainViewModel::closeGeminiApp,
             onTerminateGeminiApp = mainViewModel::terminateGeminiApp,
+            onCleanDeviceMemory = mainViewModel::cleanDeviceMemory,
             onTerminateSelfApp = mainViewModel::terminateSelfApp,
             onRepeatCountChange = mainViewModel::onRepeatCountChange,
             onRunAutomation = ::runAutomation,

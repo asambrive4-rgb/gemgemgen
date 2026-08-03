@@ -27,6 +27,8 @@ data class MainUiState(
     val canUndoPromptEdit: Boolean = false,
     val isClosingGemini: Boolean = false,
     val geminiCloseMessage: String = "",
+    val isCleaningMemory: Boolean = false,
+    val memoryCleanupMessage: String = "",
     /** 와일드카드 파일 기반 토큰 추천 후보 (입력창 위 칩용). */
     val wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
 ) {
@@ -47,13 +49,19 @@ data class MainUiState(
             isGeminiInstalled = environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning,
-            isClosingInProgress = isClosingGemini
+            isClosingInProgress = isClosingGemini || isCleaningMemory
         )
 
     val canCloseSelfApp: Boolean
         get() = SelfAppControlPolicy.canClose(
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning,
-            isClosingInProgress = isClosingGemini
+            isClosingInProgress = isClosingGemini || isCleaningMemory
         )
+
+    val canCleanMemory: Boolean
+        get() = environmentStatus.isAccessibilityServiceEnabled &&
+            !isRunning &&
+            !isCleaningMemory &&
+            !isClosingGemini
 }

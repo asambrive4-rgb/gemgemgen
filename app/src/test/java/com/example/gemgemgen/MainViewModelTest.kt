@@ -16,8 +16,11 @@ import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -754,6 +757,104 @@ class MainViewModelTest {
     }
 
     @Test
+    fun cleanDeviceMemory_updatesSuccessResult() {
+        val gateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
+        val viewModel = viewModel(
+            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(gateway)
+        )
+
+        viewModel.cleanDeviceMemory()
+
+        assertEquals(1, gateway.cleanCount)
+        assertTrue(!viewModel.uiState.value.isCleaningMemory)
+        assertTrue(viewModel.uiState.value.memoryCleanupMessage.contains("메모리 정리"))
+    }
+
+    @Test
+    fun cleanDeviceMemory_updatesFailureAndAccessibilityResults() {
+        val failureGateway = FakeMemoryCleanupGateway(
+            MemoryCleanupResult.Failure("clean button missing")
+        )
+        val failureViewModel = viewModel(
+            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(failureGateway)
+        )
+
+        failureViewModel.cleanDeviceMemory()
+
+        assertTrue(
+            failureViewModel.uiState.value.memoryCleanupMessage.contains("clean button missing")
+        )
+
+        val unavailableGateway = FakeMemoryCleanupGateway(
+            MemoryCleanupResult.AccessibilityUnavailable
+        )
+        val unavailableViewModel = viewModel(
+            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(unavailableGateway)
+        )
+
+        unavailableViewModel.cleanDeviceMemory()
+
+        assertTrue(
+            unavailableViewModel.uiState.value.memoryCleanupMessage.contains("접근성")
+        )
+    }
+
+    @Test
+    fun cleanDeviceMemory_isBlockedWhileAutomationRuns() {
+        val gateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
+        val runner = HoldingPromptAutomationGateway(
+            AutomationRunState.Running("running")
+        )
+        val viewModel = viewModel(
+            automationRunner = automation(service = runner),
+            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(gateway)
+        )
+        viewModel.onPromptTemplateChange("base")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+
+        viewModel.cleanDeviceMemory()
+
+        assertEquals(0, gateway.cleanCount)
+        assertTrue(viewModel.uiState.value.memoryCleanupMessage.contains("자동화"))
+    }
+
+    @Test
+    fun cleanDeviceMemory_blocksDuplicateCallsUntilFirstCompletes() {
+        val gateway = ControlledMemoryCleanupGateway()
+        val viewModel = viewModel(
+            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(gateway)
+        )
+
+        viewModel.cleanDeviceMemory()
+        assertTrue(gateway.started.await(2, TimeUnit.SECONDS))
+        viewModel.cleanDeviceMemory()
+
+        assertEquals(1, gateway.cleanCount)
+        assertTrue(viewModel.uiState.value.memoryCleanupMessage.contains("이미"))
+
+        gateway.result.complete(MemoryCleanupResult.Success)
+        waitUntil { !viewModel.uiState.value.isCleaningMemory }
+    }
+
+    @Test
+    fun cleanDeviceMemory_restoresStateWhenCanceled() {
+        val gateway = ControlledMemoryCleanupGateway()
+        val scope = CoroutineScope(Dispatchers.Unconfined + Job())
+        val viewModel = viewModel(
+            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(gateway),
+            coroutineScope = scope
+        )
+
+        viewModel.cleanDeviceMemory()
+        assertTrue(gateway.started.await(2, TimeUnit.SECONDS))
+
+        scope.cancel()
+
+        waitUntil { !viewModel.uiState.value.isCleaningMemory }
+        assertTrue(viewModel.uiState.value.memoryCleanupMessage.contains("취소"))
+    }
+
+    @Test
     fun terminateSelfApp_updatesResultMessage() {
         val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 1))
         val viewModel = viewModel(
@@ -887,6 +988,9 @@ class MainViewModelTest {
         closeGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
         terminateGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
         terminateSelfApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
+        cleanDeviceMemoryUseCase: CleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(
+            FakeMemoryCleanupGateway()
+        ),
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
@@ -903,6 +1007,7 @@ class MainViewModelTest {
             closeGeminiApp = closeGeminiApp,
             terminateGeminiApp = terminateGeminiApp,
             terminateSelfApp = terminateSelfApp,
+            cleanDeviceMemoryUseCase = cleanDeviceMemoryUseCase,
             dispatchers = dispatchers,
             coroutineScope = coroutineScope
         )
@@ -988,6 +1093,29 @@ class MainViewModelTest {
         override suspend fun closeGeminiApp(): CloseGeminiAppResult {
             closeCount += 1
             return result
+        }
+    }
+
+    private class FakeMemoryCleanupGateway(
+        private val result: MemoryCleanupResult = MemoryCleanupResult.Success
+    ) : MemoryCleanupGateway {
+        var cleanCount = 0
+
+        override suspend fun cleanMemory(): MemoryCleanupResult {
+            cleanCount += 1
+            return result
+        }
+    }
+
+    private class ControlledMemoryCleanupGateway : MemoryCleanupGateway {
+        val started = CountDownLatch(1)
+        val result = CompletableDeferred<MemoryCleanupResult>()
+        var cleanCount = 0
+
+        override suspend fun cleanMemory(): MemoryCleanupResult {
+            cleanCount += 1
+            started.countDown()
+            return result.await()
         }
     }
 
