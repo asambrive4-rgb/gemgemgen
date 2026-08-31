@@ -90,10 +90,10 @@ internal class FloatingAutomationBarController(
         currentPosition = position
 
         return WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            positionStore.barWidthPx(),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -138,7 +138,9 @@ internal class FloatingAutomationBarController(
     private fun clampX(value: Int): Int {
         val screenWidth = appContext.resources.displayMetrics.widthPixels
         val barWidth = positionStore.barWidthPx()
-        return min(max(value, 0), max(screenWidth - barWidth, 0))
+        val minX = min(0, screenWidth - barWidth)
+        val maxX = max(0, screenWidth - barWidth)
+        return min(max(value, minX), maxX)
     }
 
     private fun clampY(value: Int): Int {

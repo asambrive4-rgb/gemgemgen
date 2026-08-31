@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.analysis.domain.migrateLegacyAnalysisModelId
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
 import java.security.KeyStore
@@ -128,14 +129,23 @@ class AndroidEncryptedGeminiApiKeyRepository(
         val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
         val modelKey = roleModelKey(analysisRole.storageValue)
         val stored = prefs.getString(modelKey, null)
-        if (!stored.isNullOrBlank() && AnalysisProvider.isModelForProvider(stored, provider)) {
-            return stored
+        val migratedStored = stored?.let(::migrateLegacyAnalysisModelId)
+        if (!migratedStored.isNullOrBlank() &&
+            AnalysisProvider.isModelForProvider(migratedStored, provider)
+        ) {
+            if (migratedStored != stored) {
+                prefs.edit().putString(modelKey, migratedStored).apply()
+            }
+            return migratedStored
         }
         // 구버전 단일 모델 마이그레이션
         val legacy = prefs.getString(KEY_SELECTED_MODEL, null)
-        if (!legacy.isNullOrBlank() && AnalysisProvider.isModelForProvider(legacy, provider)) {
-            prefs.edit().putString(modelKey, legacy).apply()
-            return legacy
+        val migratedLegacy = legacy?.let(::migrateLegacyAnalysisModelId)
+        if (!migratedLegacy.isNullOrBlank() &&
+            AnalysisProvider.isModelForProvider(migratedLegacy, provider)
+        ) {
+            prefs.edit().putString(modelKey, migratedLegacy).apply()
+            return migratedLegacy
         }
         return if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
             AnalysisModelRole.defaultModel(analysisRole)
@@ -147,8 +157,9 @@ class AndroidEncryptedGeminiApiKeyRepository(
     override fun setRoleModel(role: String, modelId: String) {
         val analysisRole = AnalysisModelRole.fromStorage(role)
         val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
-        val normalized = if (AnalysisProvider.isModelForProvider(modelId, provider)) {
-            modelId
+        val migratedModelId = migrateLegacyAnalysisModelId(modelId)
+        val normalized = if (AnalysisProvider.isModelForProvider(migratedModelId, provider)) {
+            migratedModelId
         } else if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
             AnalysisModelRole.defaultModel(analysisRole)
         } else {

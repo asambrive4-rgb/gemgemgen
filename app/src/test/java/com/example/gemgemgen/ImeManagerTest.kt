@@ -139,10 +139,62 @@ class ImeManagerTest {
         assertEquals(NULL_IME_ID, settings.defaultImeId)
     }
 
+    @Test
+    fun switchToNullKeyboard_prioritizesEnabledCandidateWhenMultipleCandidatesExist() {
+        val candidate1 = "com.wparam.nullkeyboard/.NullInputMethod"
+        val candidate2 = "com.nilac.nullkeyboard/.NullKeyboardService"
+        val settings = FakeImeSettings(
+            defaultImeId = ORIGINAL_IME_ID,
+            enabledImeList = listOf("example.keyboard/.Ime", candidate2)
+        )
+        val manager = ImeManager(settings, listOf(candidate1, candidate2))
+
+        val result = manager.switchToNullKeyboard()
+
+        assertTrue(result is ImeSwitchResult.Success)
+        val session = (result as ImeSwitchResult.Success).session
+        assertEquals(ORIGINAL_IME_ID, session.originalImeId)
+        assertEquals(candidate2, session.targetImeId)
+        assertEquals(candidate2, settings.defaultImeId)
+        assertTrue(session.changed)
+    }
+
+    @Test
+    fun switchToNullKeyboard_fallsBackToNextCandidateWhenFirstFails() {
+        val candidate1 = "com.first.nullkeyboard/.Ime"
+        val candidate2 = "com.second.nullkeyboard/.Ime"
+        val settings = object : ImeSettings {
+            var currentIme: String? = ORIGINAL_IME_ID
+            val writes = mutableListOf<String>()
+
+            override fun getDefaultInputMethod(): String? = currentIme
+
+            override fun setDefaultInputMethod(imeId: String): Boolean {
+                writes += imeId
+                return if (imeId == candidate1) {
+                    false
+                } else {
+                    currentIme = imeId
+                    true
+                }
+            }
+        }
+        val manager = ImeManager(settings, listOf(candidate1, candidate2))
+
+        val result = manager.switchToNullKeyboard()
+
+        assertTrue(result is ImeSwitchResult.Success)
+        val session = (result as ImeSwitchResult.Success).session
+        assertEquals(candidate2, session.targetImeId)
+        assertEquals(candidate2, settings.currentIme)
+        assertEquals(listOf(candidate1, candidate2), settings.writes)
+    }
+
     private class FakeImeSettings(
         var defaultImeId: String?,
         private val writeResult: Boolean = true,
-        private val applyWrites: Boolean = true
+        private val applyWrites: Boolean = true,
+        private val enabledImeList: List<String> = emptyList()
     ) : ImeSettings {
         val writes = mutableListOf<String>()
 
@@ -157,6 +209,8 @@ class ImeManagerTest {
             }
             return true
         }
+
+        override fun getEnabledInputMethods(): List<String> = enabledImeList
     }
 
     private companion object {

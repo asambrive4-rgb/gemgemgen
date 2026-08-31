@@ -168,7 +168,7 @@ class GrokAuthUseCaseTest {
             if (role == "generation") generationProvider else "gemini"
         override fun setRoleProvider(role: String, providerId: String) = Unit
         override fun getRoleModel(role: String): String =
-            if (getRoleProvider(role) == "grok") "grok-4.5" else "gemini-3.5-flash"
+            if (getRoleProvider(role) == "grok") "grok-4.5" else "gemini-3.7-flash"
         override fun setRoleModel(role: String, modelId: String) = Unit
     }
 }

@@ -1,7 +1,9 @@
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldLineLimits
@@ -47,6 +49,8 @@ fun AppMultilineTextField(
     placeholder: String = "",
     minLines: Int,
     maxLines: Int = 18,
+    initialScrollToBottom: Boolean = true,
+    scrollState: ScrollState = rememberScrollState(),
     paragraphSelectionEnabled: Boolean = false,
     selectedParagraphRange: PromptParagraphRange? = null,
     selectedParagraphColor: Color = Color.Transparent,
@@ -90,6 +94,24 @@ fun AppMultilineTextField(
             // The text field updates its cursor from the same tap. Read it after that update settles.
             yield()
             onParagraphOffsetSelectedLatest(state.selection.end)
+        }
+    }
+
+    if (initialScrollToBottom) {
+        var initialScrollDone by remember(state) { mutableStateOf(false) }
+
+        LaunchedEffect(state, scrollState) {
+            if (initialScrollDone) return@LaunchedEffect
+            snapshotFlow {
+                val hasText = state.text.isNotEmpty()
+                val max = scrollState.maxValue
+                hasText to max
+            }.collect { (hasText, max) ->
+                if (hasText && max > 0 && !initialScrollDone) {
+                    scrollState.scrollTo(max)
+                    initialScrollDone = true
+                }
+            }
         }
     }
 
@@ -168,6 +190,7 @@ fun AppMultilineTextField(
             minHeightInLines = minLines,
             maxHeightInLines = maxLines
         ),
+        scrollState = scrollState,
         textStyle = TextStyle(fontFamily = FontFamily.Monospace)
     )
 }

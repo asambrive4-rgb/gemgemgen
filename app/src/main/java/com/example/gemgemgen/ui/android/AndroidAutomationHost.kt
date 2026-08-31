@@ -21,6 +21,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -38,6 +39,8 @@ import com.example.gemgemgen.ui.AutomationAppActions
 import com.example.gemgemgen.ui.MainActivity
 import com.example.gemgemgen.ui.MainTab
 import com.example.gemgemgen.ui.WildcardAppActions
+import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
+import com.example.gemgemgen.wildcard.android.WildcardFolderStore
 import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
 
 @Composable
@@ -101,13 +104,51 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
     }
 
-    fun selectWildcardFolder() {
+    fun launchWildcardFolderPicker() {
+        val initialUri = WildcardFolderStore.getFolderUri(context)
+        wildcardFolderLauncher.launch(initialUri)
+    }
+
+    fun openWildcardStorageSettings() {
+        val appSettingsIntent = Intent(
+            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+            "package:${context.packageName}".toUri()
+        )
+        try {
+            context.startActivity(appSettingsIntent)
+        } catch (_: android.content.ActivityNotFoundException) {
+            context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+        }
+    }
+
+    fun selectSafWildcardFolder() {
         if (wildcardViewModel == null || wildcardViewModel.requestFolderSelection()) {
-            wildcardFolderLauncher.launch(null)
+            launchWildcardFolderPicker()
         } else {
             shouldLoadWildcard = true
             selectedTab = MainTab.WILDCARD
         }
+    }
+
+    fun selectWildcardFolder() {
+        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
+            val viewModel = wildcardViewModel
+            if (viewModel != null) {
+                if (!viewModel.requestFolderSelection()) return
+                viewModel.onFolderChanged()
+            }
+            shouldLoadWildcard = true
+            selectedTab = MainTab.WILDCARD
+            mainViewModel.refreshStatus()
+            return
+        }
+
+        if (!mainUiState.environmentStatus.isWildcardDirectoryAccessible) {
+            openWildcardStorageSettings()
+            return
+        }
+
+        selectSafWildcardFolder()
     }
 
     fun selectMainTab(tab: MainTab) {
@@ -252,6 +293,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 mainViewModel::dismissAccessibilityPromptToSettings,
             onRefreshStatus = mainViewModel::refreshStatus,
             onSelectWildcardFolder = ::selectWildcardFolder,
+            onSelectSafWildcardFolder = ::selectSafWildcardFolder,
+            onOpenWildcardStorageSettings = ::openWildcardStorageSettings,
             onOpenAccessibilitySettings = {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             },
@@ -391,12 +434,12 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 onDismissClassifyOverwrite = viewModel::dismissClassifyOverwrite,
                 onConfirmPendingSave = {
                     viewModel.confirmPendingWithSave {
-                        wildcardFolderLauncher.launch(null)
+                        selectWildcardFolder()
                     }
                 },
                 onConfirmPendingDiscard = {
                     if (viewModel.confirmPendingWithDiscard()) {
-                        wildcardFolderLauncher.launch(null)
+                        selectWildcardFolder()
                     }
                 },
                 onCancelPending = viewModel::cancelPendingAction

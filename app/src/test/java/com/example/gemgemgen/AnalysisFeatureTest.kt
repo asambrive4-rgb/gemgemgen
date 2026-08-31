@@ -355,7 +355,7 @@ class AnalysisFeatureTest {
     @Test
     fun ensureForGeneration_usesMaskingModelNotGenerationModel() = runBlocking {
         val maskingModel = "gemini-3.1-flash-lite"
-        val generationModel = "gemini-3.5-flash"
+        val generationModel = "gemini-3.7-flash"
         val aiGateway = FakeAnalysisAiGateway(
             analyzeResponse = analysisJson(exactText = "blue dress"),
             generateResponse = """[{"text":"후보","explanation":"설명"}]"""

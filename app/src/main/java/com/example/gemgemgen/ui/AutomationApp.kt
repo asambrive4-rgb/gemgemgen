@@ -25,6 +25,8 @@ internal data class AutomationAppActions(
     val onDismissAccessibilityPromptToSettings: () -> Unit,
     val onRefreshStatus: () -> Unit,
     val onSelectWildcardFolder: () -> Unit,
+    val onSelectSafWildcardFolder: () -> Unit,
+    val onOpenWildcardStorageSettings: () -> Unit,
     val onOpenAccessibilitySettings: () -> Unit,
     val onTargetAppSelected: (AutomationTargetApp) -> Unit,
     val onPromptTemplateChange: (String) -> Unit,
@@ -163,6 +165,9 @@ internal fun AutomationApp(
                         automationActions.onDismissAccessibilityPromptToSettings,
                     onRefreshStatus = automationActions.onRefreshStatus,
                     onSelectWildcardFolder = automationActions.onSelectWildcardFolder,
+                    onSelectSafWildcardFolder = automationActions.onSelectSafWildcardFolder,
+                    onOpenWildcardStorageSettings =
+                        automationActions.onOpenWildcardStorageSettings,
                     onOpenAccessibilitySettings =
                         automationActions.onOpenAccessibilitySettings,
                     onTargetAppSelected = automationActions.onTargetAppSelected,

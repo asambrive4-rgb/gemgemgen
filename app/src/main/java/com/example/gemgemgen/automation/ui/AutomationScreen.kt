@@ -44,6 +44,8 @@ internal fun AutomationScreen(
     onDismissAccessibilityPromptToSettings: () -> Unit,
     onRefreshStatus: () -> Unit,
     onSelectWildcardFolder: () -> Unit,
+    onSelectSafWildcardFolder: () -> Unit,
+    onOpenWildcardStorageSettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
@@ -196,6 +198,8 @@ internal fun AutomationScreen(
                     onDismiss = onHideSettings,
                     onRefresh = onRefreshStatus,
                     onSelectWildcardFolder = onSelectWildcardFolder,
+                    onSelectSafWildcardFolder = onSelectSafWildcardFolder,
+                    onOpenWildcardStorageSettings = onOpenWildcardStorageSettings,
                     onOpenAccessibilitySettings = onOpenAccessibilitySettings
                 )
             }
@@ -217,6 +221,8 @@ private fun AutomationAppPreview() {
             onDismissAccessibilityPromptToSettings = {},
             onRefreshStatus = {},
             onSelectWildcardFolder = {},
+            onSelectSafWildcardFolder = {},
+            onOpenWildcardStorageSettings = {},
             onOpenAccessibilitySettings = {},
             onTargetAppSelected = {},
             onPromptTemplateChange = {},

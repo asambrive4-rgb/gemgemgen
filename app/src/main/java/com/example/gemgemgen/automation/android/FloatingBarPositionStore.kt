@@ -42,8 +42,7 @@ internal class FloatingBarPositionStore(
     }
 
     fun barWidthPx(): Int {
-        val screenWidth = appContext.resources.displayMetrics.widthPixels
-        return min(screenWidth - edgeMarginPx() * 2, dpToPx(MAX_BAR_WIDTH_DP))
+        return dpToPx(MAX_BAR_WIDTH_DP)
     }
 
     fun minVisibleHeightPx(): Int {
@@ -63,7 +62,7 @@ internal class FloatingBarPositionStore(
         const val KEY_X = "x"
         const val KEY_Y = "y"
         const val EDGE_MARGIN_DP = 16
-        const val MAX_BAR_WIDTH_DP = 420
+        const val MAX_BAR_WIDTH_DP = 470
         const val MIN_VISIBLE_HEIGHT_DP = 96
     }
 }

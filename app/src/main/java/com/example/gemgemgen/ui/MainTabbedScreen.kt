@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -16,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -117,48 +119,54 @@ internal fun MainTabbedScreen(
         }
 
         Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(38.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    PrimaryTabRow(
-                        selectedTabIndex = selectedTabIndex,
-                        modifier = Modifier.height(38.dp)
-                    ) {
-                        tabs.forEach { page ->
-                            Tab(
-                                selected = selectedTab == page.tab,
-                                onClick = {
-                                    if (page.tab != selectedTab) {
-                                        // VM 로딩 등은 즉시, 페이지 애니메이션은 selectedTab 동기화
-                                        onSelectTab(page.tab)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .height(38.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        PrimaryTabRow(
+                            selectedTabIndex = selectedTabIndex,
+                            modifier = Modifier.height(38.dp)
+                        ) {
+                            tabs.forEach { page ->
+                                Tab(
+                                    selected = selectedTab == page.tab,
+                                    onClick = {
+                                        if (page.tab != selectedTab) {
+                                            // VM 로딩 등은 즉시, 페이지 애니메이션은 selectedTab 동기화
+                                            onSelectTab(page.tab)
+                                        }
+                                    },
+                                    modifier = Modifier.height(38.dp),
+                                    text = {
+                                        Text(
+                                            text = page.tab.label,
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
                                     }
-                                },
-                                modifier = Modifier.height(38.dp),
-                                text = {
-                                    Text(
-                                        text = page.tab.label,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-                            )
+                                )
+                            }
                         }
                     }
-                }
-                IconButton(
-                    onClick = onShowSettings,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .padding(horizontal = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "설정",
-                        modifier = Modifier.size(22.dp)
-                    )
+                    IconButton(
+                        onClick = onShowSettings,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .padding(horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "설정",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
 

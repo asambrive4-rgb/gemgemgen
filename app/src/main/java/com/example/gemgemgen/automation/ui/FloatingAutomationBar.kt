@@ -10,14 +10,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import kotlinx.coroutines.flow.StateFlow
-import kotlin.math.max
-import kotlin.math.min
 
 @Composable
 internal fun FloatingAutomationBarOverlay(
@@ -55,18 +51,10 @@ private fun FloatingAutomationBar(
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit
 ) {
-    val configuration = LocalConfiguration.current
-    val width = with(LocalDensity.current) {
-        min(
-            420.dp.toPx(),
-            max(280.dp.toPx(), configuration.screenWidthDp.dp.toPx() - 32.dp.toPx())
-        ).toDp()
-    }
-
     GemgemgenTheme {
         Box(
             modifier = Modifier
-                .width(width)
+                .width(470.dp)
                 .padding(8.dp)
                 .pointerInput(Unit) {
                     detectDragGesturesAfterLongPress(

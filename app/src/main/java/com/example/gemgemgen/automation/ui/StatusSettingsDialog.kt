@@ -62,6 +62,8 @@ internal fun StatusSettingsDialog(
     onDismiss: () -> Unit,
     onRefresh: () -> Unit,
     onSelectWildcardFolder: () -> Unit,
+    onSelectSafWildcardFolder: () -> Unit,
+    onOpenWildcardStorageSettings: () -> Unit,
     onOpenAccessibilitySettings: () -> Unit
 ) {
     AlertDialog(
@@ -100,6 +102,16 @@ internal fun StatusSettingsDialog(
                 StatusRow("wildcard 편집 권한", status.isWildcardDirectoryWritable)
                 StatusRow("프롬프트", hasPromptTemplate)
 
+                if (!status.isWildcardDirectoryAccessible) {
+                    Text(
+                        text = "Android 14 이상에서는 시스템 파일 선택기가 Download/Documents 하위 폴더를 차단할 수 있습니다. 기존 경로를 사용하려면 공유 저장소 접근을 허용하세요.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(onClick = onOpenWildcardStorageSettings) {
+                        Text("공유 저장소 접근 설정")
+                    }
+                }
+
                 if (!status.isAccessibilityServiceEnabled) {
                     Button(onClick = onOpenAccessibilitySettings) {
                         Text("접근성 설정 열기")
@@ -108,6 +120,9 @@ internal fun StatusSettingsDialog(
 
                 OutlinedButton(onClick = onSelectWildcardFolder) {
                     Text("wildcard 폴더 선택")
+                }
+                TextButton(onClick = onSelectSafWildcardFolder) {
+                    Text("SAF로 허용된 다른 폴더 선택")
                 }
 
                 if (!status.hasWriteSecureSettingsPermission && setupInfo.adbGrantCommand.isNotBlank()) {

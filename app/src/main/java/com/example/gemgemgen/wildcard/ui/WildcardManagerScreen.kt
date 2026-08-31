@@ -55,9 +55,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
@@ -1149,9 +1149,9 @@ private fun ClassifyCriteriaDialog(
                                 onClick = { onModelSelected(MODEL_GEMINI_3_6_FLASH) }
                             )
                             ClassifyModelChip(
-                                label = "3.5 Flash",
-                                selected = modelId == MODEL_GEMINI_3_5_FLASH,
-                                onClick = { onModelSelected(MODEL_GEMINI_3_5_FLASH) }
+                                label = "3.7 Flash",
+                                selected = modelId == MODEL_GEMINI_3_7_FLASH,
+                                onClick = { onModelSelected(MODEL_GEMINI_3_7_FLASH) }
                             )
                         }
                         AnalysisProvider.GROK -> {

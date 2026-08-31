@@ -4,8 +4,13 @@ import com.example.gemgemgen.core.AppDefaults
 
 class ImeManager(
     private val settings: ImeSettings,
-    private val nullKeyboardImeId: String = AppDefaults.NULL_KEYBOARD_IME_ID
+    private val nullKeyboardCandidates: List<String> = AppDefaults.NULL_KEYBOARD_IME_CANDIDATES
 ) {
+    constructor(settings: ImeSettings, nullKeyboardImeId: String) : this(
+        settings = settings,
+        nullKeyboardCandidates = listOf(nullKeyboardImeId)
+    )
+
     fun switchToNullKeyboard(): ImeSwitchResult {
         val originalImeId = settings.getDefaultInputMethod()
         if (originalImeId.isNullOrBlank()) {
@@ -15,41 +20,54 @@ class ImeManager(
             )
         }
 
-        if (originalImeId == nullKeyboardImeId) {
+        val currentMatchingCandidate = nullKeyboardCandidates.firstOrNull { it == originalImeId }
+        if (currentMatchingCandidate != null) {
             return ImeSwitchResult.Success(
                 session = ImeSwitchSession(
                     originalImeId = originalImeId,
-                    targetImeId = nullKeyboardImeId,
+                    targetImeId = currentMatchingCandidate,
                     changed = false
                 )
             )
         }
 
-        if (!settings.setDefaultInputMethod(nullKeyboardImeId)) {
-            return ImeSwitchResult.Failure(
-                message = "Null Keyboard로 전환하지 못했습니다.",
-                originalImeId = originalImeId
-            )
+        val enabledImeIds = settings.getEnabledInputMethods()
+        val orderedCandidates = if (enabledImeIds.isNotEmpty()) {
+            val enabledCandidates = nullKeyboardCandidates.filter { candidate ->
+                enabledImeIds.any { enabled -> enabled.equals(candidate, ignoreCase = true) }
+            }
+            val remainingCandidates = nullKeyboardCandidates.filterNot { it in enabledCandidates }
+            enabledCandidates + remainingCandidates
+        } else {
+            nullKeyboardCandidates
+        }
+
+        for (candidate in orderedCandidates) {
+            if (!settings.setDefaultInputMethod(candidate)) {
+                continue
+            }
+
+            val currentImeId = settings.getDefaultInputMethod()
+            if (currentImeId == candidate) {
+                return ImeSwitchResult.Success(
+                    session = ImeSwitchSession(
+                        originalImeId = originalImeId,
+                        targetImeId = candidate,
+                        changed = true
+                    )
+                )
+            }
         }
 
         val currentImeId = settings.getDefaultInputMethod()
-        return if (currentImeId == nullKeyboardImeId) {
-            ImeSwitchResult.Success(
-                session = ImeSwitchSession(
-                    originalImeId = originalImeId,
-                    targetImeId = nullKeyboardImeId,
-                    changed = true
-                )
-            )
-        } else {
-            if (currentImeId != originalImeId) {
-                settings.setDefaultInputMethod(originalImeId)
-            }
-            ImeSwitchResult.Failure(
-                message = "Null Keyboard로 전환하지 못했습니다.",
-                originalImeId = originalImeId
-            )
+        if (currentImeId != originalImeId && currentImeId != null) {
+            settings.setDefaultInputMethod(originalImeId)
         }
+
+        return ImeSwitchResult.Failure(
+            message = "Null Keyboard로 전환하지 못했습니다.",
+            originalImeId = originalImeId
+        )
     }
 
     fun restore(session: ImeSwitchSession): ImeRestoreResult {
@@ -66,7 +84,6 @@ class ImeManager(
             )
         }
     }
-
 }
 
 data class ImeSwitchSession(
@@ -94,5 +111,6 @@ sealed interface ImeRestoreResult {
 interface ImeSettings {
     fun getDefaultInputMethod(): String?
     fun setDefaultInputMethod(imeId: String): Boolean
+    fun getEnabledInputMethods(): List<String> = emptyList()
 }
 

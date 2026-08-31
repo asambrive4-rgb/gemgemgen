@@ -14,6 +14,7 @@ import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.environment.usecase.EnvironmentGateway
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderAccessChecker
+import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
 import com.example.gemgemgen.wildcard.android.WildcardFolderStore
 
 class AndroidEnvironmentGateway(
@@ -24,9 +25,25 @@ class AndroidEnvironmentGateway(
     private val accessibilityStatus = AndroidAccessibilityServiceStatus(appContext)
     private val secureSettingsPermission = AndroidSecureSettingsPermissionChecker(appContext)
     private val wildcardDirectoryStatus = AndroidWildcardDirectoryStatus(appContext)
+    private val wildcardDirectStorage = AndroidWildcardDirectStorage()
 
     override fun check(): EnvironmentReport {
         val wildcardFolderUri = wildcardDirectoryStatus.folderUri()
+        val hasAllFilesAccess = AndroidWildcardDirectStorage.hasAllFilesAccess()
+        val directFolder = if (hasAllFilesAccess) {
+            runCatching { wildcardDirectStorage.ensureFolder() }.getOrNull()
+        } else {
+            null
+        }
+        val enabledImeList = try {
+            val imm = appContext.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+            imm?.enabledInputMethodList?.map { it.id }.orEmpty()
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        val targetImeId = AppDefaults.NULL_KEYBOARD_IME_CANDIDATES.firstOrNull { candidate ->
+            enabledImeList.any { enabled -> enabled.equals(candidate, ignoreCase = true) }
+        } ?: AppDefaults.NULL_KEYBOARD_IME_ID
 
         return EnvironmentReport(
             status = EnvironmentStatus(
@@ -38,14 +55,24 @@ class AndroidEnvironmentGateway(
                 ),
                 isAccessibilityServiceEnabled = accessibilityStatus.isEnabled(),
                 hasWriteSecureSettingsPermission = secureSettingsPermission.isGranted(),
-                isWildcardDirectoryAccessible = wildcardFolderUri != null &&
-                    wildcardDirectoryStatus.canRead(wildcardFolderUri),
-                isWildcardDirectoryWritable = wildcardFolderUri != null &&
-                    wildcardDirectoryStatus.canWrite(wildcardFolderUri)
+                isWildcardDirectoryAccessible = if (hasAllFilesAccess) {
+                    directFolder != null && wildcardDirectStorage.canReadFolder()
+                } else {
+                    wildcardFolderUri != null && wildcardDirectoryStatus.canRead(wildcardFolderUri)
+                },
+                isWildcardDirectoryWritable = if (hasAllFilesAccess) {
+                    directFolder != null && wildcardDirectStorage.canWriteFolder()
+                } else {
+                    wildcardFolderUri != null && wildcardDirectoryStatus.canWrite(wildcardFolderUri)
+                }
             ),
             setupInfo = EnvironmentSetupInfo(
-                wildcardDirectoryPath = wildcardFolderUri?.toString().orEmpty(),
-                nullKeyboardTargetImeId = AppDefaults.NULL_KEYBOARD_IME_ID,
+                wildcardDirectoryPath = if (hasAllFilesAccess) {
+                    directFolder?.absolutePath ?: wildcardDirectStorage.folderPath()
+                } else {
+                    wildcardFolderUri?.toString().orEmpty()
+                },
+                nullKeyboardTargetImeId = targetImeId,
                 adbGrantCommand =
                     "adb shell pm grant ${appContext.packageName} android.permission.WRITE_SECURE_SETTINGS"
             )
