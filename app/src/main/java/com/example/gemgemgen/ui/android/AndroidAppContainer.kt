@@ -22,31 +22,27 @@ import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
-import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
-import com.example.gemgemgen.automation.android.AndroidImeSettings
 import com.example.gemgemgen.automation.android.AndroidOverlayPermissionGateway
-import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
-import com.example.gemgemgen.automation.android.ProcessAutomationHolder
+import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CleanDeviceMemoryUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
-import com.example.gemgemgen.automation.usecase.ImeManager
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
-import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
 import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
-import com.example.gemgemgen.wildcard.android.AndroidWildcardSetRepository
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
 import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
+import com.example.gemgemgen.remote.android.AndroidRemoteAutomationGateway
+import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 
 class AndroidAppContainer(context: Context) {
     private val appContext = context.applicationContext
@@ -79,16 +75,7 @@ class AndroidAppContainer(context: Context) {
                 AndroidWildcardFolderRepository(appContext)
             ),
             lastRunSnapshotStore = lastRunSnapshotStore,
-            automation = ProcessAutomationHolder.getOrCreate {
-                RunAutomationUseCase(
-                    imeManager = ImeManager(AndroidImeSettings(appContext)),
-                    lastRunSnapshotStore = lastRunSnapshotStore,
-                    clipboardGateway = clipboardGateway,
-                    wildcardSetRepository = AndroidWildcardSetRepository(appContext),
-                    promptGatewayProvider = ActivePromptAutomationGatewayProvider,
-                    targetAppLauncher = AndroidTargetAppLauncher(appContext)
-                )
-            },
+            automation = AndroidAutomationRuntimeProvider.get(appContext),
             closeGeminiApp = CloseGeminiAppUseCase(
                 AndroidGeminiAppCloser(appContext)
             ),
@@ -104,7 +91,10 @@ class AndroidAppContainer(context: Context) {
             checkAutomationStart = CheckAutomationStartUseCase(
                 AndroidOverlayPermissionGateway(appContext)
             ),
-            wildcardFileRepository = AndroidWildcardFileRepository(appContext)
+            wildcardFileRepository = AndroidWildcardFileRepository(appContext),
+            manageRemoteAutomation = ManageRemoteAutomationUseCase(
+                AndroidRemoteAutomationGateway(appContext)
+            )
         )
     }
 

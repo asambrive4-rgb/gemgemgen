@@ -16,14 +16,21 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Wifi
+import com.example.gemgemgen.ui.theme.OnRemoteStartGreenDark
+import com.example.gemgemgen.ui.theme.RemoteStartGreen
+import com.example.gemgemgen.ui.theme.RemoteStartGreenDark
 
 @Composable
 internal fun AutomationActionBar(
@@ -34,10 +41,12 @@ internal fun AutomationActionBar(
     canRun: Boolean,
     isRunning: Boolean,
     automationState: AutomationRunState,
+    isRemoteSendMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val statusText = AutomationUiText.statusText(automationState)
     val isError = automationState is AutomationRunState.Failure
+    val isDarkTheme = isSystemInDarkTheme()
 
     val dotColor = when {
         isError -> MaterialTheme.colorScheme.error
@@ -68,11 +77,35 @@ internal fun AutomationActionBar(
                     Button(
                         onClick = onRunMvp,
                         enabled = canRun,
+                        colors = if (isRemoteSendMode) {
+                            ButtonDefaults.buttonColors(
+                                containerColor = if (isDarkTheme) {
+                                    RemoteStartGreenDark
+                                } else {
+                                    RemoteStartGreen
+                                },
+                                contentColor = if (isDarkTheme) {
+                                    OnRemoteStartGreenDark
+                                } else {
+                                    androidx.compose.ui.graphics.Color.White
+                                }
+                            )
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(34.dp)
                     ) {
+                        if (isRemoteSendMode) {
+                            Icon(
+                                imageVector = Icons.Default.Wifi,
+                                contentDescription = "Wi-Fi 송신",
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                        }
                         Text("시작", style = MaterialTheme.typography.labelMedium)
                     }
                 } else {

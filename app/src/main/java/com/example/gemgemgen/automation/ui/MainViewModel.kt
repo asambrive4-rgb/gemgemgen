@@ -37,6 +37,10 @@ import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
 import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
+import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
+import com.example.gemgemgen.remote.usecase.NoOpRemoteAutomationGateway
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -85,6 +89,8 @@ class MainViewModel(
     private val checkAutomationStart: CheckAutomationStartUseCase =
         CheckAutomationStartUseCase(OverlayPermissionGateway { true }),
     private val wildcardFileRepository: WildcardFileRepository = EmptyWildcardFileRepository,
+    private val manageRemoteAutomation: ManageRemoteAutomationUseCase =
+        ManageRemoteAutomationUseCase(NoOpRemoteAutomationGateway()),
     private val dispatchers: AppDispatchers = AppDispatchers(),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
@@ -107,6 +113,26 @@ class MainViewModel(
         scope.launch {
             automation.runState.collect { state ->
                 handleAutomationState(state)
+            }
+        }
+        scope.launch {
+            manageRemoteAutomation.status.collect { status ->
+                _uiState.update { current ->
+                    current.copy(
+                        automationMode = status.mode,
+                        remoteAutomationStatus = status,
+                        automationState = if (status.mode == AutomationMode.NORMAL) {
+                            current.automationState
+                        } else {
+                            status.automationState
+                        }
+                    )
+                }
+                if (status.mode != AutomationMode.NORMAL) {
+                    _automationBarUiState.update {
+                        it.copy(automationState = status.automationState)
+                    }
+                }
             }
         }
         loadInitialState()
@@ -198,6 +224,7 @@ class MainViewModel(
     fun onRepeatCountChange(value: String) {
         val normalized = RepeatCountParser.normalizeInput(value)
         if (_uiState.value.isRunning) {
+            if (_uiState.value.automationMode == AutomationMode.SENDER) return
             if (normalized.isEmpty()) {
                 publishRepeatCountText(normalized)
                 return
@@ -697,6 +724,32 @@ class MainViewModel(
     fun runAutomation(): AutomationStartDecision {
         syncPromptTemplateFromTextField()
         val state = uiState.value
+        if (state.automationMode == AutomationMode.RECEIVER) {
+            return AutomationStartDecision.Rejected
+        }
+        if (state.automationMode == AutomationMode.SENDER) {
+            if (!state.canRun || automationPreparationJob?.isActive == true) {
+                return AutomationStartDecision.Rejected
+            }
+            cancelParagraphSelection()
+            handleAutomationState(AutomationRunState.Running("S25 FE로 요청 전송 중"))
+            val request = AutomationRunRequest(
+                promptTemplate = state.promptTemplate,
+                repeatCountText = state.repeatCountText,
+                targetApp = state.selectedTargetApp
+            )
+            val job = scope.launch {
+                val result = manageRemoteAutomation.start(request, ::handleAutomationState)
+                if (result is RemoteActionResult.Failure) {
+                    handleAutomationState(AutomationRunState.Failure(result.message))
+                }
+            }
+            automationPreparationJob = job
+            job.invokeOnCompletion {
+                if (automationPreparationJob == job) automationPreparationJob = null
+            }
+            return AutomationStartDecision.RemoteStarted
+        }
         val decision = checkAutomationStart.decide(
             canRun = state.canRun,
             isStartInProgress = automationPreparationJob?.isActive == true
@@ -732,6 +785,13 @@ class MainViewModel(
     }
 
     fun cancelAutomation() {
+        if (_uiState.value.automationMode == AutomationMode.SENDER) {
+            val preparationJob = automationPreparationJob
+            automationPreparationJob = null
+            manageRemoteAutomation.forceStop(::handleAutomationState)
+            preparationJob?.cancel()
+            return
+        }
         val preparationJob = automationPreparationJob
         if (preparationJob?.isActive == true) {
             preparationJob.cancel()
@@ -740,6 +800,28 @@ class MainViewModel(
         }
 
         automation.cancel()
+    }
+
+    fun onAutomationModeSelected(mode: AutomationMode) {
+        if (_uiState.value.isRunning) return
+        handleAutomationState(AutomationRunState.Idle)
+        manageRemoteAutomation.selectMode(mode)
+    }
+
+    fun pairRemoteDevice(pairingCode: String) {
+        if (_uiState.value.automationMode != AutomationMode.SENDER) return
+        scope.launch {
+            val result = manageRemoteAutomation.pair(pairingCode)
+            if (result is RemoteActionResult.Failure) {
+                _uiState.update { state ->
+                    state.copy(
+                        remoteAutomationStatus = state.remoteAutomationStatus.copy(
+                            connectionMessage = result.message
+                        )
+                    )
+                }
+            }
+        }
     }
 
     private fun loadInitialState() {

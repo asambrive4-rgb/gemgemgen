@@ -14,8 +14,41 @@ import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 
 class MainUiStateTest {
+    @Test
+    fun canRun_senderMode_usesPairedRemoteDeviceInsteadOfLocalEnvironment() {
+        assertTrue(
+            MainUiState(
+                promptTemplate = "remote prompt",
+                environmentStatus = EnvironmentStatus(),
+                automationMode = AutomationMode.SENDER,
+                remoteAutomationStatus = RemoteAutomationStatus(
+                    mode = AutomationMode.SENDER,
+                    discoveredDeviceName = "S25 FE",
+                    isPaired = true
+                )
+            ).canRun
+        )
+    }
+
+    @Test
+    fun canRun_receiverMode_neverStartsFromLocalStartButton() {
+        assertFalse(
+            MainUiState(
+                promptTemplate = "prompt",
+                environmentStatus = readyEnvironment(),
+                automationMode = AutomationMode.RECEIVER,
+                remoteAutomationStatus = RemoteAutomationStatus(
+                    mode = AutomationMode.RECEIVER,
+                    isReceiverRunning = true
+                )
+            ).canRun
+        )
+    }
+
     @Test
     fun canRun_requiresReadyEnvironmentPromptAndNotRunning() {
         assertTrue(

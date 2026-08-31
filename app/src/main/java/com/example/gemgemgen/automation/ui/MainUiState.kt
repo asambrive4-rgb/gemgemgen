@@ -9,6 +9,8 @@ import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
+import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 
 data class MainUiState(
     val promptTemplate: String = "",
@@ -17,6 +19,8 @@ data class MainUiState(
     val environmentStatus: EnvironmentStatus = EnvironmentStatus(),
     val environmentSetupInfo: EnvironmentSetupInfo = EnvironmentSetupInfo(),
     val automationState: AutomationRunState = AutomationRunState.Idle,
+    val automationMode: AutomationMode = AutomationMode.NORMAL,
+    val remoteAutomationStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
     val showSettings: Boolean = false,
     val showAccessibilityPrompt: Boolean = false,
     val settingsMessage: String = "",
@@ -42,7 +46,13 @@ data class MainUiState(
         get() = environmentStatus.isReadyFor(selectedTargetApp) && hasPromptTemplate
 
     val canRun: Boolean
-        get() = hasRunRequirements && !isRunning
+        get() = when (automationMode) {
+            AutomationMode.NORMAL -> hasRunRequirements && !isRunning
+            AutomationMode.SENDER -> hasPromptTemplate &&
+                remoteAutomationStatus.canSend &&
+                !isRunning
+            AutomationMode.RECEIVER -> false
+        }
 
     val canCloseGemini: Boolean
         get() = GeminiAppControlPolicy.canClose(

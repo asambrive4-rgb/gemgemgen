@@ -18,6 +18,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -26,6 +30,9 @@ import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.ui.AutomationModePairDialog
+import com.example.gemgemgen.remote.ui.AutomationModePanel
 
 /** 스크롤 본문·키보드 하단 고정 패널이 같은 가로 폭을 쓰도록 공통 패딩 */
 private val AutomationScreenContentPadding = 8.dp
@@ -64,9 +71,12 @@ internal fun AutomationScreen(
     onTerminateSelfApp: () -> Unit,
     onRepeatCountChange: (String) -> Unit,
     onRunMvp: () -> Unit,
-    onCancelAutomation: () -> Unit
+    onCancelAutomation: () -> Unit,
+    onAutomationModeSelected: (AutomationMode) -> Unit,
+    onPairRemoteDevice: (String) -> Unit
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    var showPairDialog by remember { mutableStateOf(false) }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Box(
@@ -119,7 +129,7 @@ internal fun AutomationScreen(
                     onPasteFromClipboard = onPasteFromClipboard
                 )
 
-                if (!isKeyboardVisible) {
+                if (!isKeyboardVisible && uiState.automationMode != AutomationMode.RECEIVER) {
                     AutomationActionBar(
                         repeatCountText = uiState.repeatCountText,
                         onRepeatCountChange = onRepeatCountChange,
@@ -127,10 +137,21 @@ internal fun AutomationScreen(
                         onCancelAutomation = onCancelAutomation,
                         canRun = uiState.canRun,
                         isRunning = uiState.isRunning,
-                        automationState = automationBarUiState.automationState
+                        automationState = automationBarUiState.automationState,
+                        isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
                     )
-                } else {
+                } else if (isKeyboardVisible) {
                     Spacer(modifier = Modifier.height(144.dp))
+                }
+
+                if (!isKeyboardVisible) {
+                    AutomationModePanel(
+                        selectedMode = uiState.automationMode,
+                        status = uiState.remoteAutomationStatus,
+                        enabled = !uiState.isRunning,
+                        onModeSelected = onAutomationModeSelected,
+                        onRequestPair = { showPairDialog = true }
+                    )
                 }
             }
 
@@ -170,15 +191,19 @@ internal fun AutomationScreen(
                             onPasteFromClipboard = onPasteFromClipboard
                         )
 
-                        AutomationActionBar(
-                            repeatCountText = uiState.repeatCountText,
-                            onRepeatCountChange = onRepeatCountChange,
-                            onRunMvp = onRunMvp,
-                            onCancelAutomation = onCancelAutomation,
-                            canRun = uiState.canRun,
-                            isRunning = uiState.isRunning,
-                            automationState = automationBarUiState.automationState
-                        )
+                        if (uiState.automationMode != AutomationMode.RECEIVER) {
+                            AutomationActionBar(
+                                repeatCountText = uiState.repeatCountText,
+                                onRepeatCountChange = onRepeatCountChange,
+                                onRunMvp = onRunMvp,
+                                onCancelAutomation = onCancelAutomation,
+                                canRun = uiState.canRun,
+                                isRunning = uiState.isRunning,
+                                automationState = automationBarUiState.automationState,
+                                isRemoteSendMode =
+                                    uiState.automationMode == AutomationMode.SENDER
+                            )
+                        }
                     }
                 }
             }
@@ -201,6 +226,18 @@ internal fun AutomationScreen(
                     onSelectSafWildcardFolder = onSelectSafWildcardFolder,
                     onOpenWildcardStorageSettings = onOpenWildcardStorageSettings,
                     onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                )
+            }
+            if (showPairDialog) {
+                AutomationModePairDialog(
+                    targetDeviceName = uiState.remoteAutomationStatus.discoveredDeviceName.ifBlank { "S25 FE" },
+                    onConfirm = { code ->
+                        onPairRemoteDevice(code)
+                        showPairDialog = false
+                    },
+                    onDismiss = {
+                        showPairDialog = false
+                    }
                 )
             }
         }
@@ -240,7 +277,9 @@ private fun AutomationAppPreview() {
             onTerminateSelfApp = {},
             onRepeatCountChange = {},
             onRunMvp = {},
-            onCancelAutomation = {}
+            onCancelAutomation = {},
+            onAutomationModeSelected = {},
+            onPairRemoteDevice = {}
         )
     }
 }

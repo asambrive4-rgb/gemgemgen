@@ -1,7 +1,10 @@
 package com.example.gemgemgen.ui.android
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -22,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.core.net.toUri
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -42,6 +46,7 @@ import com.example.gemgemgen.ui.WildcardAppActions
 import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
 import com.example.gemgemgen.wildcard.android.WildcardFolderStore
 import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
+import com.example.gemgemgen.remote.domain.AutomationMode
 
 @Composable
 fun AndroidAutomationHost(container: AndroidAppContainer) {
@@ -87,6 +92,9 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val floatingBarController = remember(activity) {
         activity?.let(::FloatingAutomationBarController)
     }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -213,6 +221,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 )
                 activity?.moveTaskToBack(true)
             }
+            AutomationStartDecision.RemoteStarted -> Unit
             AutomationStartDecision.PermissionRequired -> {
                 Toast.makeText(
                     context,
@@ -228,6 +237,19 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             }
             AutomationStartDecision.Rejected -> Unit
         }
+    }
+
+    fun selectAutomationMode(mode: AutomationMode) {
+        if (mode == AutomationMode.RECEIVER &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        mainViewModel.onAutomationModeSelected(mode)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -315,7 +337,9 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onTerminateSelfApp = mainViewModel::terminateSelfApp,
             onRepeatCountChange = mainViewModel::onRepeatCountChange,
             onRunAutomation = ::runAutomation,
-            onCancelAutomation = mainViewModel::cancelAutomation
+            onCancelAutomation = mainViewModel::cancelAutomation,
+            onAutomationModeSelected = ::selectAutomationMode,
+            onPairRemoteDevice = mainViewModel::pairRemoteDevice
         ),
         analysisActions = AnalysisAppActions(
             onClearFocus = clearInputFocus,

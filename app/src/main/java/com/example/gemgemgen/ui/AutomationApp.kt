@@ -15,6 +15,7 @@ import com.example.gemgemgen.automation.ui.MainUiState
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.ui.WildcardManagerScreen
 import com.example.gemgemgen.wildcard.ui.WildcardManagerUiState
+import com.example.gemgemgen.remote.domain.AutomationMode
 
 internal data class AutomationAppActions(
     val onSelectTab: (MainTab) -> Unit,
@@ -45,7 +46,9 @@ internal data class AutomationAppActions(
     val onTerminateSelfApp: () -> Unit,
     val onRepeatCountChange: (String) -> Unit,
     val onRunAutomation: () -> Unit,
-    val onCancelAutomation: () -> Unit
+    val onCancelAutomation: () -> Unit,
+    val onAutomationModeSelected: (AutomationMode) -> Unit,
+    val onPairRemoteDevice: (String) -> Unit
 )
 
 internal data class WildcardAppActions(
@@ -193,7 +196,9 @@ internal fun AutomationApp(
                     onTerminateSelfApp = automationActions.onTerminateSelfApp,
                     onRepeatCountChange = automationActions.onRepeatCountChange,
                     onRunMvp = automationActions.onRunAutomation,
-                    onCancelAutomation = automationActions.onCancelAutomation
+                    onCancelAutomation = automationActions.onCancelAutomation,
+                    onAutomationModeSelected = automationActions.onAutomationModeSelected,
+                    onPairRemoteDevice = automationActions.onPairRemoteDevice
                 )
             },
             MainTabPage(MainTab.ANALYSIS) {

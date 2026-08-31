@@ -6,6 +6,7 @@ fun interface OverlayPermissionGateway {
 
 sealed interface AutomationStartDecision {
     data object Started : AutomationStartDecision
+    data object RemoteStarted : AutomationStartDecision
     data object PermissionRequired : AutomationStartDecision
     data object Rejected : AutomationStartDecision
 }
