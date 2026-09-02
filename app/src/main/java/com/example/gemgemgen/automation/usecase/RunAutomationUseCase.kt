@@ -30,8 +30,11 @@ class RunAutomationUseCase(
     promptGenerator: PromptGenerator = PromptGenerator(),
     private val generateFinalPrompt: ((String, List<WildcardSet>, Int) -> String)? = null,
     private val runPreparer: AutomationRunPreparer = AutomationRunPreparer(
-        lastRunSnapshotStore = lastRunSnapshotStore,
-        clipboardGateway = clipboardGateway,
+        automationStartRecorder = RecordAutomationStartUseCase(
+            lastRunSnapshotStore = lastRunSnapshotStore,
+            clipboardGateway = clipboardGateway,
+            dispatchers = dispatchers
+        ),
         wildcardSetRepository = wildcardSetRepository,
         dispatchers = dispatchers,
         promptGenerator = promptGenerator

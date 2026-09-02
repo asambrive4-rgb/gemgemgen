@@ -29,6 +29,7 @@ import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CleanDeviceMemoryUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
+import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
@@ -50,6 +51,10 @@ class AndroidAppContainer(context: Context) {
         SharedPreferencesLastRunSnapshotRepository(appContext)
     )
     private val clipboardGateway = AndroidClipboardGateway(appContext)
+    private val recordAutomationStart = RecordAutomationStartUseCase(
+        lastRunSnapshotStore = lastRunSnapshotStore,
+        clipboardGateway = clipboardGateway
+    )
     private val geminiApiKeyRepository = AndroidEncryptedGeminiApiKeyRepository(appContext)
     private val analysisAiGateway = RoutingAnalysisAiGateway(
         gemini = AndroidGeminiAnalysisGateway(),
@@ -93,7 +98,8 @@ class AndroidAppContainer(context: Context) {
             ),
             wildcardFileRepository = AndroidWildcardFileRepository(appContext),
             manageRemoteAutomation = ManageRemoteAutomationUseCase(
-                AndroidRemoteAutomationGateway(appContext)
+                gateway = AndroidRemoteAutomationGateway(appContext),
+                automationStartRecorder = recordAutomationStart
             )
         )
     }

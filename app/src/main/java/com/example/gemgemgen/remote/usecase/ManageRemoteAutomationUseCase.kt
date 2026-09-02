@@ -2,6 +2,8 @@ package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
+import com.example.gemgemgen.automation.usecase.AutomationStartRecorder
+import com.example.gemgemgen.automation.usecase.NoOpAutomationStartRecorder
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 class ManageRemoteAutomationUseCase(
     private val gateway: RemoteAutomationGateway,
+    private val automationStartRecorder: AutomationStartRecorder = NoOpAutomationStartRecorder,
     private val requestIdProvider: () -> String = { UUID.randomUUID().toString() }
 ) {
     private val activeRequestId = AtomicReference<String?>(null)
@@ -40,6 +43,15 @@ class ManageRemoteAutomationUseCase(
         }
         if (request.promptTemplate.isBlank()) {
             return RemoteActionResult.Failure("원본 프롬프트를 입력해주세요.")
+        }
+        try {
+            automationStartRecorder.record(request)
+        } catch (error: Exception) {
+            return RemoteActionResult.Failure(
+                "송신 기기에서 시작 정보를 저장하지 못했습니다. ${
+                    error.message ?: "다시 시도해주세요."
+                }"
+            )
         }
 
         val requestId = requestIdProvider()

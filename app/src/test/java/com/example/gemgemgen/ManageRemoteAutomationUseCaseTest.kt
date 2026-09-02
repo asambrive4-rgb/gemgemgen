@@ -3,6 +3,7 @@ package com.example.gemgemgen
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
+import com.example.gemgemgen.automation.usecase.AutomationStartRecorder
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
@@ -41,7 +42,12 @@ class ManageRemoteAutomationUseCaseTest {
                 isPaired = true
             )
         )
-        val useCase = ManageRemoteAutomationUseCase(gateway) { "request-1" }
+        val recorder = RecordingAutomationStartRecorder()
+        val useCase = ManageRemoteAutomationUseCase(
+            gateway = gateway,
+            requestIdProvider = { "request-1" },
+            automationStartRecorder = recorder
+        )
 
         assertEquals(
             RemoteActionResult.Success,
@@ -53,6 +59,10 @@ class ManageRemoteAutomationUseCaseTest {
         assertEquals(
             RemoteAutomationRequest("request-1", "prompt", "3", AutomationTargetApp.GEMINI),
             gateway.sentRequest
+        )
+        assertEquals(
+            listOf(AutomationRunRequest("prompt", "3", AutomationTargetApp.GEMINI)),
+            recorder.recordedRequests
         )
     }
 
@@ -116,6 +126,14 @@ class ManageRemoteAutomationUseCaseTest {
 
         override fun forceStop(requestId: String?) {
             forceStoppedRequestId = requestId
+        }
+    }
+
+    private class RecordingAutomationStartRecorder : AutomationStartRecorder {
+        val recordedRequests = mutableListOf<AutomationRunRequest>()
+
+        override suspend fun record(request: AutomationRunRequest) {
+            recordedRequests += request
         }
     }
 }
