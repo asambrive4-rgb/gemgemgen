@@ -4,6 +4,7 @@ import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
 import com.example.gemgemgen.analysis.domain.migrateLegacyAnalysisModelId
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -24,6 +25,10 @@ class AnalysisModelsTest {
 
     @Test
     fun `지원되는 Gemini 모델은 이전하지 않는다`() {
+        assertEquals(
+            MODEL_GEMINI_3_8_FLASH,
+            migrateLegacyAnalysisModelId(MODEL_GEMINI_3_8_FLASH)
+        )
         assertEquals(
             MODEL_GEMINI_3_6_FLASH,
             migrateLegacyAnalysisModelId(MODEL_GEMINI_3_6_FLASH)

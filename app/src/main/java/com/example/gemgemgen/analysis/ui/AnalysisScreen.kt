@@ -68,6 +68,7 @@ import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.ui.AppMultilineTextField
@@ -409,6 +410,11 @@ private fun RoleModelRow(
                         label = "3.7 Flash",
                         selected = modelId == MODEL_GEMINI_3_7_FLASH,
                         onClick = { onModelSelected(MODEL_GEMINI_3_7_FLASH) }
+                    )
+                    ModelChip(
+                        label = "3.8 Flash",
+                        selected = modelId == MODEL_GEMINI_3_8_FLASH,
+                        onClick = { onModelSelected(MODEL_GEMINI_3_8_FLASH) }
                     )
                 }
                 AnalysisProvider.GROK -> {

@@ -58,6 +58,7 @@ import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
@@ -1152,6 +1153,11 @@ private fun ClassifyCriteriaDialog(
                                 label = "3.7 Flash",
                                 selected = modelId == MODEL_GEMINI_3_7_FLASH,
                                 onClick = { onModelSelected(MODEL_GEMINI_3_7_FLASH) }
+                            )
+                            ClassifyModelChip(
+                                label = "3.8 Flash",
+                                selected = modelId == MODEL_GEMINI_3_8_FLASH,
+                                onClick = { onModelSelected(MODEL_GEMINI_3_8_FLASH) }
                             )
                         }
                         AnalysisProvider.GROK -> {

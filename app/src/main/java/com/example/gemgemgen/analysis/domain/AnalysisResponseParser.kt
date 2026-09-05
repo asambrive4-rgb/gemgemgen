@@ -42,7 +42,13 @@ object AnalysisResponseParser {
     }
 
     fun parseTxtCandidates(jsonText: String): List<String> {
-        val root = json.parseToJsonElement(jsonText)
+        val root = try {
+            json.parseToJsonElement(jsonText)
+        } catch (error: RuntimeException) {
+            throw AnalysisParseException(
+                "AI 응답을 JSON 형식으로 해석하지 못했습니다. (후보 목록 형식이 올바르지 않습니다.)"
+            )
+        }
         val items = when (root) {
             is JsonArray -> root
             is JsonObject -> root["items"]?.jsonArrayOrNull() ?: JsonArray(emptyList())
@@ -61,7 +67,9 @@ object AnalysisResponseParser {
         return try {
             json.parseToJsonElement(jsonText).jsonObject
         } catch (error: RuntimeException) {
-            throw AnalysisParseException("AI 응답 JSON을 해석하지 못했습니다.")
+            throw AnalysisParseException(
+                "AI 응답을 JSON 형식으로 해석하지 못했습니다. (모델 응답이 올바른 형식이 아니거나 중간에 끊겼을 수 있습니다.)"
+            )
         }
     }
 

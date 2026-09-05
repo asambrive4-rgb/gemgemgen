@@ -140,6 +140,7 @@ object AnalysisDummyDirections {
     )
 }
 
+const val MODEL_GEMINI_3_8_FLASH = "gemini-3.8-flash"
 const val MODEL_GEMINI_3_7_FLASH = "gemini-3.7-flash"
 const val DEFAULT_ANALYSIS_MODEL = MODEL_GEMINI_3_7_FLASH
 const val MODEL_GEMINI_3_6_FLASH = "gemini-3.6-flash"
