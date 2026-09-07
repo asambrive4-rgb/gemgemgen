@@ -5,6 +5,7 @@ import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.LastRunSnapshot
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotRepository
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
+import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
@@ -37,6 +38,33 @@ class RecordAutomationStartUseCaseTest {
             repository.savedSnapshot
         )
         assertEquals("base __hair__ prompt", clipboard.writtenText)
+    }
+
+    @Test
+    fun record_recordsPromptHistoryWhenStoreProvided() = runBlocking {
+        val repository = RecordingLastRunSnapshotRepository()
+        val clipboard = RecordingClipboardGateway()
+        val historyRepo = FakePromptHistoryRepository()
+        val historyStore = PromptHistoryStore(historyRepo)
+        val useCase = RecordAutomationStartUseCase(
+            lastRunSnapshotStore = LastRunSnapshotStore(repository),
+            clipboardGateway = clipboard,
+            promptHistoryStore = historyStore,
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        )
+
+        useCase.record(
+            AutomationRunRequest(
+                promptTemplate = "test history prompt",
+                repeatCountText = "3",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+
+        val historyItems = historyStore.load()
+        assertEquals(1, historyItems.size)
+        assertEquals("test history prompt", historyItems[0].prompt)
+        assertEquals(AutomationTargetApp.GEMINI, historyItems[0].targetApp)
     }
 
     private class RecordingLastRunSnapshotRepository : LastRunSnapshotRepository {

@@ -1,5 +1,6 @@
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,16 +12,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.automation.domain.RepeatCountParser
+import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuInsetBed
 
 @Composable
 internal fun RepeatCountStepper(
@@ -35,100 +39,134 @@ internal fun RepeatCountStepper(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    shape = RoundedCornerShape(8.dp)
-                )
+        NeuInsetBed(
+            shape = RoundedCornerShape(14.dp),
+            backgroundColor = AppTheme.colors.insetBed,
+            borderColor = AppTheme.colors.insetBorder
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable(enabled = currentVal > 1) {
-                        onRepeatCountChange((currentVal - 1).toString())
-                    },
-                contentAlignment = Alignment.Center
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .background(
+                        .size(36.dp)
+                        .clickable(enabled = currentVal > 1) {
+                            onRepeatCountChange((currentVal - 1).toString())
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .then(
+                                if (currentVal > 1) {
+                                    Modifier.shadow(
+                                        elevation = 2.dp,
+                                        shape = CircleShape,
+                                        ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
+                                        spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clip(CircleShape)
+                            .background(
+                                color = if (currentVal > 1) {
+                                    AppTheme.colors.card
+                                } else {
+                                    AppTheme.colors.card.copy(alpha = 0.4f)
+                                }
+                            )
+                            .border(
+                                BorderStroke(
+                                    1.dp,
+                                    if (currentVal > 1) AppTheme.colors.cardBorder else AppTheme.colors.cardBorder.copy(alpha = 0.4f)
+                                ),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "—",
                             color = if (currentVal > 1) {
-                                MaterialTheme.colorScheme.surfaceVariant
+                                AppTheme.colors.primary
                             } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                AppTheme.colors.textSecondary.copy(alpha = 0.4f)
                             },
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "—",
-                        color = if (currentVal > 1) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        },
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
-                        textAlign = TextAlign.Center
-                    )
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
-            }
 
-            Text(
-                text = repeatCountText,
-                modifier = Modifier
-                    .widthIn(min = 28.dp)
-                    .padding(horizontal = 2.dp),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                textAlign = TextAlign.Center
-            )
+                Text(
+                    text = repeatCountText,
+                    modifier = Modifier
+                        .widthIn(min = 28.dp)
+                        .padding(horizontal = 4.dp),
+                    color = AppTheme.colors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center
+                )
 
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable(enabled = currentVal < 999) {
-                        onRepeatCountChange((currentVal + 1).toString())
-                    },
-                contentAlignment = Alignment.Center
-            ) {
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .background(
-                            color = if (currentVal < 999) {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            },
-                            shape = CircleShape
-                        ),
+                        .size(36.dp)
+                        .clickable(enabled = currentVal < 999) {
+                            onRepeatCountChange((currentVal + 1).toString())
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "＋",
-                        color = if (currentVal < 999) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        },
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
-                        textAlign = TextAlign.Center
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .then(
+                                if (currentVal < 999) {
+                                    Modifier.shadow(
+                                        elevation = 2.dp,
+                                        shape = CircleShape,
+                                        ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
+                                        spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
+                                    )
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clip(CircleShape)
+                            .background(
+                                color = if (currentVal < 999) {
+                                    AppTheme.colors.card
+                                } else {
+                                    AppTheme.colors.card.copy(alpha = 0.4f)
+                                }
+                            )
+                            .border(
+                                BorderStroke(
+                                    1.dp,
+                                    if (currentVal < 999) AppTheme.colors.cardBorder else AppTheme.colors.cardBorder.copy(alpha = 0.4f)
+                                ),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "＋",
+                            color = if (currentVal < 999) {
+                                AppTheme.colors.primary
+                            } else {
+                                AppTheme.colors.textSecondary.copy(alpha = 0.4f)
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }
     }
 }
-

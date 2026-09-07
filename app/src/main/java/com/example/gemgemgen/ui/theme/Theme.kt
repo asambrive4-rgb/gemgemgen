@@ -1,58 +1,81 @@
 package com.example.gemgemgen.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
-
+/**
+ * GemGemGen 앱의 전역 소프트 3D 뉴모피즘 테마.
+ * 선택된 [AppThemePalette] 및 [AppThemeMode]에 따라 Material 3 색상 체계 및 [LocalAppColors]를 공급합니다.
+ */
 @Composable
 fun GemgemgenTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    palette: AppThemePalette = AppThemePalette.DEFAULT,
+    themeMode: AppThemeMode = AppThemeMode.DEFAULT,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val systemInDark = isSystemInDarkTheme()
+    val isDark = when (themeMode) {
+        AppThemeMode.SYSTEM -> systemInDark
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    val appColors = palette.toAppColors(isDark = isDark)
+
+    val colorScheme = if (isDark) {
+        darkColorScheme(
+            primary = appColors.primary,
+            onPrimary = appColors.onPrimary,
+            primaryContainer = appColors.card,
+            onPrimaryContainer = appColors.textPrimary,
+            secondary = appColors.accent,
+            onSecondary = Color.White,
+            secondaryContainer = appColors.insetBed,
+            onSecondaryContainer = appColors.textPrimary,
+            background = appColors.canvas,
+            onBackground = appColors.textPrimary,
+            surface = appColors.card,
+            onSurface = appColors.textPrimary,
+            surfaceVariant = appColors.insetBed,
+            onSurfaceVariant = appColors.textSecondary,
+            outline = appColors.inputBorder,
+            outlineVariant = appColors.cardBorder
+        )
+    } else {
+        lightColorScheme(
+            primary = appColors.primary,
+            onPrimary = appColors.onPrimary,
+            primaryContainer = appColors.primary.copy(alpha = 0.15f),
+            onPrimaryContainer = appColors.primary,
+            secondary = appColors.accent,
+            onSecondary = Color.White,
+            secondaryContainer = appColors.insetBed,
+            onSecondaryContainer = appColors.textPrimary,
+            background = appColors.canvas,
+            onBackground = appColors.textPrimary,
+            surface = appColors.card,
+            onSurface = appColors.textPrimary,
+            surfaceVariant = appColors.insetBed,
+            onSurfaceVariant = appColors.textSecondary,
+            outline = appColors.inputBorder,
+            outlineVariant = appColors.cardBorder
+        )
+    }
+
+    CompositionLocalProvider(
+        LocalAppColors provides appColors,
+        LocalAppThemePalette provides palette,
+        LocalAppThemeMode provides themeMode
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

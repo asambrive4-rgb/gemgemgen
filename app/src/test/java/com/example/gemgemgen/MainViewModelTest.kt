@@ -16,6 +16,9 @@ import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.example.gemgemgen.remote.domain.*
+import com.example.gemgemgen.remote.usecase.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -978,6 +981,198 @@ class MainViewModelTest {
         assertTrue(!viewModel.uiState.value.showAccessibilityPrompt)
         assertTrue(viewModel.uiState.value.showSettings)
     }
+
+    @Test
+    fun openPromptHistory_and_closePromptHistory_updatesUiState() {
+        val repo = FakePromptHistoryRepository()
+        val store = PromptHistoryStore(repo)
+        store.record("test prompt 1", AutomationTargetApp.CHATGPT)
+        val viewModel = viewModel(promptHistoryStore = store)
+
+        viewModel.openPromptHistory()
+        assertTrue(viewModel.uiState.value.showPromptHistory)
+        assertEquals(1, viewModel.uiState.value.promptHistoryItems.size)
+        assertEquals("test prompt 1", viewModel.uiState.value.promptHistoryItems[0].prompt)
+
+        viewModel.closePromptHistory()
+        assertTrue(!viewModel.uiState.value.showPromptHistory)
+    }
+
+    @Test
+    fun selectPromptHistoryItem_replacesPromptText_and_backsUpPreviousToUndoStack() {
+        val repo = FakePromptHistoryRepository()
+        val store = PromptHistoryStore(repo)
+        val viewModel = viewModel(promptHistoryStore = store)
+
+        viewModel.onPromptTemplateChange("현재 작성 중이던 텍스트")
+        val item = PromptHistoryItem(
+            id = "1",
+            prompt = "히스토리에서 고른 프롬프트",
+            targetApp = AutomationTargetApp.GEMINI,
+            createdAtMillis = 1000L
+        )
+
+        viewModel.selectPromptHistoryItem(item)
+
+        assertEquals("히스토리에서 고른 프롬프트", viewModel.uiState.value.promptTemplate)
+        assertEquals("히스토리에서 고른 프롬프트", viewModel.promptTemplateTextFieldState.text.toString())
+        assertTrue(!viewModel.uiState.value.showPromptHistory)
+
+        // 안전망 검증: undo 실행 시 원래 작성 중이던 텍스트로 복원되어야 함
+        assertTrue(viewModel.uiState.value.canUndoPromptEdit)
+        viewModel.undoPromptEdit()
+        assertEquals("현재 작성 중이던 텍스트", viewModel.uiState.value.promptTemplate)
+        assertEquals("현재 작성 중이던 텍스트", viewModel.promptTemplateTextFieldState.text.toString())
+    }
+
+    @Test
+    fun clearPromptHistory_clearsRepository_and_updatesUiState() {
+        val repo = FakePromptHistoryRepository()
+        val store = PromptHistoryStore(repo)
+        store.record("prompt to clear", AutomationTargetApp.GEMINI)
+        val viewModel = viewModel(promptHistoryStore = store)
+
+        viewModel.openPromptHistory()
+        assertEquals(1, viewModel.uiState.value.promptHistoryItems.size)
+
+        viewModel.clearPromptHistory()
+        assertTrue(viewModel.uiState.value.promptHistoryItems.isEmpty())
+        assertTrue(store.load().isEmpty())
+    }
+
+    @Test
+    fun runAutomation_inSenderMode_whenFailsDuringRun_playsShortAlertOnce() {
+        val soundAlert = FakeSoundAlertGateway()
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            )
+        )
+        remoteGateway.sendAction = { _, onStateChange ->
+            onStateChange(AutomationRunState.Running("작업 진행 중"))
+            onStateChange(AutomationRunState.Failure("S25 FE 연결 끊김"))
+            onStateChange(AutomationRunState.Failure("추가 에러"))
+        }
+        val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(
+            soundAlertGateway = soundAlert,
+            manageRemoteAutomation = remoteUseCase
+        )
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.onPromptTemplateChange("테스트 프롬프트")
+
+        viewModel.runAutomation()
+
+        // 시작 후 실패가 발생했으므로 알림음이 정확히 1회 울려야 함
+        assertEquals(1, soundAlert.playCount)
+    }
+
+    @Test
+    fun runAutomation_inSenderMode_whenSucceeds_doesNotPlayAlert() {
+        val soundAlert = FakeSoundAlertGateway()
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            )
+        )
+        remoteGateway.sendAction = { _, onStateChange ->
+            onStateChange(AutomationRunState.Running("작업 진행 중"))
+            onStateChange(AutomationRunState.Success)
+        }
+        val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(
+            soundAlertGateway = soundAlert,
+            manageRemoteAutomation = remoteUseCase
+        )
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.onPromptTemplateChange("테스트 프롬프트")
+
+        viewModel.runAutomation()
+
+        // 정상 성공 시에는 알림음이 울리지 않아야 함
+        assertEquals(0, soundAlert.playCount)
+    }
+
+    @Test
+    fun runAutomation_inSenderMode_whenCancelledByUser_doesNotPlayAlert() {
+        val soundAlert = FakeSoundAlertGateway()
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            )
+        )
+        val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(
+            soundAlertGateway = soundAlert,
+            manageRemoteAutomation = remoteUseCase
+        )
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.onPromptTemplateChange("테스트 프롬프트")
+
+        viewModel.runAutomation()
+        viewModel.cancelAutomation()
+
+        // 사용자가 직접 중지한 경우 알림음 미재생
+        assertEquals(0, soundAlert.playCount)
+    }
+
+    @Test
+    fun failure_withoutStartingSenderRun_doesNotPlayAlert() {
+        val soundAlert = FakeSoundAlertGateway()
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = false
+            )
+        )
+        val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(
+            soundAlertGateway = soundAlert,
+            manageRemoteAutomation = remoteUseCase
+        )
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+
+        // 시작 버튼을 누르지 않은 상태에서 페어링 시도 실패
+        viewModel.pairRemoteDevice("1234")
+
+        assertEquals(0, soundAlert.playCount)
+    }
+
+    @Test
+    fun runAutomation_inNormalMode_whenFails_doesNotPlayAlert() {
+        val soundAlert = FakeSoundAlertGateway()
+        val viewModel = viewModel(
+            soundAlertGateway = soundAlert,
+            automationRunner = automation(
+                service = object : PromptAutomationGateway {
+                    override fun sendPrompt(
+                        prompt: String,
+                        newChatMode: NewChatMode,
+                        onStateChange: (AutomationRunState) -> Unit,
+                        onDone: () -> Unit
+                    ) {
+                        onStateChange(AutomationRunState.Failure("일반 모드 오류"))
+                    }
+
+                    override fun cancelCurrentRun() = Unit
+                }
+            )
+        )
+        viewModel.onPromptTemplateChange("일반 모드 프롬프트")
+
+        viewModel.runAutomation()
+
+        // 일반 모드에서는 송신 모드 알림음이 울리지 않아야 함
+        assertEquals(0, soundAlert.playCount)
+    }
+
     private fun viewModel(
         environmentStatusReader: FakeEnvironmentStatusReader = FakeEnvironmentStatusReader(readyEnvironment()),
         clipboardText: String = "",
@@ -991,6 +1186,9 @@ class MainViewModelTest {
         cleanDeviceMemoryUseCase: CleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(
             FakeMemoryCleanupGateway()
         ),
+        promptHistoryStore: PromptHistoryStore? = null,
+        manageRemoteAutomation: ManageRemoteAutomationUseCase? = null,
+        soundAlertGateway: SoundAlertGateway = NoOpSoundAlertGateway,
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
@@ -1008,6 +1206,11 @@ class MainViewModelTest {
             terminateGeminiApp = terminateGeminiApp,
             terminateSelfApp = terminateSelfApp,
             cleanDeviceMemoryUseCase = cleanDeviceMemoryUseCase,
+            manageRemoteAutomation = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
+                NoOpRemoteAutomationGateway()
+            ),
+            soundAlertGateway = soundAlertGateway,
+            promptHistoryStore = promptHistoryStore,
             dispatchers = dispatchers,
             coroutineScope = coroutineScope
         )
@@ -1185,6 +1388,39 @@ class MainViewModelTest {
             promptTemplate = snapshot.promptTemplate
             repeatCountText = snapshot.repeatCountText
             targetApp = snapshot.targetApp.storageValue
+        }
+    }
+
+    private class FakeSoundAlertGateway : SoundAlertGateway {
+        var playCount = 0
+        override fun playShortAlert() {
+            playCount += 1
+        }
+    }
+
+    private class FakeRemoteGateway(
+        initialStatus: RemoteAutomationStatus = RemoteAutomationStatus()
+    ) : RemoteAutomationGateway {
+        override val status = MutableStateFlow(initialStatus)
+        var lastStateCallback: ((AutomationRunState) -> Unit)? = null
+        var sendAction: (suspend (RemoteAutomationRequest, (AutomationRunState) -> Unit) -> Unit)? = null
+
+        override fun selectMode(mode: AutomationMode) {
+            status.value = status.value.copy(mode = mode)
+        }
+
+        override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
+
+        override suspend fun send(
+            request: RemoteAutomationRequest,
+            onStateChange: (AutomationRunState) -> Unit
+        ) {
+            lastStateCallback = onStateChange
+            sendAction?.invoke(request, onStateChange)
+        }
+
+        override fun forceStop(requestId: String?) {
+            lastStateCallback?.invoke(AutomationRunState.Stopped)
         }
     }
 

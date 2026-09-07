@@ -34,7 +34,11 @@ data class MainUiState(
     val isCleaningMemory: Boolean = false,
     val memoryCleanupMessage: String = "",
     /** 와일드카드 파일 기반 토큰 추천 후보 (입력창 위 칩용). */
-    val wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
+    val wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
+    val showPromptHistory: Boolean = false,
+    val promptHistoryItems: List<com.example.gemgemgen.automation.domain.PromptHistoryItem> = emptyList(),
+    val selectedThemePalette: com.example.gemgemgen.ui.theme.AppThemePalette = com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
+    val selectedThemeMode: com.example.gemgemgen.ui.theme.AppThemeMode = com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT
 ) {
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()

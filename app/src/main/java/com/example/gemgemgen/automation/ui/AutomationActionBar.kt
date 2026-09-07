@@ -1,5 +1,6 @@
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,26 +12,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Wifi
+import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.ui.theme.OnRemoteStartGreenDark
 import com.example.gemgemgen.ui.theme.RemoteStartGreen
-import com.example.gemgemgen.ui.theme.RemoteStartGreenDark
 
 @Composable
 internal fun AutomationActionBar(
@@ -46,57 +47,50 @@ internal fun AutomationActionBar(
 ) {
     val statusText = AutomationUiText.statusText(automationState)
     val isError = automationState is AutomationRunState.Failure
-    val isDarkTheme = isSystemInDarkTheme()
 
     val dotColor = when {
         isError -> MaterialTheme.colorScheme.error
-        automationState is AutomationRunState.Running -> MaterialTheme.colorScheme.primary
-        automationState is AutomationRunState.Success -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.outline
+        automationState is AutomationRunState.Running -> AppTheme.colors.primary
+        automationState is AutomationRunState.Success -> AppTheme.colors.primary
+        else -> AppTheme.colors.cardBorder
     }
 
-    Card(
+    NeuCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+        shape = RoundedCornerShape(18.dp),
+        elevation = 5.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Box(
-                modifier = Modifier.width(68.dp),
+                modifier = Modifier.width(72.dp),
                 contentAlignment = Alignment.Center
             ) {
                 if (!isRunning) {
+                    val startBtnColor = if (isRemoteSendMode) RemoteStartGreen else AppTheme.colors.primary
                     Button(
                         onClick = onRunMvp,
                         enabled = canRun,
-                        colors = if (isRemoteSendMode) {
-                            ButtonDefaults.buttonColors(
-                                containerColor = if (isDarkTheme) {
-                                    RemoteStartGreenDark
-                                } else {
-                                    RemoteStartGreen
-                                },
-                                contentColor = if (isDarkTheme) {
-                                    OnRemoteStartGreenDark
-                                } else {
-                                    androidx.compose.ui.graphics.Color.White
-                                }
-                            )
-                        } else {
-                            ButtonDefaults.buttonColors()
-                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = startBtnColor,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(34.dp)
+                            .height(36.dp)
+                            .shadow(
+                                elevation = if (canRun) 4.dp else 0.dp,
+                                shape = RoundedCornerShape(12.dp),
+                                ambientColor = startBtnColor.copy(alpha = 0.4f),
+                                spotColor = startBtnColor.copy(alpha = 0.3f)
+                            )
                     ) {
                         if (isRemoteSendMode) {
                             Icon(
@@ -106,7 +100,11 @@ internal fun AutomationActionBar(
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                         }
-                        Text("시작", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = "시작",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 } else {
                     Button(
@@ -115,12 +113,23 @@ internal fun AutomationActionBar(
                             containerColor = MaterialTheme.colorScheme.error,
                             contentColor = MaterialTheme.colorScheme.onError
                         ),
+                        shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(34.dp)
+                            .height(36.dp)
+                            .shadow(
+                                elevation = 4.dp,
+                                shape = RoundedCornerShape(12.dp),
+                                ambientColor = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
+                                spotColor = MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
+                            )
                     ) {
-                        Text("중지", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = "중지",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -164,7 +173,7 @@ internal fun AutomationActionBar(
                     color = if (isError) {
                         MaterialTheme.colorScheme.error
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        AppTheme.colors.textSecondary
                     }
                 )
             }
@@ -179,9 +188,10 @@ private fun ProgressBadge(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = RoundedCornerShape(6.dp),
+        color = AppTheme.colors.primary.copy(alpha = 0.15f),
+        contentColor = AppTheme.colors.primary,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.3f)),
         modifier = modifier
     ) {
         Text(
@@ -192,4 +202,3 @@ private fun ProgressBadge(
         )
     }
 }
-

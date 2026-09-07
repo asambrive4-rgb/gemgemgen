@@ -26,7 +26,9 @@ class AutomationRunPreparer(
         automationStartRecorder.record(request)
 
         return withContext(dispatchers.io) {
-            val wildcards = if (wildcardTokens.isEmpty()) {
+            val wildcards = if (request.initialWildcards != null) {
+                request.initialWildcards
+            } else if (wildcardTokens.isEmpty()) {
                 emptyList()
             } else {
                 wildcardSetRepository.load(wildcardTokens)

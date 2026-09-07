@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -14,9 +15,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import com.example.gemgemgen.ui.theme.appTextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -156,6 +159,7 @@ fun AutomationModePairDialog(
     val isConfirmEnabled = pairingCode.length == 4
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         title = { Text("${targetDeviceName} 연결") },
         text = {
@@ -164,6 +168,8 @@ fun AutomationModePairDialog(
                 onValueChange = { value ->
                     pairingCode = value.filter(Char::isDigit).take(4)
                 },
+                shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
                 label = { Text("${targetDeviceName}에 표시된 4자리 번호") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(

@@ -38,11 +38,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,12 +52,6 @@ import com.example.gemgemgen.ui.blockMainTabSwipe
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
 import androidx.compose.runtime.Composable
@@ -73,6 +65,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -232,22 +225,29 @@ internal fun WildcardManagerScreen(
             // 2구역: 에디터 카드 (헤더 + 텍스트 입력창 일체화)
             val fileLabel = uiState.selectedFile?.fileName?.let {
                 if (it.endsWith(".txt")) it.dropLast(4) else it
-            } ?: "No file selected"
+            } ?: "선택된 파일 없음"
             val statusText = if (isDirty) "$fileLabel *" else fileLabel
+            val editorCardShape = RoundedCornerShape(20.dp)
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .border(1.dp, MemoEditorBorder, RoundedCornerShape(12.dp))
-                    .background(MemoSurface, RoundedCornerShape(12.dp))
+                    .shadow(
+                        elevation = 4.dp,
+                        shape = editorCardShape,
+                        ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
+                        spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
+                    )
+                    .border(1.dp, MemoEditorBorder, editorCardShape)
+                    .background(MemoSurface, editorCardShape)
             ) {
-                // 에디터 일체형 헤더 (부드러운 연보라색 배경 띠)
+                // 에디터 일체형 헤더 (부드러운 톤온톤 배경 띠)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MemoPrimary.copy(alpha = 0.3f), RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .background(MemoPrimary.copy(alpha = 0.15f), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -332,7 +332,7 @@ internal fun WildcardManagerScreen(
                             .blockMainTabSwipe()
                     )
                 } else {
-                    // 테두리 없는 텍스트 에디터
+                    // 클린 화이트 인셋 베드 텍스트 에디터
                     OutlinedTextField(
                         value = editingTextFieldValueState,
                         onValueChange = { newVal ->
@@ -346,10 +346,11 @@ internal fun WildcardManagerScreen(
                         placeholder = {
                             Text(
                                 text = "Select a file or create a new txt file.",
-                                color = MemoSubtle
+                                color = AppTheme.colors.textSecondary.copy(alpha = 0.6f)
                             )
                         },
                         minLines = 8,
+                        shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
                         textStyle = androidx.compose.ui.text.TextStyle(
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                             color = MemoText,
@@ -359,9 +360,12 @@ internal fun WildcardManagerScreen(
                             focusedBorderColor = Color.Transparent,
                             unfocusedBorderColor = Color.Transparent,
                             disabledBorderColor = Color.Transparent,
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent
+                            focusedContainerColor = AppTheme.colors.inputBackground,
+                            unfocusedContainerColor = AppTheme.colors.inputBackground,
+                            disabledContainerColor = AppTheme.colors.inputBackground.copy(alpha = 0.6f),
+                            focusedTextColor = MemoText,
+                            unfocusedTextColor = MemoText,
+                            cursorColor = AppTheme.colors.primary
                         )
                     )
                 }
@@ -429,109 +433,35 @@ internal fun WildcardManagerScreen(
         }
     }
 
-    if (uiState.showNewFileDialog) {
-        NewFileDialog(
-            fileName = uiState.newFileName,
-            error = uiState.error,
-            onFileNameChange = onNewFileNameChange,
-            onCreate = {
-                runWithCommittedText(onCreateNewFile)
-            },
-            onDismiss = onDismissNewFile
-        )
-    }
-
-    if (uiState.showRenameDialog) {
-        RenameFileDialog(
-            fileName = uiState.renameFileName,
-            error = uiState.error,
-            onFileNameChange = onRenameFileNameChange,
-            onConfirm = {
-                runWithCommittedText(onConfirmRename)
-            },
-            onDismiss = onDismissRename
-        )
-    }
-
-    if (uiState.showDeleteConfirm) {
-        DeleteConfirmDialog(
-            fileName = uiState.selectedFile?.fileName.orEmpty(),
-            onConfirm = {
-                runWithCommittedText(onConfirmDelete)
-            },
-            onDismiss = onDismissDelete
-        )
-    }
-
-    if (uiState.pendingAction != null) {
-        UnsavedChangesDialog(
-            onSave = {
-                runWithCommittedText(onConfirmPendingSave)
-            },
-            onDiscard = onConfirmPendingDiscard,
-            onCancel = onCancelPending
-        )
-    }
-
-    if (uiState.isClassifying) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("분류 중") },
-            text = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                    Text("분석 설정(Gemini/Grok)으로 분류하고 있습니다…")
-                }
-            },
-            confirmButton = {}
-        )
-    }
-
-    if (uiState.showClassifyCriteriaDialog && !uiState.isClassifying) {
-        ClassifyCriteriaDialog(
-            criteria = uiState.classifyCriteria,
-            provider = uiState.classifyProvider,
-            modelId = uiState.classifyModelId,
-            error = uiState.error,
-            canRun = uiState.canRunClassify,
-            onCriteriaChange = onClassifyCriteriaChange,
-            onProviderSelected = onClassifyProviderSelected,
-            onModelSelected = onClassifyModelSelected,
-            onRun = {
-                runWithCommittedText(onRunClassify)
-            },
-            onDismiss = onDismissClassifyCriteria
-        )
-    }
-
-    val classifyPreview = uiState.classifyPreview
-    if (classifyPreview != null && !uiState.isClassifying && uiState.classifyOverwriteConflicts.isEmpty()) {
-        ClassifyPreviewDialog(
-            result = classifyPreview,
-            criteria = uiState.classifyCriteria,
-            saveEntries = uiState.classifySaveEntries,
-            canSave = uiState.canSaveClassifyResult,
-            canRerun = uiState.canRerunClassifyFromPreview,
-            error = uiState.error,
-            onCriteriaChange = onClassifyCriteriaChange,
-            onFileNameChange = onClassifyFileNameChange,
-            onToggleFileNameEdit = onToggleClassifyFileNameEdit,
-            onRerun = onRunClassify,
-            onSave = onSaveClassifyResult,
-            onDismiss = onDismissClassifyPreview
-        )
-    }
-
-    if (uiState.classifyOverwriteConflicts.isNotEmpty()) {
-        ClassifyOverwriteDialog(
-            fileNames = uiState.classifyOverwriteConflicts,
-            onConfirm = onConfirmClassifyOverwrite,
-            onDismiss = onDismissClassifyOverwrite
-        )
-    }
+    val activeDialog = deriveActiveWildcardDialog(uiState)
+    val dialogActions = WildcardDialogActions(
+        onNewFileNameChange = onNewFileNameChange,
+        onCreateNewFile = { runWithCommittedText(onCreateNewFile) },
+        onDismissNewFile = onDismissNewFile,
+        onRenameFileNameChange = onRenameFileNameChange,
+        onConfirmRename = { runWithCommittedText(onConfirmRename) },
+        onDismissRename = onDismissRename,
+        onConfirmDelete = { runWithCommittedText(onConfirmDelete) },
+        onDismissDelete = onDismissDelete,
+        onConfirmPendingSave = { runWithCommittedText(onConfirmPendingSave) },
+        onConfirmPendingDiscard = onConfirmPendingDiscard,
+        onCancelPending = onCancelPending,
+        onClassifyCriteriaChange = onClassifyCriteriaChange,
+        onClassifyProviderSelected = onClassifyProviderSelected,
+        onClassifyModelSelected = onClassifyModelSelected,
+        onRunClassify = { runWithCommittedText(onRunClassify) },
+        onDismissClassifyCriteria = onDismissClassifyCriteria,
+        onClassifyFileNameChange = onClassifyFileNameChange,
+        onToggleClassifyFileNameEdit = onToggleClassifyFileNameEdit,
+        onSaveClassifyResult = onSaveClassifyResult,
+        onDismissClassifyPreview = onDismissClassifyPreview,
+        onConfirmClassifyOverwrite = onConfirmClassifyOverwrite,
+        onDismissClassifyOverwrite = onDismissClassifyOverwrite
+    )
+    WildcardDialogHost(
+        activeDialog = activeDialog,
+        actions = dialogActions
+    )
 }
 
 private const val TEXT_COMMIT_DEBOUNCE_MS = 250L
@@ -545,12 +475,19 @@ private fun FileTabsSection(
     onRequestNewFile: () -> Unit,
     onRequestDelete: () -> Unit
 ) {
+    val containerShape = RoundedCornerShape(18.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, MemoStripBorder, RoundedCornerShape(12.dp))
-            .background(MemoSurface)
-            .padding(8.dp),
+            .shadow(
+                elevation = 3.dp,
+                shape = containerShape,
+                ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
+                spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
+            )
+            .border(1.dp, MemoStripBorder, containerShape)
+            .background(MemoSurface, containerShape)
+            .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (fileItems.isEmpty()) {
@@ -570,24 +507,31 @@ private fun FileTabsSection(
                     key = { it.file.id }
                 ) { item ->
                     val isSelected = item.isSelected
+                    val tabShape = RoundedCornerShape(14.dp)
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) MemoTabSelected else Color.Transparent)
+                            .shadow(
+                                elevation = if (isSelected) 3.dp else 1.dp,
+                                shape = tabShape,
+                                ambientColor = if (isSelected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.25f),
+                                spotColor = if (isSelected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+                            )
+                            .clip(tabShape)
+                            .background(if (isSelected) AppTheme.colors.primary else AppTheme.colors.card)
                             .border(
                                 width = 1.dp,
-                                color = if (isSelected) MemoTabSelectedBorder else MemoTabBorder,
-                                shape = RoundedCornerShape(8.dp)
+                                color = if (isSelected) AppTheme.colors.primary else AppTheme.colors.cardBorder,
+                                shape = tabShape
                             )
                             .clickable { onFileClick(item.file) }
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = if (item.displayName.endsWith(".txt")) item.displayName.dropLast(4) else item.displayName,
-                            color = MemoText,
+                            color = if (isSelected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary,
                             fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -602,20 +546,27 @@ private fun FileTabsSection(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val actionBtnShape = RoundedCornerShape(10.dp)
             // 새 파일 (+) 버튼
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White)
-                    .border(1.dp, MemoStripBorder, RoundedCornerShape(8.dp))
+                    .shadow(
+                        elevation = if (canCreateFile) 2.dp else 0.dp,
+                        shape = actionBtnShape,
+                        ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                        spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+                    )
+                    .clip(actionBtnShape)
+                    .background(AppTheme.colors.card)
+                    .border(1.dp, AppTheme.colors.cardBorder, actionBtnShape)
                     .clickable(enabled = canCreateFile) { onRequestNewFile() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "새 파일",
-                    tint = if (canCreateFile) MemoSubtle else MemoSubtle.copy(alpha = 0.4f),
+                    tint = if (canCreateFile) AppTheme.colors.primary else AppTheme.colors.textSecondary.copy(alpha = 0.4f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -626,12 +577,18 @@ private fun FileTabsSection(
             Box(
                 modifier = Modifier
                     .size(36.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White)
+                    .shadow(
+                        elevation = if (canDelete) 2.dp else 0.dp,
+                        shape = actionBtnShape,
+                        ambientColor = MemoDanger.copy(alpha = 0.25f),
+                        spotColor = MemoDanger.copy(alpha = 0.15f)
+                    )
+                    .clip(actionBtnShape)
+                    .background(AppTheme.colors.card)
                     .border(
                         width = 1.dp,
-                        color = if (canDelete) MemoDangerBorder else MemoStripBorder,
-                        shape = RoundedCornerShape(8.dp)
+                        color = if (canDelete) MemoDangerBorder else AppTheme.colors.cardBorder,
+                        shape = actionBtnShape
                     )
                     .clickable(enabled = canDelete) { onRequestDelete() },
                 contentAlignment = Alignment.Center
@@ -639,7 +596,7 @@ private fun FileTabsSection(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "삭제",
-                    tint = if (canDelete) MemoDanger else MemoSubtle.copy(alpha = 0.4f),
+                    tint = if (canDelete) MemoDanger else AppTheme.colors.textSecondary.copy(alpha = 0.4f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -663,7 +620,7 @@ private fun FolderInfoSection(
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, MemoStripBorder, RoundedCornerShape(12.dp))
-            .background(Color.White, RoundedCornerShape(12.dp))
+            .background(AppTheme.colors.card, RoundedCornerShape(12.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -672,7 +629,7 @@ private fun FolderInfoSection(
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = "Storage folder",
+                text = "와일드카드 저장소",
                 color = MemoSubtle,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
@@ -688,13 +645,13 @@ private fun FolderInfoSection(
 
             if (!environmentStatus.isWildcardDirectoryAccessible) {
                 Text(
-                    text = "Please select the wildcard folder.",
+                    text = "와일드카드 폴더를 선택해주세요.",
                     color = MemoDanger,
                     fontSize = 12.sp
                 )
             } else if (!environmentStatus.isWildcardDirectoryWritable) {
                 Text(
-                    text = "Please select the folder again to edit files.",
+                    text = "파일 편집을 위해 폴더를 다시 선택해주세요.",
                     color = MemoDanger,
                     fontSize = 12.sp
                 )
@@ -710,14 +667,14 @@ private fun FolderInfoSection(
                 onClick = onSelectFolder,
                 border = BorderStroke(1.dp, MemoStripBorder),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White,
+                    containerColor = AppTheme.colors.card,
                     contentColor = MemoText
                 ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.height(40.dp)
             ) {
                 Text(
-                    text = if (setupInfo.wildcardDirectoryPath.isBlank()) "Select Folder" else "Change Folder",
+                    text = if (setupInfo.wildcardDirectoryPath.isBlank()) "폴더 선택" else "폴더 변경",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -727,14 +684,14 @@ private fun FolderInfoSection(
                 onClick = onRefresh,
                 border = BorderStroke(1.dp, MemoStripBorder),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White,
+                    containerColor = AppTheme.colors.card,
                     contentColor = MemoText
                 ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.height(40.dp)
             ) {
                 Text(
-                    text = "Refresh",
+                    text = "새로고침",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -820,8 +777,8 @@ private fun LineSelectionActionBar(
             enabled = uiState.canSelectAllLines,
             border = BorderStroke(1.dp, MemoStripBorder),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.White,
-                disabledContainerColor = Color.White.copy(alpha = 0.4f),
+                containerColor = AppTheme.colors.card,
+                disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
                 contentColor = MemoText,
                 disabledContentColor = MemoText.copy(alpha = 0.4f)
             ),
@@ -843,8 +800,8 @@ private fun LineSelectionActionBar(
             enabled = uiState.canDeselectAllLines,
             border = BorderStroke(1.dp, MemoStripBorder),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.White,
-                disabledContainerColor = Color.White.copy(alpha = 0.4f),
+                containerColor = AppTheme.colors.card,
+                disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
                 contentColor = MemoText,
                 disabledContentColor = MemoText.copy(alpha = 0.4f)
             ),
@@ -889,8 +846,8 @@ private fun LineSelectionActionBar(
             enabled = uiState.canExitLineSelectionMode,
             border = BorderStroke(1.dp, MemoStripBorder),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.White,
-                disabledContainerColor = Color.White.copy(alpha = 0.4f),
+                containerColor = AppTheme.colors.card,
+                disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
                 contentColor = MemoText,
                 disabledContentColor = MemoText.copy(alpha = 0.4f)
             ),
@@ -931,8 +888,8 @@ private fun ActionButtonsBar(
             onClick = onPasteBelow,
             enabled = uiState.canPaste,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MemoPrimary,
-                disabledContainerColor = MemoPrimary.copy(alpha = 0.4f),
+                containerColor = MemoPaste,
+                disabledContainerColor = MemoPaste.copy(alpha = 0.4f),
                 contentColor = MemoText,
                 disabledContentColor = MemoText.copy(alpha = 0.4f)
             ),
@@ -941,6 +898,12 @@ private fun ActionButtonsBar(
             modifier = Modifier
                 .weight(3.8f)
                 .height(52.dp)
+                .shadow(
+                    elevation = if (uiState.canPaste) 3.dp else 0.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+                )
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -952,7 +915,7 @@ private fun ActionButtonsBar(
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    text = "Paste Below",
+                    text = "아래 붙여넣기",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -976,6 +939,12 @@ private fun ActionButtonsBar(
             modifier = Modifier
                 .weight(3.6f)
                 .height(52.dp)
+                .shadow(
+                    elevation = if (uiState.canPaste) 3.dp else 0.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+                )
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -987,7 +956,7 @@ private fun ActionButtonsBar(
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    text = "Paste",
+                    text = "붙여넣기",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -1003,14 +972,20 @@ private fun ActionButtonsBar(
             colors = ButtonDefaults.buttonColors(
                 containerColor = MemoSave,
                 disabledContainerColor = MemoSave.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                contentColor = Color.White,
+                disabledContentColor = Color.White.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(horizontal = 4.dp),
             modifier = Modifier
                 .weight(3.6f)
                 .height(52.dp)
+                .shadow(
+                    elevation = if (uiState.canSave) 4.dp else 0.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = AppTheme.colors.primary.copy(alpha = 0.4f),
+                    spotColor = AppTheme.colors.primary.copy(alpha = 0.3f)
+                )
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1022,7 +997,7 @@ private fun ActionButtonsBar(
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    text = "Save",
+                    text = "저장",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -1047,10 +1022,16 @@ private fun ActionButtonsBar(
             modifier = Modifier
                 .weight(1.2f)
                 .height(52.dp)
+                .shadow(
+                    elevation = if (uiState.canCopy) 2.dp else 0.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f),
+                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.15f)
+                )
         ) {
             Icon(
                 imageVector = Icons.Default.ContentCopy,
-                contentDescription = "Copy",
+                contentDescription = "복사",
                 modifier = Modifier.size(16.dp)
             )
         }
@@ -1061,8 +1042,8 @@ private fun ActionButtonsBar(
             enabled = uiState.canUndo,
             border = BorderStroke(1.dp, MemoUndoBorder),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.White,
-                disabledContainerColor = Color.White.copy(alpha = 0.4f),
+                containerColor = AppTheme.colors.card,
+                disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
                 contentColor = MemoText,
                 disabledContentColor = MemoText.copy(alpha = 0.4f)
             ),
@@ -1071,491 +1052,22 @@ private fun ActionButtonsBar(
             modifier = Modifier
                 .weight(1.2f)
                 .height(52.dp)
+                .shadow(
+                    elevation = if (uiState.canUndo) 2.dp else 0.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f),
+                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.15f)
+                )
         ) {
             Icon(
                 imageVector = Icons.Default.Undo,
-                contentDescription = "Undo",
+                contentDescription = "실행 취소",
                 modifier = Modifier.size(16.dp)
             )
         }
     }
 }
 
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ClassifyCriteriaDialog(
-    criteria: String,
-    provider: AnalysisProvider,
-    modelId: String,
-    error: String,
-    canRun: Boolean,
-    onCriteriaChange: (String) -> Unit,
-    onProviderSelected: (AnalysisProvider) -> Unit,
-    onModelSelected: (String) -> Unit,
-    onRun: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("와일드카드 분류") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "지금 연 파일의 모든 줄을 기준에 따라 나눕니다. 모델 기본값은 분석 탭「TXT 생성」과 같고, 여기서 바꾸면 함께 저장됩니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MemoSubtle
-                )
-                Text(
-                    text = "모델",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MemoText
-                )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    ClassifyModelChip(
-                        label = "Gemini",
-                        selected = provider == AnalysisProvider.GEMINI,
-                        onClick = { onProviderSelected(AnalysisProvider.GEMINI) }
-                    )
-                    ClassifyModelChip(
-                        label = "Grok",
-                        selected = provider == AnalysisProvider.GROK,
-                        onClick = { onProviderSelected(AnalysisProvider.GROK) }
-                    )
-                    when (provider) {
-                        AnalysisProvider.GEMINI -> {
-                            ClassifyModelChip(
-                                label = "3.5 Lite",
-                                selected = modelId == MODEL_GEMINI_3_5_FLASH_LITE,
-                                onClick = { onModelSelected(MODEL_GEMINI_3_5_FLASH_LITE) }
-                            )
-                            ClassifyModelChip(
-                                label = "3.1 Lite",
-                                selected = modelId == MODEL_GEMINI_3_1_FLASH_LITE,
-                                onClick = { onModelSelected(MODEL_GEMINI_3_1_FLASH_LITE) }
-                            )
-                            ClassifyModelChip(
-                                label = "3.6 Flash",
-                                selected = modelId == MODEL_GEMINI_3_6_FLASH,
-                                onClick = { onModelSelected(MODEL_GEMINI_3_6_FLASH) }
-                            )
-                            ClassifyModelChip(
-                                label = "3.7 Flash",
-                                selected = modelId == MODEL_GEMINI_3_7_FLASH,
-                                onClick = { onModelSelected(MODEL_GEMINI_3_7_FLASH) }
-                            )
-                            ClassifyModelChip(
-                                label = "3.8 Flash",
-                                selected = modelId == MODEL_GEMINI_3_8_FLASH,
-                                onClick = { onModelSelected(MODEL_GEMINI_3_8_FLASH) }
-                            )
-                        }
-                        AnalysisProvider.GROK -> {
-                            ClassifyModelChip(
-                                label = "Grok 4.5",
-                                selected = modelId == MODEL_GROK_4_5,
-                                onClick = { onModelSelected(MODEL_GROK_4_5) }
-                            )
-                        }
-                    }
-                }
-                OutlinedTextField(
-                    value = criteria,
-                    onValueChange = onCriteriaChange,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 100.dp),
-                    minLines = 3,
-                    label = { Text("분류 기준") },
-                    placeholder = { Text("예: 캐주얼 / 포멀 / 기타") }
-                )
-                if (error.isNotBlank()) {
-                    Text(
-                        text = error,
-                        color = MemoDanger,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onRun, enabled = canRun) {
-                Text("분류 실행")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        }
-    )
-}
-
-@Composable
-private fun ClassifyModelChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (selected) MemoPrimary.copy(alpha = 0.45f) else Color.White,
-        border = BorderStroke(
-            1.dp,
-            if (selected) MemoTabSelectedBorder else MemoStripBorder
-        ),
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = MemoText
-        )
-    }
-}
-
-@Composable
-private fun ClassifyPreviewDialog(
-    result: WildcardClassifyResult,
-    criteria: String,
-    saveEntries: List<WildcardClassifySaveEntry>,
-    canSave: Boolean,
-    canRerun: Boolean,
-    error: String,
-    onCriteriaChange: (String) -> Unit,
-    onFileNameChange: (Int, String) -> Unit,
-    onToggleFileNameEdit: (Int) -> Unit,
-    onRerun: () -> Unit,
-    onSave: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("분류 미리보기") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 480.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "전체 목록을 확인한 뒤, 기준을 고쳐 다시 분류하거나 저장하세요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MemoSubtle
-                )
-                OutlinedTextField(
-                    value = criteria,
-                    onValueChange = onCriteriaChange,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 72.dp),
-                    minLines = 2,
-                    label = { Text("분류 기준 (다시 분류용)") },
-                    placeholder = { Text("기준을 수정한 뒤 다시 분류") }
-                )
-                OutlinedButton(
-                    onClick = onRerun,
-                    enabled = canRerun,
-                    modifier = Modifier.fillMaxWidth(),
-                    border = BorderStroke(1.dp, MemoStripBorder)
-                ) {
-                    Text("다시 분류 (전체)", fontWeight = FontWeight.Bold)
-                }
-                if (error.isNotBlank()) {
-                    Text(
-                        text = error,
-                        color = MemoDanger,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                val dropNote = if (result.droppedLineCount > 0) {
-                    " · 미배정 ${result.droppedLineCount}줄(저장 안 함)"
-                } else {
-                    ""
-                }
-                Text(
-                    text = "원본 ${result.sourceLines.size}줄 → ${saveEntries.size}개 파일 예정$dropNote",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                saveEntries.forEachIndexed { index, entry ->
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "${entry.groupName} (${entry.items.size})",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = MemoText
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            if (entry.isEditingFileName) {
-                                OutlinedTextField(
-                                    value = entry.fileNameInput,
-                                    onValueChange = { onFileNameChange(index, it) },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
-                                    label = { Text("파일명") },
-                                    trailingIcon = {
-                                        Text(
-                                            text = ".txt",
-                                            color = MemoSubtle,
-                                            fontSize = 12.sp
-                                        )
-                                    }
-                                )
-                                IconButton(
-                                    onClick = { onToggleFileNameEdit(index) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "파일명 확정",
-                                        tint = MemoSubtle,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    text = "${entry.fileNameInput.trim().removeSuffix(".txt")}.txt",
-                                    modifier = Modifier.weight(1f),
-                                    fontSize = 13.sp,
-                                    color = MemoText,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                IconButton(
-                                    onClick = { onToggleFileNameEdit(index) },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "파일명 수정",
-                                        tint = MemoSubtle,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                        entry.items.forEach { line ->
-                            Text(
-                                text = "· $line",
-                                fontSize = 12.sp,
-                                color = MemoSubtle
-                            )
-                        }
-                    }
-                }
-                if (result.droppedLines.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "미배정 (${result.droppedLines.size}) · 저장 안 함",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = MemoDanger
-                        )
-                        result.droppedLines.forEach { line ->
-                            Text(
-                                text = "· $line",
-                                fontSize = 12.sp,
-                                color = MemoSubtle
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onSave, enabled = canSave) {
-                Text("파일로 저장")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("닫기")
-            }
-        }
-    )
-}
-
-@Composable
-private fun ClassifyOverwriteDialog(
-    fileNames: List<String>,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("파일 덮어쓰기") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("같은 이름의 파일이 있습니다. 덮어쓸까요?")
-                fileNames.forEach { name ->
-                    Text("· $name", fontSize = 13.sp, color = MemoSubtle)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("덮어쓰기")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        }
-    )
-}
-
-@Composable
-private fun NewFileDialog(
-    fileName: String,
-    error: String,
-    onFileNameChange: (String) -> Unit,
-    onCreate: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("새 txt 파일") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = fileName,
-                    onValueChange = onFileNameChange,
-                    singleLine = true,
-                    label = { Text("파일명") },
-                    placeholder = { Text("예: hair") }
-                )
-                if (error.isNotBlank()) {
-                    Text(
-                        text = error,
-                        color = MemoDanger,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onCreate) {
-                Text("생성")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        }
-    )
-}
-
-@Composable
-private fun DeleteConfirmDialog(
-    fileName: String,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("파일 삭제") },
-        text = { Text("$fileName 파일을 삭제할까요?") },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("삭제")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        }
-    )
-}
-
-@Composable
-private fun RenameFileDialog(
-    fileName: String,
-    error: String,
-    onFileNameChange: (String) -> Unit,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("파일 이름 수정") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = fileName,
-                    onValueChange = onFileNameChange,
-                    singleLine = true,
-                    label = { Text("파일명") },
-                    placeholder = { Text("예: new_hair") }
-                )
-                if (error.isNotBlank()) {
-                    Text(
-                        text = error,
-                        color = MemoDanger,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("변경")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        }
-    )
-}
-
-@Composable
-private fun UnsavedChangesDialog(
-    onSave: () -> Unit,
-    onDiscard: () -> Unit,
-    onCancel: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("저장하지 않은 변경사항") },
-        text = { Text("현재 파일의 변경사항을 어떻게 처리할까요?") },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onSave) {
-                    Text("Save")
-                }
-                TextButton(onClick = onDiscard) {
-                    Text("Discard")
-                }
-                TextButton(onClick = onCancel) {
-                    Text("Cancel")
-                }
-            }
-        }
-    )
-}
 
 @Preview(showBackground = true)
 @Composable

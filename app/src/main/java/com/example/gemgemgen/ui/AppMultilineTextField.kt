@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,13 +23,17 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
+import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -167,13 +172,23 @@ fun AppMultilineTextField(
         Modifier
     }
 
+    val fieldShape = RoundedCornerShape(16.dp)
+
     OutlinedTextField(
         state = state,
         // 메인 탭 좌우 스와이프와 분리 — 입력칸 위 제스처는 탭 전환에 쓰지 않는다.
         modifier = modifier
+            .shadow(
+                elevation = 2.dp,
+                shape = fieldShape,
+                ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
+                spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
+            )
             .blockMainTabSwipe()
             .then(paragraphTapModifier),
         enabled = enabled,
+        shape = fieldShape,
+        colors = appTextFieldColors(),
         placeholder = {
             if (placeholder.isNotBlank()) {
                 Text(placeholder)
@@ -191,7 +206,10 @@ fun AppMultilineTextField(
             maxHeightInLines = maxLines
         ),
         scrollState = scrollState,
-        textStyle = TextStyle(fontFamily = FontFamily.Monospace)
+        textStyle = TextStyle(
+            fontFamily = FontFamily.Monospace,
+            color = AppTheme.colors.textPrimary
+        )
     )
 }
 

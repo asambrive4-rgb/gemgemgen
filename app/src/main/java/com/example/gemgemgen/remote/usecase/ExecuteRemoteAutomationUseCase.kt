@@ -1,6 +1,7 @@
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
+import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
@@ -9,14 +10,20 @@ import com.example.gemgemgen.remote.domain.RemoteExecutionDecision
 
 class ExecuteRemoteAutomationUseCase(
     private val checkExecution: CheckRemoteExecutionUseCase,
-    private val automation: RunAutomationUseCase
+    private val automation: RunAutomationUseCase,
+    private val promptGenerator: PromptGenerator = PromptGenerator()
 ) {
     suspend fun execute(
         request: RemoteAutomationRequest,
         conditions: RemoteExecutionConditions,
         onStateChange: (AutomationRunState) -> Unit
     ): RemoteExecutionDecision {
-        val decision = checkExecution.decide(conditions)
+        val wildcardTokens = promptGenerator.extractTokens(request.promptTemplate)
+        val requiresLocalWildcards = wildcardTokens.isNotEmpty() && request.wildcards.isEmpty()
+        val decision = checkExecution.decide(
+            conditions = conditions,
+            requiresWildcardDirectory = requiresLocalWildcards
+        )
         if (decision is RemoteExecutionDecision.Rejected) {
             onStateChange(AutomationRunState.Failure(decision.message))
             return decision
@@ -27,7 +34,8 @@ class ExecuteRemoteAutomationUseCase(
             request = AutomationRunRequest(
                 promptTemplate = request.promptTemplate,
                 repeatCountText = request.repeatCountText,
-                targetApp = request.targetApp
+                targetApp = request.targetApp,
+                initialWildcards = request.wildcards.ifEmpty { null }
             ),
             onStateChange = onStateChange
         )

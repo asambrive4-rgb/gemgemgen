@@ -30,12 +30,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +49,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -55,6 +60,7 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.ui.AppMultilineTextField
+import com.example.gemgemgen.ui.theme.AppTheme
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -90,7 +96,8 @@ internal fun PromptSection(
     onReplaceSelectedParagraph: (String) -> Unit,
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
-    onPasteFromClipboard: () -> Unit
+    onPasteFromClipboard: () -> Unit,
+    onOpenPromptHistory: () -> Unit = {}
 ) {
     // TextFieldState 스냅샷 구독 — 텍스트·커서 변경 시 추천 재계산
     val fieldText = promptTemplateState.text.toString()
@@ -118,28 +125,46 @@ internal fun PromptSection(
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start,
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "프롬프트 템플릿",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(8.dp))
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AutomationTargetApp.entries.forEach { targetApp ->
-                    TargetAppButton(
-                        targetApp = targetApp,
-                        selected = selectedTargetApp == targetApp,
-                        enabled = isTargetSelectionEnabled,
-                        onClick = { onTargetAppSelected(targetApp) }
-                    )
+                Text(
+                    text = "프롬프트 템플릿",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.colors.textPrimary
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AutomationTargetApp.entries.forEach { targetApp ->
+                        TargetAppButton(
+                            targetApp = targetApp,
+                            selected = selectedTargetApp == targetApp,
+                            enabled = isTargetSelectionEnabled,
+                            onClick = { onTargetAppSelected(targetApp) }
+                        )
+                    }
                 }
+            }
+
+            IconButton(
+                onClick = onOpenPromptHistory,
+                modifier = Modifier
+                    .size(36.dp)
+                    .semantics { contentDescription = "프롬프트 기록" }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = null,
+                    tint = AppTheme.colors.textSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 
@@ -237,11 +262,16 @@ internal fun PromptActionRow(
             OutlinedButton(
                 onClick = onTerminateSelfApp,
                 enabled = canCloseSelfApp && !isClosingGemini,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = AppTheme.colors.card,
+                    contentColor = AppTheme.colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "GemGemGen 앱 종료" },
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -261,29 +291,34 @@ internal fun PromptActionRow(
             }
             Box {
                 OutlinedButton(
-                onClick = { geminiMenuExpanded = true },
-                enabled = canCloseGemini && !isClosingGemini,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                modifier = Modifier
-                    .height(28.dp)
-                    .semantics { contentDescription = "Gemini 앱 종료" },
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    onClick = { geminiMenuExpanded = true },
+                    enabled = canCloseGemini && !isClosingGemini,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = AppTheme.colors.card,
+                        contentColor = AppTheme.colors.textPrimary
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier
+                        .height(28.dp)
+                        .semantics { contentDescription = "Gemini 앱 종료" },
+                    border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
                 ) {
-                    Image(
-                        imageVector = GeminiGradientLogo,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "종료",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Image(
+                            imageVector = GeminiGradientLogo,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "종료",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
                 DropdownMenu(
                     expanded = geminiMenuExpanded,
@@ -308,11 +343,16 @@ internal fun PromptActionRow(
             OutlinedButton(
                 onClick = onCleanDeviceMemory,
                 enabled = canCleanMemory && !isClosingGemini && !isCleaningMemory,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = AppTheme.colors.card,
+                    contentColor = AppTheme.colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "메모리 정리" },
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -332,11 +372,16 @@ internal fun PromptActionRow(
             OutlinedButton(
                 onClick = onInsertSystemInstruction,
                 enabled = isTargetSelectionEnabled,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = AppTheme.colors.card,
+                    contentColor = AppTheme.colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "[SI 삽입]" },
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
             ) {
                 Text(
                     text = "[SI 삽입]",
@@ -347,9 +392,14 @@ internal fun PromptActionRow(
             OutlinedButton(
                 onClick = onUndoPromptEdit,
                 enabled = canUndoPromptEdit && isTargetSelectionEnabled,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = AppTheme.colors.card,
+                    contentColor = AppTheme.colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Undo,
@@ -364,9 +414,14 @@ internal fun PromptActionRow(
             OutlinedButton(
                 onClick = onCopyPromptToClipboard,
                 enabled = canCopyPrompt,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = AppTheme.colors.card,
+                    contentColor = AppTheme.colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
             ) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
@@ -376,9 +431,14 @@ internal fun PromptActionRow(
             }
             OutlinedButton(
                 onClick = onImportFromClipboard,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = AppTheme.colors.card,
+                    contentColor = AppTheme.colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier.height(28.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
             ) {
                 Text(
                     text = "가져오기",
@@ -389,9 +449,14 @@ internal fun PromptActionRow(
             OutlinedButton(
                 onClick = onPasteFromClipboard,
                 enabled = isTargetSelectionEnabled,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = AppTheme.colors.card,
+                    contentColor = AppTheme.colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
             ) {
                 Icon(
                     imageVector = Icons.Default.ContentPaste,
@@ -417,19 +482,31 @@ private fun WildcardTokenSuggestionBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         tokens.forEach { token ->
-            SuggestionChip(
+            val shape = RoundedCornerShape(12.dp)
+            Surface(
                 onClick = { onTokenClick(token) },
-                label = {
-                    Text(
-                        text = token,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold
+                shape = shape,
+                color = AppTheme.colors.card,
+                border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.4f)),
+                modifier = Modifier
+                    .shadow(
+                        elevation = 2.dp,
+                        shape = shape,
+                        ambientColor = AppTheme.colors.primary.copy(alpha = 0.2f),
+                        spotColor = AppTheme.colors.primary.copy(alpha = 0.15f)
                     )
-                },
-                modifier = Modifier.semantics {
-                    contentDescription = "와일드카드 $token 삽입"
-                }
-            )
+                    .semantics {
+                        contentDescription = "와일드카드 $token 삽입"
+                    }
+            ) {
+                Text(
+                    text = token,
+                    color = AppTheme.colors.primary,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
         }
     }
 }
@@ -440,14 +517,14 @@ private fun ActionIsland(
     content: @Composable RowScope.() -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
+        color = AppTheme.colors.insetBed,
         modifier = modifier
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.5.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content
         )
@@ -462,42 +539,49 @@ private fun TargetAppButton(
     onClick: () -> Unit
 ) {
     val containerColor = if (selected) {
-        MaterialTheme.colorScheme.primary
+        AppTheme.colors.primary
     } else {
-        MaterialTheme.colorScheme.surface
+        AppTheme.colors.card
     }
     val contentColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
+        AppTheme.colors.onPrimary
     } else {
-        MaterialTheme.colorScheme.onSurface
+        AppTheme.colors.textSecondary
     }
+    val shape = RoundedCornerShape(15.dp)
 
     Surface(
         modifier = Modifier
-            .height(28.dp)
+            .height(30.dp)
+            .shadow(
+                elevation = if (selected) 3.dp else 1.dp,
+                shape = shape,
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+            )
             .selectable(
                 selected = selected,
                 enabled = enabled,
                 role = Role.RadioButton,
                 onClick = onClick
             ),
-        shape = RoundedCornerShape(20.dp),
+        shape = shape,
         color = containerColor,
         contentColor = contentColor,
         border = if (selected) {
-            null
+            BorderStroke(1.dp, AppTheme.colors.primary)
         } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            BorderStroke(1.dp, AppTheme.colors.cardBorder)
         }
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = targetApp.displayName,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
             )
         }
     }

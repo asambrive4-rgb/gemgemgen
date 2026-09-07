@@ -36,7 +36,7 @@ class WildcardEditorSessionTest {
     }
 
     @Test
-    fun trimForInactiveTab_clearsBodyAndUndoWhenClean() {
+    fun trimForInactiveTab_clearsOnlyUndoWhenClean() {
         val file = WildcardTextFile("hair", "hair.txt")
         val session = WildcardEditorSession()
             .open(file, "black hair")
@@ -46,8 +46,8 @@ class WildcardEditorSessionTest {
         val trimmed = session.trimForInactiveTab()
 
         assertEquals(file, trimmed.selectedFile)
-        assertEquals("", trimmed.savedText)
-        assertEquals("", trimmed.editingText)
+        assertEquals("black hair", trimmed.savedText)
+        assertEquals("black hair", trimmed.editingText)
         assertTrue(trimmed.undoStack.isEmpty())
         assertFalse(trimmed.hasUnsavedChanges)
     }

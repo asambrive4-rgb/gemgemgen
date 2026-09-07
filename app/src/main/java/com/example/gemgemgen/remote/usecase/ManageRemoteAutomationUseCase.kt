@@ -1,6 +1,8 @@
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
+import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.AutomationStartRecorder
 import com.example.gemgemgen.automation.usecase.NoOpAutomationStartRecorder
@@ -8,6 +10,8 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
+import com.example.gemgemgen.wildcard.usecase.NoOpWildcardSetRepository
+import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.flow.StateFlow
@@ -15,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 class ManageRemoteAutomationUseCase(
     private val gateway: RemoteAutomationGateway,
     private val automationStartRecorder: AutomationStartRecorder = NoOpAutomationStartRecorder,
+    private val wildcardSetRepository: WildcardSetRepository = NoOpWildcardSetRepository,
+    private val promptGenerator: PromptGenerator = PromptGenerator(),
     private val requestIdProvider: () -> String = { UUID.randomUUID().toString() }
 ) {
     private val activeRequestId = AtomicReference<String?>(null)
@@ -60,13 +66,21 @@ class ManageRemoteAutomationUseCase(
             gateway.forceStop(previousRequestId)
         }
 
+        val wildcardTokens = promptGenerator.extractTokens(request.promptTemplate).toSet()
+        val wildcards = if (wildcardTokens.isEmpty()) {
+            emptyList()
+        } else {
+            runCatching { wildcardSetRepository.load(wildcardTokens) }.getOrDefault(emptyList())
+        }
+
         try {
             gateway.send(
                 request = RemoteAutomationRequest(
                     requestId = requestId,
                     promptTemplate = request.promptTemplate,
                     repeatCountText = request.repeatCountText,
-                    targetApp = request.targetApp
+                    targetApp = request.targetApp,
+                    wildcards = wildcards
                 ),
                 onStateChange = { state ->
                     if (activeRequestId.get() == requestId) {

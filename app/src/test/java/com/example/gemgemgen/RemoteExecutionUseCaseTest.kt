@@ -34,6 +34,28 @@ class RemoteExecutionUseCaseTest {
         )
     }
 
+    @Test
+    fun decide_allowsWhenWildcardsNotRequired_evenIfDirectoryInaccessible() {
+        assertEquals(
+            RemoteExecutionDecision.Allowed,
+            useCase.decide(
+                readyConditions().copy(isWildcardDirectoryAccessible = false),
+                requiresWildcardDirectory = false
+            )
+        )
+    }
+
+    @Test
+    fun decide_rejectsWhenWildcardsRequired_andDirectoryInaccessible() {
+        assertEquals(
+            RemoteExecutionDecision.Rejected("S25 FE의 wildcard 폴더에 접근할 수 없습니다."),
+            useCase.decide(
+                readyConditions().copy(isWildcardDirectoryAccessible = false),
+                requiresWildcardDirectory = true
+            )
+        )
+    }
+
     private fun readyConditions() = RemoteExecutionConditions(
         isWifiConnected = true,
         isScreenInteractive = true,

@@ -27,9 +27,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -42,18 +42,22 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
@@ -74,6 +78,7 @@ import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.blockMainTabSwipe
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlin.math.roundToInt
 
 @Composable
@@ -207,53 +212,30 @@ internal fun AnalysisScreen(
         }
     }
 
-    if (uiState.showKeyDialog) {
-        ApiKeyDialog(
-            uiState = uiState,
-            onDismiss = onDismissKeyDialog,
-            onLabelChange = onKeyLabelChange,
-            onKeyValueChange = onKeyValueChange,
-            onAdd = onAddApiKey,
-            onDelete = onDeleteApiKey,
-            onActivate = onActivateApiKey,
-            onStartEdit = onStartEditApiKey
-        )
-    }
-
-    if (uiState.showResetConfirmation) {
-        ResetAnalysisSessionDialog(
-            onConfirm = onConfirmResetSession,
-            onDismiss = onDismissResetSession
-        )
-    }
-
-    uiState.editingApiKey?.let { editingKey ->
-        EditKeyLabelDialog(
-            originalLabel = editingKey.label,
-            currentValue = uiState.editingKeyLabelInput,
-            onValueChange = onEditKeyLabelChange,
-            onDismiss = onCancelEditApiKey,
-            onConfirm = onUpdateKeyLabel
-        )
-    }
-
-    uiState.pendingOverwriteFileName?.let { fileName ->
-        OverwriteDialog(
-            fileName = fileName,
-            onConfirmOverwrite = onConfirmOverwrite,
-            onDismiss = onDismissOverwrite
-        )
-    }
-
-    if (uiState.showGrokLoginDialog) {
-        GrokLoginDialog(
-            userCode = uiState.grokLoginUserCode,
-            verificationUri = uiState.grokLoginVerificationUri,
-            isPolling = uiState.isGrokLoginPolling,
-            onOpenUrl = onOpenGrokLoginUrl,
-            onCancel = onCancelGrokLogin
-        )
-    }
+    val activeDialog = deriveActiveAnalysisDialog(uiState)
+    val dialogActions = AnalysisDialogActions(
+        onDismissKeyDialog = onDismissKeyDialog,
+        onKeyLabelChange = onKeyLabelChange,
+        onKeyValueChange = onKeyValueChange,
+        onAddApiKey = onAddApiKey,
+        onDeleteApiKey = onDeleteApiKey,
+        onActivateApiKey = onActivateApiKey,
+        onStartEditApiKey = onStartEditApiKey,
+        onEditKeyLabelChange = onEditKeyLabelChange,
+        onCancelEditApiKey = onCancelEditApiKey,
+        onUpdateKeyLabel = onUpdateKeyLabel,
+        onConfirmResetSession = onConfirmResetSession,
+        onDismissResetSession = onDismissResetSession,
+        onConfirmOverwrite = onConfirmOverwrite,
+        onDismissOverwrite = onDismissOverwrite,
+        onOpenGrokLoginUrl = onOpenGrokLoginUrl,
+        onCancelGrokLogin = onCancelGrokLogin
+    )
+    AnalysisDialogHost(
+        activeDialog = activeDialog,
+        uiState = uiState,
+        actions = dialogActions
+    )
 }
 
 @Composable
@@ -263,31 +245,39 @@ private fun ModelChip(
     onClick: () -> Unit
 ) {
     val containerColor = if (selected) {
-        MaterialTheme.colorScheme.primary
+        AppTheme.colors.primary
     } else {
-        MaterialTheme.colorScheme.surface
+        AppTheme.colors.card
     }
     val contentColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
+        AppTheme.colors.onPrimary
     } else {
-        MaterialTheme.colorScheme.onSurface
+        AppTheme.colors.textSecondary
     }
+    val shape = RoundedCornerShape(14.dp)
     Surface(
-        shape = MaterialTheme.shapes.small,
+        shape = shape,
         color = containerColor,
         contentColor = contentColor,
         border = if (selected) {
-            null
+            BorderStroke(1.dp, AppTheme.colors.primary)
         } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+            BorderStroke(1.dp, AppTheme.colors.cardBorder)
         },
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier
+            .shadow(
+                elevation = if (selected) 3.dp else 1.dp,
+                shape = shape,
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+            )
+            .clickable(onClick = onClick)
     ) {
         Text(
             text = label,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
         )
     }
 }
@@ -301,11 +291,19 @@ private fun ApiKeyHeader(
     onStartGrokLogin: () -> Unit,
     onLogoutGrok: () -> Unit
 ) {
+    val headerShape = RoundedCornerShape(18.dp)
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 3.dp,
+                shape = headerShape,
+                ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
+                spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
+            ),
+        color = AppTheme.colors.card,
+        shape = headerShape,
+        border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -494,59 +492,7 @@ private fun CompactOutlinedButton(
     }
 }
 
-@Composable
-private fun GrokLoginDialog(
-    userCode: String,
-    verificationUri: String,
-    isPolling: Boolean,
-    onOpenUrl: (String) -> Unit,
-    onCancel: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("Grok 로그인") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (userCode.isBlank()) {
-                    Text("로그인 코드를 준비하는 중...")
-                } else {
-                    Text("Firefox에서 아래 코드를 승인하세요.")
-                    Text(
-                        text = userCode,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    if (verificationUri.isNotBlank()) {
-                        Text(
-                            text = verificationUri,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (isPolling) {
-                        Text(
-                            text = "승인 대기 중...",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (verificationUri.isNotBlank()) {
-                TextButton(onClick = { onOpenUrl(verificationUri) }) {
-                    Text("Firefox에서 열기")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) {
-                Text("취소")
-            }
-        }
-    )
-}
+
 
 /**
  * 원문 입력(좌)과 마스킹 결과(우)를 50:50으로 나란히 배치한다.
@@ -676,7 +622,7 @@ private fun StickyBottomActionPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AnalysisCategory.entries.forEach { category ->
@@ -747,13 +693,25 @@ private fun StickyBottomActionPanel(
                     )
                 }
             } else {
+                val btnShape = RoundedCornerShape(14.dp)
                 Button(
                     onClick = onGenerateTxt,
                     enabled = uiState.canGenerate,
+                    shape = btnShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AppTheme.colors.primary,
+                        contentColor = AppTheme.colors.onPrimary
+                    ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(PrimaryActionButtonHeight)
+                        .shadow(
+                            elevation = if (uiState.canGenerate) 4.dp else 0.dp,
+                            shape = btnShape,
+                            ambientColor = AppTheme.colors.primary.copy(alpha = 0.4f),
+                            spotColor = AppTheme.colors.primary.copy(alpha = 0.3f)
+                        )
                 ) {
                     Text(
                         text = "TXT 생성",
@@ -764,14 +722,21 @@ private fun StickyBottomActionPanel(
                 FilledTonalButton(
                     onClick = onGenerate,
                     enabled = uiState.canGenerate,
+                    shape = btnShape,
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        containerColor = AppTheme.colors.accent,
+                        contentColor = Color.White
                     ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(PrimaryActionButtonHeight)
+                        .shadow(
+                            elevation = if (uiState.canGenerate) 4.dp else 0.dp,
+                            shape = btnShape,
+                            ambientColor = AppTheme.colors.accent.copy(alpha = 0.4f),
+                            spotColor = AppTheme.colors.accent.copy(alpha = 0.3f)
+                        )
                 ) {
                     Text(
                         text = "생성",
@@ -784,32 +749,7 @@ private fun StickyBottomActionPanel(
     }
 }
 
-@Composable
-private fun ResetAnalysisSessionDialog(
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("분석 세션 비우기") },
-        text = {
-            Text(
-                "원문, 카테고리, 마스킹, 생성 결과와 변주 조건이 모두 지워집니다. " +
-                    "자동화 프롬프트와 계정 설정은 유지됩니다."
-            )
-        },
-        confirmButton = {
-            Button(onClick = onConfirm) {
-                Text("비우기")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        }
-    )
-}
+
 
 @Composable
 private fun CategoryChip(
@@ -819,31 +759,39 @@ private fun CategoryChip(
     onClick: () -> Unit
 ) {
     val containerColor = if (selected) {
-        MaterialTheme.colorScheme.primary
+        AppTheme.colors.primary
     } else {
-        MaterialTheme.colorScheme.surface
+        AppTheme.colors.card
     }
     val contentColor = if (selected) {
-        MaterialTheme.colorScheme.onPrimary
+        AppTheme.colors.onPrimary
     } else {
-        MaterialTheme.colorScheme.onSurface
+        AppTheme.colors.textPrimary
     }
+    val shape = RoundedCornerShape(14.dp)
     Surface(
-        shape = MaterialTheme.shapes.small,
+        shape = shape,
         color = containerColor,
         contentColor = contentColor,
-        border = if (selected) {
-            null
-        } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
-        },
-        modifier = Modifier.clickable(enabled = enabled, onClick = onClick)
+        border = BorderStroke(
+            1.dp,
+            if (selected) AppTheme.colors.primary else AppTheme.colors.cardBorder
+        ),
+        modifier = Modifier
+            .alpha(if (enabled) 1f else 0.45f)
+            .shadow(
+                elevation = if (selected) 3.dp else 1.dp,
+                shape = shape,
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.25f),
+                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+            )
+            .clickable(enabled = enabled, onClick = onClick)
     ) {
         Text(
             text = category.label,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
         )
     }
 }
@@ -856,15 +804,24 @@ private fun TargetSegmentBody(
     modifier: Modifier = Modifier
 ) {
     val hasSegment = targetSegment != null
+    val shape = RoundedCornerShape(16.dp)
     Surface(
-        modifier = modifier,
+        modifier = modifier.shadow(
+            elevation = 2.dp,
+            shape = shape,
+            ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
+            spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
+        ),
         color = if (hasSegment) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            AppTheme.colors.primary.copy(alpha = 0.08f)
         } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            AppTheme.colors.inputBackground
         },
-        shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        shape = shape,
+        border = BorderStroke(
+            1.dp,
+            if (hasSegment) AppTheme.colors.primary.copy(alpha = 0.45f) else AppTheme.colors.inputBorder
+        )
     ) {
         Column(
             modifier = Modifier
@@ -910,18 +867,17 @@ private fun DirectionSection(
     selectedIds: Set<String>,
     onToggleDirection: (String) -> Unit
 ) {
-    // 세로를 줄이기 위해 제목 + 한 줄 칩만 표시한다.
-    // 더미 안내 문구·카드형 설명은 제거한다 (선택/힌트 로직은 유지).
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             text = "추천 방향",
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = AppTheme.colors.textPrimary
         )
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             directions.forEach { direction ->
                 DirectionChip(
@@ -940,29 +896,56 @@ private fun DirectionChip(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val shape = RoundedCornerShape(14.dp)
+    val containerColor = if (selected) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.card
+    }
+    val contentColor = if (selected) {
+        AppTheme.colors.onPrimary
+    } else {
+        AppTheme.colors.textPrimary
+    }
+    val borderColor = if (selected) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.cardBorder
+    }
+
     Surface(
-        modifier = Modifier.clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.small,
-        color = if (selected) {
-            MaterialTheme.colorScheme.secondaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-        },
-        border = BorderStroke(
-            1.dp,
-            if (selected) {
-                MaterialTheme.colorScheme.secondary
-            } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            }
-        )
+        shape = shape,
+        color = containerColor,
+        contentColor = contentColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier
+            .shadow(
+                elevation = if (selected) 2.dp else 1.dp,
+                shape = shape,
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.25f),
+                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+            )
+            .clickable(onClick = onClick)
     ) {
-        Text(
-            text = title,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                    tint = AppTheme.colors.onPrimary
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
+            )
+        }
     }
 }
 
@@ -1179,6 +1162,8 @@ private fun TxtResultSection(
                 .heightIn(min = 160.dp, max = 200.dp)
                 .blockMainTabSwipe(),
             readOnly = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = appTextFieldColors(),
             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
         )
         OutlinedTextField(
@@ -1187,6 +1172,8 @@ private fun TxtResultSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .blockMainTabSwipe(),
+            shape = RoundedCornerShape(12.dp),
+            colors = appTextFieldColors(),
             singleLine = true,
             label = { Text("저장할 와일드카드 파일명") },
             placeholder = { Text("옷.txt") }
@@ -1194,186 +1181,7 @@ private fun TxtResultSection(
     }
 }
 
-@Composable
-private fun ApiKeyDialog(
-    uiState: AnalysisUiState,
-    onDismiss: () -> Unit,
-    onLabelChange: (String) -> Unit,
-    onKeyValueChange: (String) -> Unit,
-    onAdd: () -> Unit,
-    onDelete: (String) -> Unit,
-    onActivate: (String) -> Unit,
-    onStartEdit: (GeminiApiKeySummary) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Gemini API 키 관리") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedTextField(
-                    value = uiState.keyLabelInput,
-                    onValueChange = onLabelChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("키 이름") },
-                    placeholder = { Text("개인 키") }
-                )
-                OutlinedTextField(
-                    value = uiState.keyValueInput,
-                    onValueChange = onKeyValueChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("API 키") },
-                    visualTransformation = PasswordVisualTransformation()
-                )
-                Button(
-                    onClick = onAdd,
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("추가")
-                }
 
-                HorizontalDivider()
-
-                if (uiState.apiKeys.isEmpty()) {
-                    Text(
-                        text = "저장된 키가 없습니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    uiState.apiKeys.forEach { key ->
-                        ApiKeyRow(
-                            key = key,
-                            onActivate = onActivate,
-                            onDelete = onDelete,
-                            onEdit = onStartEdit
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("닫기")
-            }
-        }
-    )
-}
-
-@Composable
-private fun ApiKeyRow(
-    key: GeminiApiKeySummary,
-    onActivate: (String) -> Unit,
-    onDelete: (String) -> Unit,
-    onEdit: (GeminiApiKeySummary) -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.small,
-        color = if (key.isActive) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-        },
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-    ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = "${key.label} ${key.preview}",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = { onActivate(key.id) },
-                    enabled = !key.isActive
-                ) {
-                    Text(if (key.isActive) "활성" else "활성화")
-                }
-                OutlinedButton(
-                    onClick = { onEdit(key) }
-                ) {
-                    Text("이름 수정")
-                }
-                TextButton(onClick = { onDelete(key.id) }) {
-                    Text("삭제")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OverwriteDialog(
-    fileName: String,
-    onConfirmOverwrite: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("같은 파일명이 있습니다") },
-        text = {
-            Text("$fileName 파일을 덮어쓸까요? 다른 이름을 입력하려면 취소하고 파일명을 바꿔주세요.")
-        },
-        confirmButton = {
-            Button(onClick = onConfirmOverwrite) {
-                Text("덮어쓰기")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("다른 파일명 입력")
-            }
-        }
-    )
-}
-
-@Composable
-private fun EditKeyLabelDialog(
-    originalLabel: String,
-    currentValue: String,
-    onValueChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("API 키 이름 수정") },
-        text = {
-            OutlinedTextField(
-                value = currentValue,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("새 키 이름") },
-                placeholder = { Text(originalLabel) }
-            )
-        },
-        confirmButton = {
-            Button(onClick = onConfirm) {
-                Text("저장")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-        }
-    )
-}
 
 @Composable
 private fun CustomHintSection(
@@ -1389,12 +1197,13 @@ private fun CustomHintSection(
             Text(
                 text = "추가 요청사항 (선택)",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.colors.textPrimary
             )
             Text(
                 text = "${customHint.length}/100",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = AppTheme.colors.textSecondary
             )
         }
         OutlinedTextField(
@@ -1403,6 +1212,8 @@ private fun CustomHintSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .blockMainTabSwipe(),
+            shape = RoundedCornerShape(14.dp),
+            colors = appTextFieldColors(),
             singleLine = false,
             minLines = 1,
             maxLines = 3,

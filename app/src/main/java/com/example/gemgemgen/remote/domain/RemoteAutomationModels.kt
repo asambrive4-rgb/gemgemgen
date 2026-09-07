@@ -2,12 +2,14 @@ package com.example.gemgemgen.remote.domain
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.wildcard.domain.WildcardSet
 
 data class RemoteAutomationRequest(
     val requestId: String,
     val promptTemplate: String,
     val repeatCountText: String,
-    val targetApp: AutomationTargetApp
+    val targetApp: AutomationTargetApp,
+    val wildcards: List<WildcardSet> = emptyList()
 )
 
 data class RemoteAutomationStatus(

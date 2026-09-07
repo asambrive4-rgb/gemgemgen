@@ -19,7 +19,10 @@ object AndroidAutomationRuntimeProvider {
                 clipboardGateway = AndroidClipboardGateway(appContext),
                 wildcardSetRepository = AndroidWildcardSetRepository(appContext),
                 promptGatewayProvider = ActivePromptAutomationGatewayProvider,
-                targetAppLauncher = AndroidTargetAppLauncher(appContext)
+                targetAppLauncher = AndroidTargetAppLauncher(appContext),
+                promptHistoryStore = com.example.gemgemgen.automation.usecase.PromptHistoryStore(
+                    SharedPreferencesPromptHistoryRepository(appContext)
+                )
             )
         }
     }

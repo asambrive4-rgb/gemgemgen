@@ -26,6 +26,34 @@ class RemoteAutomationProtocolTest {
     }
 
     @Test
+    fun runRequest_roundTripsWithWildcards() {
+        val message = RemoteProtocolMessage.RunRequest(
+            senderId = "tablet",
+            token = "token",
+            request = RemoteAutomationRequest(
+                requestId = "request-2",
+                promptTemplate = "a photo of __color__ __flower__",
+                repeatCountText = "5",
+                targetApp = AutomationTargetApp.CHATGPT,
+                wildcards = listOf(
+                    com.example.gemgemgen.wildcard.domain.WildcardSet(
+                        token = "__color__",
+                        fileName = "color.txt",
+                        items = listOf("red", "blue", "yellow")
+                    ),
+                    com.example.gemgemgen.wildcard.domain.WildcardSet(
+                        token = "__flower__",
+                        fileName = "flower.txt",
+                        items = listOf("rose", "tulip")
+                    )
+                )
+            )
+        )
+
+        assertEquals(message, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(message)))
+    }
+
+    @Test
     fun stateUpdate_roundTripsDetailedFailureAndProgress() {
         val running = RemoteProtocolMessage.StateUpdate(
             requestId = "request-1",

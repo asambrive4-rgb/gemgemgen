@@ -9,9 +9,13 @@ import com.example.gemgemgen.analysis.ui.AnalysisScreen
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.automation.ui.AutomationScreen
 import com.example.gemgemgen.automation.ui.MainUiState
+import com.example.gemgemgen.automation.ui.SettingsDialogHost
+import com.example.gemgemgen.ui.theme.AppThemeMode
+import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.ui.WildcardManagerScreen
 import com.example.gemgemgen.wildcard.ui.WildcardManagerUiState
@@ -20,6 +24,8 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 internal data class AutomationAppActions(
     val onSelectTab: (MainTab) -> Unit,
     val onShowSettings: () -> Unit,
+    val onSelectThemePalette: (AppThemePalette) -> Unit = {},
+    val onSelectThemeMode: (AppThemeMode) -> Unit = {},
     val onClearFocus: () -> Unit,
     val onHideSettings: () -> Unit,
     val onConfirmAccessibilityPrompt: () -> Unit,
@@ -48,7 +54,11 @@ internal data class AutomationAppActions(
     val onRunAutomation: () -> Unit,
     val onCancelAutomation: () -> Unit,
     val onAutomationModeSelected: (AutomationMode) -> Unit,
-    val onPairRemoteDevice: (String) -> Unit
+    val onPairRemoteDevice: (String) -> Unit,
+    val onOpenPromptHistory: () -> Unit = {},
+    val onClosePromptHistory: () -> Unit = {},
+    val onSelectPromptHistoryItem: (PromptHistoryItem) -> Unit = {},
+    val onClearPromptHistory: () -> Unit = {}
 )
 
 internal data class WildcardAppActions(
@@ -145,10 +155,10 @@ internal fun AutomationApp(
     promptTemplateState: TextFieldState,
     analysisUiState: AnalysisUiState,
     analysisPromptState: TextFieldState,
-    wildcardUiState: WildcardManagerUiState?,
+    wildcardUiState: WildcardManagerUiState,
     automationActions: AutomationAppActions,
     analysisActions: AnalysisAppActions,
-    wildcardActions: WildcardAppActions?
+    wildcardActions: WildcardAppActions
 ) {
     MainTabbedScreen(
         selectedTab = selectedTab,
@@ -198,7 +208,13 @@ internal fun AutomationApp(
                     onRunMvp = automationActions.onRunAutomation,
                     onCancelAutomation = automationActions.onCancelAutomation,
                     onAutomationModeSelected = automationActions.onAutomationModeSelected,
-                    onPairRemoteDevice = automationActions.onPairRemoteDevice
+                    onPairRemoteDevice = automationActions.onPairRemoteDevice,
+                    onOpenPromptHistory = automationActions.onOpenPromptHistory,
+                    onClosePromptHistory = automationActions.onClosePromptHistory,
+                    onSelectPromptHistoryItem = automationActions.onSelectPromptHistoryItem,
+                    onClearPromptHistory = automationActions.onClearPromptHistory,
+                    onSelectThemePalette = automationActions.onSelectThemePalette,
+                    onSelectThemeMode = automationActions.onSelectThemeMode
                 )
             },
             MainTabPage(MainTab.ANALYSIS) {
@@ -247,58 +263,76 @@ internal fun AutomationApp(
                 )
             },
             MainTabPage(MainTab.WILDCARD) {
-                val state = wildcardUiState
-                val actions = wildcardActions
-                if (state != null && actions != null) {
-                    WildcardManagerScreen(
-                        uiState = state,
-                        environmentStatus = mainUiState.environmentStatus,
-                        environmentSetupInfo = mainUiState.environmentSetupInfo,
-                        onClearFocus = automationActions.onClearFocus,
-                        onRefresh = actions.onRefresh,
-                        onSelectFolder = actions.onSelectFolder,
-                        onFileClick = actions.onFileClick,
-                        onTextChange = actions.onTextChange,
-                        onSave = actions.onSave,
-                        onRequestNewFile = actions.onRequestNewFile,
-                        onNewFileNameChange = actions.onNewFileNameChange,
-                        onCreateNewFile = actions.onCreateNewFile,
-                        onDismissNewFile = actions.onDismissNewFile,
-                        onRequestDelete = actions.onRequestDelete,
-                        onConfirmDelete = actions.onConfirmDelete,
-                        onDismissDelete = actions.onDismissDelete,
-                        onRequestRename = actions.onRequestRename,
-                        onRenameFileNameChange = actions.onRenameFileNameChange,
-                        onConfirmRename = actions.onConfirmRename,
-                        onDismissRename = actions.onDismissRename,
-                        onPaste = actions.onPaste,
-                        onPasteBelow = actions.onPasteBelow,
-                        onCopy = actions.onCopy,
-                        onUndo = actions.onUndo,
-                        onEnterLineSelectionMode = actions.onEnterLineSelectionMode,
-                        onExitLineSelectionMode = actions.onExitLineSelectionMode,
-                        onToggleLineSelection = actions.onToggleLineSelection,
-                        onSelectAllLines = actions.onSelectAllLines,
-                        onDeselectAllLines = actions.onDeselectAllLines,
-                        onComposeDynamicPrompt = actions.onComposeDynamicPrompt,
-                        onRequestClassify = actions.onRequestClassify,
-                        onClassifyCriteriaChange = actions.onClassifyCriteriaChange,
-                        onClassifyProviderSelected = actions.onClassifyProviderSelected,
-                        onClassifyModelSelected = actions.onClassifyModelSelected,
-                        onDismissClassifyCriteria = actions.onDismissClassifyCriteria,
-                        onRunClassify = actions.onRunClassify,
-                        onDismissClassifyPreview = actions.onDismissClassifyPreview,
-                        onClassifyFileNameChange = actions.onClassifyFileNameChange,
-                        onToggleClassifyFileNameEdit = actions.onToggleClassifyFileNameEdit,
-                        onSaveClassifyResult = actions.onSaveClassifyResult,
-                        onConfirmClassifyOverwrite = actions.onConfirmClassifyOverwrite,
-                        onDismissClassifyOverwrite = actions.onDismissClassifyOverwrite,
-                        onConfirmPendingSave = actions.onConfirmPendingSave,
-                        onConfirmPendingDiscard = actions.onConfirmPendingDiscard,
-                        onCancelPending = actions.onCancelPending
-                    )
-                }
+                WildcardManagerScreen(
+                    uiState = wildcardUiState,
+                    environmentStatus = mainUiState.environmentStatus,
+                    environmentSetupInfo = mainUiState.environmentSetupInfo,
+                    onClearFocus = automationActions.onClearFocus,
+                    onRefresh = wildcardActions.onRefresh,
+                    onSelectFolder = wildcardActions.onSelectFolder,
+                    onFileClick = wildcardActions.onFileClick,
+                    onTextChange = wildcardActions.onTextChange,
+                    onSave = wildcardActions.onSave,
+                    onRequestNewFile = wildcardActions.onRequestNewFile,
+                    onNewFileNameChange = wildcardActions.onNewFileNameChange,
+                    onCreateNewFile = wildcardActions.onCreateNewFile,
+                    onDismissNewFile = wildcardActions.onDismissNewFile,
+                    onRequestDelete = wildcardActions.onRequestDelete,
+                    onConfirmDelete = wildcardActions.onConfirmDelete,
+                    onDismissDelete = wildcardActions.onDismissDelete,
+                    onRequestRename = wildcardActions.onRequestRename,
+                    onRenameFileNameChange = wildcardActions.onRenameFileNameChange,
+                    onConfirmRename = wildcardActions.onConfirmRename,
+                    onDismissRename = wildcardActions.onDismissRename,
+                    onPaste = wildcardActions.onPaste,
+                    onPasteBelow = wildcardActions.onPasteBelow,
+                    onCopy = wildcardActions.onCopy,
+                    onUndo = wildcardActions.onUndo,
+                    onEnterLineSelectionMode = wildcardActions.onEnterLineSelectionMode,
+                    onExitLineSelectionMode = wildcardActions.onExitLineSelectionMode,
+                    onToggleLineSelection = wildcardActions.onToggleLineSelection,
+                    onSelectAllLines = wildcardActions.onSelectAllLines,
+                    onDeselectAllLines = wildcardActions.onDeselectAllLines,
+                    onComposeDynamicPrompt = wildcardActions.onComposeDynamicPrompt,
+                    onRequestClassify = wildcardActions.onRequestClassify,
+                    onClassifyCriteriaChange = wildcardActions.onClassifyCriteriaChange,
+                    onClassifyProviderSelected = wildcardActions.onClassifyProviderSelected,
+                    onClassifyModelSelected = wildcardActions.onClassifyModelSelected,
+                    onDismissClassifyCriteria = wildcardActions.onDismissClassifyCriteria,
+                    onRunClassify = wildcardActions.onRunClassify,
+                    onDismissClassifyPreview = wildcardActions.onDismissClassifyPreview,
+                    onClassifyFileNameChange = wildcardActions.onClassifyFileNameChange,
+                    onToggleClassifyFileNameEdit = wildcardActions.onToggleClassifyFileNameEdit,
+                    onSaveClassifyResult = wildcardActions.onSaveClassifyResult,
+                    onConfirmClassifyOverwrite = wildcardActions.onConfirmClassifyOverwrite,
+                    onDismissClassifyOverwrite = wildcardActions.onDismissClassifyOverwrite,
+                    onConfirmPendingSave = wildcardActions.onConfirmPendingSave,
+                    onConfirmPendingDiscard = wildcardActions.onConfirmPendingDiscard,
+                    onCancelPending = wildcardActions.onCancelPending
+                )
             }
         )
+    )
+
+    SettingsDialogHost(
+        showSettings = mainUiState.showSettings,
+        showAccessibilityPrompt = mainUiState.showAccessibilityPrompt,
+        status = mainUiState.environmentStatus,
+        setupInfo = mainUiState.environmentSetupInfo,
+        hasPromptTemplate = mainUiState.hasPromptTemplate,
+        message = mainUiState.settingsMessage,
+        error = mainUiState.settingsError,
+        selectedThemePalette = mainUiState.selectedThemePalette,
+        selectedThemeMode = mainUiState.selectedThemeMode,
+        onSelectThemePalette = automationActions.onSelectThemePalette,
+        onSelectThemeMode = automationActions.onSelectThemeMode,
+        onDismiss = automationActions.onHideSettings,
+        onConfirmAccessibilityPrompt = automationActions.onConfirmAccessibilityPrompt,
+        onDismissAccessibilityPromptToSettings = automationActions.onDismissAccessibilityPromptToSettings,
+        onRefresh = automationActions.onRefreshStatus,
+        onSelectWildcardFolder = automationActions.onSelectWildcardFolder,
+        onSelectSafWildcardFolder = automationActions.onSelectSafWildcardFolder,
+        onOpenWildcardStorageSettings = automationActions.onOpenWildcardStorageSettings,
+        onOpenAccessibilitySettings = automationActions.onOpenAccessibilitySettings
     )
 }

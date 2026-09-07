@@ -25,17 +25,21 @@ import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
 import com.example.gemgemgen.automation.android.AndroidOverlayPermissionGateway
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
+import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRepository
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CleanDeviceMemoryUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
+import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
+import com.example.gemgemgen.core.android.AndroidSoundAlertGateway
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
 import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
+import com.example.gemgemgen.wildcard.android.AndroidWildcardSetRepository
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
@@ -50,10 +54,14 @@ class AndroidAppContainer(context: Context) {
     private val lastRunSnapshotStore = LastRunSnapshotStore(
         SharedPreferencesLastRunSnapshotRepository(appContext)
     )
+    private val promptHistoryStore = PromptHistoryStore(
+        SharedPreferencesPromptHistoryRepository(appContext)
+    )
     private val clipboardGateway = AndroidClipboardGateway(appContext)
     private val recordAutomationStart = RecordAutomationStartUseCase(
         lastRunSnapshotStore = lastRunSnapshotStore,
-        clipboardGateway = clipboardGateway
+        clipboardGateway = clipboardGateway,
+        promptHistoryStore = promptHistoryStore
     )
     private val geminiApiKeyRepository = AndroidEncryptedGeminiApiKeyRepository(appContext)
     private val analysisAiGateway = RoutingAnalysisAiGateway(
@@ -69,6 +77,8 @@ class AndroidAppContainer(context: Context) {
         apiKeyRepository = geminiApiKeyRepository,
         grokAuth = grokAuthManager
     )
+
+    val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
 
     val mainViewModelFactory: ViewModelProvider.Factory = factory<MainViewModel> {
         MainViewModel(
@@ -99,8 +109,12 @@ class AndroidAppContainer(context: Context) {
             wildcardFileRepository = AndroidWildcardFileRepository(appContext),
             manageRemoteAutomation = ManageRemoteAutomationUseCase(
                 gateway = AndroidRemoteAutomationGateway(appContext),
-                automationStartRecorder = recordAutomationStart
-            )
+                automationStartRecorder = recordAutomationStart,
+                wildcardSetRepository = AndroidWildcardSetRepository(appContext)
+            ),
+            soundAlertGateway = AndroidSoundAlertGateway(appContext),
+            promptHistoryStore = promptHistoryStore,
+            themePaletteStore = themePaletteStore
         )
     }
 

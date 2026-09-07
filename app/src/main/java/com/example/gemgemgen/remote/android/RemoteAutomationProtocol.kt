@@ -3,11 +3,15 @@ package com.example.gemgemgen.remote.android
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
+import com.example.gemgemgen.wildcard.domain.WildcardSet
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
@@ -66,6 +70,19 @@ internal object RemoteAutomationProtocol {
                 put("prompt", message.request.promptTemplate)
                 put("repeatCount", message.request.repeatCountText)
                 put("targetApp", message.request.targetApp.storageValue)
+                if (message.request.wildcards.isNotEmpty()) {
+                    put("wildcards", buildJsonArray {
+                        message.request.wildcards.forEach { set ->
+                            add(buildJsonObject {
+                                put("token", set.token)
+                                put("fileName", set.fileName)
+                                put("items", buildJsonArray {
+                                    set.items.forEach { add(it) }
+                                })
+                            })
+                        }
+                    })
+                }
             }
             is RemoteProtocolMessage.CancelRequest -> buildJsonObject {
                 put("type", "cancel")
@@ -97,16 +114,29 @@ internal object RemoteAutomationProtocol {
                 token = value.string("token"),
                 message = value.string("message")
             )
-            "run" -> RemoteProtocolMessage.RunRequest(
-                senderId = value.string("senderId"),
-                token = value.string("token"),
-                request = RemoteAutomationRequest(
-                    requestId = value.string("requestId"),
-                    promptTemplate = value.string("prompt"),
-                    repeatCountText = value.string("repeatCount"),
-                    targetApp = AutomationTargetApp.fromStorageValue(value.string("targetApp"))
+            "run" -> {
+                val wildcards = runCatching {
+                    value["wildcards"]?.jsonArray?.mapNotNull { element ->
+                        val obj = element as? JsonObject ?: return@mapNotNull null
+                        WildcardSet(
+                            token = obj.string("token"),
+                            fileName = obj.string("fileName"),
+                            items = obj["items"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
+                        )
+                    }
+                }.getOrNull().orEmpty()
+                RemoteProtocolMessage.RunRequest(
+                    senderId = value.string("senderId"),
+                    token = value.string("token"),
+                    request = RemoteAutomationRequest(
+                        requestId = value.string("requestId"),
+                        promptTemplate = value.string("prompt"),
+                        repeatCountText = value.string("repeatCount"),
+                        targetApp = AutomationTargetApp.fromStorageValue(value.string("targetApp")),
+                        wildcards = wildcards
+                    )
                 )
-            )
+            }
             "cancel" -> RemoteProtocolMessage.CancelRequest(
                 senderId = value.string("senderId"),
                 token = value.string("token"),

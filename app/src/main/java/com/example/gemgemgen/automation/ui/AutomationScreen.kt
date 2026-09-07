@@ -28,8 +28,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
+import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.ui.AutomationModePairDialog
 import com.example.gemgemgen.remote.ui.AutomationModePanel
@@ -46,14 +48,14 @@ internal fun AutomationScreen(
     automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
     onClearFocus: () -> Unit,
-    onHideSettings: () -> Unit,
-    onConfirmAccessibilityPrompt: () -> Unit,
-    onDismissAccessibilityPromptToSettings: () -> Unit,
-    onRefreshStatus: () -> Unit,
-    onSelectWildcardFolder: () -> Unit,
-    onSelectSafWildcardFolder: () -> Unit,
-    onOpenWildcardStorageSettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit,
+    onHideSettings: () -> Unit = {},
+    onConfirmAccessibilityPrompt: () -> Unit = {},
+    onDismissAccessibilityPromptToSettings: () -> Unit = {},
+    onRefreshStatus: () -> Unit = {},
+    onSelectWildcardFolder: () -> Unit = {},
+    onSelectSafWildcardFolder: () -> Unit = {},
+    onOpenWildcardStorageSettings: () -> Unit = {},
+    onOpenAccessibilitySettings: () -> Unit = {},
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
     onWildcardTokenSuggestionClick: (String) -> Unit = {},
@@ -73,7 +75,13 @@ internal fun AutomationScreen(
     onRunMvp: () -> Unit,
     onCancelAutomation: () -> Unit,
     onAutomationModeSelected: (AutomationMode) -> Unit,
-    onPairRemoteDevice: (String) -> Unit
+    onPairRemoteDevice: (String) -> Unit,
+    onOpenPromptHistory: () -> Unit = {},
+    onClosePromptHistory: () -> Unit = {},
+    onSelectPromptHistoryItem: (PromptHistoryItem) -> Unit = {},
+    onClearPromptHistory: () -> Unit = {},
+    onSelectThemePalette: (AppThemePalette) -> Unit = {},
+    onSelectThemeMode: (com.example.gemgemgen.ui.theme.AppThemeMode) -> Unit = {}
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     var showPairDialog by remember { mutableStateOf(false) }
@@ -126,7 +134,8 @@ internal fun AutomationScreen(
                     onReplaceSelectedParagraph = onReplaceSelectedParagraph,
                     onImportFromClipboard = onImportFromClipboard,
                     onCopyPromptToClipboard = onCopyPromptToClipboard,
-                    onPasteFromClipboard = onPasteFromClipboard
+                    onPasteFromClipboard = onPasteFromClipboard,
+                    onOpenPromptHistory = onOpenPromptHistory
                 )
 
                 if (!isKeyboardVisible && uiState.automationMode != AutomationMode.RECEIVER) {
@@ -207,27 +216,8 @@ internal fun AutomationScreen(
                     }
                 }
             }
-            if (uiState.showAccessibilityPrompt) {
-                AccessibilityPromptDialog(
-                    onConfirm = onConfirmAccessibilityPrompt,
-                    onDismissToSettings = onDismissAccessibilityPromptToSettings
-                )
-            }
-            if (uiState.showSettings) {
-                StatusSettingsDialog(
-                    status = uiState.environmentStatus,
-                    setupInfo = uiState.environmentSetupInfo,
-                    hasPromptTemplate = uiState.hasPromptTemplate,
-                    message = uiState.settingsMessage,
-                    error = uiState.settingsError,
-                    onDismiss = onHideSettings,
-                    onRefresh = onRefreshStatus,
-                    onSelectWildcardFolder = onSelectWildcardFolder,
-                    onSelectSafWildcardFolder = onSelectSafWildcardFolder,
-                    onOpenWildcardStorageSettings = onOpenWildcardStorageSettings,
-                    onOpenAccessibilitySettings = onOpenAccessibilitySettings
-                )
-            }
+
+
             if (showPairDialog) {
                 AutomationModePairDialog(
                     targetDeviceName = uiState.remoteAutomationStatus.discoveredDeviceName.ifBlank { "S25 FE" },
@@ -238,6 +228,14 @@ internal fun AutomationScreen(
                     onDismiss = {
                         showPairDialog = false
                     }
+                )
+            }
+            if (uiState.showPromptHistory) {
+                PromptHistoryBottomSheet(
+                    items = uiState.promptHistoryItems,
+                    onSelect = onSelectPromptHistoryItem,
+                    onClear = onClearPromptHistory,
+                    onDismiss = onClosePromptHistory
                 )
             }
         }

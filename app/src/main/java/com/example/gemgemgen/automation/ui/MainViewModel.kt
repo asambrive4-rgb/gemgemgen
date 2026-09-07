@@ -11,12 +11,15 @@ import com.example.gemgemgen.automation.domain.PromptEditorSession
 import com.example.gemgemgen.automation.domain.PromptParagraphActionResult
 import com.example.gemgemgen.automation.domain.PromptSegmentEditPolicy
 import com.example.gemgemgen.automation.domain.PromptTextMutation
+import com.example.gemgemgen.automation.domain.PromptHistoryItem
+import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.PromptTypingChange
 import com.example.gemgemgen.automation.domain.PromptUndoHistory
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.SystemInstructionPrompt
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
+import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
@@ -41,6 +44,8 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.remote.usecase.NoOpRemoteAutomationGateway
+import com.example.gemgemgen.core.NoOpSoundAlertGateway
+import com.example.gemgemgen.core.SoundAlertGateway
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -91,18 +96,29 @@ class MainViewModel(
     private val wildcardFileRepository: WildcardFileRepository = EmptyWildcardFileRepository,
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase =
         ManageRemoteAutomationUseCase(NoOpRemoteAutomationGateway()),
+    private val soundAlertGateway: SoundAlertGateway = NoOpSoundAlertGateway,
+    private val promptHistoryStore: PromptHistoryStore? = null,
+    private val themePaletteStore: com.example.gemgemgen.ui.theme.ThemePaletteStore? = null,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
     private var automationPreparationJob: Job? = null
+    private var isRemoteRunActive = false
     private val promptUndoHistory = PromptUndoHistory()
     private var promptUndoDebounceJob: Job? = null
     private var ignoredPromptChangeText: String? = null
     /** TextField / 비즈니스 로직용 최신 프롬프트. 타이핑 중 uiState 전체 방출을 줄이기 위해 분리. */
     private var promptTemplateValue: String = ""
     private var promptEditorSession = PromptEditorSession()
-    private val _uiState = MutableStateFlow(MainUiState())
+    private val _uiState = MutableStateFlow(
+        MainUiState(
+            selectedThemePalette = themePaletteStore?.currentPalette?.value
+                ?: com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
+            selectedThemeMode = themePaletteStore?.currentMode?.value
+                ?: com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT
+        )
+    )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
     val promptTemplateTextFieldState = TextFieldState()
     private val _automationBarUiState = MutableStateFlow(AutomationBarUiState())
@@ -110,6 +126,18 @@ class MainViewModel(
         _automationBarUiState.asStateFlow()
 
     init {
+        themePaletteStore?.let { store ->
+            scope.launch {
+                store.currentPalette.collect { palette ->
+                    _uiState.update { it.copy(selectedThemePalette = palette) }
+                }
+            }
+            scope.launch {
+                store.currentMode.collect { mode ->
+                    _uiState.update { it.copy(selectedThemeMode = mode) }
+                }
+            }
+        }
         scope.launch {
             automation.runState.collect { state ->
                 handleAutomationState(state)
@@ -137,6 +165,14 @@ class MainViewModel(
         }
         loadInitialState()
         refreshStatus()
+    }
+
+    fun onSelectThemePalette(palette: com.example.gemgemgen.ui.theme.AppThemePalette) {
+        themePaletteStore?.setPalette(palette) ?: _uiState.update { it.copy(selectedThemePalette = palette) }
+    }
+
+    fun onSelectThemeMode(mode: com.example.gemgemgen.ui.theme.AppThemeMode) {
+        themePaletteStore?.setThemeMode(mode) ?: _uiState.update { it.copy(selectedThemeMode = mode) }
     }
 
     fun onPromptTemplateChange(value: String) {
@@ -732,6 +768,7 @@ class MainViewModel(
                 return AutomationStartDecision.Rejected
             }
             cancelParagraphSelection()
+            isRemoteRunActive = true
             handleAutomationState(AutomationRunState.Running("S25 FE로 요청 전송 중"))
             val request = AutomationRunRequest(
                 promptTemplate = state.promptTemplate,
@@ -739,6 +776,7 @@ class MainViewModel(
                 targetApp = state.selectedTargetApp
             )
             val job = scope.launch {
+                promptHistoryStore?.record(request.promptTemplate, request.targetApp)
                 val result = manageRemoteAutomation.start(request, ::handleAutomationState)
                 if (result is RemoteActionResult.Failure) {
                     handleAutomationState(AutomationRunState.Failure(result.message))
@@ -765,6 +803,7 @@ class MainViewModel(
         )
         val job = scope.launch {
             try {
+                promptHistoryStore?.record(request.promptTemplate, request.targetApp)
                 automation.run(request)
             } catch (error: CancellationException) {
                 handleAutomationState(AutomationRunState.Stopped)
@@ -784,7 +823,37 @@ class MainViewModel(
         return AutomationStartDecision.Started
     }
 
+    fun openPromptHistory() {
+        val items = promptHistoryStore?.load().orEmpty()
+        _uiState.update { it.copy(showPromptHistory = true, promptHistoryItems = items) }
+    }
+
+    fun closePromptHistory() {
+        _uiState.update { it.copy(showPromptHistory = false) }
+    }
+
+    fun clearPromptHistory() {
+        promptHistoryStore?.clear()
+        _uiState.update { it.copy(promptHistoryItems = emptyList()) }
+    }
+
+    fun selectPromptHistoryItem(item: PromptHistoryItem) {
+        if (_uiState.value.isRunning) return
+        commitPendingPromptUndo()
+        if (promptTemplateValue != item.prompt) {
+            promptUndoHistory.recordImmediateSnapshot(promptTemplateValue)
+        }
+        applyPromptTemplateText(item.prompt)
+        promptTemplateValue = item.prompt
+        publishEditorSession(
+            session = promptEditorSession.afterWholeReplace(item.prompt),
+            canUndoPromptEdit = hasPromptUndo()
+        )
+        closePromptHistory()
+    }
+
     fun cancelAutomation() {
+        isRemoteRunActive = false
         if (_uiState.value.automationMode == AutomationMode.SENDER) {
             val preparationJob = automationPreparationJob
             automationPreparationJob = null
@@ -804,6 +873,7 @@ class MainViewModel(
 
     fun onAutomationModeSelected(mode: AutomationMode) {
         if (_uiState.value.isRunning) return
+        isRemoteRunActive = false
         handleAutomationState(AutomationRunState.Idle)
         manageRemoteAutomation.selectMode(mode)
     }
@@ -826,8 +896,8 @@ class MainViewModel(
 
     private fun loadInitialState() {
         scope.launch {
-            val lastRunSnapshot = withContext(dispatchers.io) {
-                lastRunSnapshotStore.load()
+            val (lastRunSnapshot, historyItems) = withContext(dispatchers.io) {
+                lastRunSnapshotStore.load() to (promptHistoryStore?.load().orEmpty())
             }
             val current = _uiState.value
             val defaultRepeatCountText = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
@@ -848,7 +918,8 @@ class MainViewModel(
                     } else {
                         it.repeatCountText
                     },
-                    selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp
+                    selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp,
+                    promptHistoryItems = historyItems
                 )
             }
             applyPromptTemplateText(promptTemplateValue)
@@ -861,6 +932,19 @@ class MainViewModel(
     }
 
     private fun handleAutomationState(state: AutomationRunState) {
+        if (_uiState.value.automationMode == AutomationMode.SENDER && isRemoteRunActive) {
+            when (state) {
+                is AutomationRunState.Failure -> {
+                    isRemoteRunActive = false
+                    soundAlertGateway.playShortAlert()
+                }
+                AutomationRunState.Success,
+                AutomationRunState.Stopped -> {
+                    isRemoteRunActive = false
+                }
+                else -> Unit
+            }
+        }
         _uiState.update {
             val coarseState = it.automationState.coarseAutomationStateFor(state)
             if (it.automationState == coarseState) {

@@ -98,6 +98,42 @@ class RunAutomationUseCaseTest {
     }
 
     @Test
+    fun run_withInitialWildcards_bypassesRepositoryAndUsesProvidedSets() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = true)
+        var loadCount = 0
+        var receivedWildcards: List<WildcardSet>? = null
+        val customWildcard = WildcardSet("__color__", "color.txt", listOf("cyan"))
+        val automation = automation(
+            service = service,
+            loadWildcardSets = {
+                loadCount += 1
+                listOf(WildcardSet("__color__", "color.txt", listOf("magenta")))
+            },
+            generateFinalPrompt = { _, wildcards, _ ->
+                receivedWildcards = wildcards
+                "paint it ${wildcards.first().items.first()}"
+            }
+        )
+
+        automation.run(
+            request = AutomationRunRequest(
+                promptTemplate = "paint it __color__",
+                repeatCountText = "1",
+                targetApp = AutomationTargetApp.GEMINI,
+                initialWildcards = listOf(customWildcard)
+            ),
+            onStateChange = {}
+        )
+
+        assertEquals(0, loadCount)
+        assertEquals(listOf(customWildcard), receivedWildcards)
+        assertEquals(
+            listOf(RunAutomationUseCase.MARKER_PROMPT, "paint it cyan"),
+            service.sentPrompts
+        )
+    }
+
+    @Test
     fun cancel_cancelsServiceRestoresImeAndWritesStoppedLog() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(

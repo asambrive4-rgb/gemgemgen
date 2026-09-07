@@ -12,6 +12,7 @@ fun interface AutomationStartRecorder {
 class RecordAutomationStartUseCase(
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val clipboardGateway: ClipboardGateway,
+    private val promptHistoryStore: PromptHistoryStore? = null,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) : AutomationStartRecorder {
     override suspend fun record(request: AutomationRunRequest) {
@@ -22,6 +23,10 @@ class RecordAutomationStartUseCase(
                     repeatCountText = request.repeatCountText,
                     targetApp = request.targetApp
                 )
+            )
+            promptHistoryStore?.record(
+                prompt = request.promptTemplate,
+                targetApp = request.targetApp
             )
             // 전송은 Accessibility ACTION_SET_TEXT 경로를 쓰며, 클립보드 붙여넣기에 의존하지 않는다.
             // 실행 중/직후 수동 붙여넣기·백업 등 사용자 편의용으로 원본 템플릿을 남긴다.

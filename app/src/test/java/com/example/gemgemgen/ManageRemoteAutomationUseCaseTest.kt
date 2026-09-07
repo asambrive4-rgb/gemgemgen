@@ -67,6 +67,43 @@ class ManageRemoteAutomationUseCaseTest {
     }
 
     @Test
+    fun start_bundlesMatchingWildcardsFromRepository() = runBlocking {
+        val gateway = FakeRemoteAutomationGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            )
+        )
+        val expectedWildcard = com.example.gemgemgen.wildcard.domain.WildcardSet(
+            token = "__flower__",
+            fileName = "flower.txt",
+            items = listOf("rose", "tulip")
+        )
+        val fakeRepo = object : com.example.gemgemgen.wildcard.usecase.WildcardSetRepository {
+            override fun load(): List<com.example.gemgemgen.wildcard.domain.WildcardSet> =
+                listOf(expectedWildcard)
+        }
+        val useCase = ManageRemoteAutomationUseCase(
+            gateway = gateway,
+            wildcardSetRepository = fakeRepo,
+            requestIdProvider = { "request-wildcard-1" }
+        )
+
+        assertEquals(
+            RemoteActionResult.Success,
+            useCase.start(
+                AutomationRunRequest("draw a __flower__", "2", AutomationTargetApp.CHATGPT),
+                onStateChange = {}
+            )
+        )
+        assertEquals(
+            listOf(expectedWildcard),
+            gateway.sentRequest?.wildcards
+        )
+    }
+
+    @Test
     fun forceStop_stopsLocallyAndIgnoresLateStateFromStoppedRequest() = runBlocking {
         val gateway = FakeRemoteAutomationGateway(
             initialStatus = RemoteAutomationStatus(

@@ -10,3 +10,8 @@ interface WildcardSetRepository {
         return load().filter { it.token in tokens }
     }
 }
+
+object NoOpWildcardSetRepository : WildcardSetRepository {
+    override fun load(): List<WildcardSet> = emptyList()
+}
+

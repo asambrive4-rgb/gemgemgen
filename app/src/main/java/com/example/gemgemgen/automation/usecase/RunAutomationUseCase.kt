@@ -16,7 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 data class AutomationRunRequest(
     val promptTemplate: String,
     val repeatCountText: String,
-    val targetApp: AutomationTargetApp
+    val targetApp: AutomationTargetApp,
+    val initialWildcards: List<WildcardSet>? = null
 )
 
 class RunAutomationUseCase(
@@ -29,10 +30,12 @@ class RunAutomationUseCase(
     dispatchers: AppDispatchers = AppDispatchers(),
     promptGenerator: PromptGenerator = PromptGenerator(),
     private val generateFinalPrompt: ((String, List<WildcardSet>, Int) -> String)? = null,
+    promptHistoryStore: PromptHistoryStore? = null,
     private val runPreparer: AutomationRunPreparer = AutomationRunPreparer(
         automationStartRecorder = RecordAutomationStartUseCase(
             lastRunSnapshotStore = lastRunSnapshotStore,
             clipboardGateway = clipboardGateway,
+            promptHistoryStore = promptHistoryStore,
             dispatchers = dispatchers
         ),
         wildcardSetRepository = wildcardSetRepository,
