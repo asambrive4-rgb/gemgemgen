@@ -25,6 +25,8 @@ data class MainUiState(
     val showAccessibilityPrompt: Boolean = false,
     val settingsMessage: String = "",
     val settingsError: String = "",
+    val isDisconnectingRemote: Boolean = false,
+    val remoteDisconnectMessage: String = "",
     val isParagraphSelectionMode: Boolean = false,
     val selectedParagraphRange: PromptParagraphRange? = null,
     val paragraphSelectionMessage: String = "",

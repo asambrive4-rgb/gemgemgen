@@ -58,6 +58,14 @@ internal class RemoteAutomationStore(context: Context) {
             .apply()
     }
 
+    fun isUserDisconnected(): Boolean {
+        return preferences.getBoolean(KEY_USER_DISCONNECTED, false)
+    }
+
+    fun saveUserDisconnected(disconnected: Boolean) {
+        preferences.edit().putBoolean(KEY_USER_DISCONNECTED, disconnected).apply()
+    }
+
     data class PairedSender(val senderId: String, val token: String)
     data class PairedReceiver(
         val receiverId: String,
@@ -74,5 +82,6 @@ internal class RemoteAutomationStore(context: Context) {
         private const val KEY_PAIRED_RECEIVER_ID = "paired_receiver_id"
         private const val KEY_PAIRED_RECEIVER_NAME = "paired_receiver_name"
         private const val KEY_PAIRED_RECEIVER_TOKEN = "paired_receiver_token"
+        private const val KEY_USER_DISCONNECTED = "user_disconnected"
     }
 }

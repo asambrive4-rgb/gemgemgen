@@ -320,6 +320,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onCancelAutomation = mainViewModel::cancelAutomation,
             onAutomationModeSelected = ::selectAutomationMode,
             onPairRemoteDevice = mainViewModel::pairRemoteDevice,
+            onDisconnectRemoteDevice = mainViewModel::disconnectRemoteDevice,
             onOpenPromptHistory = mainViewModel::openPromptHistory,
             onClosePromptHistory = mainViewModel::closePromptHistory,
             onSelectPromptHistoryItem = mainViewModel::selectPromptHistoryItem,

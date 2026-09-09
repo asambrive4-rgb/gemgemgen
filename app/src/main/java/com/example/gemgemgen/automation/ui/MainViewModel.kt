@@ -709,10 +709,11 @@ class MainViewModel(
 
     fun showSettings() {
         _uiState.update { state ->
-            if (!state.environmentStatus.isAccessibilityServiceEnabled) {
-                state.copy(showAccessibilityPrompt = true, showSettings = false)
+            val base = state.copy(remoteDisconnectMessage = "")
+            if (!base.environmentStatus.isAccessibilityServiceEnabled) {
+                base.copy(showAccessibilityPrompt = true, showSettings = false)
             } else {
-                state.copy(showSettings = true, showAccessibilityPrompt = false)
+                base.copy(showSettings = true, showAccessibilityPrompt = false)
             }
         }
     }
@@ -888,6 +889,34 @@ class MainViewModel(
                         remoteAutomationStatus = state.remoteAutomationStatus.copy(
                             connectionMessage = result.message
                         )
+                    )
+                }
+            }
+        }
+    }
+
+    fun disconnectRemoteDevice() {
+        if (_uiState.value.isDisconnectingRemote) return
+        if (_uiState.value.remoteAutomationStatus.automationState is AutomationRunState.Running) {
+            _uiState.update {
+                it.copy(remoteDisconnectMessage = "원격 자동화를 중지한 뒤 연결을 끊어주세요.")
+            }
+            return
+        }
+        scope.launch {
+            _uiState.update {
+                it.copy(isDisconnectingRemote = true, remoteDisconnectMessage = "")
+            }
+            val result = manageRemoteAutomation.disconnect()
+            _uiState.update { state ->
+                when (result) {
+                    is RemoteActionResult.Success -> state.copy(
+                        isDisconnectingRemote = false,
+                        remoteDisconnectMessage = "원격 연결을 끊었습니다."
+                    )
+                    is RemoteActionResult.Failure -> state.copy(
+                        isDisconnectingRemote = false,
+                        remoteDisconnectMessage = result.message
                     )
                 }
             }

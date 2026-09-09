@@ -41,8 +41,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
+import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
@@ -63,6 +66,9 @@ internal fun SettingsDialogHost(
     error: String,
     selectedThemePalette: AppThemePalette = AppThemePalette.DEFAULT,
     selectedThemeMode: AppThemeMode = AppThemeMode.DEFAULT,
+    remoteStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
+    isDisconnectingRemote: Boolean = false,
+    remoteDisconnectMessage: String = "",
     onSelectThemePalette: (AppThemePalette) -> Unit = {},
     onSelectThemeMode: (AppThemeMode) -> Unit = {},
     onDismiss: () -> Unit,
@@ -72,7 +78,8 @@ internal fun SettingsDialogHost(
     onSelectWildcardFolder: () -> Unit,
     onSelectSafWildcardFolder: () -> Unit,
     onOpenWildcardStorageSettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit
+    onOpenAccessibilitySettings: () -> Unit,
+    onDisconnectRemote: () -> Unit = {}
 ) {
     val activeStage = when {
         showAccessibilityPrompt -> SettingsDialogStage.ACCESSIBILITY_PROMPT
@@ -126,6 +133,9 @@ internal fun SettingsDialogHost(
                             error = error,
                             selectedThemePalette = selectedThemePalette,
                             selectedThemeMode = selectedThemeMode,
+                            remoteStatus = remoteStatus,
+                            isDisconnectingRemote = isDisconnectingRemote,
+                            remoteDisconnectMessage = remoteDisconnectMessage,
                             onSelectThemePalette = onSelectThemePalette,
                             onSelectThemeMode = onSelectThemeMode,
                             onDismiss = onDismiss,
@@ -133,7 +143,8 @@ internal fun SettingsDialogHost(
                             onSelectWildcardFolder = onSelectWildcardFolder,
                             onSelectSafWildcardFolder = onSelectSafWildcardFolder,
                             onOpenWildcardStorageSettings = onOpenWildcardStorageSettings,
-                            onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                            onDisconnectRemote = onDisconnectRemote
                         )
                     }
                 }
@@ -218,6 +229,9 @@ internal fun StatusSettingsDialog(
     error: String,
     selectedThemePalette: AppThemePalette = AppThemePalette.DEFAULT,
     selectedThemeMode: AppThemeMode = AppThemeMode.DEFAULT,
+    remoteStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
+    isDisconnectingRemote: Boolean = false,
+    remoteDisconnectMessage: String = "",
     onSelectThemePalette: (AppThemePalette) -> Unit = {},
     onSelectThemeMode: (AppThemeMode) -> Unit = {},
     onDismiss: () -> Unit,
@@ -225,7 +239,8 @@ internal fun StatusSettingsDialog(
     onSelectWildcardFolder: () -> Unit,
     onSelectSafWildcardFolder: () -> Unit,
     onOpenWildcardStorageSettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit
+    onOpenAccessibilitySettings: () -> Unit,
+    onDisconnectRemote: () -> Unit = {}
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -250,6 +265,9 @@ internal fun StatusSettingsDialog(
                 error = error,
                 selectedThemePalette = selectedThemePalette,
                 selectedThemeMode = selectedThemeMode,
+                remoteStatus = remoteStatus,
+                isDisconnectingRemote = isDisconnectingRemote,
+                remoteDisconnectMessage = remoteDisconnectMessage,
                 onSelectThemePalette = onSelectThemePalette,
                 onSelectThemeMode = onSelectThemeMode,
                 onDismiss = onDismiss,
@@ -257,7 +275,8 @@ internal fun StatusSettingsDialog(
                 onSelectWildcardFolder = onSelectWildcardFolder,
                 onSelectSafWildcardFolder = onSelectSafWildcardFolder,
                 onOpenWildcardStorageSettings = onOpenWildcardStorageSettings,
-                onOpenAccessibilitySettings = onOpenAccessibilitySettings
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                onDisconnectRemote = onDisconnectRemote
             )
         }
     }
@@ -272,6 +291,9 @@ private fun StatusSettingsDialogContent(
     error: String,
     selectedThemePalette: AppThemePalette = AppThemePalette.DEFAULT,
     selectedThemeMode: AppThemeMode = AppThemeMode.DEFAULT,
+    remoteStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
+    isDisconnectingRemote: Boolean = false,
+    remoteDisconnectMessage: String = "",
     onSelectThemePalette: (AppThemePalette) -> Unit = {},
     onSelectThemeMode: (AppThemeMode) -> Unit = {},
     onDismiss: () -> Unit,
@@ -279,7 +301,8 @@ private fun StatusSettingsDialogContent(
     onSelectWildcardFolder: () -> Unit,
     onSelectSafWildcardFolder: () -> Unit,
     onOpenWildcardStorageSettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit
+    onOpenAccessibilitySettings: () -> Unit,
+    onDisconnectRemote: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -413,6 +436,90 @@ private fun StatusSettingsDialogContent(
                                 onClick = { onSelectThemePalette(palette) }
                             )
                         }
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            // 원격 연결 섹션
+            Text(
+                text = "🌐 원격 연결",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            val isRemoteConnected = when (remoteStatus.mode) {
+                AutomationMode.SENDER -> remoteStatus.isPaired && remoteStatus.discoveredDeviceName.isNotBlank()
+                AutomationMode.RECEIVER -> remoteStatus.isPaired
+                AutomationMode.NORMAL -> false
+            }
+            val connectedDeviceName = when (remoteStatus.mode) {
+                AutomationMode.SENDER -> remoteStatus.discoveredDeviceName.ifBlank { "S25 FE" }
+                AutomationMode.RECEIVER -> "태블릿"
+                AutomationMode.NORMAL -> ""
+            }
+            val isRemoteRunning = remoteStatus.automationState is AutomationRunState.Running
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isRemoteConnected) connectedDeviceName else "연결된 기기 없음",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isRemoteConnected) "원격 연결됨" else "원격 연결 안 됨",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isRemoteConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        StatusBadge(isReady = isRemoteConnected)
+                    }
+
+                    if (isRemoteRunning) {
+                        Text(
+                            text = "원격 자동화를 중지한 뒤 연결을 끊어주세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    if (remoteDisconnectMessage.isNotBlank()) {
+                        Text(
+                            text = remoteDisconnectMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (remoteDisconnectMessage == "원격 연결을 끊었습니다.") {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = onDisconnectRemote,
+                        enabled = isRemoteConnected && !isRemoteRunning && !isDisconnectingRemote,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isDisconnectingRemote) "연결 끊는 중…" else "연결 끊기")
                     }
                 }
             }

@@ -74,12 +74,13 @@ class RemoteAutomationReceiverService : Service() {
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
+        val isPaired = store.pairedSender() != null && !store.isUserDisconnected()
         RemoteAutomationStateHub.update {
             it.copy(
                 mode = AutomationMode.RECEIVER,
                 isReceiverRunning = true,
                 receiverPairingCode = pairingCode,
-                isPaired = store.pairedSender() != null,
+                isPaired = isPaired,
                 message = receiverReadyMessage()
             )
         }
@@ -87,9 +88,21 @@ class RemoteAutomationReceiverService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            store.saveMode(AutomationMode.NORMAL)
-            stopSelf()
+        when (intent?.action) {
+            ACTION_STOP -> {
+                store.saveMode(AutomationMode.NORMAL)
+                stopSelf()
+            }
+            ACTION_DISCONNECT -> {
+                store.saveUserDisconnected(true)
+                RemoteAutomationStateHub.update {
+                    it.copy(
+                        isPaired = false,
+                        message = "원격 연결을 끊었습니다."
+                    )
+                }
+                serverSocket?.localPort?.let(::reregisterService)
+            }
         }
         return START_NOT_STICKY
     }
@@ -153,6 +166,7 @@ class RemoteAutomationReceiverService : Service() {
             val line = reader.readLine() ?: return
             when (val message = RemoteAutomationProtocol.decode(line)) {
                 is RemoteProtocolMessage.PairRequest -> handlePair(message, writer)
+                is RemoteProtocolMessage.DisconnectRequest -> handleDisconnect(message, writer)
                 is RemoteProtocolMessage.RunRequest -> handleRun(message, writer, socket)
                 is RemoteProtocolMessage.CancelRequest -> handleCancel(message)
                 else -> Unit
@@ -180,6 +194,7 @@ class RemoteAutomationReceiverService : Service() {
             UUID.randomUUID().toString() + UUID.randomUUID().toString()
         }
         store.savePairedSender(message.senderId, token)
+        store.saveUserDisconnected(false)
         val receiverName = deviceName()
         writer.println(
             RemoteAutomationProtocol.encode(
@@ -194,6 +209,34 @@ class RemoteAutomationReceiverService : Service() {
         RemoteAutomationStateHub.update {
             it.copy(isPaired = true, message = "태블릿 연결됨")
         }
+        serverSocket?.localPort?.let(::reregisterService)
+    }
+
+    private fun handleDisconnect(
+        message: RemoteProtocolMessage.DisconnectRequest,
+        writer: PrintWriter
+    ) {
+        if (!isAuthenticated(message.senderId, message.token)) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.DisconnectResult(
+                        success = false,
+                        message = "등록되지 않은 송신 기기입니다."
+                    )
+                )
+            )
+            return
+        }
+        store.saveUserDisconnected(true)
+        RemoteAutomationStateHub.update {
+            it.copy(isPaired = false, message = "송신 기기와의 연결이 끊어졌습니다.")
+        }
+        writer.println(
+            RemoteAutomationProtocol.encode(
+                RemoteProtocolMessage.DisconnectResult(success = true)
+            )
+        )
+        serverSocket?.localPort?.let(::reregisterService)
     }
 
     private suspend fun handleRun(
@@ -343,11 +386,13 @@ class RemoteAutomationReceiverService : Service() {
 
     private fun registerService(port: Int) {
         val nsdManager = getSystemService(NsdManager::class.java)
+        val isPaired = store.pairedSender() != null && !store.isUserDisconnected()
         val serviceInfo = NsdServiceInfo().apply {
             serviceName = "GemGemGen ${deviceName()}".take(55)
             serviceType = RemoteAutomationProtocol.SERVICE_TYPE
             this.port = port
             setAttribute("receiverId", store.installationId())
+            setAttribute("isPaired", isPaired.toString())
         }
         val listener = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(serviceInfo: NsdServiceInfo) {
@@ -377,8 +422,13 @@ class RemoteAutomationReceiverService : Service() {
         }
     }
 
+    private fun reregisterService(port: Int) {
+        unregisterService()
+        registerService(port)
+    }
+
     private fun receiverReadyMessage(registeredName: String = deviceName()): String {
-        return if (store.pairedSender() == null) {
+        return if (store.pairedSender() == null || store.isUserDisconnected()) {
             "$registeredName 수신 대기 중 · 연결 번호 $pairingCode"
         } else {
             "$registeredName 수신 대기 중 · 태블릿 연결됨"
@@ -438,6 +488,7 @@ class RemoteAutomationReceiverService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "remote_automation_receiver"
         private const val NOTIFICATION_ID = 4102
         private const val ACTION_STOP = "com.example.gemgemgen.remote.STOP_RECEIVER"
+        const val ACTION_DISCONNECT = "com.example.gemgemgen.remote.DISCONNECT_RECEIVER"
 
         fun intent(context: Context): Intent {
             return Intent(context, RemoteAutomationReceiverService::class.java)

@@ -131,6 +131,45 @@ class ManageRemoteAutomationUseCaseTest {
         startJob.cancelAndJoin()
     }
 
+    @Test
+    fun disconnect_whenAutomationIsRunning_returnsFailureWithoutCallingGateway() = runBlocking {
+        val gateway = FakeRemoteAutomationGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true,
+                automationState = AutomationRunState.Running("작업 진행 중")
+            )
+        )
+        val useCase = ManageRemoteAutomationUseCase(gateway)
+
+        val result = useCase.disconnect()
+
+        assertEquals(
+            RemoteActionResult.Failure("원격 자동화를 중지한 뒤 연결을 끊어주세요."),
+            result
+        )
+        assertEquals(false, gateway.disconnectCalled)
+    }
+
+    @Test
+    fun disconnect_whenIdle_delegatesToGateway() = runBlocking {
+        val gateway = FakeRemoteAutomationGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true,
+                automationState = AutomationRunState.Idle
+            )
+        )
+        val useCase = ManageRemoteAutomationUseCase(gateway)
+
+        val result = useCase.disconnect()
+
+        assertEquals(RemoteActionResult.Success, result)
+        assertEquals(true, gateway.disconnectCalled)
+    }
+
     private class FakeRemoteAutomationGateway(
         initialStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
         private val holdSend: Boolean = false
@@ -141,6 +180,7 @@ class ManageRemoteAutomationUseCaseTest {
         var sentRequest: RemoteAutomationRequest? = null
         var sentStateCallback: ((AutomationRunState) -> Unit)? = null
         var forceStoppedRequestId: String? = null
+        var disconnectCalled = false
 
         override fun selectMode(mode: AutomationMode) {
             status.value = status.value.copy(mode = mode)
@@ -148,6 +188,11 @@ class ManageRemoteAutomationUseCaseTest {
 
         override suspend fun pair(pairingCode: String): RemoteActionResult {
             pairedCode = pairingCode
+            return RemoteActionResult.Success
+        }
+
+        override suspend fun disconnect(): RemoteActionResult {
+            disconnectCalled = true
             return RemoteActionResult.Success
         }
 

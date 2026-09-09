@@ -113,6 +113,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                 receiverName = result.receiverName,
                 token = result.token
             )
+            store.saveUserDisconnected(false)
             RemoteAutomationStateHub.update {
                 it.copy(
                     discoveredDeviceName = result.receiverName,
@@ -128,6 +129,72 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                 it.copy(isPaired = false, connectionMessage = message)
             }
             RemoteActionResult.Failure(message)
+        }
+    }
+
+    override suspend fun disconnect(): RemoteActionResult = withContext(Dispatchers.IO) {
+        val currentStatus = status.value
+        if (currentStatus.automationState is AutomationRunState.Running) {
+            return@withContext RemoteActionResult.Failure("원격 자동화를 중지한 뒤 연결을 끊어주세요.")
+        }
+        when (currentStatus.mode) {
+            AutomationMode.SENDER -> {
+                val target = endpoint
+                val paired = store.pairedReceiver()
+                if (target == null || paired == null || !currentStatus.isPaired) {
+                    return@withContext RemoteActionResult.Failure("연결된 기기가 없습니다.")
+                }
+                val result = runCatching {
+                    openSocket(target).use { socket ->
+                        val writer = PrintWriter(socket.getOutputStream(), true)
+                        val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                        writer.println(
+                            RemoteAutomationProtocol.encode(
+                                RemoteProtocolMessage.DisconnectRequest(
+                                    senderId = store.installationId(),
+                                    token = paired.token
+                                )
+                            )
+                        )
+                        RemoteAutomationProtocol.decode(reader.readLine().orEmpty())
+                            as? RemoteProtocolMessage.DisconnectResult
+                    }
+                }.getOrNull()
+
+                if (result?.success == true) {
+                    store.saveUserDisconnected(true)
+                    RemoteAutomationStateHub.update {
+                        it.copy(
+                            isPaired = false,
+                            connectionMessage = "원격 연결을 끊었습니다."
+                        )
+                    }
+                    RemoteActionResult.Success
+                } else {
+                    val message = result?.message?.takeIf(String::isNotBlank)
+                        ?: "수신 기기에 연결할 수 없어 연결을 끊지 못했습니다."
+                    RemoteActionResult.Failure(message)
+                }
+            }
+            AutomationMode.RECEIVER -> {
+                if (!currentStatus.isPaired) {
+                    return@withContext RemoteActionResult.Failure("연결된 기기가 없습니다.")
+                }
+                store.saveUserDisconnected(true)
+                val intent = RemoteAutomationReceiverService.intent(appContext)
+                    .setAction(RemoteAutomationReceiverService.ACTION_DISCONNECT)
+                appContext.startService(intent)
+                RemoteAutomationStateHub.update {
+                    it.copy(
+                        isPaired = false,
+                        message = "원격 연결을 끊었습니다."
+                    )
+                }
+                RemoteActionResult.Success
+            }
+            AutomationMode.NORMAL -> {
+                RemoteActionResult.Failure("연결된 기기가 없습니다.")
+            }
         }
     }
 
@@ -289,13 +356,18 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         if (resolved.receiverId == store.installationId()) return
         val paired = store.pairedReceiver()
         endpoint = resolved
-        val isPaired = paired?.receiverId == resolved.receiverId
+        val isUserDisconnected = store.isUserDisconnected()
+        val isPaired = !isUserDisconnected && paired?.receiverId == resolved.receiverId && resolved.isPaired
         RemoteAutomationStateHub.update {
             it.copy(
                 discoveredDeviceName = resolved.name,
                 isPaired = isPaired,
                 connectionMessage = if (isPaired) {
                     "${resolved.name} 연결됨"
+                } else if (!resolved.isPaired && paired?.receiverId == resolved.receiverId) {
+                    "${resolved.name} 연결이 해제되었습니다."
+                } else if (isUserDisconnected && paired?.receiverId == resolved.receiverId) {
+                    "${resolved.name} 발견됨 · 다시 연결하려면 연결 버튼을 눌러주세요."
                 } else {
                     "${resolved.name} 발견됨 · 4자리 번호로 연결해주세요."
                 }
@@ -338,7 +410,8 @@ internal data class RemoteEndpoint(
     val receiverId: String,
     val name: String,
     val address: InetAddress,
-    val port: Int
+    val port: Int,
+    val isPaired: Boolean = true
 )
 
 private class RemoteServiceDiscovery(
@@ -374,6 +447,9 @@ private class RemoteServiceDiscovery(
                             val receiverId = serviceInfo.attributes[ATTRIBUTE_RECEIVER_ID]
                                 ?.toString(Charsets.UTF_8)
                                 .orEmpty()
+                            val isPairedAttr = serviceInfo.attributes[ATTRIBUTE_IS_PAIRED]
+                                ?.toString(Charsets.UTF_8)
+                            val isReceiverPaired = isPairedAttr?.toBooleanStrictOrNull() ?: true
                             @Suppress("DEPRECATION")
                             val address = serviceInfo.host ?: return
                             if (receiverId.isBlank() || serviceInfo.port <= 0) return
@@ -382,7 +458,8 @@ private class RemoteServiceDiscovery(
                                     receiverId = receiverId,
                                     name = serviceInfo.serviceName,
                                     address = address,
-                                    port = serviceInfo.port
+                                    port = serviceInfo.port,
+                                    isPaired = isReceiverPaired
                                 )
                             )
                         }
@@ -427,5 +504,6 @@ private class RemoteServiceDiscovery(
 
     companion object {
         const val ATTRIBUTE_RECEIVER_ID = "receiverId"
+        const val ATTRIBUTE_IS_PAIRED = "isPaired"
     }
 }

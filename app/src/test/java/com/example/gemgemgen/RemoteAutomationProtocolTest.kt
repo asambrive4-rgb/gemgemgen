@@ -67,4 +67,24 @@ class RemoteAutomationProtocolTest {
         assertEquals(running, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(running)))
         assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))
     }
+
+    @Test
+    fun disconnectRequest_roundTrips() {
+        val message = RemoteProtocolMessage.DisconnectRequest(
+            senderId = "tablet-id",
+            token = "sample-token-123"
+        )
+        assertEquals(message, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(message)))
+    }
+
+    @Test
+    fun disconnectResult_roundTrips() {
+        val success = RemoteProtocolMessage.DisconnectResult(success = true)
+        val failure = RemoteProtocolMessage.DisconnectResult(
+            success = false,
+            message = "등록되지 않은 송신 기기입니다."
+        )
+        assertEquals(success, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(success)))
+        assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))
+    }
 }

@@ -34,6 +34,14 @@ internal sealed interface RemoteProtocolMessage {
         val token: String,
         val requestId: String
     ) : RemoteProtocolMessage
+    data class DisconnectRequest(
+        val senderId: String,
+        val token: String
+    ) : RemoteProtocolMessage
+    data class DisconnectResult(
+        val success: Boolean,
+        val message: String = ""
+    ) : RemoteProtocolMessage
     data class StateUpdate(
         val requestId: String,
         val state: AutomationRunState
@@ -90,6 +98,16 @@ internal object RemoteAutomationProtocol {
                 put("token", message.token)
                 put("requestId", message.requestId)
             }
+            is RemoteProtocolMessage.DisconnectRequest -> buildJsonObject {
+                put("type", "disconnect")
+                put("senderId", message.senderId)
+                put("token", message.token)
+            }
+            is RemoteProtocolMessage.DisconnectResult -> buildJsonObject {
+                put("type", "disconnectResult")
+                put("success", message.success)
+                put("message", message.message)
+            }
             is RemoteProtocolMessage.StateUpdate -> buildJsonObject {
                 put("type", "state")
                 put("requestId", message.requestId)
@@ -141,6 +159,14 @@ internal object RemoteAutomationProtocol {
                 senderId = value.string("senderId"),
                 token = value.string("token"),
                 requestId = value.string("requestId")
+            )
+            "disconnect" -> RemoteProtocolMessage.DisconnectRequest(
+                senderId = value.string("senderId"),
+                token = value.string("token")
+            )
+            "disconnectResult" -> RemoteProtocolMessage.DisconnectResult(
+                success = value.boolean("success"),
+                message = value.string("message")
             )
             "state" -> RemoteProtocolMessage.StateUpdate(
                 requestId = value.string("requestId"),

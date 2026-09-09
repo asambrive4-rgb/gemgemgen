@@ -13,6 +13,7 @@ interface RemoteAutomationGateway {
 
     fun selectMode(mode: AutomationMode)
     suspend fun pair(pairingCode: String): RemoteActionResult
+    suspend fun disconnect(): RemoteActionResult
     suspend fun send(
         request: RemoteAutomationRequest,
         onStateChange: (AutomationRunState) -> Unit
@@ -30,6 +31,14 @@ class NoOpRemoteAutomationGateway : RemoteAutomationGateway {
 
     override suspend fun pair(pairingCode: String): RemoteActionResult {
         return RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
+    }
+
+    override suspend fun disconnect(): RemoteActionResult {
+        currentStatus.value = currentStatus.value.copy(
+            isPaired = false,
+            connectionMessage = "원격 연결을 끊었습니다."
+        )
+        return RemoteActionResult.Success
     }
 
     override suspend fun send(

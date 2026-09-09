@@ -40,6 +40,14 @@ class ManageRemoteAutomationUseCase(
         return gateway.pair(normalizedCode)
     }
 
+    suspend fun disconnect(): RemoteActionResult {
+        val currentStatus = status.value
+        if (currentStatus.automationState is AutomationRunState.Running) {
+            return RemoteActionResult.Failure("원격 자동화를 중지한 뒤 연결을 끊어주세요.")
+        }
+        return gateway.disconnect()
+    }
+
     suspend fun start(
         request: AutomationRunRequest,
         onStateChange: (AutomationRunState) -> Unit

@@ -55,6 +55,7 @@ internal data class AutomationAppActions(
     val onCancelAutomation: () -> Unit,
     val onAutomationModeSelected: (AutomationMode) -> Unit,
     val onPairRemoteDevice: (String) -> Unit,
+    val onDisconnectRemoteDevice: () -> Unit = {},
     val onOpenPromptHistory: () -> Unit = {},
     val onClosePromptHistory: () -> Unit = {},
     val onSelectPromptHistoryItem: (PromptHistoryItem) -> Unit = {},
@@ -324,6 +325,9 @@ internal fun AutomationApp(
         error = mainUiState.settingsError,
         selectedThemePalette = mainUiState.selectedThemePalette,
         selectedThemeMode = mainUiState.selectedThemeMode,
+        remoteStatus = mainUiState.remoteAutomationStatus,
+        isDisconnectingRemote = mainUiState.isDisconnectingRemote,
+        remoteDisconnectMessage = mainUiState.remoteDisconnectMessage,
         onSelectThemePalette = automationActions.onSelectThemePalette,
         onSelectThemeMode = automationActions.onSelectThemeMode,
         onDismiss = automationActions.onHideSettings,
@@ -333,6 +337,7 @@ internal fun AutomationApp(
         onSelectWildcardFolder = automationActions.onSelectWildcardFolder,
         onSelectSafWildcardFolder = automationActions.onSelectSafWildcardFolder,
         onOpenWildcardStorageSettings = automationActions.onOpenWildcardStorageSettings,
-        onOpenAccessibilitySettings = automationActions.onOpenAccessibilitySettings
+        onOpenAccessibilitySettings = automationActions.onOpenAccessibilitySettings,
+        onDisconnectRemote = automationActions.onDisconnectRemoteDevice
     )
 }

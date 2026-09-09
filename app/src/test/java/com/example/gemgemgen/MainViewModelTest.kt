@@ -1146,6 +1146,69 @@ class MainViewModelTest {
     }
 
     @Test
+    fun disconnectRemoteDevice_whenSuccess_updatesMessageAndDisconnectedStatus() {
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            )
+        )
+        val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(manageRemoteAutomation = remoteUseCase)
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+
+        viewModel.disconnectRemoteDevice()
+
+        assertEquals("원격 연결을 끊었습니다.", viewModel.uiState.value.remoteDisconnectMessage)
+        assertEquals(false, viewModel.uiState.value.isDisconnectingRemote)
+        assertEquals(1, remoteGateway.disconnectCallCount)
+        assertEquals(false, viewModel.uiState.value.remoteAutomationStatus.isPaired)
+    }
+
+    @Test
+    fun disconnectRemoteDevice_whenAutomationRunning_showsWarningAndBlocksDisconnect() {
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true,
+                automationState = AutomationRunState.Running("원격 실행 중")
+            )
+        )
+        val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(manageRemoteAutomation = remoteUseCase)
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+
+        viewModel.disconnectRemoteDevice()
+
+        assertEquals("원격 자동화를 중지한 뒤 연결을 끊어주세요.", viewModel.uiState.value.remoteDisconnectMessage)
+        assertEquals(false, viewModel.uiState.value.isDisconnectingRemote)
+        assertEquals(0, remoteGateway.disconnectCallCount)
+    }
+
+    @Test
+    fun disconnectRemoteDevice_whenGatewayFails_updatesErrorMessage() {
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            )
+        )
+        remoteGateway.disconnectResult = RemoteActionResult.Failure("네트워크 연결이 불안정합니다.")
+        val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(manageRemoteAutomation = remoteUseCase)
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+
+        viewModel.disconnectRemoteDevice()
+
+        assertEquals("네트워크 연결이 불안정합니다.", viewModel.uiState.value.remoteDisconnectMessage)
+        assertEquals(false, viewModel.uiState.value.isDisconnectingRemote)
+        assertEquals(1, remoteGateway.disconnectCallCount)
+    }
+
+    @Test
     fun runAutomation_inNormalMode_whenFails_doesNotPlayAlert() {
         val soundAlert = FakeSoundAlertGateway()
         val viewModel = viewModel(
@@ -1410,6 +1473,20 @@ class MainViewModelTest {
         }
 
         override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
+
+        var disconnectResult: RemoteActionResult = RemoteActionResult.Success
+        var disconnectCallCount = 0
+
+        override suspend fun disconnect(): RemoteActionResult {
+            disconnectCallCount++
+            if (disconnectResult is RemoteActionResult.Success) {
+                status.value = status.value.copy(
+                    isPaired = false,
+                    connectionMessage = "원격 연결을 끊었습니다."
+                )
+            }
+            return disconnectResult
+        }
 
         override suspend fun send(
             request: RemoteAutomationRequest,
