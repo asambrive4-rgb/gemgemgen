@@ -147,7 +147,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             mainViewModel.cancelParagraphSelection()
         }
         if (selectedTab == MainTab.ANALYSIS && tab != MainTab.ANALYSIS) {
-            // 결과·설정·타겟 구간은 유지. 진행 중 AI 작업만 취소.
+            // 결과·설정·타겟 구간 및 진행 중 AI 작업은 유지하고 일시적 다이얼로그 상태만 정리.
             analysisViewModel.trimForInactiveTab()
         }
         if (selectedTab == MainTab.WILDCARD && tab != MainTab.WILDCARD) {

@@ -29,6 +29,7 @@ import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -302,6 +303,7 @@ class AnalysisViewModel(
 
         runningJob?.cancel()
         runningJob = scope.launch {
+            runningJob = coroutineContext[Job]
             _uiState.update {
                 it.copy(
                     status = AnalysisStatus.GENERATING,
@@ -323,6 +325,7 @@ class AnalysisViewModel(
                     selectedHints = directionInput.selectedHints,
                     customHint = directionInput.customHint
                 )
+                coroutineContext.ensureActive()
                 analysisCache = ensured.cache
                 if (ensured.targetChanged) {
                     _uiState.update {
@@ -347,6 +350,7 @@ class AnalysisViewModel(
                     selectedHints = directionInput.selectedHints,
                     customHint = directionInput.customHint
                 )
+                coroutineContext.ensureActive()
                 if (ensured.didAnalyze) {
                     rememberLastUsed(
                         role = AnalysisModelRole.MASKING,
@@ -398,6 +402,10 @@ class AnalysisViewModel(
             } catch (error: Exception) {
                 analysisCache = null
                 showError(error.message ?: failureFallback)
+            } finally {
+                if (runningJob === coroutineContext[Job]) {
+                    runningJob = null
+                }
             }
         }
     }
@@ -622,28 +630,18 @@ class AnalysisViewModel(
     }
 
     /**
-     * 다른 탭으로 떠나거나 자동화를 시작할 때 호출.
-     * 생성 결과·원문·설정·타겟 구간·분석 캐시는 유지하고,
-     * 진행 중 AI 작업만 취소한다. (앱 종료 후 복원은 하지 않음)
+     * 다른 탭으로 이동하거나 자동화를 시작하는 등 탭이 비활성화될 때 호출.
+     * 진행 중인 AI 생성 작업(자동 마스킹 및 후보 생성), 결과, 원문, 설정, 타겟 구간은 모두 유지하고,
+     * 탭 밖에서 방치될 수 있는 일시적 대화상자(덮어쓰기 확인, 세션 초기화 확인)만 닫는다.
      */
     fun trimForInactiveTab() {
-        val hadRunningJob = runningJob != null
-        runningJob?.cancel()
-        runningJob = null
         _uiState.update { state ->
-            val wasBusy = state.status == AnalysisStatus.ANALYZING ||
-                state.status == AnalysisStatus.GENERATING
-            if (!hadRunningJob && !wasBusy && state.pendingOverwriteFileName == null) {
+            if (state.pendingOverwriteFileName == null && !state.showResetConfirmation) {
                 return@update state
             }
             state.copy(
-                status = if (wasBusy) AnalysisStatus.IDLE else state.status,
-                message = if (hadRunningJob || wasBusy) {
-                    "작업을 중지했습니다."
-                } else {
-                    state.message
-                },
-                pendingOverwriteFileName = null
+                pendingOverwriteFileName = null,
+                showResetConfirmation = false
             )
         }
     }
@@ -1088,5 +1086,13 @@ class AnalysisViewModel(
                 pendingOverwriteFileName = null
             )
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        runningJob?.cancel()
+        runningJob = null
+        grokLoginJob?.cancel()
+        grokLoginJob = null
     }
 }

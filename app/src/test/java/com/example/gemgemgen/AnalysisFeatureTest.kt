@@ -816,10 +816,260 @@ class AnalysisFeatureTest {
         assertEquals(listOf("후보"), viewModel.uiState.value.generatedCandidates)
         assertEquals(segmentBefore, viewModel.uiState.value.targetSegment)
         assertEquals(AnalysisCategory.WOMEN_CLOTHING, viewModel.uiState.value.selectedCategory)
-        // 완료 상태(SUCCESS)는 유지. 진행 중일 때만 IDLE로 돌린다.
         assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
         assertEquals(prompt, viewModel.sourcePromptTextFieldState.text.toString())
         assertEquals(prompt, viewModel.uiState.value.sourcePrompt)
+    }
+
+    @Test
+    fun viewModel_trimForInactiveTab_duringMasking_keepsGeneratingJobAndCompletesSuccessfully() {
+        var observedStatusDuringMasking: AnalysisStatus? = null
+        var observedMessageDuringMasking: String? = null
+        var vmRef: AnalysisViewModel? = null
+
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"후보 결과","explanation":""}]""",
+            onAnalyze = {
+                val vm = vmRef ?: return@FakeAnalysisAiGateway
+                observedStatusDuringMasking = vm.uiState.value.status
+                observedMessageDuringMasking = vm.uiState.value.message
+                // 자동 마스킹 진행 중 다른 탭으로 이동 (비활성화)
+                vm.trimForInactiveTab()
+            }
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        vmRef = viewModel
+
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+
+        // TXT 생성 시작 (마스킹 캐시 없음 -> 자동 마스킹 수행)
+        viewModel.generateTxt()
+
+        // 탭 이동 시점의 상태 검증
+        assertEquals(AnalysisStatus.GENERATING, observedStatusDuringMasking)
+        assertEquals("자동 마스킹 중...", observedMessageDuringMasking)
+
+        // 탭 이동에도 불구하고 작업이 취소되지 않고 최종 완료까지 도달
+        assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+        assertEquals(listOf("후보 결과"), viewModel.uiState.value.generatedCandidates)
+        assertEquals(1, aiGateway.analyzeCallCount)
+        assertEquals(1, aiGateway.generateCallCount)
+    }
+
+    @Test
+    fun viewModel_trimForInactiveTab_duringCandidateGeneration_keepsGeneratingJobAndCompletesSuccessfully() {
+        var observedStatusDuringGen: AnalysisStatus? = null
+        var observedMessageDuringGen: String? = null
+        var vmRef: AnalysisViewModel? = null
+
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"생성된 후보","explanation":""}]""",
+            onGenerateTxt = {
+                val vm = vmRef ?: return@FakeAnalysisAiGateway
+                observedStatusDuringGen = vm.uiState.value.status
+                observedMessageDuringGen = vm.uiState.value.message
+                // 후보 생성 중 다른 탭으로 이동 (비활성화)
+                vm.trimForInactiveTab()
+            }
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        vmRef = viewModel
+
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+
+        viewModel.generateTxt()
+
+        assertEquals(AnalysisStatus.GENERATING, observedStatusDuringGen)
+        assertEquals("프롬프트 목록 생성 중...", observedMessageDuringGen)
+
+        // 탭을 벗어났어도 백그라운드에서 완료되어 SUCCESS 상태로 전환됨
+        assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+        assertEquals(listOf("생성된 후보"), viewModel.uiState.value.generatedCandidates)
+    }
+
+    @Test
+    fun viewModel_trimForInactiveTab_duringGeneration_failureReflectsInUiState() {
+        var vmRef: AnalysisViewModel? = null
+
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            onGenerateTxt = {
+                val vm = vmRef ?: return@FakeAnalysisAiGateway
+                // 생성 중 탭 전환
+                vm.trimForInactiveTab()
+                // API 실패 시뮬레이션
+                throw IllegalStateException("AI 서버 응답 실패")
+            }
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        vmRef = viewModel
+
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+
+        viewModel.generateTxt()
+
+        // 탭 밖에서 발생한 실패가 정상적으로 UI 상태에 반영됨
+        assertEquals(AnalysisStatus.ERROR, viewModel.uiState.value.status)
+        assertEquals("AI 서버 응답 실패", viewModel.uiState.value.error)
+        assertTrue(viewModel.uiState.value.canGenerate) // 재시도 가능
+    }
+
+    @Test
+    fun viewModel_trimForInactiveTab_rapidTabSwitches_doesNotDuplicateOrReset() {
+        var vmRef: AnalysisViewModel? = null
+
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"안정적인 결과","explanation":""}]""",
+            onGenerateTxt = {
+                val vm = vmRef ?: return@FakeAnalysisAiGateway
+                // 빠른 탭 왕복 시뮬레이션 (비활성화 다회 호출)
+                repeat(5) {
+                    vm.trimForInactiveTab()
+                }
+            }
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        vmRef = viewModel
+
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+
+        viewModel.generateTxt()
+
+        // 중복 호출 없이 1회만 호출되고 결과 정상 보존
+        assertEquals(1, aiGateway.generateCallCount)
+        assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+        assertEquals(listOf("안정적인 결과"), viewModel.uiState.value.generatedCandidates)
+    }
+
+    @Test
+    fun viewModel_cancelActiveWork_explicitStopCancelsJobAndPreventsLateResults() {
+        var vmRef: AnalysisViewModel? = null
+
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"늦게 도착한 결과","explanation":""}]""",
+            onGenerateTxt = {
+                val vm = vmRef ?: return@FakeAnalysisAiGateway
+                // 사용자가 명시적으로 중지 버튼 클릭
+                vm.cancelActiveWork()
+            }
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        vmRef = viewModel
+
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+
+        viewModel.generateTxt()
+
+        // 취소 후 상태는 IDLE, 메시지는 "작업을 중지했습니다."
+        assertEquals(AnalysisStatus.IDLE, viewModel.uiState.value.status)
+        assertEquals("작업을 중지했습니다.", viewModel.uiState.value.message)
+        // 늦게 도착한 결과가 반영되지 않아야 함
+        assertTrue(viewModel.uiState.value.generatedCandidates.isEmpty())
+    }
+
+    @Test
+    fun viewModel_confirmResetSession_cancelsJobAndResetsState() {
+        var vmRef: AnalysisViewModel? = null
+
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"취소된 결과","explanation":""}]""",
+            onGenerateTxt = {
+                val vm = vmRef ?: return@FakeAnalysisAiGateway
+                // 작업 중 세션 초기화 확정
+                vm.confirmResetSession()
+            }
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        vmRef = viewModel
+
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+
+        viewModel.generateTxt()
+
+        // 세션이 완전히 초기화되었는지 확인
+        assertEquals(AnalysisStatus.IDLE, viewModel.uiState.value.status)
+        assertEquals("", viewModel.uiState.value.sourcePrompt)
+        assertTrue(viewModel.uiState.value.generatedCandidates.isEmpty())
+    }
+
+    @Test
+    fun viewModel_generate_cardsMode_keepsRunningAcrossInactiveTab() {
+        var vmRef: AnalysisViewModel? = null
+
+        val candidatesJson = (1..6).joinToString(separator = ",", prefix = "[", postfix = "]") {
+            """{"text":"카드 후보 $it","explanation":""}"""
+        }
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = candidatesJson,
+            onGenerateTxt = {
+                val vm = vmRef ?: return@FakeAnalysisAiGateway
+                // 후보 6개 생성 중 탭 이동
+                vm.trimForInactiveTab()
+            }
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        vmRef = viewModel
+
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+
+        // 후보 6개 모드인 generate() 호출
+        viewModel.generate()
+
+        assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+        assertEquals(AnalysisResultPresentation.CARDS, viewModel.uiState.value.resultPresentation)
+        assertEquals(6, viewModel.uiState.value.generatedCandidates.size)
+        assertEquals("카드 후보 1", viewModel.uiState.value.generatedCandidates[0])
+    }
+
+    @Test
+    fun viewModel_trimForInactiveTab_dismissesTemporaryDialogs() {
+        val viewModel = analysisViewModel(
+            aiGateway = FakeAnalysisAiGateway(),
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        )
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+
+        viewModel.requestResetSession()
+        assertTrue(viewModel.uiState.value.showResetConfirmation)
+
+        viewModel.trimForInactiveTab()
+        assertFalse(viewModel.uiState.value.showResetConfirmation)
     }
 
     @Test
@@ -1000,9 +1250,12 @@ class AnalysisFeatureTest {
 
     private class FakeAnalysisAiGateway(
         private val analyzeResponse: String = analysisJsonStatic("long hair"),
-        private val generateResponse: String = "[]"
+        private val generateResponse: String = "[]",
+        private val onAnalyze: (suspend () -> Unit)? = null,
+        private val onGenerateTxt: (suspend () -> Unit)? = null
     ) : AnalysisAiGateway {
         var analyzeCallCount = 0
+        var generateCallCount = 0
         var lastGenerateCount: Int? = null
         val analyzeModelIds = mutableListOf<String>()
         val generateModelIds = mutableListOf<String>()
@@ -1014,6 +1267,7 @@ class AnalysisFeatureTest {
         ): String {
             analyzeCallCount++
             analyzeModelIds += modelId
+            onAnalyze?.invoke()
             return analyzeResponse
         }
 
@@ -1022,6 +1276,7 @@ class AnalysisFeatureTest {
             modelId: String,
             payload: AnalysisTxtPromptPayload
         ): String {
+            generateCallCount++
             generateModelIds += modelId
             lastGenerateCount = Regex("""Generate exactly (\d+)""")
                 .find(payload.systemInstruction)
@@ -1029,6 +1284,7 @@ class AnalysisFeatureTest {
                 ?.getOrNull(1)
                 ?.toIntOrNull()
             assertFalse(payload.systemInstruction.contains("fallback", ignoreCase = true))
+            onGenerateTxt?.invoke()
             return generateResponse
         }
     }
