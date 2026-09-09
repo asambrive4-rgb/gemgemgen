@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
+import com.example.gemgemgen.ui.theme.AppTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -136,8 +138,9 @@ fun PromptHistoryBottomSheet(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(items, key = { it.id }) { item ->
+                    itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
                         PromptHistoryItemCard(
+                            index = index,
                             item = item,
                             onSelect = { onSelect(item) },
                             onCopy = {
@@ -158,11 +161,17 @@ fun PromptHistoryBottomSheet(
 
 @Composable
 private fun PromptHistoryItemCard(
+    index: Int,
     item: PromptHistoryItem,
     onSelect: () -> Unit,
     onCopy: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // 줄바꿈 및 연속 공백을 단일 공백으로 치환하여 1줄 요약 미리보기를 깔끔하게 구성
+    val singleLinePrompt = remember(item.prompt) {
+        item.prompt.replace(Regex("\\s+"), " ").trim()
+    }
+
     OutlinedCard(
         modifier = modifier
             .fillMaxWidth()
@@ -174,7 +183,7 @@ private fun PromptHistoryItemCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // 상단 메타데이터 줄
             Row(
@@ -186,6 +195,20 @@ private fun PromptHistoryItemCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    // 번호 캡슐 뱃지 (테마별 메인 포인트 색상 적용)
+                    Surface(
+                        color = AppTheme.colors.primary,
+                        shape = RoundedCornerShape(percent = 50)
+                    ) {
+                        Text(
+                            text = "#${index + 1}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AppTheme.colors.onPrimary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+
                     // 타깃 앱 태그
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -231,11 +254,11 @@ private fun PromptHistoryItemCard(
                 }
             }
 
-            // 프롬프트 텍스트 미리보기 (최대 3줄)
+            // 프롬프트 텍스트 미리보기 (1줄 요약)
             Text(
-                text = item.prompt,
+                text = singleLinePrompt,
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = 3,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurface
             )
