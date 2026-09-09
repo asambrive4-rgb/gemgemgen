@@ -9,7 +9,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
-import com.example.gemgemgen.analysis.domain.AnalysisStartGate
 import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
@@ -90,9 +89,18 @@ class AnalysisViewModel(
             AnalysisTargetSegmentPolicy.isStillValid(value, segment)
         val nextSegment = if (segmentStillValid) segment else null
         val shouldClearCandidates = state.generatedCandidates.isNotEmpty()
+        val nextNeedsMasking = computeNeedsMaskingAnalysis(
+            source = value,
+            category = state.selectedCategory,
+            targetSegment = nextSegment,
+            cache = null,
+            state = state
+        )
+        val needsMaskingChanged = state.needsMaskingAnalysis != nextNeedsMasking
 
-        // 핫패스: canAnalyze 경계·구간 무효·결과 정리가 없으면 화면 state 방출 생략
+        // 핫패스: canGenerate 경계·구간 무효·결과 정리가 없으면 화면 state 방출 생략
         val needsUiUpdate = blanknessChanged ||
+            needsMaskingChanged ||
             nextSegment != segment ||
             shouldClearCandidates
         if (!needsUiUpdate) return
@@ -101,6 +109,7 @@ class AnalysisViewModel(
             it.copy(
                 sourcePrompt = value,
                 targetSegment = nextSegment,
+                needsMaskingAnalysis = nextNeedsMasking,
                 generatedCandidates = if (shouldClearCandidates) {
                     emptyList()
                 } else {
@@ -162,11 +171,19 @@ class AnalysisViewModel(
             AnalysisTargetSegmentPolicy.isStillValid(value, segment)
         val nextSegment = if (segmentStillValid) segment else null
         val clearCandidates = state.generatedCandidates.isNotEmpty()
+        val nextNeedsMasking = computeNeedsMaskingAnalysis(
+            source = value,
+            category = state.selectedCategory,
+            targetSegment = nextSegment,
+            cache = null,
+            state = state
+        )
 
         _uiState.update {
             it.copy(
                 sourcePrompt = value,
                 targetSegment = nextSegment,
+                needsMaskingAnalysis = nextNeedsMasking,
                 generatedCandidates = if (clearCandidates) emptyList() else it.generatedCandidates,
                 resultPresentation = if (clearCandidates) {
                     AnalysisResultPresentation.NONE
@@ -188,10 +205,16 @@ class AnalysisViewModel(
 
     fun onCategorySelected(category: AnalysisCategory) {
         analysisCache = null
+        val nextNeedsMasking = computeNeedsMaskingAnalysis(
+            category = category,
+            targetSegment = null,
+            cache = null
+        )
         _uiState.update {
             it.copy(
                 selectedCategory = category,
                 targetSegment = null,
+                needsMaskingAnalysis = nextNeedsMasking,
                 generatedCandidates = emptyList(),
                 resultPresentation = AnalysisResultPresentation.NONE,
                 selectedCandidateIndex = null,
@@ -205,9 +228,14 @@ class AnalysisViewModel(
 
     fun clearTargetSegment() {
         analysisCache = null
+        val nextNeedsMasking = computeNeedsMaskingAnalysis(
+            targetSegment = null,
+            cache = null
+        )
         _uiState.update {
             it.copy(
                 targetSegment = null,
+                needsMaskingAnalysis = nextNeedsMasking,
                 generatedCandidates = emptyList(),
                 resultPresentation = AnalysisResultPresentation.NONE,
                 selectedCandidateIndex = null,
@@ -258,46 +286,18 @@ class AnalysisViewModel(
             selectedHints = directionInput.selectedHints,
             customHint = directionInput.customHint
         )
-        // 캐시 미스 등으로 구간 분석이 필요하면 마스킹 자격증명도 먼저 확인
-        if (needsMaskingAnalysis) {
-            when (
-                val gate = AnalysisStartPolicy.evaluateInputs(
-                    source = source,
-                    category = snapshot.selectedCategory,
-                    hasActiveKey = snapshot.hasMaskingCredential
-                )
-            ) {
-                is AnalysisStartGate.Blocked -> {
-                    showError(
-                        AnalysisUiText.startBlockedMessage(
-                            reason = gate.reason,
-                            provider = snapshot.maskingProvider,
-                            role = AnalysisModelRole.MASKING
-                        )
-                    )
-                    return
-                }
-                AnalysisStartGate.Allowed -> Unit
-            }
-        }
-        when (
-            val gate = AnalysisStartPolicy.evaluateInputs(
-                source = source,
-                category = snapshot.selectedCategory,
-                hasActiveKey = snapshot.hasGenerationCredential
-            )
-        ) {
-            is AnalysisStartGate.Blocked -> {
-                showError(
-                    AnalysisUiText.startBlockedMessage(
-                        reason = gate.reason,
-                        provider = snapshot.generationProvider,
-                        role = AnalysisModelRole.GENERATION
-                    )
-                )
-                return
-            }
-            AnalysisStartGate.Allowed -> Unit
+        val blockedReason = AnalysisStartPolicy.evaluatePreconditions(
+            source = source,
+            category = snapshot.selectedCategory,
+            needsMaskingAnalysis = needsMaskingAnalysis,
+            maskingProvider = snapshot.maskingProvider,
+            hasMaskingCredential = snapshot.hasMaskingCredential,
+            generationProvider = snapshot.generationProvider,
+            hasGenerationCredential = snapshot.hasGenerationCredential
+        )
+        if (blockedReason != null) {
+            showError(AnalysisUiText.startBlockedMessage(blockedReason))
+            return
         }
         val category = checkNotNull(snapshot.selectedCategory)
 
@@ -367,6 +367,7 @@ class AnalysisViewModel(
                     it.copy(
                         sourcePrompt = source,
                         targetSegment = ensured.target,
+                        needsMaskingAnalysis = false,
                         generatedCandidates = result.candidates,
                         resultPresentation = if (result.candidates.isEmpty()) {
                             AnalysisResultPresentation.NONE
@@ -561,6 +562,24 @@ class AnalysisViewModel(
             cache.customHint != customHint
     }
 
+    private fun computeNeedsMaskingAnalysis(
+        source: String = currentSourcePrompt(),
+        category: AnalysisCategory? = _uiState.value.selectedCategory,
+        targetSegment: AnalysisTargetSegment? = _uiState.value.targetSegment,
+        cache: AnalysisReportCache? = analysisCache,
+        state: AnalysisUiState = _uiState.value
+    ): Boolean {
+        val directionInput = currentDirectionInput(state)
+        return willNeedMaskingAnalysis(
+            source = source,
+            category = category,
+            existingTarget = targetSegment,
+            cache = cache,
+            selectedHints = directionInput.selectedHints,
+            customHint = directionInput.customHint
+        )
+    }
+
     private data class DirectionInput(
         val selectedHints: List<String>,
         val customHint: String
@@ -624,7 +643,8 @@ class AnalysisViewModel(
                 hasAppliedCandidateToAutomation = false,
                 resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
                 pendingOverwriteFileName = null,
-                showResetConfirmation = false
+                showResetConfirmation = false,
+                needsMaskingAnalysis = true
             )
         }
     }
@@ -654,8 +674,11 @@ class AnalysisViewModel(
 
     fun onCustomHintChange(value: String) {
         if (value.length <= 100) {
-            _uiState.update {
-                it.copy(customHint = value)
+            _uiState.update { state ->
+                val nextState = state.copy(customHint = value)
+                nextState.copy(
+                    needsMaskingAnalysis = computeNeedsMaskingAnalysis(state = nextState)
+                )
             }
         }
     }
@@ -667,7 +690,10 @@ class AnalysisViewModel(
             } else {
                 state.selectedDirectionIds + id
             }
-            state.copy(selectedDirectionIds = nextIds)
+            val nextState = state.copy(selectedDirectionIds = nextIds)
+            nextState.copy(
+                needsMaskingAnalysis = computeNeedsMaskingAnalysis(state = nextState)
+            )
         }
     }
 

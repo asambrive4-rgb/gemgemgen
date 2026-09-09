@@ -1,29 +1,20 @@
 package com.example.gemgemgen.analysis.ui
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason
 
 object AnalysisUiText {
-    fun startBlockedMessage(
-        reason: AnalysisStartBlockReason,
-        provider: AnalysisProvider = AnalysisProvider.GEMINI,
-        role: AnalysisModelRole = AnalysisModelRole.MASKING
-    ): String {
+    fun startBlockedMessage(reason: AnalysisStartBlockReason): String {
         return when (reason) {
-            AnalysisStartBlockReason.MissingCategory -> "카테고리를 선택해주세요."
-            AnalysisStartBlockReason.BlankSource -> "원본 프롬프트를 입력해주세요."
-            AnalysisStartBlockReason.NoActiveKey -> {
-                val step = when (role) {
-                    AnalysisModelRole.MASKING -> "자동 마스킹"
-                    AnalysisModelRole.GENERATION -> "TXT 생성"
-                }
-                when (provider) {
-                    AnalysisProvider.GEMINI ->
-                        "$step 에 활성 Gemini API 키가 필요합니다."
-                    AnalysisProvider.GROK ->
-                        "$step 에 Grok 로그인이 필요합니다."
-                }
+            AnalysisStartBlockReason.BlankSource -> "원문을 입력하거나 가져오세요."
+            AnalysisStartBlockReason.MissingCategory -> "변경할 카테고리를 선택하세요."
+            is AnalysisStartBlockReason.MissingMaskingCredential -> when (reason.provider) {
+                AnalysisProvider.GEMINI -> "자동 마스킹용 Gemini API 키를 등록하거나 활성화하세요."
+                AnalysisProvider.GROK -> "자동 마스킹용 Grok에 로그인하세요."
+            }
+            is AnalysisStartBlockReason.MissingGenerationCredential -> when (reason.provider) {
+                AnalysisProvider.GEMINI -> "생성용 Gemini API 키를 등록하거나 활성화하세요."
+                AnalysisProvider.GROK -> "생성용 Grok에 로그인하세요."
             }
         }
     }

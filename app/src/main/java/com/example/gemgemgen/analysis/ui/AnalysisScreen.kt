@@ -662,6 +662,22 @@ private fun StickyBottomActionPanel(
             }
         }
 
+        val hintMessage = uiState.preconditionHintMessage
+        if (hintMessage != null && !uiState.isBusy) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = AppTheme.colors.insetBed,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = hintMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.colors.textSecondary,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

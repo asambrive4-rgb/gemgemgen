@@ -1154,15 +1154,174 @@ class AnalysisFeatureTest {
         assertTrue(viewModel.uiState.value.message.contains("자동화 프롬프트"))
     }
 
+    @Test
+    fun preconditionHint_progressesThrough_source_category_masking_generation_order() {
+        val keyRepo = FakeGeminiApiKeyRepository()
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "hair"),
+            generateResponse = """[{"text":"후보 1","explanation":"설명"},{"text":"후보 2","explanation":"설명"}]"""
+        )
+        val viewModel = analysisViewModel(aiGateway = aiGateway, keyRepository = keyRepo)
+        // 생성 프로바이더를 Grok으로 명시적 설정 (Grok 미로그인 상태)
+        viewModel.onRoleProviderSelected(
+            com.example.gemgemgen.analysis.domain.AnalysisModelRole.GENERATION,
+            com.example.gemgemgen.analysis.domain.AnalysisProvider.GROK
+        )
+
+        // 1. 원문 없음 -> 원문 안내 + canGenerate false
+        assertEquals("원문을 입력하거나 가져오세요.", viewModel.uiState.value.preconditionHintMessage)
+        assertFalse(viewModel.uiState.value.canGenerate)
+
+        // 2. 원문 입력 -> 카테고리 안내 + canGenerate false
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        assertEquals("변경할 카테고리를 선택하세요.", viewModel.uiState.value.preconditionHintMessage)
+        assertFalse(viewModel.uiState.value.canGenerate)
+
+        // 3. 카테고리 선택 -> 기본 마스킹 Gemini, 키 없음 -> 자동 마스킹용 Gemini 키 안내
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
+        assertEquals(
+            "자동 마스킹용 Gemini API 키를 등록하거나 활성화하세요.",
+            viewModel.uiState.value.preconditionHintMessage
+        )
+        assertFalse(viewModel.uiState.value.canGenerate)
+
+        // 마스킹 모델을 Grok으로 변경 시 -> Grok 로그인 안내
+        viewModel.onRoleProviderSelected(
+            com.example.gemgemgen.analysis.domain.AnalysisModelRole.MASKING,
+            com.example.gemgemgen.analysis.domain.AnalysisProvider.GROK
+        )
+        assertEquals(
+            "자동 마스킹용 Grok에 로그인하세요.",
+            viewModel.uiState.value.preconditionHintMessage
+        )
+        assertFalse(viewModel.uiState.value.canGenerate)
+
+        // 마스킹 모델을 다시 Gemini로 변경 후 Gemini 키 등록/활성화 -> 마스킹 인증 충족
+        viewModel.onRoleProviderSelected(
+            com.example.gemgemgen.analysis.domain.AnalysisModelRole.MASKING,
+            com.example.gemgemgen.analysis.domain.AnalysisProvider.GEMINI
+        )
+        viewModel.onKeyLabelChange("gemini-key")
+        viewModel.onKeyValueChange("valid-key-value")
+        viewModel.addApiKey()
+        // 기본 생성 프로바이더는 Grok이며 Grok 로그인 안됨 -> 생성용 Grok 로그인 안내 (4순위)
+        assertEquals(
+            "생성용 Grok에 로그인하세요.",
+            viewModel.uiState.value.preconditionHintMessage
+        )
+        assertFalse(viewModel.uiState.value.canGenerate)
+
+        // 생성 모델도 Gemini로 변경 -> Gemini 키가 이미 있으므로 모든 조건 충족!
+        viewModel.onRoleProviderSelected(
+            com.example.gemgemgen.analysis.domain.AnalysisModelRole.GENERATION,
+            com.example.gemgemgen.analysis.domain.AnalysisProvider.GEMINI
+        )
+        org.junit.Assert.assertNull(viewModel.uiState.value.preconditionHintMessage)
+        assertTrue(viewModel.uiState.value.canGenerate)
+    }
+
+    @Test
+    fun preconditionHint_allowsGenerationWithoutMaskingCredential_whenCacheReusable() {
+        val keyRepo = FakeGeminiApiKeyRepository(activeKey = "gemini-secret")
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "hair"),
+            generateResponse = """[{"text":"후보 1","explanation":"설명"},{"text":"후보 2","explanation":"설명"}]"""
+        )
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = keyRepo
+        )
+        viewModel.onRoleProviderSelected(
+            com.example.gemgemgen.analysis.domain.AnalysisModelRole.MASKING,
+            com.example.gemgemgen.analysis.domain.AnalysisProvider.GEMINI
+        )
+        viewModel.onRoleProviderSelected(
+            com.example.gemgemgen.analysis.domain.AnalysisModelRole.GENERATION,
+            com.example.gemgemgen.analysis.domain.AnalysisProvider.GEMINI
+        )
+
+        val prompt = "red hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
+
+        // 처음에는 마스킹 키(Gemini)와 생성 키(Gemini) 모두 충족
+        org.junit.Assert.assertNull(viewModel.uiState.value.preconditionHintMessage)
+        assertTrue(viewModel.uiState.value.canGenerate)
+
+        // 1회 생성 실행 -> 자동 마스킹 완료 및 캐시 생성됨
+        viewModel.generate()
+        assertEquals(2, viewModel.uiState.value.generatedCandidates.size)
+        assertFalse(viewModel.uiState.value.needsMaskingAnalysis)
+
+        // 이제 마스킹 프로바이더를 Grok(로그인 안 됨)으로 변경
+        viewModel.onRoleProviderSelected(
+            com.example.gemgemgen.analysis.domain.AnalysisModelRole.MASKING,
+            com.example.gemgemgen.analysis.domain.AnalysisProvider.GROK
+        )
+        assertFalse(viewModel.uiState.value.hasMaskingCredential)
+        assertTrue(viewModel.uiState.value.hasGenerationCredential)
+
+        // 캐시가 유효하므로 마스킹 인증(Grok)이 없어도 생성이 차단되지 않고 계속 허용됨!
+        org.junit.Assert.assertNull(viewModel.uiState.value.preconditionHintMessage)
+        assertTrue(viewModel.uiState.value.canGenerate)
+
+        // 하지만 원문이 변경되면 캐시가 무효화되어 다시 마스킹 인증이 필요해짐!
+        val modifiedPrompt = "blonde hair and blue dress"
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(modifiedPrompt)
+        viewModel.onSourcePromptChange(modifiedPrompt)
+
+        // 캐시 무효화로 인해 즉시 마스킹 키 부족 안내가 나타나고 버튼 비활성화!
+        assertEquals(
+            "자동 마스킹용 Grok에 로그인하세요.",
+            viewModel.uiState.value.preconditionHintMessage
+        )
+        assertFalse(viewModel.uiState.value.canGenerate)
+    }
+
+    @Test
+    fun preconditionHint_hiddenDuringActiveWork() {
+        val keyRepo = FakeGeminiApiKeyRepository(activeKey = "gemini-secret")
+        val grokRepo = FakeGrokAuthRepository(
+            session = GrokAuthSession(
+                accessToken = "grok-token",
+                refreshToken = "refresh",
+                expiresAtMillis = System.currentTimeMillis() + 10 * 60_000L,
+                tokenEndpoint = "https://auth.x.ai/oauth2/token",
+                accountPreview = "grok_user"
+            )
+        )
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "hair"),
+            generateResponse = """[{"text":"후보 1","explanation":"설명"},{"text":"후보 2","explanation":"설명"}]"""
+        )
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = keyRepo,
+            grokAuthRepository = grokRepo
+        )
+
+        // IDLE 상태에서 원문이 비어있으면 안내 노출
+        assertEquals("원문을 입력하거나 가져오세요.", viewModel.uiState.value.preconditionHintMessage)
+
+        // GENERATING 상태인 UI State로 확인 시 isBusy이므로 안내는 노출되지 않음
+        val busyState = viewModel.uiState.value.copy(status = AnalysisStatus.GENERATING)
+        org.junit.Assert.assertNull(busyState.preconditionHintMessage)
+        assertFalse(busyState.canGenerate)
+    }
+
     private fun analysisViewModel(
         aiGateway: AnalysisAiGateway,
         keyRepository: GeminiApiKeyRepository,
-        clipboardGateway: ClipboardGateway = FakeClipboard()
+        clipboardGateway: ClipboardGateway = FakeClipboard(),
+        grokAuthRepository: GrokAuthRepository = FakeGrokAuthRepository()
     ): AnalysisViewModel {
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         val grokAuth = ManageGrokAuthUseCase(
             gateway = FakeGrokAuthGateway(),
-            repository = FakeGrokAuthRepository(),
+            repository = grokAuthRepository,
             dispatchers = dispatchers
         )
         val credentialResolver = AnalysisCredentialResolver(

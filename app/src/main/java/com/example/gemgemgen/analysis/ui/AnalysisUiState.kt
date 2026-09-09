@@ -6,6 +6,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
+import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason
 import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
@@ -55,7 +56,9 @@ data class AnalysisUiState(
     val grokLoginVerificationUri: String = "",
     val isGrokLoginPolling: Boolean = false,
     /** Grok 남은 크레딧 %. 로그인 전이거나 조회 실패 시 null. */
-    val grokRemainingPercent: Int? = null
+    val grokRemainingPercent: Int? = null,
+    /** 자동 마스킹 모델을 통한 분석이 필요한지 여부 (캐시 미스 등) */
+    val needsMaskingAnalysis: Boolean = true
 ) {
     val hasGeminiCredential: Boolean
         get() = apiKeys.any { it.isActive }
@@ -77,21 +80,29 @@ data class AnalysisUiState(
         get() = maskingProvider == AnalysisProvider.GROK ||
             generationProvider == AnalysisProvider.GROK
 
-    val canAnalyze: Boolean
-        get() = AnalysisStartPolicy.canAnalyze(
-            source = sourcePrompt,
-            category = selectedCategory,
-            hasActiveKey = hasMaskingCredential,
-            status = status
-        )
+    val isBusy: Boolean
+        get() = status == AnalysisStatus.ANALYZING || status == AnalysisStatus.GENERATING
+
+    val startBlockedReason: AnalysisStartBlockReason?
+        get() = if (isBusy) {
+            null
+        } else {
+            AnalysisStartPolicy.evaluatePreconditions(
+                source = sourcePrompt,
+                category = selectedCategory,
+                needsMaskingAnalysis = needsMaskingAnalysis,
+                maskingProvider = maskingProvider,
+                hasMaskingCredential = hasMaskingCredential,
+                generationProvider = generationProvider,
+                hasGenerationCredential = hasGenerationCredential
+            )
+        }
+
+    val preconditionHintMessage: String?
+        get() = startBlockedReason?.let { AnalysisUiText.startBlockedMessage(it) }
 
     val canGenerate: Boolean
-        get() = AnalysisStartPolicy.canGenerate(
-            source = sourcePrompt,
-            category = selectedCategory,
-            hasActiveKey = hasGenerationCredential,
-            status = status
-        )
+        get() = !isBusy && startBlockedReason == null
 
     val canCopyOrSave: Boolean
         get() = resultPresentation == AnalysisResultPresentation.TXT &&
@@ -101,9 +112,6 @@ data class AnalysisUiState(
 
     val geminiKeyPreview: String
         get() = apiKeys.firstOrNull { it.isActive }?.preview.orEmpty()
-
-    val isBusy: Boolean
-        get() = status == AnalysisStatus.ANALYZING || status == AnalysisStatus.GENERATING
 
     val canResetSession: Boolean
         get() = sourcePrompt.isNotEmpty() ||
