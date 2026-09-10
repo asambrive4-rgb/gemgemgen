@@ -155,7 +155,13 @@ internal fun AutomationScreen(
                         isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
                     )
                 } else if (isKeyboardVisible) {
-                    val bottomSpacerHeight = if (suggestionTokens.isNotEmpty()) 96.dp else 56.dp
+                    val hasActionBarOnIme = uiState.automationMode != AutomationMode.RECEIVER
+                    val bottomSpacerHeight = when {
+                        suggestionTokens.isNotEmpty() && hasActionBarOnIme -> 160.dp
+                        hasActionBarOnIme -> 120.dp
+                        suggestionTokens.isNotEmpty() -> 96.dp
+                        else -> 56.dp
+                    }
                     Spacer(modifier = Modifier.height(bottomSpacerHeight))
                 }
 
@@ -211,6 +217,25 @@ internal fun AutomationScreen(
                             onCopyPromptToClipboard = onCopyPromptToClipboard,
                             onPasteFromClipboard = onPasteFromClipboard
                         )
+
+                        if (uiState.automationMode != AutomationMode.RECEIVER) {
+                            AutomationActionBar(
+                                repeatCountText = uiState.repeatCountText,
+                                onRepeatCountChange = onRepeatCountChange,
+                                onRunMvp = {
+                                    onClearFocus()
+                                    onRunMvp()
+                                },
+                                onCancelAutomation = {
+                                    onClearFocus()
+                                    onCancelAutomation()
+                                },
+                                canRun = uiState.canRun,
+                                isRunning = uiState.isRunning,
+                                automationState = automationBarUiState.automationState,
+                                isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
+                            )
+                        }
                     }
                 }
             }
