@@ -16,10 +16,11 @@ import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 
 const val DEFAULT_ANALYSIS_RESULT_FILE_NAME = "analysis-wildcard-results.txt"
+val DEFAULT_ANALYSIS_CATEGORY: AnalysisCategory = AnalysisCategory.FREE_EDIT
 
 data class AnalysisUiState(
     val sourcePrompt: String = "",
-    val selectedCategory: AnalysisCategory? = null,
+    val selectedCategory: AnalysisCategory? = DEFAULT_ANALYSIS_CATEGORY,
     val targetSegment: AnalysisTargetSegment? = null,
     val status: AnalysisStatus = AnalysisStatus.IDLE,
     val error: String = "",
@@ -115,7 +116,7 @@ data class AnalysisUiState(
 
     val canResetSession: Boolean
         get() = sourcePrompt.isNotEmpty() ||
-            selectedCategory != null ||
+            selectedCategory != DEFAULT_ANALYSIS_CATEGORY ||
             targetSegment != null ||
             generatedCandidates.isNotEmpty() ||
             selectedDirectionIds.isNotEmpty() ||

@@ -615,7 +615,7 @@ class AnalysisViewModel(
         _uiState.update {
             it.copy(
                 sourcePrompt = "",
-                selectedCategory = null,
+                selectedCategory = AnalysisCategory.FREE_EDIT,
                 targetSegment = null,
                 status = AnalysisStatus.IDLE,
                 error = "",

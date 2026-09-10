@@ -49,6 +49,9 @@ class AnalysisFeatureTest {
     fun categories_keepAllTypesFromSourceApp() {
         assertEquals(
             listOf(
+                "분석 수정",
+                "구도",
+                "카메라 질감",
                 "여성 의상",
                 "남성 의상",
                 "남성 외모",
@@ -61,6 +64,24 @@ class AnalysisFeatureTest {
             ),
             AnalysisCategory.entries.map { it.label }
         )
+    }
+
+    @Test
+    fun newCategories_haveValidRulesAndFileNames() {
+        assertEquals("분석수정.txt", AnalysisCategory.FREE_EDIT.defaultWildcardSaveFileName())
+        assertEquals("구도.txt", AnalysisCategory.COMPOSITION.defaultWildcardSaveFileName())
+        assertEquals("카메라질감.txt", AnalysisCategory.CAMERA_TEXTURE.defaultWildcardSaveFileName())
+
+        val freeRule = com.example.gemgemgen.analysis.domain.AnalysisCategoryRules.ruleFor(AnalysisCategory.FREE_EDIT)
+        assertTrue(freeRule.goal.contains("연쇄 보완"))
+        assertTrue(freeRule.goal.contains("정밀 분석"))
+        assertTrue(freeRule.required.contains("관찰 가능한 시각적/물리적 조건"))
+
+        val compRule = com.example.gemgemgen.analysis.domain.AnalysisCategoryRules.ruleFor(AnalysisCategory.COMPOSITION)
+        assertTrue(compRule.goal.contains("구도"))
+
+        val camRule = com.example.gemgemgen.analysis.domain.AnalysisCategoryRules.ruleFor(AnalysisCategory.CAMERA_TEXTURE)
+        assertTrue(camRule.goal.contains("질감"))
     }
 
     @Test
@@ -688,7 +709,7 @@ class AnalysisFeatureTest {
         val resetState = viewModel.uiState.value
         assertEquals("", viewModel.sourcePromptTextFieldState.text.toString())
         assertEquals("", resetState.sourcePrompt)
-        assertEquals(null, resetState.selectedCategory)
+        assertEquals(AnalysisCategory.FREE_EDIT, resetState.selectedCategory)
         assertEquals(null, resetState.targetSegment)
         assertEquals(AnalysisStatus.IDLE, resetState.status)
         assertEquals(AnalysisTxtCountPolicy.DEFAULT_COUNT, resetState.txtCount)
@@ -1172,14 +1193,17 @@ class AnalysisFeatureTest {
         assertEquals("원문을 입력하거나 가져오세요.", viewModel.uiState.value.preconditionHintMessage)
         assertFalse(viewModel.uiState.value.canGenerate)
 
-        // 2. 원문 입력 -> 카테고리 안내 + canGenerate false
+        // 2. 원문 입력 -> 기본 카테고리(분석 수정)가 이미 선택되어 있으므로 바로 마스킹 키 안내 + canGenerate false
         val prompt = "red hair and blue dress"
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
         viewModel.onSourcePromptChange(prompt)
-        assertEquals("변경할 카테고리를 선택하세요.", viewModel.uiState.value.preconditionHintMessage)
+        assertEquals(
+            "자동 마스킹용 Gemini API 키를 등록하거나 활성화하세요.",
+            viewModel.uiState.value.preconditionHintMessage
+        )
         assertFalse(viewModel.uiState.value.canGenerate)
 
-        // 3. 카테고리 선택 -> 기본 마스킹 Gemini, 키 없음 -> 자동 마스킹용 Gemini 키 안내
+        // 3. 다른 카테고리 선택 -> 여전히 마스킹 키 없음 -> 동일 안내
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
         assertEquals(
             "자동 마스킹용 Gemini API 키를 등록하거나 활성화하세요.",
