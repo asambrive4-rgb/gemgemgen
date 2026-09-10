@@ -25,14 +25,12 @@ import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRepository
+import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
-import com.example.gemgemgen.automation.usecase.CleanDeviceMemoryUseCase
-import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationUseCase
-import com.example.gemgemgen.automation.usecase.StartAutomationUseCase
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.core.android.AndroidSoundAlertGateway
@@ -85,18 +83,15 @@ class AndroidAppContainer(context: Context) {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
         val environmentGateway = AndroidEnvironmentGateway(appContext)
         val checkAutomationStart = CheckAutomationStartUseCase(environmentGateway)
-        val startAutomation = StartAutomationUseCase(
-            checkAutomationStart = checkAutomationStart,
-            automationStartRecorder = recordAutomationStart,
-            automation = automation
-        )
         val manageRemoteAutomation = ManageRemoteAutomationUseCase(
             gateway = AndroidRemoteAutomationGateway(appContext),
             automationStartRecorder = recordAutomationStart,
             wildcardSetRepository = AndroidWildcardSetRepository(appContext)
         )
         val executeAutomation = ExecuteAutomationUseCase(
-            startAutomation = startAutomation,
+            checkAutomationStart = checkAutomationStart,
+            automationStartRecorder = recordAutomationStart,
+            automation = automation,
             manageRemoteAutomation = manageRemoteAutomation,
             promptHistoryStore = promptHistoryStore
         )
@@ -108,20 +103,13 @@ class AndroidAppContainer(context: Context) {
             ),
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automation,
-            closeGeminiApp = CloseGeminiAppUseCase(
-                AndroidGeminiAppCloser(appContext)
-            ),
-            terminateGeminiApp = CloseGeminiAppUseCase(
-                AndroidGeminiAppCloser(appContext, relaunchAfterClose = false)
-            ),
-            terminateSelfApp = CloseGeminiAppUseCase(
-                AndroidSelfAppCloser(appContext)
-            ),
-            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(
-                AndroidMemoryCleanupGateway(appContext)
+            appMaintenance = AppMaintenanceUseCase(
+                geminiRestartCloser = AndroidGeminiAppCloser(appContext),
+                geminiTerminateCloser = AndroidGeminiAppCloser(appContext, relaunchAfterClose = false),
+                selfAppCloser = AndroidSelfAppCloser(appContext),
+                memoryCleanupGateway = AndroidMemoryCleanupGateway(appContext)
             ),
             checkAutomationStart = checkAutomationStart,
-            startAutomation = startAutomation,
             executeAutomation = executeAutomation,
             wildcardFileRepository = AndroidWildcardFileRepository(appContext),
             manageRemoteAutomation = manageRemoteAutomation,

@@ -30,6 +30,7 @@ object AnalysisResponseParser {
         } ?: AnalysisCategoryConstraints()
         val variationGoal = root["variationGoal"].stringOrBlank().trim()
         val warnings = root["warnings"].strings()
+        val trace = root["cascadingTrace"]?.jsonObjectOrNull()
 
         return AnalysisReport(
             targetSegment = targetSegment,
@@ -37,8 +38,60 @@ object AnalysisResponseParser {
             spatialLayout = spatialLayout,
             categoryConstraints = constraints,
             variationGoal = variationGoal,
-            warnings = warnings
+            warnings = warnings,
+            targetVisualContext = root["targetVisualContext"]?.jsonObjectOrNull()?.let(::parseVisualContext)
+                ?: AnalysisVisualContext(),
+            cascadingTrace = AnalysisCascadingTrace(
+                newlyVisible = trace?.get("newlyVisible").strings(),
+                disappearing = trace?.get("disappearing").strings(),
+                undefinedAreas = trace?.get("undefinedAreas").strings(),
+                requiredAdjustments = trace?.get("requiredAdjustments").strings(),
+                conflictingSegments = parseRanges(trace?.get("conflictingSegments"), sourcePrompt)
+            ),
+            preservedSegments = parseRanges(root["preservedSegments"], sourcePrompt),
+            clarificationQuestion = root["clarificationQuestion"].stringOrBlank().trim()
         )
+    }
+
+    fun parseEditCandidates(jsonText: String): List<List<AnalysisTextEdit>> {
+        val items = runCatching { json.parseToJsonElement(jsonText).jsonArray }.getOrElse {
+            throw AnalysisParseException("편집 후보 목록이 올바른 JSON 배열이 아닙니다.")
+        }
+        return items.map { item ->
+            val edits = item.jsonObjectOrNull()?.get("edits")?.jsonArrayOrNull()
+                ?: throw AnalysisParseException("편집 후보에 edits 목록이 없습니다.")
+            edits.map { element ->
+                val edit = element.jsonObjectOrNull()
+                    ?: throw AnalysisParseException("편집 항목 형식이 올바르지 않습니다.")
+                val replacement = edit["replacement"] as? kotlinx.serialization.json.JsonPrimitive
+                if (replacement == null || !replacement.isString) {
+                    throw AnalysisParseException("편집 항목의 replacement 문자열이 없습니다.")
+                }
+                AnalysisTextEdit(parseRange(edit), replacement.content)
+            }
+        }
+    }
+
+    private fun parseRanges(element: JsonElement?, source: String): List<AnalysisSourceRange> {
+        if (element == null) return emptyList()
+        val items = element.jsonArrayOrNull()
+            ?: throw AnalysisParseException("원문 편집 범위 목록 형식이 올바르지 않습니다.")
+        return items.map {
+            val range = parseRange(it.jsonObjectOrNull()
+                ?: throw AnalysisParseException("원문 편집 범위 형식이 올바르지 않습니다."))
+            AnalysisSourceLocator.resolve(source, range)
+        }
+    }
+
+    private fun parseRange(obj: JsonObject): AnalysisSourceRange {
+        val start = obj["startIndex"].stringOrBlank().toIntOrNull() ?: -1
+        val end = obj["endIndex"].stringOrBlank().toIntOrNull() ?: -1
+        val text = obj["exactText"] as? kotlinx.serialization.json.JsonPrimitive
+        if (text == null || !text.isString) {
+            throw AnalysisParseException("편집할 원문 문자열이 없습니다.")
+        }
+        return AnalysisSourceRange(start, end, text.content,
+            obj["occurrence"].stringOrBlank().toIntOrNull())
     }
 
     fun parseTxtCandidates(jsonText: String): List<String> {
@@ -77,41 +130,18 @@ object AnalysisResponseParser {
         obj: JsonObject,
         sourcePrompt: String
     ): AnalysisDetectedSegment? {
-        val exactText = obj["exactText"].stringOrBlank().trim()
+        val exactText = obj["exactText"].stringOrBlank()
         if (exactText.isBlank()) return null
-
-        val reportedConfidence = obj["confidence"].doubleOrNull() ?: 0.5
+        val confidence = obj["confidence"].doubleOrNull() ?: 0.5
         val reason = obj["reason"].stringOrBlank()
-        val directIndex = sourcePrompt.indexOf(exactText)
-        if (directIndex >= 0) {
-            return AnalysisDetectedSegment(
-                exactText = exactText,
-                startIndex = directIndex,
-                endIndex = directIndex + exactText.length,
-                confidence = reportedConfidence,
-                reason = reason
-            )
-        }
-
-        val lowerIndex = sourcePrompt.lowercase().indexOf(exactText.lowercase())
-        if (lowerIndex >= 0) {
-            val fixedText = sourcePrompt.substring(lowerIndex, lowerIndex + exactText.length)
-            return AnalysisDetectedSegment(
-                exactText = fixedText,
-                startIndex = lowerIndex,
-                endIndex = lowerIndex + exactText.length,
-                confidence = minOf(reportedConfidence, 0.8),
-                reason = reason.ifBlank { "대소문자가 조정되었습니다." }
-            )
-        }
-
-        return AnalysisDetectedSegment(
-            exactText = exactText,
-            startIndex = -1,
-            endIndex = -1,
-            confidence = 0.1,
-            reason = reason.ifBlank {
-                "원본 텍스트와 추출 문구가 일치하지 않습니다. 수동 선택이 필요합니다."
+        val resolved = runCatching { AnalysisSourceLocator.resolve(sourcePrompt, parseRange(obj)) }
+        return resolved.fold(
+            onSuccess = {
+                AnalysisDetectedSegment(it.exactText, it.startIndex, it.endIndex, confidence, reason)
+            },
+            onFailure = {
+                AnalysisDetectedSegment(exactText, -1, -1, 0.1,
+                    it.message ?: reason.ifBlank { "수정 대상 문구를 원문에서 찾지 못했습니다." })
             }
         )
     }

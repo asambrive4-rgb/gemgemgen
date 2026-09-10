@@ -318,6 +318,9 @@ class AnalysisViewModel(
                     _uiState.update {
                         it.copy(
                             targetSegment = ensured.target,
+                            generatedCandidates = emptyList(),
+                            resultPresentation = AnalysisResultPresentation.NONE,
+                            selectedCandidateIndex = null,
                             warning = ensured.warning
                         )
                     }
@@ -615,7 +618,7 @@ class AnalysisViewModel(
         _uiState.update {
             it.copy(
                 sourcePrompt = "",
-                selectedCategory = AnalysisCategory.FREE_EDIT,
+                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
                 targetSegment = null,
                 status = AnalysisStatus.IDLE,
                 error = "",

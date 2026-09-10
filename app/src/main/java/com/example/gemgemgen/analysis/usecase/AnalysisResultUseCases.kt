@@ -49,6 +49,9 @@ class SaveAnalysisWildcardFileUseCase(
         candidates: List<String>,
         overwrite: Boolean
     ): AnalysisWildcardSaveResult = withContext(dispatchers.io) {
+        require(candidates.none { '\n' in it || '\r' in it }) {
+            "여러 줄의 원문을 보존한 후보는 한 줄 단위 와일드카드 파일로 저장할 수 없습니다. '생성' 카드에서 복사하거나 적용해 주세요."
+        }
         val fileName = WildcardFileName.normalize(fileNameInput)
             ?: return@withContext AnalysisWildcardSaveResult.InvalidFileName
         val existingFile = repository.listFiles()

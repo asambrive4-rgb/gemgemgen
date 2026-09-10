@@ -17,10 +17,14 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class AndroidGeminiAnalysisGateway : AnalysisAiGateway {
+class AndroidGeminiAnalysisGateway(
+    private val maxRetries: Int = DEFAULT_MAX_RETRIES,
+    private val initialRetryDelayMillis: Long = DEFAULT_INITIAL_RETRY_DELAY_MILLIS
+) : AnalysisAiGateway {
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun analyze(
@@ -51,56 +55,91 @@ class AndroidGeminiAnalysisGateway : AnalysisAiGateway {
         )
     }
 
-    private fun generateContent(
+    private suspend fun generateContent(
         apiKey: String,
         modelId: String,
         systemInstruction: String,
         userPrompt: String,
         responseSchema: JsonObject
     ): String {
-        return try {
-            val encodedKey = URLEncoder.encode(apiKey, Charsets.UTF_8.name())
-            val url = URL(
-                "https://generativelanguage.googleapis.com/v1beta/models/$modelId:generateContent?key=$encodedKey"
-            )
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = CONNECT_TIMEOUT_MILLIS
-                readTimeout = READ_TIMEOUT_MILLIS
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
+        var attempt = 0
+        var currentDelay = initialRetryDelayMillis
 
-            val body = buildRequestBody(
-                systemInstruction = systemInstruction,
-                userPrompt = userPrompt,
-                responseSchema = responseSchema
-            )
+        while (true) {
+            attempt++
             try {
-                OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                    writer.write(body.toString())
+                return executeRequest(
+                    apiKey = apiKey,
+                    modelId = modelId,
+                    systemInstruction = systemInstruction,
+                    userPrompt = userPrompt,
+                    responseSchema = responseSchema
+                )
+            } catch (error: RetryableServerException) {
+                if (attempt > maxRetries) {
+                    throw AnalysisException(formatHttpError(error.responseCode, error.responseText, modelId))
                 }
-
-                val responseCode = connection.responseCode
-                val responseText = if (responseCode in 200..299) {
-                    connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } else {
-                    connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                        .orEmpty()
-                }
-
-                if (responseCode !in 200..299) {
-                    throw AnalysisException(formatHttpError(responseCode, responseText, modelId))
-                }
-
-                extractCandidateText(responseText)
-            } finally {
-                connection.disconnect()
+                delay(currentDelay)
+                currentDelay *= 2
+            } catch (error: AnalysisException) {
+                throw error
+            } catch (error: Exception) {
+                throw AnalysisException(formatNetworkError(error))
             }
-        } catch (error: AnalysisException) {
-            throw error
-        } catch (error: Exception) {
-            throw AnalysisException(formatNetworkError(error))
+        }
+    }
+
+    private fun executeRequest(
+        apiKey: String,
+        modelId: String,
+        systemInstruction: String,
+        userPrompt: String,
+        responseSchema: JsonObject
+    ): String {
+        val encodedKey = URLEncoder.encode(apiKey, Charsets.UTF_8.name())
+        val url = URL(
+            "https://generativelanguage.googleapis.com/v1beta/models/$modelId:generateContent?key=$encodedKey"
+        )
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = CONNECT_TIMEOUT_MILLIS
+            readTimeout = READ_TIMEOUT_MILLIS
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        }
+
+        val body = buildRequestBody(
+            systemInstruction = systemInstruction,
+            userPrompt = userPrompt,
+            responseSchema = responseSchema
+        )
+        return try {
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(body.toString())
+            }
+
+            val responseCode = connection.responseCode
+            val responseText = if (responseCode in 200..299) {
+                connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } else {
+                connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    .orEmpty()
+            }
+
+            if (responseCode !in 200..299) {
+                val isRetryable = responseCode == 503 ||
+                    responseCode == 502 ||
+                    responseCode == 504 ||
+                    (responseCode in 500..599 && responseText.contains("overloaded", ignoreCase = true))
+                if (isRetryable) {
+                    throw RetryableServerException(responseCode, responseText)
+                }
+                throw AnalysisException(formatHttpError(responseCode, responseText, modelId))
+            }
+
+            extractCandidateText(responseText)
+        } finally {
+            connection.disconnect()
         }
     }
 
@@ -264,8 +303,15 @@ class AndroidGeminiAnalysisGateway : AnalysisAiGateway {
         return this ?: emptyList()
     }
 
-    private companion object {
+    private class RetryableServerException(
+        val responseCode: Int,
+        val responseText: String
+    ) : RuntimeException()
+
+    internal companion object {
         const val CONNECT_TIMEOUT_MILLIS = 15_000
         const val READ_TIMEOUT_MILLIS = 120_000
+        const val DEFAULT_MAX_RETRIES = 2
+        const val DEFAULT_INITIAL_RETRY_DELAY_MILLIS = 1_500L
     }
 }

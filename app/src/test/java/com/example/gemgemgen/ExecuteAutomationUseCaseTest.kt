@@ -74,7 +74,7 @@ class ExecuteAutomationUseCaseTest {
     }
 
     @Test
-    fun decideStart_inNormalMode_delegatesToStartAutomationUseCase() {
+    fun decideStart_inNormalMode_checksOverlayPermissionAndStartStatus() {
         val (useCaseWithOverlay, _) = createUseCase(isOverlayGranted = true)
         val (useCaseWithoutOverlay, _) = createUseCase(isOverlayGranted = false)
 
@@ -135,7 +135,7 @@ class ExecuteAutomationUseCaseTest {
     }
 
     @Test
-    fun executeLocal_delegatesToStartAutomation() = runBlocking {
+    fun executeLocal_recordsSnapshotAndRunsAutomation() = runBlocking {
         val (useCase, context) = createUseCase()
 
         val request = AutomationRunRequest(
@@ -149,6 +149,36 @@ class ExecuteAutomationUseCaseTest {
         assertEquals(1, context.startRecorder.callCount)
         assertEquals(request, context.startRecorder.recordedRequest)
         assertEquals(AutomationRunState.Success, context.localAutomation.runState.value)
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun compatibilityConstructor_delegatesProperly() = runBlocking {
+        val checkAutomationStart = CheckAutomationStartUseCase(OverlayPermissionGateway { true })
+        val startRecorder = FakeAutomationStartRecorder()
+        val localAutomation = createLocalAutomation()
+        val startAutomation = StartAutomationUseCase(
+            checkAutomationStart = checkAutomationStart,
+            automationStartRecorder = startRecorder,
+            automation = localAutomation
+        )
+        val remoteGateway = FakeRemoteAutomationGateway()
+        val manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway)
+
+        val useCase = ExecuteAutomationUseCase(
+            startAutomation = startAutomation,
+            manageRemoteAutomation = manageRemoteAutomation
+        )
+
+        val request = AutomationRunRequest(
+            promptTemplate = "compat prompt",
+            repeatCountText = "1",
+            targetApp = AutomationTargetApp.GEMINI
+        )
+
+        useCase.executeLocal(request)
+        assertEquals(1, startRecorder.callCount)
+        assertEquals(AutomationRunState.Success, localAutomation.runState.value)
     }
 
     @Test
@@ -235,11 +265,6 @@ class ExecuteAutomationUseCaseTest {
         val checkAutomationStart = CheckAutomationStartUseCase(OverlayPermissionGateway { isOverlayGranted })
         val startRecorder = FakeAutomationStartRecorder()
         val localAutomation = createLocalAutomation()
-        val startAutomation = StartAutomationUseCase(
-            checkAutomationStart = checkAutomationStart,
-            automationStartRecorder = startRecorder,
-            automation = localAutomation
-        )
 
         val remoteGateway = FakeRemoteAutomationGateway(
             RemoteAutomationStatus(
@@ -254,7 +279,9 @@ class ExecuteAutomationUseCaseTest {
         )
 
         val useCase = ExecuteAutomationUseCase(
-            startAutomation = startAutomation,
+            checkAutomationStart = checkAutomationStart,
+            automationStartRecorder = startRecorder,
+            automation = localAutomation,
             manageRemoteAutomation = manageRemoteAutomation,
             promptHistoryStore = promptHistoryStore
         )

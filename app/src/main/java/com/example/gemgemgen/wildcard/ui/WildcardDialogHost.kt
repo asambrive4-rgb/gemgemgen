@@ -91,14 +91,15 @@ sealed interface WildcardDialogType {
 }
 
 fun deriveActiveWildcardDialog(uiState: WildcardManagerUiState): WildcardDialogType {
+    val classifyPreview = uiState.classifyPreview
     return when {
         uiState.classifyOverwriteConflicts.isNotEmpty() ->
             WildcardDialogType.ClassifyOverwrite(uiState.classifyOverwriteConflicts)
         uiState.isClassifying ->
             WildcardDialogType.ClassifyLoading
-        uiState.classifyPreview != null ->
+        classifyPreview != null ->
             WildcardDialogType.ClassifyPreview(
-                result = uiState.classifyPreview,
+                result = classifyPreview,
                 criteria = uiState.classifyCriteria,
                 saveEntries = uiState.classifySaveEntries,
                 canSave = uiState.canSaveClassifyResult,

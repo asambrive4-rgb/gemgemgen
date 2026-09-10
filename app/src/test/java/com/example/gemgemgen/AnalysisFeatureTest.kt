@@ -46,6 +46,73 @@ import org.junit.Test
 
 class AnalysisFeatureTest {
     @Test
+    fun freeEdit_scatteredEdits_applySwitchAndRestoreWithoutRewritingGaps() {
+        val source = "head|waist-up|KEEP|hide feet|tail"
+        val analysis = analysisJson("waist-up").trimEnd().dropLast(1) + """,
+            "cascadingTrace":{"conflictingSegments":[{
+                "startIndex":999,"endIndex":1000,"exactText":"hide feet"
+            }]}
+        }
+        """
+        val edits = listOf("full body", "long shot").joinToString(prefix = "[", postfix = "]") { frame ->
+            """{"edits":[
+              {"exactText":"waist-up","replacement":"$frame"},
+              {"exactText":"hide feet","replacement":"show feet"}
+            ],"explanation":""}"""
+        }
+        val gateway = FakeAnalysisAiGateway(analyzeResponse = analysis, generateResponse = edits)
+        val viewModel = analysisViewModel(gateway, FakeGeminiApiKeyRepository(activeKey = "test-credential"))
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(source)
+        viewModel.onSourcePromptChange(source)
+        viewModel.generate()
+        assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+        assertEquals(listOf("full body|KEEP|show feet", "long shot|KEEP|show feet"),
+            viewModel.uiState.value.generatedCandidates)
+        assertEquals("waist-up|KEEP|hide feet", viewModel.uiState.value.targetSegment?.text)
+        var automation = source
+        val apply = { expected: String, replacement: String, _: Int ->
+            val start = automation.indexOf(expected)
+            if (start < 0) null else {
+                automation = automation.replaceRange(start, start + expected.length, replacement)
+                start
+            }
+        }
+        viewModel.applyCandidate(0, apply)
+        assertEquals("head|full body|KEEP|show feet|tail", automation)
+        viewModel.applyCandidate(1, apply)
+        assertEquals("head|long shot|KEEP|show feet|tail", automation)
+        viewModel.restoreOriginalPrompt(apply)
+        assertEquals(source, automation)
+        assertEquals(source, viewModel.sourcePromptTextFieldState.text.toString())
+    }
+
+    @Test
+    fun essentialClarification_stopsBeforeGenerationAndPromptsForCustomHint() {
+        val analysis = analysisJson("blue dress").trimEnd().dropLast(1) +
+            """, "clarificationQuestion":"의상 길이를 어떻게 바꿀까요?" }"""
+        val gateway = FakeAnalysisAiGateway(analyzeResponse = analysis)
+        val viewModel = analysisViewModel(gateway, FakeGeminiApiKeyRepository(activeKey = "test-credential"))
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("blue dress")
+        viewModel.onSourcePromptChange("blue dress")
+        viewModel.generate()
+        assertEquals(0, gateway.generateCallCount)
+        assertEquals(AnalysisStatus.ERROR, viewModel.uiState.value.status)
+        assertTrue(viewModel.uiState.value.error.contains("추가 요구사항"))
+        assertTrue(viewModel.uiState.value.error.contains("의상 길이"))
+    }
+
+    @Test
+    fun multilineWildcardCandidate_isRejectedBeforeCreatingFile() = runBlocking {
+        val repository = FakeWildcardRepository()
+        val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        val save = SaveAnalysisWildcardFileUseCase(repository,
+            CopyAnalysisResultsUseCase(FakeClipboard(), dispatchers), dispatchers)
+        val result = runCatching { save.save("test.txt", listOf("first\nsecond"), false) }
+        assertTrue(result.exceptionOrNull() is IllegalArgumentException)
+        assertTrue(repository.listFiles().isEmpty())
+    }
+
+    @Test
     fun categories_keepAllTypesFromSourceApp() {
         assertEquals(
             listOf(

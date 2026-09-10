@@ -11,6 +11,7 @@ interface MemoryCleanupGateway {
     suspend fun cleanMemory(): MemoryCleanupResult
 }
 
+@Deprecated("AppMaintenanceUseCase로 대체되었습니다. AppMaintenanceUseCase를 사용하세요.")
 class CleanDeviceMemoryUseCase(
     private val memoryCleanupGateway: MemoryCleanupGateway
 ) {

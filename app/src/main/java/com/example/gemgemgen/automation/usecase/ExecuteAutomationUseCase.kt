@@ -1,4 +1,4 @@
-﻿package com.example.gemgemgen.automation.usecase
+package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.remote.domain.AutomationMode
@@ -6,10 +6,41 @@ import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 
 class ExecuteAutomationUseCase(
-    private val startAutomation: StartAutomationUseCase,
+    private val checkAutomationStart: CheckAutomationStartUseCase,
+    private val automationStartRecorder: AutomationStartRecorder,
+    private val automation: RunAutomationUseCase,
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase,
     private val promptHistoryStore: PromptHistoryStore? = null
 ) {
+    /** StartAutomationUseCase 경유 형태를 호환하기 위한 보조 생성자 */
+    @Suppress("DEPRECATION")
+    constructor(
+        startAutomation: StartAutomationUseCase,
+        manageRemoteAutomation: ManageRemoteAutomationUseCase,
+        promptHistoryStore: PromptHistoryStore? = null
+    ) : this(
+        checkAutomationStart = startAutomation.checkAutomationStart,
+        automationStartRecorder = startAutomation.automationStartRecorder,
+        automation = startAutomation.automation,
+        manageRemoteAutomation = manageRemoteAutomation,
+        promptHistoryStore = promptHistoryStore
+    )
+
+    /** OverlayPermissionGateway 직접 주입을 위한 편의 생성자 */
+    constructor(
+        overlayPermissionGateway: OverlayPermissionGateway,
+        automationStartRecorder: AutomationStartRecorder,
+        automation: RunAutomationUseCase,
+        manageRemoteAutomation: ManageRemoteAutomationUseCase,
+        promptHistoryStore: PromptHistoryStore? = null
+    ) : this(
+        checkAutomationStart = CheckAutomationStartUseCase(overlayPermissionGateway),
+        automationStartRecorder = automationStartRecorder,
+        automation = automation,
+        manageRemoteAutomation = manageRemoteAutomation,
+        promptHistoryStore = promptHistoryStore
+    )
+
     fun decideStart(
         canRun: Boolean,
         isStartInProgress: Boolean,
@@ -25,7 +56,7 @@ class ExecuteAutomationUseCase(
                 }
             }
             AutomationMode.NORMAL -> {
-                startAutomation.decideStart(
+                checkAutomationStart.decide(
                     canRun = canRun,
                     isStartInProgress = isStartInProgress
                 )
@@ -42,7 +73,8 @@ class ExecuteAutomationUseCase(
     }
 
     suspend fun executeLocal(request: AutomationRunRequest) {
-        startAutomation.start(request)
+        automationStartRecorder.record(request)
+        automation.run(request)
     }
 
     fun cancel(

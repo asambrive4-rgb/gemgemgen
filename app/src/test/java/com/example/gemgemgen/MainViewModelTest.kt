@@ -570,6 +570,30 @@ class MainViewModelTest {
     }
 
     @Test
+    fun decideWildcardFolderAction_delegatesToPolicyBasedOnEnvironmentStatus() {
+        val allFilesEnv = readyEnvironment().copy(hasAllFilesAccess = true, isWildcardDirectoryAccessible = true)
+        val viewModelAllFiles = viewModel(environmentStatusReader = FakeEnvironmentStatusReader(allFilesEnv))
+        assertEquals(WildcardFolderAction.OpenDirectFolder, viewModelAllFiles.decideWildcardFolderAction())
+
+        val inaccessibleEnv = readyEnvironment().copy(hasAllFilesAccess = false, isWildcardDirectoryAccessible = false)
+        val viewModelInaccessible = viewModel(environmentStatusReader = FakeEnvironmentStatusReader(inaccessibleEnv))
+        assertEquals(WildcardFolderAction.OpenStorageSettings, viewModelInaccessible.decideWildcardFolderAction())
+
+        val safEnv = readyEnvironment().copy(hasAllFilesAccess = false, isWildcardDirectoryAccessible = true)
+        val viewModelSaf = viewModel(environmentStatusReader = FakeEnvironmentStatusReader(safEnv))
+        assertEquals(WildcardFolderAction.LaunchSafPicker, viewModelSaf.decideWildcardFolderAction())
+    }
+
+    @Test
+    fun getInitialWildcardFolderUri_returnsStoredFolderUri() {
+        val folderSaver = FakeWildcardFolderSaver()
+        folderSaver.savedFolderUri = "content://stored/uri"
+        val viewModel = viewModel(wildcardFolderSaver = folderSaver)
+
+        assertEquals("content://stored/uri", viewModel.getInitialWildcardFolderUri())
+    }
+
+    @Test
     fun runAutomation_savesLastRunSnapshotWhenRunStarts() {
         val snapshotStorage = FakeLastRunSnapshotStorage()
         val viewModel = viewModel(
@@ -1243,18 +1267,23 @@ class MainViewModelTest {
         wildcardFolderSaver: FakeWildcardFolderSaver = FakeWildcardFolderSaver(),
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         automationRunner: RunAutomationUseCase? = null,
-        closeGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
-        terminateGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
-        terminateSelfApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(FakeGeminiAppCloser()),
-        cleanDeviceMemoryUseCase: CleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(
-            FakeMemoryCleanupGateway()
-        ),
+        appMaintenance: AppMaintenanceUseCase? = null,
+        closeGeminiApp: CloseGeminiAppUseCase? = null,
+        terminateGeminiApp: CloseGeminiAppUseCase? = null,
+        terminateSelfApp: CloseGeminiAppUseCase? = null,
+        cleanDeviceMemoryUseCase: CleanDeviceMemoryUseCase? = null,
         promptHistoryStore: PromptHistoryStore? = null,
         manageRemoteAutomation: ManageRemoteAutomationUseCase? = null,
         soundAlertGateway: SoundAlertGateway = NoOpSoundAlertGateway,
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
+        val resolvedMaintenance = appMaintenance ?: AppMaintenanceUseCase(
+            geminiRestartCloser = closeGeminiApp?.let { FakeGeminiCloserAdapter(it) } ?: FakeGeminiAppCloser(),
+            geminiTerminateCloser = terminateGeminiApp?.let { FakeGeminiCloserAdapter(it) } ?: FakeGeminiAppCloser(),
+            selfAppCloser = terminateSelfApp?.let { FakeGeminiCloserAdapter(it) } ?: FakeGeminiAppCloser(),
+            memoryCleanupGateway = cleanDeviceMemoryUseCase?.let { FakeMemoryGatewayAdapter(it) } ?: FakeMemoryCleanupGateway()
+        )
         return MainViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentStatusReader),
             clipboardGateway = clipboardGateway,
@@ -1265,10 +1294,7 @@ class MainViewModelTest {
                 clipboardGateway = clipboardGateway,
                 dispatchers = dispatchers
             ),
-            closeGeminiApp = closeGeminiApp,
-            terminateGeminiApp = terminateGeminiApp,
-            terminateSelfApp = terminateSelfApp,
-            cleanDeviceMemoryUseCase = cleanDeviceMemoryUseCase,
+            appMaintenance = resolvedMaintenance,
             manageRemoteAutomation = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
                 NoOpRemoteAutomationGateway()
             ),
@@ -1277,6 +1303,14 @@ class MainViewModelTest {
             dispatchers = dispatchers,
             coroutineScope = coroutineScope
         )
+    }
+
+    private class FakeGeminiCloserAdapter(private val useCase: CloseGeminiAppUseCase) : GeminiAppCloser {
+        override suspend fun closeGeminiApp(): CloseGeminiAppResult = useCase.close()
+    }
+
+    private class FakeMemoryGatewayAdapter(private val useCase: CleanDeviceMemoryUseCase) : MemoryCleanupGateway {
+        override suspend fun cleanMemory(): MemoryCleanupResult = useCase.clean()
     }
 
     private fun automation(
@@ -1347,6 +1381,10 @@ class MainViewModelTest {
         override fun save(folderUri: String): FolderSelectionResult {
             savedFolderUri = folderUri
             return result
+        }
+
+        override fun getFolderUri(): String? {
+            return savedFolderUri.ifEmpty { null }
         }
     }
 

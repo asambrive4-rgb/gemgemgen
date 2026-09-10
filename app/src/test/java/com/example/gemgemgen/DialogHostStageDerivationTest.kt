@@ -86,13 +86,13 @@ class DialogHostStageDerivationTest {
         val baseState = WildcardManagerUiState()
         assertEquals(WildcardDialogType.None, deriveActiveWildcardDialog(baseState))
 
-        val overwriteState = baseState.copy(classifyOverwriteConflicts = listOf("a.txt"))
+        val overwriteState = baseState.copy(classify = baseState.classify.copy(classifyOverwriteConflicts = listOf("a.txt")))
         assertEquals(
             WildcardDialogType.ClassifyOverwrite(listOf("a.txt")),
             deriveActiveWildcardDialog(overwriteState)
         )
 
-        val loadingState = baseState.copy(isClassifying = true)
+        val loadingState = baseState.copy(classify = baseState.classify.copy(isClassifying = true))
         assertEquals(WildcardDialogType.ClassifyLoading, deriveActiveWildcardDialog(loadingState))
     }
 

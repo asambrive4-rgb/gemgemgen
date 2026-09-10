@@ -13,8 +13,6 @@ import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
-import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
-import com.example.gemgemgen.automation.usecase.CleanDeviceMemoryUseCase
 import com.example.gemgemgen.automation.usecase.GeminiAppCloser
 import com.example.gemgemgen.automation.usecase.LastRunSnapshot
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
@@ -23,7 +21,6 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationUseCase
-import com.example.gemgemgen.automation.usecase.StartAutomationUseCase
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
@@ -49,35 +46,24 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
+import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
+import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
+import com.example.gemgemgen.automation.usecase.MaintenanceResult
+
 class MainViewModel(
     private val checkEnvironmentStatus: CheckEnvironmentStatusUseCase,
     private val clipboardGateway: ClipboardGateway,
     private val saveWildcardFolder: SaveWildcardFolderUseCase,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: RunAutomationUseCase,
-    private val closeGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(
-        object : GeminiAppCloser {
+    private val appMaintenance: AppMaintenanceUseCase = AppMaintenanceUseCase(
+        geminiAppCloser = object : GeminiAppCloser {
             override suspend fun closeGeminiApp(): CloseGeminiAppResult {
                 return CloseGeminiAppResult.AccessibilityUnavailable
             }
-        }
-    ),
-    private val terminateGeminiApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(
-        object : GeminiAppCloser {
-            override suspend fun closeGeminiApp(): CloseGeminiAppResult {
-                return CloseGeminiAppResult.AccessibilityUnavailable
-            }
-        }
-    ),
-    private val terminateSelfApp: CloseGeminiAppUseCase = CloseGeminiAppUseCase(
-        object : GeminiAppCloser {
-            override suspend fun closeGeminiApp(): CloseGeminiAppResult {
-                return CloseGeminiAppResult.AccessibilityUnavailable
-            }
-        }
-    ),
-    private val cleanDeviceMemoryUseCase: CleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(
-        object : MemoryCleanupGateway {
+        },
+        memoryCleanupGateway = object : MemoryCleanupGateway {
             override suspend fun cleanMemory(): MemoryCleanupResult {
                 return MemoryCleanupResult.AccessibilityUnavailable
             }
@@ -92,7 +78,7 @@ class MainViewModel(
     private val promptHistoryStore: PromptHistoryStore? = null,
     private val themePaletteStore: com.example.gemgemgen.ui.theme.ThemePaletteStore? = null,
     private val dispatchers: AppDispatchers = AppDispatchers(),
-    private val startAutomation: StartAutomationUseCase = StartAutomationUseCase(
+    private val executeAutomation: ExecuteAutomationUseCase = ExecuteAutomationUseCase(
         checkAutomationStart = checkAutomationStart,
         automationStartRecorder = RecordAutomationStartUseCase(
             lastRunSnapshotStore = lastRunSnapshotStore,
@@ -100,10 +86,7 @@ class MainViewModel(
             promptHistoryStore = promptHistoryStore,
             dispatchers = dispatchers
         ),
-        automation = automation
-    ),
-    private val executeAutomation: ExecuteAutomationUseCase = ExecuteAutomationUseCase(
-        startAutomation = startAutomation,
+        automation = automation,
         manageRemoteAutomation = manageRemoteAutomation,
         promptHistoryStore = promptHistoryStore
     ),
@@ -344,15 +327,25 @@ class MainViewModel(
         promptEditor.replaceSelectedPromptParagraph(replacement)
     }
 
+    fun decideWildcardFolderAction(): WildcardFolderAction {
+        val status = _uiState.value.environmentStatus
+        return WildcardFolderAccessPolicy.decideAction(
+            hasAllFilesAccess = status.hasAllFilesAccess,
+            isWildcardDirectoryAccessible = status.isWildcardDirectoryAccessible
+        )
+    }
+
+    fun getInitialWildcardFolderUri(): String? {
+        return saveWildcardFolder.getFolderUri()
+    }
+
     fun closeGeminiApp() {
         runMaintenanceAction(
             canExecute = { it.canCloseGemini },
             unavailableMessage = { AutomationUiText.geminiRestartUnavailableMessage(it) },
             startingText = { AutomationUiText.geminiRestartStartingText() },
             canceledText = { AutomationUiText.geminiRestartCanceledText() },
-            action = { closeGeminiApp.close() },
-            onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
-            resultMessage = { AutomationUiText.geminiRestartResultMessage(it) }
+            action = { appMaintenance.restartGemini() }
         )
     }
 
@@ -362,9 +355,7 @@ class MainViewModel(
             unavailableMessage = { AutomationUiText.geminiTerminateUnavailableMessage(it) },
             startingText = { AutomationUiText.geminiTerminateStartingText() },
             canceledText = { AutomationUiText.geminiTerminateCanceledText() },
-            action = { terminateGeminiApp.close() },
-            onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
-            resultMessage = { AutomationUiText.geminiTerminateResultMessage(it) }
+            action = { appMaintenance.terminateGemini() }
         )
     }
 
@@ -374,9 +365,7 @@ class MainViewModel(
             unavailableMessage = { AutomationUiText.selfAppTerminateUnavailableMessage(it) },
             startingText = { AutomationUiText.selfAppTerminateStartingText() },
             canceledText = { AutomationUiText.selfAppTerminateCanceledText() },
-            action = { terminateSelfApp.close() },
-            onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
-            resultMessage = { AutomationUiText.selfAppTerminateResultMessage(it) }
+            action = { appMaintenance.terminateSelf() }
         )
     }
 
@@ -386,20 +375,16 @@ class MainViewModel(
             unavailableMessage = { AutomationUiText.memoryCleanupUnavailableMessage(it) },
             startingText = { AutomationUiText.memoryCleanupStartingText() },
             canceledText = { AutomationUiText.memoryCleanupCanceledText() },
-            action = { cleanDeviceMemoryUseCase.clean() },
-            onFailure = { MemoryCleanupResult.Failure(AutomationUiText.unknownMemoryCleanupErrorMessage(it)) },
-            resultMessage = { AutomationUiText.memoryCleanupResultMessage(it) }
+            action = { appMaintenance.cleanMemory() }
         )
     }
 
-    private fun <T> runMaintenanceAction(
+    private fun runMaintenanceAction(
         canExecute: (MainUiState) -> Boolean,
         unavailableMessage: (MainUiState) -> String,
         startingText: () -> String,
         canceledText: () -> String,
-        action: suspend () -> T,
-        onFailure: (Exception) -> T,
-        resultMessage: (T) -> String
+        action: suspend () -> MaintenanceResult
     ) {
         val state = _uiState.value
         if (!canExecute(state)) {
@@ -417,10 +402,15 @@ class MainViewModel(
                 _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = canceledText())) }
                 throw error
             } catch (error: Exception) {
-                onFailure(error)
+                MaintenanceResult.Failure(error.message ?: "작업 중 오류가 발생했습니다.")
             }
 
-            _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = resultMessage(result))) }
+            val message = when (result) {
+                is MaintenanceResult.Success -> result.message
+                is MaintenanceResult.Failure -> result.message
+                MaintenanceResult.Unavailable -> "접근성 서비스가 켜져 있지 않습니다."
+            }
+            _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = message)) }
         }
     }
 

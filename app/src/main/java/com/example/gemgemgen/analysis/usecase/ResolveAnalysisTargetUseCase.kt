@@ -1,6 +1,7 @@
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisEditPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
@@ -56,10 +57,12 @@ class ResolveAnalysisTargetUseCase(
             selectedHints = selectedHints,
             customHint = normalizedCustomHint.ifBlank { null }
         )
-        val autoTarget = AnalysisTargetSegmentPolicy.fromAutoReport(report, category)
+        requireNoClarification(report)
+        val detectedTarget = AnalysisTargetSegmentPolicy.fromAutoReport(report, category)
             ?: throw AnalysisException(
                 "자동으로 변주 대상을 찾지 못했습니다. 원문에서 직접 구간을 선택해주세요."
             )
+        val autoTarget = AnalysisEditPolicy.envelope(source, detectedTarget, report)
         val cache = AnalysisReportCache(
             sourcePrompt = source,
             category = category,
@@ -96,11 +99,13 @@ class ResolveAnalysisTargetUseCase(
                 selectedHints = selectedHints,
                 customHint = normalizedCustomHint
             )
+            requireNoClarification(report.report)
+            val target = AnalysisEditPolicy.envelope(source, existingTarget, report.report)
             return EnsureTargetResult(
-                target = existingTarget,
+                target = target,
                 report = report.report,
-                cache = report.cache,
-                targetChanged = false,
+                cache = report.cache.copy(targetSegment = target),
+                targetChanged = target != existingTarget,
                 warning = "",
                 didAnalyze = report.didAnalyze
             )
@@ -115,10 +120,12 @@ class ResolveAnalysisTargetUseCase(
             selectedHints = selectedHints,
             customHint = normalizedCustomHint
         )
-        val autoTarget = AnalysisTargetSegmentPolicy.fromAutoReport(resolved.report, category)
+        requireNoClarification(resolved.report)
+        val detectedTarget = AnalysisTargetSegmentPolicy.fromAutoReport(resolved.report, category)
             ?: throw AnalysisException(
                 "자동으로 변주 대상을 찾지 못했습니다. 원문에서 직접 구간을 선택해주세요."
             )
+        val autoTarget = AnalysisEditPolicy.envelope(source, detectedTarget, resolved.report)
         val targetChanged = existingTarget != autoTarget
         val nextCache = if (targetChanged) {
             resolved.cache.copy(targetSegment = autoTarget)
@@ -180,4 +187,10 @@ class ResolveAnalysisTargetUseCase(
         val cache: AnalysisReportCache,
         val didAnalyze: Boolean
     )
+
+    private fun requireNoClarification(report: AnalysisReport) {
+        if (report.clarificationQuestion.isNotBlank()) {
+            throw AnalysisException("추가 요구사항에 답을 적어 주세요: ${report.clarificationQuestion}")
+        }
+    }
 }

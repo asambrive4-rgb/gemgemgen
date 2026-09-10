@@ -33,16 +33,17 @@ data class WildcardManagerUiState(
     val isLineSelectionMode: Boolean = false,
     /** [selectableLines] 인덱스 집합. 파일 순서로 조립한다. */
     val selectedLineIndices: Set<Int> = emptySet(),
-    val showClassifyCriteriaDialog: Boolean = false,
-    val classifyCriteria: String = "",
-    val isClassifying: Boolean = false,
-    val classifyPreview: WildcardClassifyResult? = null,
-    val classifySaveEntries: List<WildcardClassifySaveEntry> = emptyList(),
-    val classifyOverwriteConflicts: List<String> = emptyList(),
-    /** 분석 탭 TXT 생성(generation)과 공유. 기준 입력 화면에서 변경 가능. */
-    val classifyProvider: AnalysisProvider = AnalysisModelRole.defaultProvider(AnalysisModelRole.GENERATION),
-    val classifyModelId: String = MODEL_GROK_4_5
+    val classify: WildcardClassifyUiState = WildcardClassifyUiState()
 ) {
+    val showClassifyCriteriaDialog: Boolean get() = classify.showClassifyCriteriaDialog
+    val classifyCriteria: String get() = classify.classifyCriteria
+    val isClassifying: Boolean get() = classify.isClassifying
+    val classifyPreview: WildcardClassifyResult? get() = classify.classifyPreview
+    val classifySaveEntries: List<WildcardClassifySaveEntry> get() = classify.classifySaveEntries
+    val classifyOverwriteConflicts: List<String> get() = classify.classifyOverwriteConflicts
+    val classifyProvider: AnalysisProvider get() = classify.classifyProvider
+    val classifyModelId: String get() = classify.classifyModelId
+
     val selectedFile: WildcardTextFile?
         get() = editor.selectedFile
 
@@ -81,7 +82,7 @@ data class WildcardManagerUiState(
         } ?: "No file selected"
 
     private val classifyBusy: Boolean
-        get() = isClassifying || classifyPreview != null || showClassifyCriteriaDialog
+        get() = classify.isBusy
 
     val canCreateFile: Boolean
         get() = canModifyFiles && !isFileOperationInProgress && !isLineSelectionMode && !classifyBusy
@@ -133,30 +134,18 @@ data class WildcardManagerUiState(
             selectableLines.isNotEmpty() &&
             !isFileOperationInProgress &&
             !isLineSelectionMode &&
-            !isClassifying &&
-            classifyPreview == null &&
-            !showClassifyCriteriaDialog
+            !classifyBusy
 
     /** 기준 입력 다이얼로그 또는 미리보기에서 전체 재분류 가능 */
     val canRunClassify: Boolean
-        get() = classifyCriteria.isNotBlank() &&
-            !isClassifying &&
-            !isFileOperationInProgress &&
-            (showClassifyCriteriaDialog || classifyPreview != null)
+        get() = classify.canRunClassify(isFileOperationInProgress)
 
     val canRerunClassifyFromPreview: Boolean
         get() = classifyPreview != null && canRunClassify
 
     val canSaveClassifyResult: Boolean
-        get() = classifyPreview != null &&
-            classifySaveEntries.isNotEmpty() &&
-            classifySaveEntries.all {
-                WildcardClassifyFileName.normalizeUserInput(it.fileNameInput) != null
-            } &&
-            canModifyFiles &&
-            !isClassifying &&
-            !isFileOperationInProgress &&
-            classifyOverwriteConflicts.isEmpty()
+        get() = classify.canSaveClassifyResult(canModifyFiles, isFileOperationInProgress)
+
 }
 
 sealed interface WildcardPendingAction {

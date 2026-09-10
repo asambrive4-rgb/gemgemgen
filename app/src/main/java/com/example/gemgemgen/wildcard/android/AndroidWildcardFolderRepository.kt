@@ -21,4 +21,8 @@ class AndroidWildcardFolderRepository(
             FolderSelectionResult.Failure(error.message)
         }
     }
+
+    override fun getFolderUri(): String? {
+        return WildcardFolderStore.getFolderUri(context)?.toString()
+    }
 }

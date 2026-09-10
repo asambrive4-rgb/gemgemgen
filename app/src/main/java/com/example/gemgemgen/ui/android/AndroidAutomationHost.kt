@@ -35,8 +35,6 @@ import com.example.gemgemgen.ui.AutomationAppActions
 import com.example.gemgemgen.ui.MainTab
 import com.example.gemgemgen.ui.WildcardAppActions
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
-import com.example.gemgemgen.wildcard.android.WildcardFolderStore
-import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
 import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
 import com.example.gemgemgen.remote.domain.AutomationMode
@@ -94,7 +92,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun launchWildcardFolderPicker() {
-        val initialUri = WildcardFolderStore.getFolderUri(context)
+        val initialUri = mainViewModel.getInitialWildcardFolderUri()?.let { android.net.Uri.parse(it) }
         wildcardFolderLauncher.launch(initialUri)
     }
 
@@ -111,12 +109,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectWildcardFolder() {
-        when (
-            WildcardFolderAccessPolicy.decideAction(
-                hasAllFilesAccess = mainUiState.environmentStatus.hasAllFilesAccess,
-                isWildcardDirectoryAccessible = mainUiState.environmentStatus.isWildcardDirectoryAccessible
-            )
-        ) {
+        when (mainViewModel.decideWildcardFolderAction()) {
             WildcardFolderAction.OpenDirectFolder -> {
                 if (!wildcardViewModel.requestFolderSelection()) return
                 wildcardViewModel.onFolderChanged()

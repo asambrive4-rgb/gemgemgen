@@ -30,7 +30,9 @@ data class AnalysisTargetSegment(
     val source: AnalysisTargetSource,
     val category: AnalysisCategory,
     val confidence: Double = 1.0,
-    val reason: String = ""
+    val reason: String = "",
+    /** 연쇄 보완을 포함한 치환 범위 안에서 실제 편집이 허용된 구간들. */
+    val editableRanges: List<AnalysisSourceRange> = emptyList()
 ) {
     val isValid: Boolean
         get() = text.isNotBlank() && startIndex >= 0 && endIndex > startIndex
@@ -88,7 +90,20 @@ data class AnalysisReport(
      * 비어 있으면 생성 단계에서 카테고리 폴백 Goal을 쓴다.
      */
     val variationGoal: String = "",
-    val warnings: List<String> = emptyList()
+    val warnings: List<String> = emptyList(),
+    val targetVisualContext: AnalysisVisualContext = AnalysisVisualContext(),
+    val cascadingTrace: AnalysisCascadingTrace = AnalysisCascadingTrace(),
+    val clarificationQuestion: String = "",
+    /** System Instruction 등 명시적으로 변경을 요청하지 않은 보호 구간. */
+    val preservedSegments: List<AnalysisSourceRange> = emptyList()
+)
+
+data class AnalysisCascadingTrace(
+    val newlyVisible: List<String> = emptyList(),
+    val disappearing: List<String> = emptyList(),
+    val undefinedAreas: List<String> = emptyList(),
+    val requiredAdjustments: List<String> = emptyList(),
+    val conflictingSegments: List<AnalysisSourceRange> = emptyList()
 )
 
 data class AnalysisDirection(

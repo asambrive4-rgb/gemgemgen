@@ -12,6 +12,7 @@ interface GeminiAppCloser {
     suspend fun closeGeminiApp(): CloseGeminiAppResult
 }
 
+@Deprecated("AppMaintenanceUseCase로 대체되었습니다. AppMaintenanceUseCase를 사용하세요.")
 class CloseGeminiAppUseCase(
     private val geminiAppCloser: GeminiAppCloser
 ) {

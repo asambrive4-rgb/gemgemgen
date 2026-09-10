@@ -7,6 +7,7 @@ sealed interface FolderSelectionResult {
 
 interface WildcardFolderRepository {
     fun save(folderUri: String): FolderSelectionResult
+    fun getFolderUri(): String?
 }
 
 class SaveWildcardFolderUseCase(
@@ -14,5 +15,9 @@ class SaveWildcardFolderUseCase(
 ) {
     fun save(folderUri: String): FolderSelectionResult {
         return repository.save(folderUri)
+    }
+
+    fun getFolderUri(): String? {
+        return repository.getFolderUri()
     }
 }
