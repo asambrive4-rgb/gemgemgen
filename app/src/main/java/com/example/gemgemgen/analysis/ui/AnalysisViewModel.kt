@@ -14,6 +14,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
+import com.example.gemgemgen.analysis.domain.CandidateAutomationSession
 import com.example.gemgemgen.analysis.usecase.AnalysisReportCache
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
@@ -34,20 +35,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-private data class CandidateAutomationSession(
-    val originalSource: String,
-    val targetSegment: AnalysisTargetSegment,
-    val appliedCandidate: String,
-    val automationSegmentStartIndex: Int
-) {
-    fun matches(source: String, segment: AnalysisTargetSegment): Boolean {
-        return originalSource == source &&
-            targetSegment.text == segment.text &&
-            targetSegment.startIndex == segment.startIndex &&
-            targetSegment.endIndex == segment.endIndex
-    }
-}
 
 class AnalysisViewModel(
     private val resolveTarget: ResolveAnalysisTargetUseCase,

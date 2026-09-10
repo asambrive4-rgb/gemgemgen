@@ -1,12 +1,8 @@
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
-import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,7 +20,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.core.net.toUri
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -40,7 +35,6 @@ import com.example.gemgemgen.core.android.AndroidExternalBrowserLauncher
 import com.example.gemgemgen.ui.AnalysisAppActions
 import com.example.gemgemgen.ui.AutomationApp
 import com.example.gemgemgen.ui.AutomationAppActions
-import com.example.gemgemgen.ui.MainActivity
 import com.example.gemgemgen.ui.MainTab
 import com.example.gemgemgen.ui.WildcardAppActions
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
@@ -57,6 +51,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val windowInfo = LocalWindowInfo.current
     val browserLauncher = remember(context) { AndroidExternalBrowserLauncher(context) }
+    val platformNavigator = remember(context) { AndroidHostPlatformNavigator(context) }
     val clearInputFocus = remember(focusManager) {
         { focusManager.clearFocus(force = true) }
     }
@@ -106,15 +101,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun openWildcardStorageSettings() {
-        val appSettingsIntent = Intent(
-            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-            "package:${context.packageName}".toUri()
-        )
-        try {
-            context.startActivity(appSettingsIntent)
-        } catch (_: android.content.ActivityNotFoundException) {
-            context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-        }
+        platformNavigator.openAllFilesAccessSettings()
     }
 
     fun selectSafWildcardFolder() {
@@ -167,15 +154,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun bringMainActivityToFront() {
-        val appContext = context.applicationContext
-        val launchIntent = appContext.packageManager.getLaunchIntentForPackage(appContext.packageName)
-            ?: Intent(appContext, MainActivity::class.java)
-        appContext.startActivity(
-            launchIntent
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        )
+        platformNavigator.bringMainActivityToFront()
     }
 
     fun runAutomation() {
@@ -197,17 +176,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             }
             AutomationStartDecision.RemoteStarted -> Unit
             AutomationStartDecision.PermissionRequired -> {
-                Toast.makeText(
-                    context,
-                    "플로팅 바를 띄우려면 다른 앱 위에 표시 권한이 필요합니다.",
-                    Toast.LENGTH_LONG
-                ).show()
-                context.startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    )
-                )
+                platformNavigator.openOverlayPermissionSettings()
             }
             AutomationStartDecision.Rejected -> Unit
         }
@@ -289,7 +258,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onHideSettings = mainViewModel::hideSettings,
             onConfirmAccessibilityPrompt = {
                 mainViewModel.confirmAccessibilityPrompt()
-                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                platformNavigator.openAccessibilitySettings()
             },
             onDismissAccessibilityPromptToSettings =
                 mainViewModel::dismissAccessibilityPromptToSettings,
@@ -297,9 +266,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onSelectWildcardFolder = ::selectWildcardFolder,
             onSelectSafWildcardFolder = ::selectSafWildcardFolder,
             onOpenWildcardStorageSettings = ::openWildcardStorageSettings,
-            onOpenAccessibilitySettings = {
-                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            },
+            onOpenAccessibilitySettings = platformNavigator::openAccessibilitySettings,
             onTargetAppSelected = mainViewModel::onTargetAppSelected,
             onPromptTemplateChange = mainViewModel::onPromptTemplateFromEditor,
             onWildcardTokenSuggestionClick = mainViewModel::applyWildcardTokenSuggestion,
@@ -380,14 +347,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onCancelGrokLogin = analysisViewModel::cancelGrokLogin,
             onLogoutGrok = analysisViewModel::logoutGrok,
             onOpenGrokLoginUrl = { url ->
-                val opened = browserLauncher.openUrlPreferFirefox(url)
-                if (!opened) {
-                    Toast.makeText(
-                        context,
-                        "브라우저를 열 수 없습니다. Firefox 설치 여부를 확인해 주세요.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                platformNavigator.openUrlPreferFirefox(browserLauncher, url)
             },
             onAddApiKey = analysisViewModel::addApiKey,
             onDeleteApiKey = analysisViewModel::deleteApiKey,

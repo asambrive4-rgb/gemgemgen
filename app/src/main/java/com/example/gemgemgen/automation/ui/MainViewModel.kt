@@ -30,7 +30,9 @@ import com.example.gemgemgen.automation.usecase.LastRunSnapshot
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
+import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
+import com.example.gemgemgen.automation.usecase.StartAutomationUseCase
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
@@ -100,6 +102,16 @@ class MainViewModel(
     private val promptHistoryStore: PromptHistoryStore? = null,
     private val themePaletteStore: com.example.gemgemgen.ui.theme.ThemePaletteStore? = null,
     private val dispatchers: AppDispatchers = AppDispatchers(),
+    private val startAutomation: StartAutomationUseCase = StartAutomationUseCase(
+        checkAutomationStart = checkAutomationStart,
+        automationStartRecorder = RecordAutomationStartUseCase(
+            lastRunSnapshotStore = lastRunSnapshotStore,
+            clipboardGateway = clipboardGateway,
+            promptHistoryStore = promptHistoryStore,
+            dispatchers = dispatchers
+        ),
+        automation = automation
+    ),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
@@ -789,7 +801,7 @@ class MainViewModel(
             }
             return AutomationStartDecision.RemoteStarted
         }
-        val decision = checkAutomationStart.decide(
+        val decision = startAutomation.decideStart(
             canRun = state.canRun,
             isStartInProgress = automationPreparationJob?.isActive == true
         )
@@ -804,8 +816,7 @@ class MainViewModel(
         )
         val job = scope.launch {
             try {
-                promptHistoryStore?.record(request.promptTemplate, request.targetApp)
-                automation.run(request)
+                startAutomation.start(request)
             } catch (error: CancellationException) {
                 handleAutomationState(AutomationRunState.Stopped)
                 throw error

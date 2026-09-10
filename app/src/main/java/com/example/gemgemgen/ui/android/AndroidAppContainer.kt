@@ -32,6 +32,7 @@ import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
+import com.example.gemgemgen.automation.usecase.StartAutomationUseCase
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.core.android.AndroidSoundAlertGateway
@@ -81,6 +82,15 @@ class AndroidAppContainer(context: Context) {
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
 
     val mainViewModelFactory: ViewModelProvider.Factory = factory<MainViewModel> {
+        val automation = AndroidAutomationRuntimeProvider.get(appContext)
+        val checkAutomationStart = CheckAutomationStartUseCase(
+            AndroidOverlayPermissionGateway(appContext)
+        )
+        val startAutomation = StartAutomationUseCase(
+            checkAutomationStart = checkAutomationStart,
+            automationStartRecorder = recordAutomationStart,
+            automation = automation
+        )
         MainViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(
                 AndroidEnvironmentGateway(appContext)
@@ -90,7 +100,7 @@ class AndroidAppContainer(context: Context) {
                 AndroidWildcardFolderRepository(appContext)
             ),
             lastRunSnapshotStore = lastRunSnapshotStore,
-            automation = AndroidAutomationRuntimeProvider.get(appContext),
+            automation = automation,
             closeGeminiApp = CloseGeminiAppUseCase(
                 AndroidGeminiAppCloser(appContext)
             ),
@@ -103,9 +113,8 @@ class AndroidAppContainer(context: Context) {
             cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(
                 AndroidMemoryCleanupGateway(appContext)
             ),
-            checkAutomationStart = CheckAutomationStartUseCase(
-                AndroidOverlayPermissionGateway(appContext)
-            ),
+            checkAutomationStart = checkAutomationStart,
+            startAutomation = startAutomation,
             wildcardFileRepository = AndroidWildcardFileRepository(appContext),
             manageRemoteAutomation = ManageRemoteAutomationUseCase(
                 gateway = AndroidRemoteAutomationGateway(appContext),
