@@ -5,9 +5,11 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.example.gemgemgen.automation.android.GeminiAccessibilityService
+import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentReport
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
@@ -19,7 +21,7 @@ import com.example.gemgemgen.wildcard.android.WildcardFolderStore
 
 class AndroidEnvironmentGateway(
     context: Context
-) : EnvironmentGateway {
+) : EnvironmentGateway, OverlayPermissionGateway {
     private val appContext = context.applicationContext
     private val packageInstallChecker = AndroidPackageInstallChecker(appContext)
     private val accessibilityStatus = AndroidAccessibilityServiceStatus(appContext)
@@ -45,6 +47,16 @@ class AndroidEnvironmentGateway(
             enabledImeList.any { enabled -> enabled.equals(candidate, ignoreCase = true) }
         } ?: AppDefaults.NULL_KEYBOARD_IME_ID
 
+        val hasOverlay = isGranted()
+        val hasNotification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                appContext,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
         return EnvironmentReport(
             status = EnvironmentStatus(
                 isGeminiInstalled = packageInstallChecker.isInstalled(
@@ -64,7 +76,10 @@ class AndroidEnvironmentGateway(
                     directFolder != null && wildcardDirectStorage.canWriteFolder()
                 } else {
                     wildcardFolderUri != null && wildcardDirectoryStatus.canWrite(wildcardFolderUri)
-                }
+                },
+                hasOverlayPermission = hasOverlay,
+                hasNotificationPermission = hasNotification,
+                hasAllFilesAccess = hasAllFilesAccess
             ),
             setupInfo = EnvironmentSetupInfo(
                 wildcardDirectoryPath = if (hasAllFilesAccess) {
@@ -77,6 +92,10 @@ class AndroidEnvironmentGateway(
                     "adb shell pm grant ${appContext.packageName} android.permission.WRITE_SECURE_SETTINGS"
             )
         )
+    }
+
+    override fun isGranted(): Boolean {
+        return Settings.canDrawOverlays(appContext)
     }
 }
 

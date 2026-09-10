@@ -68,8 +68,7 @@ object AutomationUiText {
     fun memoryCleanupUnavailableMessage(state: MainUiState): String {
         return when {
             state.isRunning -> "자동화 실행 중에는 메모리를 정리할 수 없습니다."
-            state.isCleaningMemory -> "메모리 정리가 이미 진행 중입니다."
-            state.isClosingGemini -> "Gemini 종료/재시작 중에는 메모리를 정리할 수 없습니다."
+            state.isMaintenanceBusy -> "유지보수 작업이 이미 진행 중입니다."
             !state.environmentStatus.isAccessibilityServiceEnabled ->
                 "접근성 서비스를 먼저 켜주세요."
             else -> "메모리 정리를 지금 실행할 수 없습니다."
@@ -143,7 +142,7 @@ object AutomationUiText {
             isGeminiInstalled = state.environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = state.isRunning,
-            isClosingInProgress = state.isClosingGemini || state.isCleaningMemory
+            isClosingInProgress = state.isMaintenanceBusy
         )
     }
 
@@ -151,7 +150,7 @@ object AutomationUiText {
         return SelfAppControlPolicy.blockReason(
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = state.isRunning,
-            isClosingInProgress = state.isClosingGemini || state.isCleaningMemory
+            isClosingInProgress = state.isMaintenanceBusy
         )
     }
 

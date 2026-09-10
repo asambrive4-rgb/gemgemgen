@@ -109,20 +109,14 @@ class MainUiStateTest {
         assertFalse(
             MainUiState(
                 environmentStatus = readyEnvironment(),
-                isClosingGemini = true
+                maintenanceState = MaintenanceState(isBusy = true)
             ).canCloseGemini
         )
 
         assertFalse(
             MainUiState(
                 environmentStatus = readyEnvironment(),
-                isCleaningMemory = true
-            ).canCloseGemini
-        )
-        assertFalse(
-            MainUiState(
-                environmentStatus = readyEnvironment(),
-                isCleaningMemory = true
+                maintenanceState = MaintenanceState(isBusy = true)
             ).canCloseSelfApp
         )
     }
@@ -149,13 +143,7 @@ class MainUiStateTest {
         assertFalse(
             MainUiState(
                 environmentStatus = readyEnvironment(),
-                isCleaningMemory = true
-            ).canCleanMemory
-        )
-        assertFalse(
-            MainUiState(
-                environmentStatus = readyEnvironment(),
-                isClosingGemini = true
+                maintenanceState = MaintenanceState(isBusy = true)
             ).canCleanMemory
         )
     }
@@ -184,7 +172,7 @@ class MainUiStateTest {
         assertFalse(
             MainUiState(
                 environmentStatus = readyEnvironment(),
-                isClosingGemini = true
+                maintenanceState = MaintenanceState(isBusy = true)
             ).canCloseSelfApp
         )
     }

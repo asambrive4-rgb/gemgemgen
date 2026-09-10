@@ -8,7 +8,10 @@ data class EnvironmentStatus(
     val isAccessibilityServiceEnabled: Boolean = false,
     val hasWriteSecureSettingsPermission: Boolean = false,
     val isWildcardDirectoryAccessible: Boolean = false,
-    val isWildcardDirectoryWritable: Boolean = false
+    val isWildcardDirectoryWritable: Boolean = false,
+    val hasOverlayPermission: Boolean = false,
+    val hasNotificationPermission: Boolean = false,
+    val hasAllFilesAccess: Boolean = false
 ) {
     fun isReadyFor(targetApp: AutomationTargetApp): Boolean {
         return isTargetAppInstalled(targetApp) &&

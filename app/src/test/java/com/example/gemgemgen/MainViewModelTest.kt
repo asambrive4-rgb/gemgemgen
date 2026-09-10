@@ -735,10 +735,10 @@ class MainViewModelTest {
         viewModel.closeGeminiApp()
 
         assertEquals(1, closer.closeCount)
-        assertTrue(!viewModel.uiState.value.isClosingGemini)
+        assertTrue(!viewModel.uiState.value.isMaintenanceBusy)
         assertEquals(
             "Gemini 앱 2개를 종료하고 재시작했습니다.",
-            viewModel.uiState.value.geminiCloseMessage
+            viewModel.uiState.value.maintenanceMessage
         )
     }
 
@@ -752,10 +752,10 @@ class MainViewModelTest {
         viewModel.terminateGeminiApp()
 
         assertEquals(1, closer.closeCount)
-        assertTrue(!viewModel.uiState.value.isClosingGemini)
+        assertTrue(!viewModel.uiState.value.isMaintenanceBusy)
         assertEquals(
             "Gemini 앱 2개를 종료했습니다.",
-            viewModel.uiState.value.geminiCloseMessage
+            viewModel.uiState.value.maintenanceMessage
         )
     }
 
@@ -769,8 +769,8 @@ class MainViewModelTest {
         viewModel.cleanDeviceMemory()
 
         assertEquals(1, gateway.cleanCount)
-        assertTrue(!viewModel.uiState.value.isCleaningMemory)
-        assertTrue(viewModel.uiState.value.memoryCleanupMessage.contains("메모리 정리"))
+        assertTrue(!viewModel.uiState.value.isMaintenanceBusy)
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("메모리 정리"))
     }
 
     @Test
@@ -785,7 +785,7 @@ class MainViewModelTest {
         failureViewModel.cleanDeviceMemory()
 
         assertTrue(
-            failureViewModel.uiState.value.memoryCleanupMessage.contains("clean button missing")
+            failureViewModel.uiState.value.maintenanceMessage.contains("clean button missing")
         )
 
         val unavailableGateway = FakeMemoryCleanupGateway(
@@ -798,7 +798,7 @@ class MainViewModelTest {
         unavailableViewModel.cleanDeviceMemory()
 
         assertTrue(
-            unavailableViewModel.uiState.value.memoryCleanupMessage.contains("접근성")
+            unavailableViewModel.uiState.value.maintenanceMessage.contains("접근성")
         )
     }
 
@@ -818,7 +818,7 @@ class MainViewModelTest {
         viewModel.cleanDeviceMemory()
 
         assertEquals(0, gateway.cleanCount)
-        assertTrue(viewModel.uiState.value.memoryCleanupMessage.contains("자동화"))
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("자동화"))
     }
 
     @Test
@@ -833,10 +833,10 @@ class MainViewModelTest {
         viewModel.cleanDeviceMemory()
 
         assertEquals(1, gateway.cleanCount)
-        assertTrue(viewModel.uiState.value.memoryCleanupMessage.contains("이미"))
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("이미"))
 
         gateway.result.complete(MemoryCleanupResult.Success)
-        waitUntil { !viewModel.uiState.value.isCleaningMemory }
+        waitUntil { !viewModel.uiState.value.isMaintenanceBusy }
     }
 
     @Test
@@ -853,8 +853,8 @@ class MainViewModelTest {
 
         scope.cancel()
 
-        waitUntil { !viewModel.uiState.value.isCleaningMemory }
-        assertTrue(viewModel.uiState.value.memoryCleanupMessage.contains("취소"))
+        waitUntil { !viewModel.uiState.value.isMaintenanceBusy }
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("취소"))
     }
 
     @Test
@@ -867,10 +867,10 @@ class MainViewModelTest {
         viewModel.terminateSelfApp()
 
         assertEquals(1, closer.closeCount)
-        assertTrue(!viewModel.uiState.value.isClosingGemini)
+        assertTrue(!viewModel.uiState.value.isMaintenanceBusy)
         assertEquals(
             "앱을 종료했습니다.",
-            viewModel.uiState.value.geminiCloseMessage
+            viewModel.uiState.value.maintenanceMessage
         )
     }
 
@@ -887,7 +887,7 @@ class MainViewModelTest {
         viewModel.terminateSelfApp()
 
         assertEquals(0, closer.closeCount)
-        assertTrue(viewModel.uiState.value.geminiCloseMessage.contains("접근성"))
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("접근성"))
     }
 
     @Test
@@ -908,7 +908,7 @@ class MainViewModelTest {
 
         assertEquals(0, closer.closeCount)
         assertTrue(
-            viewModel.uiState.value.geminiCloseMessage.contains("자동화 중에는 앱을 종료")
+            viewModel.uiState.value.maintenanceMessage.contains("자동화 중에는 앱을 종료")
         )
     }
 
@@ -925,7 +925,7 @@ class MainViewModelTest {
         viewModel.closeGeminiApp()
 
         assertEquals(0, closer.closeCount)
-        assertTrue(viewModel.uiState.value.geminiCloseMessage.contains("접근성"))
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("접근성"))
     }
 
     @Test

@@ -1,8 +1,6 @@
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,7 +18,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -38,7 +35,6 @@ import com.example.gemgemgen.ui.AutomationAppActions
 import com.example.gemgemgen.ui.MainTab
 import com.example.gemgemgen.ui.WildcardAppActions
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
-import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
 import com.example.gemgemgen.wildcard.android.WildcardFolderStore
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
@@ -117,7 +113,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     fun selectWildcardFolder() {
         when (
             WildcardFolderAccessPolicy.decideAction(
-                hasAllFilesAccess = AndroidWildcardDirectStorage.hasAllFilesAccess(),
+                hasAllFilesAccess = mainUiState.environmentStatus.hasAllFilesAccess,
                 isWildcardDirectoryAccessible = mainUiState.environmentStatus.isWildcardDirectoryAccessible
             )
         ) {
@@ -136,17 +132,23 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
     }
 
+    fun trimInactiveTabs(exceptTab: MainTab? = null) {
+        if (exceptTab != MainTab.ANALYSIS) {
+            // 결과·설정·타겟 구간 및 진행 중 AI 작업은 유지하고 일시적 다이얼로그 상태만 정리.
+            analysisViewModel.trimForInactiveTab()
+        }
+        if (exceptTab != MainTab.WILDCARD) {
+            // 미저장 여부와 무관하게 ViewModel과 텍스트 본문은 보존하고, 무거운 Undo 버퍼만 정리하여 재진입 시 0ms 즉시 표시
+            wildcardViewModel.trimForInactiveTab()
+        }
+    }
+
     fun selectMainTab(tab: MainTab) {
         if (tab != MainTab.AUTOMATION) {
             mainViewModel.cancelParagraphSelection()
         }
-        if (selectedTab == MainTab.ANALYSIS && tab != MainTab.ANALYSIS) {
-            // 결과·설정·타겟 구간 및 진행 중 AI 작업은 유지하고 일시적 다이얼로그 상태만 정리.
-            analysisViewModel.trimForInactiveTab()
-        }
-        if (selectedTab == MainTab.WILDCARD && tab != MainTab.WILDCARD) {
-            // 미저장 여부와 무관하게 ViewModel과 텍스트 본문은 보존하고, 무거운 Undo 버퍼만 정리하여 재진입 시 0ms 즉시 표시
-            wildcardViewModel.trimForInactiveTab()
+        if (selectedTab != tab) {
+            trimInactiveTabs(exceptTab = tab)
         }
         // 와일드카드 탭에서 파일 추가/이름변경 후 돌아와도 추천 목록이 갱신되게 한다.
         if (tab == MainTab.AUTOMATION) {
@@ -165,8 +167,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun runAutomation() {
-        analysisViewModel.trimForInactiveTab()
-        wildcardViewModel.trimForInactiveTab()
+        trimInactiveTabs()
         when (mainViewModel.runAutomation()) {
             AutomationStartDecision.Started -> {
                 if (!mainViewModel.uiState.value.isRunning) return
@@ -190,13 +191,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectAutomationMode(mode: AutomationMode) {
-        if (mode == AutomationMode.RECEIVER &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (mode == AutomationMode.RECEIVER && !mainUiState.environmentStatus.hasNotificationPermission) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         mainViewModel.onAutomationModeSelected(mode)

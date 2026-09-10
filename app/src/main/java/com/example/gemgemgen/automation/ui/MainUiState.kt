@@ -31,10 +31,7 @@ data class MainUiState(
     val selectedParagraphRange: PromptParagraphRange? = null,
     val paragraphSelectionMessage: String = "",
     val canUndoPromptEdit: Boolean = false,
-    val isClosingGemini: Boolean = false,
-    val geminiCloseMessage: String = "",
-    val isCleaningMemory: Boolean = false,
-    val memoryCleanupMessage: String = "",
+    val maintenanceState: MaintenanceState = MaintenanceState(),
     /** 와일드카드 파일 기반 토큰 추천 후보 (입력창 위 칩용). */
     val wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
     val showPromptHistory: Boolean = false,
@@ -60,24 +57,34 @@ data class MainUiState(
             AutomationMode.RECEIVER -> false
         }
 
+    val isMaintenanceBusy: Boolean
+        get() = maintenanceState.isBusy
+
+    val maintenanceMessage: String
+        get() = maintenanceState.message
+
     val canCloseGemini: Boolean
         get() = GeminiAppControlPolicy.canClose(
             isGeminiInstalled = environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning,
-            isClosingInProgress = isClosingGemini || isCleaningMemory
+            isClosingInProgress = isMaintenanceBusy
         )
 
     val canCloseSelfApp: Boolean
         get() = SelfAppControlPolicy.canClose(
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning,
-            isClosingInProgress = isClosingGemini || isCleaningMemory
+            isClosingInProgress = isMaintenanceBusy
         )
 
     val canCleanMemory: Boolean
         get() = environmentStatus.isAccessibilityServiceEnabled &&
             !isRunning &&
-            !isCleaningMemory &&
-            !isClosingGemini
+            !isMaintenanceBusy
 }
+
+data class MaintenanceState(
+    val isBusy: Boolean = false,
+    val message: String = ""
+)

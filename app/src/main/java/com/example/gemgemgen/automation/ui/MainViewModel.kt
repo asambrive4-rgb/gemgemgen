@@ -1,22 +1,12 @@
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
-import androidx.compose.ui.text.TextRange
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
-import com.example.gemgemgen.automation.domain.PromptEditorSession
-import com.example.gemgemgen.automation.domain.PromptParagraphActionResult
-import com.example.gemgemgen.automation.domain.PromptSegmentEditPolicy
-import com.example.gemgemgen.automation.domain.PromptTextMutation
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
-import com.example.gemgemgen.automation.domain.PromptParagraphRange
-import com.example.gemgemgen.automation.domain.PromptTypingChange
-import com.example.gemgemgen.automation.domain.PromptUndoHistory
 import com.example.gemgemgen.automation.domain.RepeatCountParser
-import com.example.gemgemgen.automation.domain.SystemInstructionPrompt
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
@@ -52,7 +42,6 @@ import com.example.gemgemgen.core.SoundAlertGateway
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -123,12 +112,14 @@ class MainViewModel(
     private val scope = coroutineScope ?: viewModelScope
     private var automationPreparationJob: Job? = null
     private var isRemoteRunActive = false
-    private val promptUndoHistory = PromptUndoHistory()
-    private var promptUndoDebounceJob: Job? = null
-    private var ignoredPromptChangeText: String? = null
-    /** TextField / 비즈니스 로직용 최신 프롬프트. 타이핑 중 uiState 전체 방출을 줄이기 위해 분리. */
-    private var promptTemplateValue: String = ""
-    private var promptEditorSession = PromptEditorSession()
+    private val promptEditor = PromptEditorCoordinator(
+        clipboardGateway = clipboardGateway,
+        scope = scope,
+        dispatchers = dispatchers
+    )
+    val promptTemplateTextFieldState: TextFieldState
+        get() = promptEditor.textFieldState
+
     private val _uiState = MutableStateFlow(
         MainUiState(
             selectedThemePalette = themePaletteStore?.currentPalette?.value
@@ -138,7 +129,6 @@ class MainViewModel(
         )
     )
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
-    val promptTemplateTextFieldState = TextFieldState()
     private val _automationBarUiState = MutableStateFlow(AutomationBarUiState())
     val automationBarUiState: StateFlow<AutomationBarUiState> =
         _automationBarUiState.asStateFlow()
@@ -153,6 +143,19 @@ class MainViewModel(
             scope.launch {
                 store.currentMode.collect { mode ->
                     _uiState.update { it.copy(selectedThemeMode = mode) }
+                }
+            }
+        }
+        scope.launch {
+            promptEditor.editorUiState.collect { editorState ->
+                _uiState.update { current ->
+                    current.copy(
+                        promptTemplate = editorState.promptTemplate,
+                        isParagraphSelectionMode = editorState.isParagraphSelectionMode,
+                        selectedParagraphRange = editorState.selectedParagraphRange,
+                        paragraphSelectionMessage = editorState.paragraphSelectionMessage,
+                        canUndoPromptEdit = editorState.canUndoPromptEdit
+                    )
                 }
             }
         }
@@ -194,79 +197,31 @@ class MainViewModel(
     }
 
     fun onPromptTemplateChange(value: String) {
-        onPromptTemplateChange(value, updateTextFieldState = true)
+        promptEditor.onPromptTemplateChange(value)
     }
 
-    /**
-     * 텍스트 필드 debounce 경로 전용. [updateTextFieldState] = false 와 같으며
-     * 메서드 레퍼런스로 넘길 수 있어 Host 람다 재생성으로 인한 구독 재시작을 줄인다.
-     */
     fun onPromptTemplateFromEditor(value: String) {
-        onPromptTemplateChange(value, updateTextFieldState = false)
+        promptEditor.onPromptTemplateFromEditor(value)
     }
 
     fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean) {
-        if (updateTextFieldState && !promptTemplateTextFieldState.text.contentEquals(value)) {
-            promptTemplateTextFieldState.setTextAndPlaceCursorAtEnd(value)
-        }
-        when (
-            val change = PromptEditorSession.classifyTypingChange(
-                previousText = promptTemplateValue,
-                newText = value,
-                programmaticEchoText = ignoredPromptChangeText
-            )
-        ) {
-            PromptTypingChange.IgnoredEcho -> {
-                ignoredPromptChangeText = null
-                setPromptTextOnly(value)
-                // 외부에서 필드를 맞춘 경우(붙여넣기/삭제 등)에는 state도 즉시 동기화한다.
-                publishPromptTemplateToUiState(value, force = true)
-            }
-            PromptTypingChange.Unchanged -> Unit
-            is PromptTypingChange.UserEdit -> {
-                setPromptTextOnly(change.newText)
-                schedulePromptTypingUndo(change.previousText)
-                // 타이핑(필드→VM): 빈/비어 있지 않음 경계일 때만 uiState 방출.
-                // 테스트·직접 호출(updateTextFieldState=true): 기존처럼 즉시 반영.
-                publishPromptTemplateToUiState(change.newText, force = updateTextFieldState)
-            }
-        }
-    }
-
-    private fun publishPromptTemplateToUiState(value: String, force: Boolean) {
-        _uiState.update { state ->
-            if (state.promptTemplate == value) {
-                state
-            } else if (!force && state.promptTemplate.isBlank() == value.isBlank()) {
-                // 같은 blankness면 hasPromptTemplate/canRun 이 변하지 않음 → 전체 화면 리컴포즈 생략
-                state
-            } else {
-                state.copy(promptTemplate = value)
-            }
-        }
+        promptEditor.onPromptTemplateChange(value, updateTextFieldState)
     }
 
     fun toggleParagraphSelectionMode() {
-        syncEditorTextFromCurrent()
-        publishEditorSession(promptEditorSession.toggleSelectionMode())
+        promptEditor.toggleParagraphSelectionMode()
     }
 
     fun selectPromptParagraphAt(offset: Int) {
-        syncEditorTextFromCurrent()
-        publishEditorSession(promptEditorSession.selectAt(offset))
+        promptEditor.selectPromptParagraphAt(offset)
     }
 
     fun deleteSelectedPromptParagraph() {
-        syncEditorTextFromCurrent()
-        when (val result = promptEditorSession.prepareDeleteSelected()) {
-            PromptParagraphActionResult.NoOp -> Unit
-            is PromptParagraphActionResult.SessionOnly -> publishEditorSession(result.session)
-            is PromptParagraphActionResult.Mutated -> applyTextMutation(result.mutation)
-        }
+        promptEditor.deleteSelectedPromptParagraph()
     }
 
     fun cancelParagraphSelection() {
-        publishEditorSession(promptEditorSession.cancelSelection())
+        promptEditor.cancelParagraphSelection()
     }
 
     fun onTargetAppSelected(targetApp: AutomationTargetApp) {
@@ -314,30 +269,17 @@ class MainViewModel(
     }
 
     fun importPromptFromClipboard() {
-        syncPromptTemplateFromTextField()
-        scope.launch {
-            val text = withContext(dispatchers.io) {
-                clipboardGateway.readText()
-            }
-            val state = _uiState.value
-            if (!state.isParagraphSelectionMode) {
-                replaceWholePromptTemplate(text)
-                return@launch
-            }
-
-            replaceSelectedPromptParagraph(text)
-        }
+        promptEditor.importPromptFromClipboard()
     }
 
     /** TextField 최신 값을 반영한 현재 원본 프롬프트. 분석 탭 가져오기 등에서 사용. */
     fun currentPromptTemplateText(): String {
-        syncPromptTemplateFromTextField()
-        return promptTemplateValue
+        return promptEditor.currentPromptTemplateText()
     }
 
     /** 외부(분석 저장 등)에서 프롬프트 템플릿 전체를 교체한다. Undo 가능. */
     fun replacePromptTemplateEntirely(replacement: String) {
-        replaceWholePromptTemplate(replacement)
+        promptEditor.replacePromptTemplateEntirely(replacement)
     }
 
     /** 현재 프롬프트의 나머지 내용은 보존하고 일치하는 대상 구간만 교체한다. */
@@ -346,72 +288,19 @@ class MainViewModel(
         replacement: String,
         preferredStartIndex: Int
     ): Int? {
-        syncPromptTemplateFromTextField()
-        val currentText = promptTemplateValue
-        val edit = PromptSegmentEditPolicy.replace(
-            currentText = currentText,
+        return promptEditor.replacePromptTemplateSegment(
             expectedSegment = expectedSegment,
             replacement = replacement,
             preferredStartIndex = preferredStartIndex
-        ) ?: return null
-
-        recordImmediatePromptUndo(currentText)
-        ignoredPromptChangeText = edit.updatedText
-        promptTemplateTextFieldState.edit {
-            replace(edit.startIndex, edit.previousEndIndex, replacement)
-            selection = TextRange(edit.replacementEndIndex)
-        }
-        promptTemplateValue = edit.updatedText
-        publishEditorSession(
-            session = promptEditorSession.afterWholeReplace(edit.updatedText),
-            canUndoPromptEdit = hasPromptUndo()
         )
-        return edit.startIndex
     }
 
     fun copyPromptToClipboard() {
-        syncPromptTemplateFromTextField()
-        val state = _uiState.value
-        val text = state.promptTemplate
-        if (state.isRunning || text.isBlank()) return
-
-        scope.launch {
-            withContext(dispatchers.io) {
-                clipboardGateway.writeText(text)
-            }
-        }
+        promptEditor.copyPromptToClipboard(_uiState.value.isRunning)
     }
 
     fun pastePromptFromClipboard() {
-        syncPromptTemplateFromTextField()
-        scope.launch {
-            val text = withContext(dispatchers.io) {
-                clipboardGateway.readText()
-            }
-            if (text.isEmpty()) return@launch
-
-            val currentText = promptTemplateTextFieldState.text.toString()
-            recordImmediatePromptUndo(currentText)
-
-            val selection = promptTemplateTextFieldState.selection
-            val start = selection.min
-            val end = selection.max
-
-            promptTemplateTextFieldState.edit {
-                replace(start, end, text)
-                this.selection = TextRange(start + text.length)
-            }
-
-            val newText = promptTemplateTextFieldState.text.toString()
-            promptTemplateValue = newText
-            promptEditorSession = promptEditorSession.afterPaste(newText)
-            _uiState.update {
-                it.copy(
-                    promptTemplate = newText,
-                    canUndoPromptEdit = hasPromptUndo()
-                )
-            }
-        }
+        promptEditor.pastePromptFromClipboard()
     }
 
     /**
@@ -420,28 +309,7 @@ class MainViewModel(
      * 연속 탭 시 SI가 다시 앞에 붙는다.
      */
     fun insertSystemInstruction() {
-        if (_uiState.value.isRunning) return
-        syncPromptTemplateFromTextField()
-        val currentText = promptTemplateValue
-        val newText = SystemInstructionPrompt.prependTo(currentText)
-        if (currentText == newText) return
-
-        recordImmediatePromptUndo(currentText)
-        ignoredPromptChangeText = newText
-        val cursorAfter = if (currentText.isEmpty()) {
-            SystemInstructionPrompt.text.length
-        } else {
-            SystemInstructionPrompt.text.length + 2
-        }
-        promptTemplateTextFieldState.edit {
-            replace(0, length, newText)
-            selection = TextRange(cursorAfter.coerceIn(0, newText.length))
-        }
-        promptTemplateValue = newText
-        publishEditorSession(
-            session = promptEditorSession.afterWholeReplace(newText),
-            canUndoPromptEdit = hasPromptUndo()
-        )
+        promptEditor.insertSystemInstruction(_uiState.value.isRunning)
     }
 
     /**
@@ -449,37 +317,11 @@ class MainViewModel(
      * Undo 가능. 실행 중·문단 선택 모드에서는 무시.
      */
     fun applyWildcardTokenSuggestion(token: String) {
-        val state = _uiState.value
-        if (state.isRunning || state.isParagraphSelectionMode) return
-        if (token.isBlank()) return
-        if (state.wildcardTokenCandidates.none { it.token == token }) return
-
-        val currentText = promptTemplateTextFieldState.text.toString()
-        val selection = promptTemplateTextFieldState.selection
-        if (selection.min != selection.max) return
-
-        val replacement = WildcardTokenAutocomplete.replaceWordAtCursor(
-            text = currentText,
-            cursor = selection.max,
-            token = token
-        ) ?: return
-        if (replacement.newText == currentText) return
-
-        recordImmediatePromptUndo(currentText)
-        ignoredPromptChangeText = replacement.newText
-        val cursorAfter = replacement.cursorAfter.coerceIn(0, replacement.newText.length)
-        promptTemplateTextFieldState.edit {
-            replace(0, length, replacement.newText)
-            this.selection = TextRange(cursorAfter)
-        }
-        promptTemplateValue = replacement.newText
-        promptEditorSession = promptEditorSession.withText(replacement.newText)
-        _uiState.update {
-            it.copy(
-                promptTemplate = replacement.newText,
-                canUndoPromptEdit = hasPromptUndo()
-            )
-        }
+        promptEditor.applyWildcardTokenSuggestion(
+            token = token,
+            isBlocked = _uiState.value.isRunning,
+            candidates = _uiState.value.wildcardTokenCandidates
+        )
     }
 
     /** 와일드카드 폴더의 txt 파일명으로 추천 후보를 다시 읽는다. */
@@ -499,12 +341,7 @@ class MainViewModel(
     }
 
     fun replaceSelectedPromptParagraph(replacement: String) {
-        syncEditorTextFromCurrent()
-        when (val result = promptEditorSession.prepareReplaceSelected(replacement)) {
-            PromptParagraphActionResult.NoOp -> Unit
-            is PromptParagraphActionResult.SessionOnly -> publishEditorSession(result.session)
-            is PromptParagraphActionResult.Mutated -> applyTextMutation(result.mutation)
-        }
+        promptEditor.replaceSelectedPromptParagraph(replacement)
     }
 
     fun closeGeminiApp() {
@@ -515,8 +352,7 @@ class MainViewModel(
             canceledText = { AutomationUiText.geminiRestartCanceledText() },
             action = { closeGeminiApp.close() },
             onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
-            resultMessage = { AutomationUiText.geminiRestartResultMessage(it) },
-            updateState = { state, isBusy, msg -> state.copy(isClosingGemini = isBusy, geminiCloseMessage = msg) }
+            resultMessage = { AutomationUiText.geminiRestartResultMessage(it) }
         )
     }
 
@@ -528,8 +364,7 @@ class MainViewModel(
             canceledText = { AutomationUiText.geminiTerminateCanceledText() },
             action = { terminateGeminiApp.close() },
             onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
-            resultMessage = { AutomationUiText.geminiTerminateResultMessage(it) },
-            updateState = { state, isBusy, msg -> state.copy(isClosingGemini = isBusy, geminiCloseMessage = msg) }
+            resultMessage = { AutomationUiText.geminiTerminateResultMessage(it) }
         )
     }
 
@@ -541,8 +376,7 @@ class MainViewModel(
             canceledText = { AutomationUiText.selfAppTerminateCanceledText() },
             action = { terminateSelfApp.close() },
             onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
-            resultMessage = { AutomationUiText.selfAppTerminateResultMessage(it) },
-            updateState = { state, isBusy, msg -> state.copy(isClosingGemini = isBusy, geminiCloseMessage = msg) }
+            resultMessage = { AutomationUiText.selfAppTerminateResultMessage(it) }
         )
     }
 
@@ -554,8 +388,7 @@ class MainViewModel(
             canceledText = { AutomationUiText.memoryCleanupCanceledText() },
             action = { cleanDeviceMemoryUseCase.clean() },
             onFailure = { MemoryCleanupResult.Failure(AutomationUiText.unknownMemoryCleanupErrorMessage(it)) },
-            resultMessage = { AutomationUiText.memoryCleanupResultMessage(it) },
-            updateState = { state, isBusy, msg -> state.copy(isCleaningMemory = isBusy, memoryCleanupMessage = msg) }
+            resultMessage = { AutomationUiText.memoryCleanupResultMessage(it) }
         )
     }
 
@@ -566,43 +399,33 @@ class MainViewModel(
         canceledText: () -> String,
         action: suspend () -> T,
         onFailure: (Exception) -> T,
-        resultMessage: (T) -> String,
-        updateState: (MainUiState, isBusy: Boolean, message: String) -> MainUiState
+        resultMessage: (T) -> String
     ) {
         val state = _uiState.value
         if (!canExecute(state)) {
-            _uiState.update { updateState(it, false, unavailableMessage(it)) }
+            _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = unavailableMessage(it))) }
             return
         }
 
-        _uiState.update { updateState(it, true, startingText()) }
+        _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = true, message = startingText())) }
         scope.launch {
             val result = try {
                 withContext(dispatchers.io) {
                     action()
                 }
             } catch (error: CancellationException) {
-                _uiState.update { updateState(it, false, canceledText()) }
+                _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = canceledText())) }
                 throw error
             } catch (error: Exception) {
                 onFailure(error)
             }
 
-            _uiState.update { updateState(it, false, resultMessage(result)) }
+            _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = resultMessage(result))) }
         }
     }
 
     fun undoPromptEdit() {
-        if (_uiState.value.isRunning) return
-
-        commitPendingPromptUndo()
-        val previous = promptUndoHistory.popUndo() ?: return
-        applyPromptTemplateText(previous)
-        promptTemplateValue = previous
-        publishEditorSession(
-            session = promptEditorSession.afterUndo(previous),
-            canUndoPromptEdit = hasPromptUndo()
-        )
+        promptEditor.undoPromptEdit(_uiState.value.isRunning)
     }
 
     fun refreshStatus() {
@@ -681,7 +504,7 @@ class MainViewModel(
     }
 
     fun runAutomation(): AutomationStartDecision {
-        syncPromptTemplateFromTextField()
+        promptEditor.syncPromptTemplateFromTextField()
         val state = uiState.value
         val isStartInProgress = automationPreparationJob?.isActive == true
         val decision = executeAutomation.decideStart(
@@ -761,16 +584,7 @@ class MainViewModel(
 
     fun selectPromptHistoryItem(item: PromptHistoryItem) {
         if (_uiState.value.isRunning) return
-        commitPendingPromptUndo()
-        if (promptTemplateValue != item.prompt) {
-            promptUndoHistory.recordImmediateSnapshot(promptTemplateValue)
-        }
-        applyPromptTemplateText(item.prompt)
-        promptTemplateValue = item.prompt
-        publishEditorSession(
-            session = promptEditorSession.afterWholeReplace(item.prompt),
-            canUndoPromptEdit = hasPromptUndo()
-        )
+        promptEditor.restorePrompt(item.prompt)
         closePromptHistory()
     }
 
@@ -854,8 +668,7 @@ class MainViewModel(
             } else {
                 current.promptTemplate
             }
-            promptTemplateValue = restoredPrompt
-            promptEditorSession = promptEditorSession.withText(restoredPrompt)
+            promptEditor.restorePrompt(restoredPrompt)
             _uiState.update {
                 it.copy(
                     promptTemplate = restoredPrompt,
@@ -870,7 +683,6 @@ class MainViewModel(
                     promptHistoryItems = historyItems
                 )
             }
-            applyPromptTemplateText(promptTemplateValue)
             val restoredState = uiState.value
             _automationBarUiState.value = AutomationBarUiState(
                 repeatCountText = restoredState.repeatCountText,
@@ -916,137 +728,7 @@ class MainViewModel(
         }
     }
 
-    private fun replaceWholePromptTemplate(replacement: String) {
-        syncEditorTextFromCurrent()
-        val currentText = promptTemplateValue
-        if (currentText == replacement) return
-
-        recordImmediatePromptUndo(currentText)
-        applyPromptTemplateText(replacement)
-        promptTemplateValue = replacement
-        publishEditorSession(
-            session = promptEditorSession.afterWholeReplace(replacement),
-            canUndoPromptEdit = hasPromptUndo()
-        )
-    }
-
-    private fun applyTextMutation(mutation: PromptTextMutation) {
-        recordImmediatePromptUndo(mutation.previousTextForUndo)
-        val newText = mutation.session.text
-        ignoredPromptChangeText = newText
-        val start = mutation.selectionStart.coerceIn(0, newText.length)
-        val end = mutation.selectionEnd.coerceIn(start, newText.length)
-        // 전체 치환 후 커서 위치를 Domain이 지정한 범위로 맞춘다.
-        promptTemplateTextFieldState.edit {
-            replace(0, length, newText)
-            selection = TextRange(start, end)
-        }
-        promptTemplateValue = newText
-        publishEditorSession(mutation.session)
-    }
-
-    private fun applyPromptTemplateText(text: String) {
-        if (!promptTemplateTextFieldState.text.contentEquals(text)) {
-            ignoredPromptChangeText = text
-            promptTemplateTextFieldState.setTextAndPlaceCursorAtEnd(text)
-        }
-    }
-
-    /**
-     * 실행·복사 등 최신 문자열이 필요할 때 TextField → 내부 값·uiState 를 맞춘다.
-     * Undo 스냅샷은 잡지 않는다(타이핑 중 state 미방출 보정용).
-     */
-    private fun syncPromptTemplateFromTextField() {
-        val currentText = promptTemplateTextFieldState.text.toString()
-        if (promptTemplateValue == currentText &&
-            _uiState.value.promptTemplate == currentText &&
-            promptEditorSession.text == currentText
-        ) {
-            return
-        }
-        setPromptTextOnly(currentText)
-        _uiState.update {
-            if (it.promptTemplate == currentText) it else it.copy(promptTemplate = currentText)
-        }
-    }
-
-    private fun syncEditorTextFromCurrent() {
-        val currentText = promptTemplateTextFieldState.text.toString()
-        if (promptTemplateValue != currentText || promptEditorSession.text != currentText) {
-            setPromptTextOnly(currentText)
-        }
-    }
-
-    private fun setPromptTextOnly(text: String) {
-        promptTemplateValue = text
-        promptEditorSession = promptEditorSession.withText(text)
-    }
-
-    private fun publishEditorSession(
-        session: PromptEditorSession,
-        canUndoPromptEdit: Boolean? = null
-    ) {
-        promptEditorSession = session
-        promptTemplateValue = session.text
-        val message = AutomationUiText.paragraphMessage(session.messageKey)
-        _uiState.update { state ->
-            val nextCanUndo = canUndoPromptEdit ?: state.canUndoPromptEdit
-            if (state.promptTemplate == session.text &&
-                state.isParagraphSelectionMode == session.isParagraphSelectionMode &&
-                state.selectedParagraphRange == session.selectedParagraphRange &&
-                state.paragraphSelectionMessage == message &&
-                state.canUndoPromptEdit == nextCanUndo
-            ) {
-                state
-            } else {
-                state.copy(
-                    promptTemplate = session.text,
-                    isParagraphSelectionMode = session.isParagraphSelectionMode,
-                    selectedParagraphRange = session.selectedParagraphRange,
-                    paragraphSelectionMessage = message,
-                    canUndoPromptEdit = nextCanUndo
-                )
-            }
-        }
-    }
-
-    private fun schedulePromptTypingUndo(previous: String) {
-        promptUndoHistory.recordTypingSnapshot(previous)
-        promptUndoDebounceJob?.cancel()
-        promptUndoDebounceJob = scope.launch {
-            delay(PROMPT_UNDO_DEBOUNCE_MILLIS)
-            commitPendingPromptUndo()
-        }
-        updatePromptUndoAvailability()
-    }
-
-    private fun recordImmediatePromptUndo(snapshot: String) {
-        commitPendingPromptUndo()
-        promptUndoHistory.recordImmediateSnapshot(snapshot)
-        updatePromptUndoAvailability()
-    }
-
-    private fun commitPendingPromptUndo() {
-        promptUndoHistory.commitPendingTyping(promptTemplateValue)
-        promptUndoDebounceJob?.cancel()
-        promptUndoDebounceJob = null
-        updatePromptUndoAvailability()
-    }
-
-    private fun updatePromptUndoAvailability() {
-        val canUndo = hasPromptUndo()
-        _uiState.update {
-            if (it.canUndoPromptEdit == canUndo) it else it.copy(canUndoPromptEdit = canUndo)
-        }
-    }
-
-    private fun hasPromptUndo(): Boolean {
-        return promptUndoHistory.canUndo
-    }
-
     private companion object {
-        const val PROMPT_UNDO_DEBOUNCE_MILLIS = 700L
-
         private object EmptyWildcardFileRepository : WildcardFileRepository {
             override fun listFiles(): List<WildcardTextFile> = emptyList()
             override fun readFile(file: WildcardTextFile): String = ""

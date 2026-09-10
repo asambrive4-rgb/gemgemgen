@@ -18,7 +18,6 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.example.gemgemgen.R
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
-import com.example.gemgemgen.automation.android.AndroidOverlayPermissionGateway
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
@@ -54,7 +53,6 @@ class RemoteAutomationReceiverService : Service() {
     private lateinit var store: RemoteAutomationStore
     private lateinit var executeRemoteAutomation: ExecuteRemoteAutomationUseCase
     private lateinit var environmentGateway: AndroidEnvironmentGateway
-    private lateinit var overlayPermissionGateway: AndroidOverlayPermissionGateway
     private var serverSocket: ServerSocket? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
     private val manageReceivedAutomation = ManageReceivedAutomationUseCase()
@@ -70,7 +68,6 @@ class RemoteAutomationReceiverService : Service() {
             automation = AndroidAutomationRuntimeProvider.get(this)
         )
         environmentGateway = AndroidEnvironmentGateway(this)
-        overlayPermissionGateway = AndroidOverlayPermissionGateway(this)
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
@@ -350,7 +347,7 @@ class RemoteAutomationReceiverService : Service() {
             isAccessibilityServiceEnabled = report.status.isAccessibilityServiceEnabled,
             hasWriteSecureSettingsPermission = report.status.hasWriteSecureSettingsPermission,
             isWildcardDirectoryAccessible = report.status.isWildcardDirectoryAccessible,
-            hasOverlayPermission = overlayPermissionGateway.isGranted(),
+            hasOverlayPermission = report.status.hasOverlayPermission,
             isAutomationBusy = runState is AutomationRunState.Running
         )
     }

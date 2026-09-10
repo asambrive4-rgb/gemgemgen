@@ -73,11 +73,9 @@ internal fun PromptSection(
     canCopyPrompt: Boolean,
     canCloseGemini: Boolean,
     canCloseSelfApp: Boolean,
-    isClosingGemini: Boolean,
-    geminiCloseMessage: String,
     canCleanMemory: Boolean,
-    isCleaningMemory: Boolean,
-    memoryCleanupMessage: String,
+    isMaintenanceBusy: Boolean = false,
+    maintenanceMessage: String = "",
     selectedParagraphRange: PromptParagraphRange?,
     paragraphSelectionMessage: String,
     wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
@@ -178,9 +176,8 @@ internal fun PromptSection(
             PromptActionRow(
                 canCloseGemini = canCloseGemini,
                 canCloseSelfApp = canCloseSelfApp,
-                isClosingGemini = isClosingGemini,
                 canCleanMemory = canCleanMemory,
-                isCleaningMemory = isCleaningMemory,
+                isMaintenanceBusy = isMaintenanceBusy,
                 canUndoPromptEdit = canUndoPromptEdit,
                 canCopyPrompt = canCopyPrompt,
                 isTargetSelectionEnabled = isTargetSelectionEnabled,
@@ -196,16 +193,9 @@ internal fun PromptSection(
             )
         }
 
-        if (geminiCloseMessage.isNotBlank()) {
+        if (maintenanceMessage.isNotBlank()) {
             Text(
-                text = geminiCloseMessage,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        if (memoryCleanupMessage.isNotBlank()) {
-            Text(
-                text = memoryCleanupMessage,
+                text = maintenanceMessage,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -218,9 +208,8 @@ internal fun PromptSection(
 internal fun PromptActionRow(
     canCloseGemini: Boolean,
     canCloseSelfApp: Boolean,
-    isClosingGemini: Boolean,
     canCleanMemory: Boolean,
-    isCleaningMemory: Boolean,
+    isMaintenanceBusy: Boolean = false,
     canUndoPromptEdit: Boolean,
     canCopyPrompt: Boolean,
     isTargetSelectionEnabled: Boolean,
@@ -246,7 +235,7 @@ internal fun PromptActionRow(
         ActionIsland {
             OutlinedButton(
                 onClick = onTerminateSelfApp,
-                enabled = canCloseSelfApp && !isClosingGemini,
+                enabled = canCloseSelfApp && !isMaintenanceBusy,
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = AppTheme.colors.card,
                     contentColor = AppTheme.colors.textPrimary
@@ -277,7 +266,7 @@ internal fun PromptActionRow(
             Box {
                 OutlinedButton(
                     onClick = { geminiMenuExpanded = true },
-                    enabled = canCloseGemini && !isClosingGemini,
+                    enabled = canCloseGemini && !isMaintenanceBusy,
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = AppTheme.colors.card,
                         contentColor = AppTheme.colors.textPrimary
@@ -327,7 +316,7 @@ internal fun PromptActionRow(
             }
             OutlinedButton(
                 onClick = onCleanDeviceMemory,
-                enabled = canCleanMemory && !isClosingGemini && !isCleaningMemory,
+                enabled = canCleanMemory && !isMaintenanceBusy,
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = AppTheme.colors.card,
                     contentColor = AppTheme.colors.textPrimary

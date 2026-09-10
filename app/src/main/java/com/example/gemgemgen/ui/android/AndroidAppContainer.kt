@@ -22,7 +22,6 @@ import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
-import com.example.gemgemgen.automation.android.AndroidOverlayPermissionGateway
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRepository
@@ -84,9 +83,8 @@ class AndroidAppContainer(context: Context) {
 
     val mainViewModelFactory: ViewModelProvider.Factory = factory<MainViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
-        val checkAutomationStart = CheckAutomationStartUseCase(
-            AndroidOverlayPermissionGateway(appContext)
-        )
+        val environmentGateway = AndroidEnvironmentGateway(appContext)
+        val checkAutomationStart = CheckAutomationStartUseCase(environmentGateway)
         val startAutomation = StartAutomationUseCase(
             checkAutomationStart = checkAutomationStart,
             automationStartRecorder = recordAutomationStart,
@@ -103,9 +101,7 @@ class AndroidAppContainer(context: Context) {
             promptHistoryStore = promptHistoryStore
         )
         MainViewModel(
-            checkEnvironmentStatus = CheckEnvironmentStatusUseCase(
-                AndroidEnvironmentGateway(appContext)
-            ),
+            checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentGateway),
             clipboardGateway = clipboardGateway,
             saveWildcardFolder = SaveWildcardFolderUseCase(
                 AndroidWildcardFolderRepository(appContext)
