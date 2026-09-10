@@ -82,6 +82,7 @@ internal fun PromptSection(
     paragraphSelectionMessage: String,
     wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
     showPromptActions: Boolean = true,
+    showWildcardSuggestions: Boolean = true,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
     onPromptTemplateChange: (String) -> Unit,
     onWildcardTokenSuggestionClick: (String) -> Unit = {},
@@ -99,28 +100,12 @@ internal fun PromptSection(
     onPasteFromClipboard: () -> Unit,
     onOpenPromptHistory: () -> Unit = {}
 ) {
-    // TextFieldState 스냅샷 구독 — 텍스트·커서 변경 시 추천 재계산
-    val fieldText = promptTemplateState.text.toString()
-    val selection = promptTemplateState.selection
-    val suggestionTokens = remember(
-        fieldText,
-        selection,
-        wildcardTokenCandidates,
-        isParagraphSelectionMode,
-        isTargetSelectionEnabled
-    ) {
-        if (isParagraphSelectionMode || !isTargetSelectionEnabled) {
-            emptyList()
-        } else if (selection.min != selection.max) {
-            emptyList()
-        } else {
-            WildcardTokenAutocomplete.suggestions(
-                text = fieldText,
-                cursor = selection.max,
-                candidates = wildcardTokenCandidates
-            )
-        }
-    }
+    val suggestionTokens = rememberWildcardSuggestionTokens(
+        promptTemplateState = promptTemplateState,
+        wildcardTokenCandidates = wildcardTokenCandidates,
+        isParagraphSelectionMode = isParagraphSelectionMode,
+        isTargetSelectionEnabled = isTargetSelectionEnabled
+    )
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(
@@ -168,7 +153,7 @@ internal fun PromptSection(
             }
         }
 
-        if (suggestionTokens.isNotEmpty()) {
+        if (showWildcardSuggestions && suggestionTokens.isNotEmpty()) {
             WildcardTokenSuggestionBar(
                 tokens = suggestionTokens,
                 onTokenClick = onWildcardTokenSuggestionClick
@@ -469,7 +454,37 @@ internal fun PromptActionRow(
 }
 
 @Composable
-private fun WildcardTokenSuggestionBar(
+internal fun rememberWildcardSuggestionTokens(
+    promptTemplateState: TextFieldState,
+    wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate>,
+    isParagraphSelectionMode: Boolean,
+    isTargetSelectionEnabled: Boolean
+): List<String> {
+    val fieldText = promptTemplateState.text.toString()
+    val selection = promptTemplateState.selection
+    return remember(
+        fieldText,
+        selection,
+        wildcardTokenCandidates,
+        isParagraphSelectionMode,
+        isTargetSelectionEnabled
+    ) {
+        if (isParagraphSelectionMode || !isTargetSelectionEnabled) {
+            emptyList()
+        } else if (selection.min != selection.max) {
+            emptyList()
+        } else {
+            WildcardTokenAutocomplete.suggestions(
+                text = fieldText,
+                cursor = selection.max,
+                candidates = wildcardTokenCandidates
+            )
+        }
+    }
+}
+
+@Composable
+internal fun WildcardTokenSuggestionBar(
     tokens: List<String>,
     onTokenClick: (String) -> Unit,
     modifier: Modifier = Modifier

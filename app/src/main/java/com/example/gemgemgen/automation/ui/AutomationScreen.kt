@@ -84,6 +84,12 @@ internal fun AutomationScreen(
     onSelectThemeMode: (com.example.gemgemgen.ui.theme.AppThemeMode) -> Unit = {}
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val suggestionTokens = rememberWildcardSuggestionTokens(
+        promptTemplateState = promptTemplateState,
+        wildcardTokenCandidates = uiState.wildcardTokenCandidates,
+        isParagraphSelectionMode = uiState.isParagraphSelectionMode,
+        isTargetSelectionEnabled = !uiState.isRunning
+    )
     var showPairDialog by remember { mutableStateOf(false) }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -120,6 +126,7 @@ internal fun AutomationScreen(
                     paragraphSelectionMessage = uiState.paragraphSelectionMessage,
                     wildcardTokenCandidates = uiState.wildcardTokenCandidates,
                     showPromptActions = !isKeyboardVisible,
+                    showWildcardSuggestions = !isKeyboardVisible,
                     onTargetAppSelected = onTargetAppSelected,
                     onPromptTemplateChange = onPromptTemplateChange,
                     onWildcardTokenSuggestionClick = onWildcardTokenSuggestionClick,
@@ -150,7 +157,8 @@ internal fun AutomationScreen(
                         isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
                     )
                 } else if (isKeyboardVisible) {
-                    Spacer(modifier = Modifier.height(144.dp))
+                    val bottomSpacerHeight = if (suggestionTokens.isNotEmpty()) 96.dp else 56.dp
+                    Spacer(modifier = Modifier.height(bottomSpacerHeight))
                 }
 
                 if (!isKeyboardVisible) {
@@ -179,6 +187,13 @@ internal fun AutomationScreen(
                             .padding(AutomationScreenContentPadding),
                         verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
                     ) {
+                        if (suggestionTokens.isNotEmpty()) {
+                            WildcardTokenSuggestionBar(
+                                tokens = suggestionTokens,
+                                onTokenClick = onWildcardTokenSuggestionClick
+                            )
+                        }
+
                         PromptActionRow(
                             canCloseGemini = uiState.canCloseGemini,
                             canCloseSelfApp = uiState.canCloseSelfApp,
@@ -199,20 +214,6 @@ internal fun AutomationScreen(
                             onCopyPromptToClipboard = onCopyPromptToClipboard,
                             onPasteFromClipboard = onPasteFromClipboard
                         )
-
-                        if (uiState.automationMode != AutomationMode.RECEIVER) {
-                            AutomationActionBar(
-                                repeatCountText = uiState.repeatCountText,
-                                onRepeatCountChange = onRepeatCountChange,
-                                onRunMvp = onRunMvp,
-                                onCancelAutomation = onCancelAutomation,
-                                canRun = uiState.canRun,
-                                isRunning = uiState.isRunning,
-                                automationState = automationBarUiState.automationState,
-                                isRemoteSendMode =
-                                    uiState.automationMode == AutomationMode.SENDER
-                            )
-                        }
                     }
                 }
             }
