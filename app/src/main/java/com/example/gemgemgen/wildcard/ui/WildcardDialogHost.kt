@@ -55,12 +55,13 @@ import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
-import com.example.gemgemgen.ui.theme.MemoDanger
-import com.example.gemgemgen.ui.theme.MemoPrimary
-import com.example.gemgemgen.ui.theme.MemoStripBorder
-import com.example.gemgemgen.ui.theme.MemoSubtle
-import com.example.gemgemgen.ui.theme.MemoTabSelectedBorder
-import com.example.gemgemgen.ui.theme.MemoText
+import com.example.gemgemgen.ui.theme.AppTheme
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.ui.theme.appTextFieldColors
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
 
@@ -196,6 +197,8 @@ internal fun WildcardDialogHost(
         }
     }
 
+    val focusManager = LocalFocusManager.current
+
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(
@@ -210,7 +213,8 @@ internal fun WildcardDialogHost(
                 .imePadding()
                 .widthIn(min = 280.dp, max = 560.dp)
                 .fillMaxWidth()
-                .wrapContentHeight(),
+                .wrapContentHeight()
+                .clearFocusOnOutsideTap { focusManager.clearFocus(force = true) },
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
@@ -243,6 +247,7 @@ private fun NewFileContent(
     dialog: WildcardDialogType.NewFile,
     actions: WildcardDialogActions
 ) {
+    val canCreate = dialog.fileName.isNotBlank()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -261,13 +266,23 @@ private fun NewFileContent(
                 onValueChange = actions.onNewFileNameChange,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (canCreate) {
+                            actions.onCreateNewFile()
+                        }
+                    }
+                ),
                 label = { Text("파일명") },
                 placeholder = { Text("예: hair") }
             )
             if (dialog.error.isNotBlank()) {
                 Text(
                     text = dialog.error,
-                    color = MemoDanger,
+                    color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -280,7 +295,10 @@ private fun NewFileContent(
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = actions.onCreateNewFile) {
+            TextButton(
+                onClick = actions.onCreateNewFile,
+                enabled = canCreate
+            ) {
                 Text("생성")
             }
         }
@@ -292,6 +310,7 @@ private fun RenameFileContent(
     dialog: WildcardDialogType.RenameFile,
     actions: WildcardDialogActions
 ) {
+    val canRename = dialog.fileName.isNotBlank()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -310,13 +329,23 @@ private fun RenameFileContent(
                 onValueChange = actions.onRenameFileNameChange,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (canRename) {
+                            actions.onConfirmRename()
+                        }
+                    }
+                ),
                 label = { Text("파일명") },
                 placeholder = { Text("예: new_hair") }
             )
             if (dialog.error.isNotBlank()) {
                 Text(
                     text = dialog.error,
-                    color = MemoDanger,
+                    color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -329,7 +358,10 @@ private fun RenameFileContent(
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = actions.onConfirmRename) {
+            TextButton(
+                onClick = actions.onConfirmRename,
+                enabled = canRename
+            ) {
                 Text("변경")
             }
         }
@@ -469,13 +501,13 @@ private fun ClassifyCriteriaContent(
             Text(
                 text = "지금 연 파일의 모든 줄을 기준에 따라 나눕니다. 모델 기본값은 분석 탭「TXT 생성」과 같고, 여기서 바꾸면 함께 저장됩니다.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MemoSubtle
+                color = AppTheme.colors.textSecondary
             )
             Text(
                 text = "모델",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = MemoText
+                color = AppTheme.colors.textPrimary
             )
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -536,6 +568,8 @@ private fun ClassifyCriteriaContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 96.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
                 minLines = 3,
                 label = { Text("분류 기준 (필수)") },
                 placeholder = {
@@ -546,7 +580,7 @@ private fun ClassifyCriteriaContent(
             if (dialog.error.isNotBlank()) {
                 Text(
                     text = dialog.error,
-                    color = MemoDanger,
+                    color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -598,7 +632,7 @@ private fun ClassifyPreviewContent(
             Text(
                 text = "전체 목록을 확인한 뒤, 기준을 고쳐 다시 분류하거나 저장하세요.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MemoSubtle
+                color = AppTheme.colors.textSecondary
             )
             OutlinedTextField(
                 value = dialog.criteria,
@@ -606,6 +640,8 @@ private fun ClassifyPreviewContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 72.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
                 minLines = 2,
                 label = { Text("분류 기준 (다시 분류용)") },
                 placeholder = { Text("기준을 수정한 뒤 다시 분류") }
@@ -614,14 +650,14 @@ private fun ClassifyPreviewContent(
                 onClick = actions.onRunClassify,
                 enabled = dialog.canRerun,
                 modifier = Modifier.fillMaxWidth(),
-                border = BorderStroke(1.dp, MemoStripBorder)
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
             ) {
                 Text("다시 분류 (전체)", fontWeight = FontWeight.Bold)
             }
             if (dialog.error.isNotBlank()) {
                 Text(
                     text = dialog.error,
-                    color = MemoDanger,
+                    color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -641,7 +677,7 @@ private fun ClassifyPreviewContent(
                         text = "${entry.groupName} (${entry.items.size})",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = MemoText
+                        color = AppTheme.colors.textPrimary
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -653,12 +689,18 @@ private fun ClassifyPreviewContent(
                                 value = entry.fileNameInput,
                                 onValueChange = { actions.onClassifyFileNameChange(index, it) },
                                 modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = appTextFieldColors(),
                                 singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(
+                                    onDone = { actions.onToggleClassifyFileNameEdit(index) }
+                                ),
                                 label = { Text("파일명") },
                                 trailingIcon = {
                                     Text(
                                         text = ".txt",
-                                        color = MemoSubtle,
+                                        color = AppTheme.colors.textSecondary,
                                         fontSize = 12.sp
                                     )
                                 }
@@ -670,7 +712,7 @@ private fun ClassifyPreviewContent(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = "파일명 확정",
-                                    tint = MemoSubtle,
+                                    tint = AppTheme.colors.textSecondary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -679,7 +721,7 @@ private fun ClassifyPreviewContent(
                                 text = "${entry.fileNameInput.trim().removeSuffix(".txt")}.txt",
                                 modifier = Modifier.weight(1f),
                                 fontSize = 13.sp,
-                                color = MemoText,
+                                color = AppTheme.colors.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -690,7 +732,7 @@ private fun ClassifyPreviewContent(
                                 Icon(
                                     imageVector = Icons.Default.Edit,
                                     contentDescription = "파일명 수정",
-                                    tint = MemoSubtle,
+                                    tint = AppTheme.colors.textSecondary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -700,7 +742,7 @@ private fun ClassifyPreviewContent(
                         Text(
                             text = "· $line",
                             fontSize = 12.sp,
-                            color = MemoSubtle
+                            color = AppTheme.colors.textSecondary
                         )
                     }
                 }
@@ -711,13 +753,13 @@ private fun ClassifyPreviewContent(
                         text = "미배정 (${dialog.result.droppedLines.size}) · 저장 안 함",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = MemoDanger
+                        color = MaterialTheme.colorScheme.error
                     )
                     dialog.result.droppedLines.forEach { line ->
                         Text(
                             text = "· $line",
                             fontSize = 12.sp,
-                            color = MemoSubtle
+                            color = AppTheme.colors.textSecondary
                         )
                     }
                 }
@@ -762,7 +804,7 @@ private fun ClassifyOverwriteContent(
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("같은 이름의 파일이 있습니다. 덮어쓸까요?")
             dialog.fileNames.forEach { name ->
-                Text("· $name", fontSize = 13.sp, color = MemoSubtle)
+                Text("· $name", fontSize = 13.sp, color = AppTheme.colors.textSecondary)
             }
         }
         Row(
@@ -788,10 +830,10 @@ private fun DialogModelChip(
 ) {
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = if (selected) MemoPrimary.copy(alpha = 0.45f) else Color.White,
+        color = if (selected) AppTheme.colors.primary.copy(alpha = 0.45f) else Color.White,
         border = BorderStroke(
             1.dp,
-            if (selected) MemoTabSelectedBorder else MemoStripBorder
+            if (selected) AppTheme.colors.primary else AppTheme.colors.cardBorder
         ),
         modifier = Modifier.clickable(onClick = onClick)
     ) {
@@ -800,7 +842,7 @@ private fun DialogModelChip(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = MemoText
+            color = AppTheme.colors.textPrimary
         )
     }
 }

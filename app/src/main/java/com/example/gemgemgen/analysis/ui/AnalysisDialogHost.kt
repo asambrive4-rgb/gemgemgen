@@ -39,6 +39,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.ui.theme.appTextFieldColors
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
@@ -137,6 +144,8 @@ internal fun AnalysisDialogHost(
         }
     }
 
+    val focusManager = LocalFocusManager.current
+
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -147,7 +156,8 @@ internal fun AnalysisDialogHost(
                 .imePadding()
                 .widthIn(min = 280.dp, max = 560.dp)
                 .fillMaxWidth()
-                .wrapContentHeight(),
+                .wrapContentHeight()
+                .clearFocusOnOutsideTap { focusManager.clearFocus(force = true) },
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
@@ -177,6 +187,9 @@ private fun KeyManagementContent(
     uiState: AnalysisUiState,
     actions: AnalysisDialogActions
 ) {
+    val focusManager = LocalFocusManager.current
+    val canAddKey = uiState.keyValueInput.isNotBlank()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -201,7 +214,12 @@ private fun KeyManagementContent(
                 onValueChange = actions.onKeyLabelChange,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
                 label = { Text("키 이름") },
                 placeholder = { Text("개인 키") }
             )
@@ -210,12 +228,22 @@ private fun KeyManagementContent(
                 onValueChange = actions.onKeyValueChange,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        if (canAddKey) {
+                            actions.onAddApiKey()
+                        }
+                    }
+                ),
                 label = { Text("API 키") },
                 visualTransformation = PasswordVisualTransformation()
             )
             Button(
                 onClick = actions.onAddApiKey,
+                enabled = canAddKey,
                 modifier = Modifier.align(Alignment.End)
             ) {
                 Text("추가")
@@ -290,6 +318,7 @@ private fun EditKeyLabelContent(
     dialog: AnalysisDialogType.EditKeyLabel,
     actions: AnalysisDialogActions
 ) {
+    val canSave = dialog.currentLabel.isNotBlank()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -307,7 +336,16 @@ private fun EditKeyLabelContent(
             onValueChange = actions.onEditKeyLabelChange,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
+            colors = appTextFieldColors(),
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    if (canSave) {
+                        actions.onUpdateKeyLabel()
+                    }
+                }
+            ),
             label = { Text("새 키 이름") },
             placeholder = { Text(dialog.originalLabel) }
         )
@@ -319,7 +357,10 @@ private fun EditKeyLabelContent(
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = actions.onUpdateKeyLabel) {
+            Button(
+                onClick = actions.onUpdateKeyLabel,
+                enabled = canSave
+            ) {
                 Text("저장")
             }
         }

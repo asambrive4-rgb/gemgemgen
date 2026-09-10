@@ -76,7 +76,8 @@ import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
-import com.example.gemgemgen.ui.theme.*
+import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import kotlinx.coroutines.delay
@@ -191,7 +192,7 @@ internal fun WildcardManagerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MemoBackground)
+            .background(AppTheme.colors.canvas)
             .imePadding()
             .clearFocusOnOutsideTap {
                 runWithCommittedText(onClearFocus)
@@ -238,14 +239,14 @@ internal fun WildcardManagerScreen(
                         ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
                         spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
                     )
-                    .border(1.dp, MemoEditorBorder, editorCardShape)
-                    .background(MemoSurface, editorCardShape)
+                    .border(1.dp, AppTheme.colors.cardBorder, editorCardShape)
+                    .background(AppTheme.colors.card, editorCardShape)
             ) {
                 // 에디터 일체형 헤더 (부드러운 톤온톤 배경 띠)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MemoPrimary.copy(alpha = 0.15f), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                        .background(AppTheme.colors.primary.copy(alpha = 0.15f), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -255,7 +256,7 @@ internal fun WildcardManagerScreen(
                         } else {
                             statusText
                         },
-                        color = MemoText,
+                        color = AppTheme.colors.textPrimary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
@@ -270,9 +271,9 @@ internal fun WildcardManagerScreen(
                             Text(
                                 text = "분류",
                                 color = if (uiState.canRequestClassify) {
-                                    MemoText
+                                    AppTheme.colors.textPrimary
                                 } else {
-                                    MemoText.copy(alpha = 0.4f)
+                                    AppTheme.colors.textPrimary.copy(alpha = 0.4f)
                                 },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -287,9 +288,9 @@ internal fun WildcardManagerScreen(
                             Text(
                                 text = "선택",
                                 color = if (uiState.canEnterLineSelectionMode) {
-                                    MemoText
+                                    AppTheme.colors.textPrimary
                                 } else {
-                                    MemoText.copy(alpha = 0.4f)
+                                    AppTheme.colors.textPrimary.copy(alpha = 0.4f)
                                 },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -305,7 +306,7 @@ internal fun WildcardManagerScreen(
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "이름 수정",
-                                tint = MemoSubtle,
+                                tint = AppTheme.colors.textSecondary,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -315,7 +316,7 @@ internal fun WildcardManagerScreen(
                             onClick = onExitLineSelectionMode,
                             enabled = uiState.canExitLineSelectionMode
                         ) {
-                            Text("편집으로", color = MemoText, fontSize = 12.sp)
+                            Text("편집으로", color = AppTheme.colors.textPrimary, fontSize = 12.sp)
                         }
                     }
                 }
@@ -350,7 +351,7 @@ internal fun WildcardManagerScreen(
                         shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
                         textStyle = androidx.compose.ui.text.TextStyle(
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            color = MemoText,
+                            color = AppTheme.colors.textPrimary,
                             fontSize = 15.sp
                         ),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -360,8 +361,8 @@ internal fun WildcardManagerScreen(
                             focusedContainerColor = AppTheme.colors.inputBackground,
                             unfocusedContainerColor = AppTheme.colors.inputBackground,
                             disabledContainerColor = AppTheme.colors.inputBackground.copy(alpha = 0.6f),
-                            focusedTextColor = MemoText,
-                            unfocusedTextColor = MemoText,
+                            focusedTextColor = AppTheme.colors.textPrimary,
+                            unfocusedTextColor = AppTheme.colors.textPrimary,
                             cursorColor = AppTheme.colors.primary
                         )
                     )
@@ -415,7 +416,7 @@ internal fun WildcardManagerScreen(
             if (uiState.message.isNotBlank()) {
                 Text(
                     text = uiState.message,
-                    color = MemoSubtle,
+                    color = AppTheme.colors.textSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -423,7 +424,7 @@ internal fun WildcardManagerScreen(
             if (uiState.error.isNotBlank()) {
                 Text(
                     text = uiState.error,
-                    color = MemoDanger,
+                    color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -482,15 +483,15 @@ private fun FileTabsSection(
                 ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
                 spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
             )
-            .border(1.dp, MemoStripBorder, containerShape)
-            .background(MemoSurface, containerShape)
+            .border(1.dp, AppTheme.colors.cardBorder, containerShape)
+            .background(AppTheme.colors.card, containerShape)
             .padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (fileItems.isEmpty()) {
             Text(
                 text = "표시할 txt 파일이 없습니다.",
-                color = MemoSubtle,
+                color = AppTheme.colors.textSecondary,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(vertical = 12.dp)
             )
@@ -577,14 +578,14 @@ private fun FileTabsSection(
                     .shadow(
                         elevation = if (canDelete) 2.dp else 0.dp,
                         shape = actionBtnShape,
-                        ambientColor = MemoDanger.copy(alpha = 0.25f),
-                        spotColor = MemoDanger.copy(alpha = 0.15f)
+                        ambientColor = MaterialTheme.colorScheme.error.copy(alpha = 0.25f),
+                        spotColor = MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
                     )
                     .clip(actionBtnShape)
                     .background(AppTheme.colors.card)
                     .border(
                         width = 1.dp,
-                        color = if (canDelete) MemoDangerBorder else AppTheme.colors.cardBorder,
+                        color = if (canDelete) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else AppTheme.colors.cardBorder,
                         shape = actionBtnShape
                     )
                     .clickable(enabled = canDelete) { onRequestDelete() },
@@ -593,7 +594,7 @@ private fun FileTabsSection(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "삭제",
-                    tint = if (canDelete) MemoDanger else AppTheme.colors.textSecondary.copy(alpha = 0.4f),
+                    tint = if (canDelete) MaterialTheme.colorScheme.error else AppTheme.colors.textSecondary.copy(alpha = 0.4f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -616,7 +617,7 @@ private fun FolderInfoSection(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, MemoStripBorder, RoundedCornerShape(12.dp))
+            .border(1.dp, AppTheme.colors.cardBorder, RoundedCornerShape(12.dp))
             .background(AppTheme.colors.card, RoundedCornerShape(12.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -627,14 +628,14 @@ private fun FolderInfoSection(
         ) {
             Text(
                 text = "와일드카드 저장소",
-                color = MemoSubtle,
+                color = AppTheme.colors.textSecondary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
             
             Text(
                 text = folderPathDesc,
-                color = MemoText,
+                color = AppTheme.colors.textPrimary,
                 fontSize = 14.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -643,13 +644,13 @@ private fun FolderInfoSection(
             if (!environmentStatus.isWildcardDirectoryAccessible) {
                 Text(
                     text = "와일드카드 폴더를 선택해주세요.",
-                    color = MemoDanger,
+                    color = MaterialTheme.colorScheme.error,
                     fontSize = 12.sp
                 )
             } else if (!environmentStatus.isWildcardDirectoryWritable) {
                 Text(
                     text = "파일 편집을 위해 폴더를 다시 선택해주세요.",
-                    color = MemoDanger,
+                    color = MaterialTheme.colorScheme.error,
                     fontSize = 12.sp
                 )
             }
@@ -662,10 +663,10 @@ private fun FolderInfoSection(
         ) {
             OutlinedButton(
                 onClick = onSelectFolder,
-                border = BorderStroke(1.dp, MemoStripBorder),
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = AppTheme.colors.card,
-                    contentColor = MemoText
+                    contentColor = AppTheme.colors.textPrimary
                 ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.height(40.dp)
@@ -679,10 +680,10 @@ private fun FolderInfoSection(
 
             OutlinedButton(
                 onClick = onRefresh,
-                border = BorderStroke(1.dp, MemoStripBorder),
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = AppTheme.colors.card,
-                    contentColor = MemoText
+                    contentColor = AppTheme.colors.textPrimary
                 ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.height(40.dp)
@@ -711,7 +712,7 @@ private fun LineSelectionList(
         ) {
             Text(
                 text = "선택할 줄이 없습니다.",
-                color = MemoSubtle,
+                color = AppTheme.colors.textSecondary,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
             )
@@ -742,7 +743,7 @@ private fun LineSelectionList(
                 )
                 Text(
                     text = line,
-                    color = MemoText,
+                    color = AppTheme.colors.textPrimary,
                     fontSize = 14.sp,
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                     maxLines = 3,
@@ -772,12 +773,12 @@ private fun LineSelectionActionBar(
         OutlinedButton(
             onClick = onSelectAll,
             enabled = uiState.canSelectAllLines,
-            border = BorderStroke(1.dp, MemoStripBorder),
+            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = AppTheme.colors.card,
                 disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                contentColor = AppTheme.colors.textPrimary,
+                disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(horizontal = 6.dp),
@@ -795,12 +796,12 @@ private fun LineSelectionActionBar(
         OutlinedButton(
             onClick = onDeselectAll,
             enabled = uiState.canDeselectAllLines,
-            border = BorderStroke(1.dp, MemoStripBorder),
+            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = AppTheme.colors.card,
                 disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                contentColor = AppTheme.colors.textPrimary,
+                disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(horizontal = 6.dp),
@@ -819,10 +820,10 @@ private fun LineSelectionActionBar(
             onClick = onCompose,
             enabled = uiState.canComposeDynamicPrompt,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MemoPrimary,
-                disabledContainerColor = MemoPrimary.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                containerColor = AppTheme.colors.primary,
+                disabledContainerColor = AppTheme.colors.primary.copy(alpha = 0.4f),
+                contentColor = AppTheme.colors.textPrimary,
+                disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(horizontal = 6.dp),
@@ -841,12 +842,12 @@ private fun LineSelectionActionBar(
         OutlinedButton(
             onClick = onExit,
             enabled = uiState.canExitLineSelectionMode,
-            border = BorderStroke(1.dp, MemoStripBorder),
+            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = AppTheme.colors.card,
                 disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                contentColor = AppTheme.colors.textPrimary,
+                disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(horizontal = 6.dp),
@@ -885,10 +886,10 @@ private fun ActionButtonsBar(
             onClick = onPasteBelow,
             enabled = uiState.canPaste,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MemoPaste,
-                disabledContainerColor = MemoPaste.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                containerColor = AppTheme.colors.card,
+                disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
+                contentColor = AppTheme.colors.textPrimary,
+                disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(horizontal = 4.dp),
@@ -926,10 +927,10 @@ private fun ActionButtonsBar(
             onClick = onPaste,
             enabled = uiState.canPaste,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MemoPaste,
-                disabledContainerColor = MemoPaste.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                containerColor = AppTheme.colors.card,
+                disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
+                contentColor = AppTheme.colors.textPrimary,
+                disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(horizontal = 4.dp),
@@ -967,8 +968,8 @@ private fun ActionButtonsBar(
             onClick = onSave,
             enabled = uiState.canSave,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MemoSave,
-                disabledContainerColor = MemoSave.copy(alpha = 0.4f),
+                containerColor = AppTheme.colors.primary,
+                disabledContainerColor = AppTheme.colors.primary.copy(alpha = 0.4f),
                 contentColor = Color.White,
                 disabledContentColor = Color.White.copy(alpha = 0.4f)
             ),
@@ -1007,12 +1008,12 @@ private fun ActionButtonsBar(
         OutlinedButton(
             onClick = onCopy,
             enabled = uiState.canCopy,
-            border = BorderStroke(1.dp, if (uiState.canCopy) MemoCopyBorder else MemoStripBorder),
+            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = MemoCopy,
-                disabledContainerColor = MemoCopy.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                containerColor = AppTheme.colors.card,
+                disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
+                contentColor = AppTheme.colors.textPrimary,
+                disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(0.dp),
@@ -1037,12 +1038,12 @@ private fun ActionButtonsBar(
         OutlinedButton(
             onClick = onUndo,
             enabled = uiState.canUndo,
-            border = BorderStroke(1.dp, MemoUndoBorder),
+            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = AppTheme.colors.card,
                 disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.4f),
-                contentColor = MemoText,
-                disabledContentColor = MemoText.copy(alpha = 0.4f)
+                contentColor = AppTheme.colors.textPrimary,
+                disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.4f)
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(0.dp),

@@ -32,14 +32,12 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,11 +51,17 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuButton
+import com.example.gemgemgen.ui.theme.NeuCard
+import com.example.gemgemgen.ui.theme.NeuPillChip
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
@@ -238,50 +242,6 @@ internal fun AnalysisScreen(
 }
 
 @Composable
-private fun ModelChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val containerColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.card
-    }
-    val contentColor = if (selected) {
-        AppTheme.colors.onPrimary
-    } else {
-        AppTheme.colors.textSecondary
-    }
-    val shape = RoundedCornerShape(14.dp)
-    Surface(
-        shape = shape,
-        color = containerColor,
-        contentColor = contentColor,
-        border = if (selected) {
-            BorderStroke(1.dp, AppTheme.colors.primary)
-        } else {
-            BorderStroke(1.dp, AppTheme.colors.cardBorder)
-        },
-        modifier = Modifier
-            .shadow(
-                elevation = if (selected) 3.dp else 1.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
-            .clickable(onClick = onClick)
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
-
-@Composable
 private fun ApiKeyHeader(
     uiState: AnalysisUiState,
     onRoleProviderSelected: (AnalysisModelRole, AnalysisProvider) -> Unit,
@@ -291,18 +251,10 @@ private fun ApiKeyHeader(
     onLogoutGrok: () -> Unit
 ) {
     val headerShape = RoundedCornerShape(18.dp)
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 3.dp,
-                shape = headerShape,
-                ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
-                spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
-            ),
-        color = AppTheme.colors.card,
+    NeuCard(
+        modifier = Modifier.fillMaxWidth(),
         shape = headerShape,
-        border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+        elevation = 3.dp
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -376,47 +328,47 @@ private fun RoleModelRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            ModelChip(
-                label = "Gemini",
+            NeuPillChip(
+                text = "Gemini",
                 selected = provider == AnalysisProvider.GEMINI,
                 onClick = { onProviderSelected(AnalysisProvider.GEMINI) }
             )
-            ModelChip(
-                label = "Grok",
+            NeuPillChip(
+                text = "Grok",
                 selected = provider == AnalysisProvider.GROK,
                 onClick = { onProviderSelected(AnalysisProvider.GROK) }
             )
             when (provider) {
                 AnalysisProvider.GEMINI -> {
-                    ModelChip(
-                        label = "3.5 Lite",
+                    NeuPillChip(
+                        text = "3.5 Lite",
                         selected = modelId == MODEL_GEMINI_3_5_FLASH_LITE,
                         onClick = { onModelSelected(MODEL_GEMINI_3_5_FLASH_LITE) }
                     )
-                    ModelChip(
-                        label = "3.1 Lite",
+                    NeuPillChip(
+                        text = "3.1 Lite",
                         selected = modelId == MODEL_GEMINI_3_1_FLASH_LITE,
                         onClick = { onModelSelected(MODEL_GEMINI_3_1_FLASH_LITE) }
                     )
-                    ModelChip(
-                        label = "3.6 Flash",
+                    NeuPillChip(
+                        text = "3.6 Flash",
                         selected = modelId == MODEL_GEMINI_3_6_FLASH,
                         onClick = { onModelSelected(MODEL_GEMINI_3_6_FLASH) }
                     )
-                    ModelChip(
-                        label = "3.7 Flash",
+                    NeuPillChip(
+                        text = "3.7 Flash",
                         selected = modelId == MODEL_GEMINI_3_7_FLASH,
                         onClick = { onModelSelected(MODEL_GEMINI_3_7_FLASH) }
                     )
-                    ModelChip(
-                        label = "3.8 Flash",
+                    NeuPillChip(
+                        text = "3.8 Flash",
                         selected = modelId == MODEL_GEMINI_3_8_FLASH,
                         onClick = { onModelSelected(MODEL_GEMINI_3_8_FLASH) }
                     )
                 }
                 AnalysisProvider.GROK -> {
-                    ModelChip(
-                        label = "Grok 4.5",
+                    NeuPillChip(
+                        text = "Grok 4.5",
                         selected = modelId == MODEL_GROK_4_5,
                         onClick = { onModelSelected(MODEL_GROK_4_5) }
                     )
@@ -597,8 +549,8 @@ private fun SourcePromptAndMaskingRow(
 /** 좌·우 섹션 제목 줄 공통 높이 (단차 정렬용). CompactOutlinedButton과 동일. */
 private val SectionHeaderHeight = 32.dp
 
-/** 하단 주 액션(TXT 생성 / 생성) 높이 */
-private val PrimaryActionButtonHeight = 56.dp
+/** 하단 주 액션(TXT 생성 / 생성) 높이 - 터치 규격 44~52dp 가이드 준수 (48dp) */
+private val PrimaryActionButtonHeight = 48.dp
 
 @Composable
 private fun StickyBottomActionPanel(
@@ -625,11 +577,12 @@ private fun StickyBottomActionPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             AnalysisCategory.entries.forEach { category ->
-                CategoryChip(
-                    category = category,
+                NeuPillChip(
+                    text = category.label,
                     selected = uiState.selectedCategory == category,
                     enabled = !uiState.isBusy,
-                    onClick = { onCategorySelected(category) }
+                    onClick = { onCategorySelected(category) },
+                    modifier = Modifier.alpha(if (uiState.isBusy) 0.45f else 1f)
                 )
             }
         }
@@ -653,6 +606,10 @@ private fun StickyBottomActionPanel(
                 Button(
                     onClick = onSaveResults,
                     enabled = uiState.canCopyOrSave,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AppTheme.colors.primary,
+                        contentColor = AppTheme.colors.onPrimary
+                    ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
                 ) {
@@ -682,24 +639,42 @@ private fun StickyBottomActionPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(
-                onClick = onRequestResetSession,
-                enabled = uiState.canResetSession,
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.size(PrimaryActionButtonHeight)
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (uiState.canResetSession) AppTheme.colors.card else AppTheme.colors.card.copy(alpha = 0.5f),
+                contentColor = if (uiState.canResetSession) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
+                modifier = Modifier
+                    .size(PrimaryActionButtonHeight)
+                    .shadow(
+                        elevation = if (uiState.canResetSession) 3.dp else 0.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                        spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+                    )
+                    .clickable(
+                        enabled = uiState.canResetSession,
+                        onClick = onRequestResetSession
+                    )
             ) {
-                Icon(
-                    imageVector = Icons.Default.RestartAlt,
-                    contentDescription = "분석 세션 비우기"
-                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RestartAlt,
+                        contentDescription = "분석 세션 비우기"
+                    )
+                }
             }
             if (uiState.status == AnalysisStatus.GENERATING) {
-                Button(
+                NeuButton(
                     onClick = onCancelWork,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(PrimaryActionButtonHeight)
+                        .height(PrimaryActionButtonHeight),
+                    isPrimary = true
                 ) {
                     Text(
                         text = "중지",
@@ -708,25 +683,14 @@ private fun StickyBottomActionPanel(
                     )
                 }
             } else {
-                val btnShape = RoundedCornerShape(14.dp)
-                Button(
+                NeuButton(
                     onClick = onGenerateTxt,
                     enabled = uiState.canGenerate,
-                    shape = btnShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppTheme.colors.primary,
-                        contentColor = AppTheme.colors.onPrimary
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                    isPrimary = true,
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(PrimaryActionButtonHeight)
-                        .shadow(
-                            elevation = if (uiState.canGenerate) 4.dp else 0.dp,
-                            shape = btnShape,
-                            ambientColor = AppTheme.colors.primary.copy(alpha = 0.4f),
-                            spotColor = AppTheme.colors.primary.copy(alpha = 0.3f)
-                        )
                 ) {
                     Text(
                         text = "TXT 생성",
@@ -734,80 +698,37 @@ private fun StickyBottomActionPanel(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                FilledTonalButton(
+                Surface(
                     onClick = onGenerate,
                     enabled = uiState.canGenerate,
-                    shape = btnShape,
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = AppTheme.colors.accent,
-                        contentColor = Color.White
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (uiState.canGenerate) AppTheme.colors.accent else AppTheme.colors.accent.copy(alpha = 0.5f),
+                    contentColor = if (uiState.canGenerate) AppTheme.colors.onPrimary else AppTheme.colors.onPrimary.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, AppTheme.colors.accent),
                     modifier = Modifier
                         .weight(1f)
                         .height(PrimaryActionButtonHeight)
                         .shadow(
-                            elevation = if (uiState.canGenerate) 4.dp else 0.dp,
-                            shape = btnShape,
+                            elevation = if (uiState.canGenerate) 6.dp else 0.dp,
+                            shape = RoundedCornerShape(14.dp),
                             ambientColor = AppTheme.colors.accent.copy(alpha = 0.4f),
                             spotColor = AppTheme.colors.accent.copy(alpha = 0.3f)
                         )
                 ) {
-                    Text(
-                        text = "생성",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "생성",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
-    }
-}
-
-
-
-@Composable
-private fun CategoryChip(
-    category: AnalysisCategory,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    val containerColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.card
-    }
-    val contentColor = if (selected) {
-        AppTheme.colors.onPrimary
-    } else {
-        AppTheme.colors.textPrimary
-    }
-    val shape = RoundedCornerShape(14.dp)
-    Surface(
-        shape = shape,
-        color = containerColor,
-        contentColor = contentColor,
-        border = BorderStroke(
-            1.dp,
-            if (selected) AppTheme.colors.primary else AppTheme.colors.cardBorder
-        ),
-        modifier = Modifier
-            .alpha(if (enabled) 1f else 0.45f)
-            .shadow(
-                elevation = if (selected) 3.dp else 1.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.25f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
-            .clickable(enabled = enabled, onClick = onClick)
-    ) {
-        Text(
-            text = category.label,
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
-        )
     }
 }
 
@@ -820,23 +741,20 @@ private fun TargetSegmentBody(
 ) {
     val hasSegment = targetSegment != null
     val shape = RoundedCornerShape(16.dp)
-    Surface(
-        modifier = modifier.shadow(
-            elevation = 2.dp,
-            shape = shape,
-            ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
-            spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
-        ),
-        color = if (hasSegment) {
+    NeuCard(
+        modifier = modifier,
+        shape = shape,
+        elevation = 2.dp,
+        backgroundColor = if (hasSegment) {
             AppTheme.colors.primary.copy(alpha = 0.08f)
         } else {
             AppTheme.colors.inputBackground
         },
-        shape = shape,
-        border = BorderStroke(
-            1.dp,
-            if (hasSegment) AppTheme.colors.primary.copy(alpha = 0.45f) else AppTheme.colors.inputBorder
-        )
+        borderColor = if (hasSegment) {
+            AppTheme.colors.primary.copy(alpha = 0.45f)
+        } else {
+            AppTheme.colors.inputBorder
+        }
     ) {
         Column(
             modifier = Modifier
@@ -935,9 +853,9 @@ private fun DirectionChip(
         border = BorderStroke(1.dp, borderColor),
         modifier = Modifier
             .shadow(
-                elevation = if (selected) 2.dp else 1.dp,
+                elevation = if (selected) 4.dp else 2.dp,
                 shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.25f),
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.4f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
                 spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
             )
             .clickable(onClick = onClick)
@@ -1160,6 +1078,7 @@ private fun TxtResultSection(
     resultFileName: String,
     onResultFileNameChange: (String) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
         Text(
@@ -1185,6 +1104,10 @@ private fun TxtResultSection(
             shape = RoundedCornerShape(12.dp),
             colors = appTextFieldColors(),
             singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = { focusManager.clearFocus(force = true) }
+            ),
             label = { Text("저장할 와일드카드 파일명") },
             placeholder = { Text("옷.txt") }
         )

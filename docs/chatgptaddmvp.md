@@ -283,23 +283,23 @@ ChatGPT 버튼 탐색 규칙을 확정하기 위해 다음 화면의 접근성 �
 | --- | --- |
 | 기기 | Samsung Galaxy Tab S7 FE (`SM-T733`) |
 | Android | Android 14, API 34 |
-| ChatGPT 앱 | `1.2026.160` (`versionCode 2616021`) |
+| ChatGPT 앱 | `1.2026.244` (최신 업데이트 확인) |
 | 시스템 언어 | 한국어 (`ko-KR`) |
 | ADB 연결 | 연결 확인 |
 
 따라서 사용자가 별도로 기기와 앱 버전을 전달할 필요는 없다. 메뉴, 새 채팅, 입력창, 보내기 버튼의 UI 구조와 전송 후 흐름도 확인했다.
 
-### 확인된 ChatGPT 접근성 식별값
+### 확인된 ChatGPT 접근성 식별값 (1.2026.244 최신화)
 
-| 동작 | 확인된 식별값 | 클릭 방식 |
+| 동작 | 확인된 식별값 | Fallback 및 클릭 방식 |
 | --- | --- | --- |
-| 메뉴 열기 | contentDescription `메뉴` | 해당 노드 또는 클릭 가능한 부모 |
-| 첫 채팅 열기 | 표시 텍스트 `채팅` | 텍스트 노드의 클릭 가능한 부모 |
-| 반복 새 채팅 | contentDescription `새 채팅` | 전송 후 우측 상단에 나타난 해당 노드 또는 클릭 가능한 부모 |
+| 메뉴 열기 | contentDescription `메뉴` | `메뉴`, `사이드바 열기`, `탐색 창 열기`, `Menu` 등 다중 후보군 / 해당 노드 또는 클릭 가능한 부모 |
+| 첫 채팅 열기 | contentDescription `새 채팅` (사이드바 상단) | 1) 사이드바 상단 `새 채팅` 우선, 2) 하단 텍스트 `채팅`, `Chat` 순차 fallback 탐색 |
+| 반복 새 채팅 | contentDescription `새 채팅` | `새 채팅`, `새 대화`, `새로운 채팅`, `New chat` / 전송 후 우측 상단에 나타난 해당 노드 또는 클릭 가능한 부모 |
 | 입력창 찾기 | `android.widget.EditText`, editable `true` | 편집 가능한 노드 우선 |
-| 빈 채팅 입력창 보조값 | contentDescription `ChatGPT에게 묻기` | 입력창 후보 검증에 사용 |
-| 전송 후 입력창 보조값 | contentDescription `ChatGPT에 답장` | 입력창 후보 검증에 사용 |
-| 보내기 | contentDescription `메시지 보내기` | 해당 노드의 클릭 가능한 부모 |
+| 빈 채팅 입력창 보조값 | contentDescription `ChatGPT에게 물어보세요` | 구버전 `ChatGPT에게 묻기` 및 영문 `Ask ChatGPT` 보조 검증에 사용 |
+| 전송 후 입력창 보조값 | contentDescription `ChatGPT에게 답장하기` | 구버전 `ChatGPT에 답장` 및 영문 `Reply to ChatGPT` 보조 검증에 사용 |
+| 보내기 | contentDescription `메시지 보내기` | `메시지 보내기`, `전송`, `보내기`, `Send message`, `Send` / 해당 노드의 클릭 가능한 부모 |
 
 이 버전에서는 위 요소들의 Android resource ID가 노출되지 않았다. 따라서 패키지 `com.openai.chatgpt`, 접근성 설명값, 표시 텍스트, 편집 가능 여부, 클릭 가능한 부모를 조합해 탐색한다.
 

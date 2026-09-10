@@ -93,26 +93,42 @@ fun selectFile(file: WildcardTextFile) {
 ```
 
 #### ✅ 권장 패턴 (Recommended: Hold Screen & Atomic Transition)
-새 파일 데이터가 준비될 때까지 이전 화면을 그대로 유지(Hold)하고, 단 1회의 원자적 갱신으로 교체.
+새 파일 데이터가 준비될 때까지 이전 화면을 그대로 유지(Hold)하고, `isFileOperationInProgress`로 비동기 중복 요청을 가드한 뒤, 단 1회의 원자적 갱신으로 교체.
+- 적용 파일: [`WildcardManagerViewModel.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/wildcard/ui/WildcardManagerViewModel.kt), [`WildcardEditorSession.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/wildcard/domain/WildcardEditorSession.kt)
 ```kotlin
 // GOOD: 이전 내용을 그대로 유지하다가, 새 데이터가 준비된 순간 한 번에 원자적 교체
 fun selectFile(file: WildcardTextFile) {
+    val state = uiState.value
+    // 작업 진행 중이거나 이미 선택된 파일이면 무시 (동시성 레이스 컨디션 차단)
     if (state.isFileOperationInProgress || state.selectedFile?.id == file.id) return
     
+    // 미저장 변경사항이 있을 경우 보류 액션(PendingAction) 가드로 먼저 확인
+    if (state.hasUnsavedChanges) {
+        _uiState.update { it.copy(pendingAction = WildcardPendingAction.OpenFile(file)) }
+        return
+    }
+
+    openFile(file)
+}
+
+private fun openFile(file: WildcardTextFile, keepMessage: Boolean = false) {
+    if (!beginFileOperation()) return // isFileOperationInProgress = true
     scope.launch {
-        beginFileOperation() // 화면은 이전 파일 내용 그대로 유지(Hold)
         try {
-            val text = repository.readText(file)
+            val text = manageWildcardFiles.readText(file)
             _uiState.update { current ->
                 // 단 1회의 업데이트로 파일과 텍스트가 동시에 교체됨!
                 current.copy(
                     editor = current.editor.open(file, text),
-                    isFileOperationInProgress = false
+                    isFileOperationInProgress = false,
+                    message = if (keepMessage) current.message else "${file.fileName} 열기 완료",
+                    error = ""
                 )
             }
-        } catch (e: Exception) {
-            endFileOperation()
+        } catch (error: RuntimeException) {
             showError("파일을 열지 못했습니다.")
+        } finally {
+            endFileOperation() // isFileOperationInProgress = false
         }
     }
 }
@@ -120,24 +136,50 @@ fun selectFile(file: WildcardTextFile) {
 
 ---
 
-### 패턴 3. 탭 수명주기 및 상태 보존 (Zero-Flash Tab Transition)
+### 패턴 3. 탭 수명주기 및 상태 보존 (TabViewModelStoreOwner & Inactive Tab Trimming)
 
 #### ❌ 금지 패턴 (Anti-pattern)
 메모리를 아낀다는 이유로 탭을 나갈 때마다 ViewModel을 파괴(`clear()`)하거나 텍스트 본문까지 모두 비움.
 ```kotlin
-// BAD: 탭 바꿀 때마다 파괴하여 재진입 시 0초 표시 불가능
+// BAD: 탭 바꿀 때마다 파괴하여 재진입 시 0초 표시 불가능 (매번 재로딩 스피너 및 깜빡임)
 if (selectedTab == MainTab.WILDCARD && tab != MainTab.WILDCARD) {
     wildcardStoreOwner.clear() // 매번 ViewModel 재생성 및 디스크 재조회 유발
 }
 ```
 
-#### ✅ 권장 패턴 (Recommended: Lightweight Inactive Tab Trimming)
-ViewModel과 파일 목록, 현재 텍스트 본문(수십 KB 수준)은 유지하고, 무거운 Undo 스택 등만 정리.
+#### ✅ 권장 패턴 (Recommended: TabViewModelStoreOwner Isolation & Inactive Tab Trimming)
+1. **탭 전용 ViewModelStoreOwner 격리**: Activity/호스트 단위의 `TabViewModelStoreOwner`를 생성하여 탭 간 생명주기를 안전하게 독립시킴.
+2. **비활성 탭 경량화 (`trimForInactiveTab`)**: 탭을 벗어날 때 가벼운 본문(수십 KB)과 파일 목록은 그대로 보존하고, 무거운 Undo 스택이나 임시 다이얼로그 상태만 정리하여 재진입 시 **0ms 즉시 표시(Zero-Flash)** 보장.
+- 적용 파일: [`TabViewModelStoreOwner.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/ui/android/TabViewModelStoreOwner.kt), [`AndroidAutomationHost.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/ui/android/AndroidAutomationHost.kt), [`WildcardEditorSession.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/wildcard/domain/WildcardEditorSession.kt)
 ```kotlin
-// GOOD: 본문은 유지하여 재진입 시 0ms 즉시 표시, Undo 스택만 정리
+// 1. 호스트 레벨에서 탭 StoreOwner 관리 (AndroidAutomationHost.kt)
+val wildcardStoreOwner = remember { TabViewModelStoreOwner() }
+val wildcardViewModel: WildcardManagerViewModel = viewModel(
+    viewModelStoreOwner = wildcardStoreOwner,
+    factory = container.wildcardViewModelFactory
+)
+
+// 전체 호스트 파괴 시에만 StoreOwner clear
+DisposableEffect(Unit) {
+    onDispose {
+        wildcardStoreOwner.clear()
+        analysisStoreOwner.clear()
+    }
+}
+
+// 2. 탭 전환 시: ViewModel은 살려두고 무거운 캐시만 trim (0ms 복귀 보장)
+fun selectMainTab(tab: MainTab) {
+    if (selectedTab == MainTab.WILDCARD && tab != MainTab.WILDCARD) {
+        // 미저장 여부와 무관하게 텍스트 본문은 보존하고, 무거운 Undo 버퍼만 정리
+        wildcardViewModel.trimForInactiveTab()
+    }
+    selectedTab = tab
+}
+
+// 3. 도메인 세션의 경량화 메서드 (WildcardEditorSession.kt)
 fun trimForInactiveTab(): WildcardEditorSession {
     if (selectedFile == null) return this
-    // 텍스트 본문(savedText, editingText)은 보존하고, 큰 히스토리(undoStack)만 비움
+    // 텍스트 본문(savedText, editingText)은 유지, 큰 Undo 스택만 비움
     return if (undoStack.isEmpty()) this else copy(undoStack = emptyList())
 }
 ```
