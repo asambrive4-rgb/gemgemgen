@@ -184,7 +184,6 @@ fun AppMultilineTextField(
                 ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
                 spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
             )
-            .blockMainTabSwipe()
             .then(paragraphTapModifier),
         enabled = enabled,
         shape = fieldShape,

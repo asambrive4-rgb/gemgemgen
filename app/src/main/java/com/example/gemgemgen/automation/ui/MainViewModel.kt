@@ -32,6 +32,7 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
+import com.example.gemgemgen.automation.usecase.ExecuteAutomationUseCase
 import com.example.gemgemgen.automation.usecase.StartAutomationUseCase
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
@@ -111,6 +112,11 @@ class MainViewModel(
             dispatchers = dispatchers
         ),
         automation = automation
+    ),
+    private val executeAutomation: ExecuteAutomationUseCase = ExecuteAutomationUseCase(
+        startAutomation = startAutomation,
+        manageRemoteAutomation = manageRemoteAutomation,
+        promptHistoryStore = promptHistoryStore
     ),
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
@@ -502,183 +508,87 @@ class MainViewModel(
     }
 
     fun closeGeminiApp() {
-        val state = _uiState.value
-        if (!state.canCloseGemini) {
-            _uiState.update {
-                it.copy(
-                    geminiCloseMessage = AutomationUiText.geminiRestartUnavailableMessage(it)
-                )
-            }
-            return
-        }
-
-        _uiState.update {
-            it.copy(
-                isClosingGemini = true,
-                geminiCloseMessage = AutomationUiText.geminiRestartStartingText()
-            )
-        }
-        scope.launch {
-            val result = try {
-                withContext(dispatchers.io) {
-                    closeGeminiApp.close()
-                }
-            } catch (error: CancellationException) {
-                _uiState.update {
-                    it.copy(
-                        isClosingGemini = false,
-                        geminiCloseMessage = AutomationUiText.geminiRestartCanceledText()
-                    )
-                }
-                throw error
-            } catch (error: Exception) {
-                CloseGeminiAppResult.Failure(
-                    AutomationUiText.unknownCloseErrorMessage(error)
-                )
-            }
-
-            _uiState.update {
-                it.copy(
-                    isClosingGemini = false,
-                    geminiCloseMessage = AutomationUiText.geminiRestartResultMessage(result)
-                )
-            }
-        }
+        runMaintenanceAction(
+            canExecute = { it.canCloseGemini },
+            unavailableMessage = { AutomationUiText.geminiRestartUnavailableMessage(it) },
+            startingText = { AutomationUiText.geminiRestartStartingText() },
+            canceledText = { AutomationUiText.geminiRestartCanceledText() },
+            action = { closeGeminiApp.close() },
+            onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
+            resultMessage = { AutomationUiText.geminiRestartResultMessage(it) },
+            updateState = { state, isBusy, msg -> state.copy(isClosingGemini = isBusy, geminiCloseMessage = msg) }
+        )
     }
 
     fun terminateGeminiApp() {
-        val state = _uiState.value
-        if (!state.canCloseGemini) {
-            _uiState.update {
-                it.copy(
-                    geminiCloseMessage = AutomationUiText.geminiTerminateUnavailableMessage(it)
-                )
-            }
-            return
-        }
-
-        _uiState.update {
-            it.copy(
-                isClosingGemini = true,
-                geminiCloseMessage = AutomationUiText.geminiTerminateStartingText()
-            )
-        }
-        scope.launch {
-            val result = try {
-                withContext(dispatchers.io) {
-                    terminateGeminiApp.close()
-                }
-            } catch (error: CancellationException) {
-                _uiState.update {
-                    it.copy(
-                        isClosingGemini = false,
-                        geminiCloseMessage = AutomationUiText.geminiTerminateCanceledText()
-                    )
-                }
-                throw error
-            } catch (error: Exception) {
-                CloseGeminiAppResult.Failure(
-                    AutomationUiText.unknownCloseErrorMessage(error)
-                )
-            }
-
-            _uiState.update {
-                it.copy(
-                    isClosingGemini = false,
-                    geminiCloseMessage = AutomationUiText.geminiTerminateResultMessage(result)
-                )
-            }
-        }
+        runMaintenanceAction(
+            canExecute = { it.canCloseGemini },
+            unavailableMessage = { AutomationUiText.geminiTerminateUnavailableMessage(it) },
+            startingText = { AutomationUiText.geminiTerminateStartingText() },
+            canceledText = { AutomationUiText.geminiTerminateCanceledText() },
+            action = { terminateGeminiApp.close() },
+            onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
+            resultMessage = { AutomationUiText.geminiTerminateResultMessage(it) },
+            updateState = { state, isBusy, msg -> state.copy(isClosingGemini = isBusy, geminiCloseMessage = msg) }
+        )
     }
 
     fun terminateSelfApp() {
-        val state = _uiState.value
-        if (!state.canCloseSelfApp) {
-            _uiState.update {
-                it.copy(
-                    geminiCloseMessage = AutomationUiText.selfAppTerminateUnavailableMessage(it)
-                )
-            }
-            return
-        }
-
-        _uiState.update {
-            it.copy(
-                isClosingGemini = true,
-                geminiCloseMessage = AutomationUiText.selfAppTerminateStartingText()
-            )
-        }
-        scope.launch {
-            val result = try {
-                withContext(dispatchers.io) {
-                    terminateSelfApp.close()
-                }
-            } catch (error: CancellationException) {
-                _uiState.update {
-                    it.copy(
-                        isClosingGemini = false,
-                        geminiCloseMessage = AutomationUiText.selfAppTerminateCanceledText()
-                    )
-                }
-                throw error
-            } catch (error: Exception) {
-                CloseGeminiAppResult.Failure(
-                    AutomationUiText.unknownCloseErrorMessage(error)
-                )
-            }
-
-            // 성공 시 프로세스가 이미 종료될 수 있어 UI 갱신이 안 될 수 있다.
-            _uiState.update {
-                it.copy(
-                    isClosingGemini = false,
-                    geminiCloseMessage = AutomationUiText.selfAppTerminateResultMessage(result)
-                )
-            }
-        }
+        runMaintenanceAction(
+            canExecute = { it.canCloseSelfApp },
+            unavailableMessage = { AutomationUiText.selfAppTerminateUnavailableMessage(it) },
+            startingText = { AutomationUiText.selfAppTerminateStartingText() },
+            canceledText = { AutomationUiText.selfAppTerminateCanceledText() },
+            action = { terminateSelfApp.close() },
+            onFailure = { CloseGeminiAppResult.Failure(AutomationUiText.unknownCloseErrorMessage(it)) },
+            resultMessage = { AutomationUiText.selfAppTerminateResultMessage(it) },
+            updateState = { state, isBusy, msg -> state.copy(isClosingGemini = isBusy, geminiCloseMessage = msg) }
+        )
     }
 
     fun cleanDeviceMemory() {
+        runMaintenanceAction(
+            canExecute = { it.canCleanMemory },
+            unavailableMessage = { AutomationUiText.memoryCleanupUnavailableMessage(it) },
+            startingText = { AutomationUiText.memoryCleanupStartingText() },
+            canceledText = { AutomationUiText.memoryCleanupCanceledText() },
+            action = { cleanDeviceMemoryUseCase.clean() },
+            onFailure = { MemoryCleanupResult.Failure(AutomationUiText.unknownMemoryCleanupErrorMessage(it)) },
+            resultMessage = { AutomationUiText.memoryCleanupResultMessage(it) },
+            updateState = { state, isBusy, msg -> state.copy(isCleaningMemory = isBusy, memoryCleanupMessage = msg) }
+        )
+    }
+
+    private fun <T> runMaintenanceAction(
+        canExecute: (MainUiState) -> Boolean,
+        unavailableMessage: (MainUiState) -> String,
+        startingText: () -> String,
+        canceledText: () -> String,
+        action: suspend () -> T,
+        onFailure: (Exception) -> T,
+        resultMessage: (T) -> String,
+        updateState: (MainUiState, isBusy: Boolean, message: String) -> MainUiState
+    ) {
         val state = _uiState.value
-        if (!state.canCleanMemory) {
-            _uiState.update {
-                it.copy(
-                    memoryCleanupMessage = AutomationUiText.memoryCleanupUnavailableMessage(it)
-                )
-            }
+        if (!canExecute(state)) {
+            _uiState.update { updateState(it, false, unavailableMessage(it)) }
             return
         }
 
-        _uiState.update {
-            it.copy(
-                isCleaningMemory = true,
-                memoryCleanupMessage = AutomationUiText.memoryCleanupStartingText()
-            )
-        }
+        _uiState.update { updateState(it, true, startingText()) }
         scope.launch {
             val result = try {
                 withContext(dispatchers.io) {
-                    cleanDeviceMemoryUseCase.clean()
+                    action()
                 }
             } catch (error: CancellationException) {
-                _uiState.update {
-                    it.copy(
-                        isCleaningMemory = false,
-                        memoryCleanupMessage = AutomationUiText.memoryCleanupCanceledText()
-                    )
-                }
+                _uiState.update { updateState(it, false, canceledText()) }
                 throw error
             } catch (error: Exception) {
-                MemoryCleanupResult.Failure(
-                    AutomationUiText.unknownMemoryCleanupErrorMessage(error)
-                )
+                onFailure(error)
             }
 
-            _uiState.update {
-                it.copy(
-                    isCleaningMemory = false,
-                    memoryCleanupMessage = AutomationUiText.memoryCleanupResultMessage(result)
-                )
-            }
+            _uiState.update { updateState(it, false, resultMessage(result)) }
         }
     }
 
@@ -773,66 +683,66 @@ class MainViewModel(
     fun runAutomation(): AutomationStartDecision {
         syncPromptTemplateFromTextField()
         val state = uiState.value
-        if (state.automationMode == AutomationMode.RECEIVER) {
-            return AutomationStartDecision.Rejected
-        }
-        if (state.automationMode == AutomationMode.SENDER) {
-            if (!state.canRun || automationPreparationJob?.isActive == true) {
-                return AutomationStartDecision.Rejected
-            }
-            cancelParagraphSelection()
-            isRemoteRunActive = true
-            handleAutomationState(AutomationRunState.Running("S25 FE로 요청 전송 중"))
-            val request = AutomationRunRequest(
-                promptTemplate = state.promptTemplate,
-                repeatCountText = state.repeatCountText,
-                targetApp = state.selectedTargetApp
-            )
-            val job = scope.launch {
-                promptHistoryStore?.record(request.promptTemplate, request.targetApp)
-                val result = manageRemoteAutomation.start(request, ::handleAutomationState)
-                if (result is RemoteActionResult.Failure) {
-                    handleAutomationState(AutomationRunState.Failure(result.message))
-                }
-            }
-            automationPreparationJob = job
-            job.invokeOnCompletion {
-                if (automationPreparationJob == job) automationPreparationJob = null
-            }
-            return AutomationStartDecision.RemoteStarted
-        }
-        val decision = startAutomation.decideStart(
+        val isStartInProgress = automationPreparationJob?.isActive == true
+        val decision = executeAutomation.decideStart(
             canRun = state.canRun,
-            isStartInProgress = automationPreparationJob?.isActive == true
+            isStartInProgress = isStartInProgress,
+            mode = state.automationMode
         )
-        if (decision != AutomationStartDecision.Started) return decision
 
-        cancelParagraphSelection()
-        handleAutomationState(AutomationRunState.Running("자동화 준비 중"))
-        val request = AutomationRunRequest(
-            promptTemplate = state.promptTemplate,
-            repeatCountText = state.repeatCountText,
-            targetApp = state.selectedTargetApp
-        )
-        val job = scope.launch {
-            try {
-                startAutomation.start(request)
-            } catch (error: CancellationException) {
-                handleAutomationState(AutomationRunState.Stopped)
-                throw error
-            } catch (error: Exception) {
-                handleAutomationState(
-                    AutomationRunState.Failure(error.message ?: "자동화 준비 중 오류가 발생했습니다.")
+        when (decision) {
+            AutomationStartDecision.RemoteStarted -> {
+                cancelParagraphSelection()
+                isRemoteRunActive = true
+                handleAutomationState(AutomationRunState.Running("S25 FE로 요청 전송 중"))
+                val request = AutomationRunRequest(
+                    promptTemplate = state.promptTemplate,
+                    repeatCountText = state.repeatCountText,
+                    targetApp = state.selectedTargetApp
                 )
+                val job = scope.launch {
+                    val result = executeAutomation.executeRemote(request, ::handleAutomationState)
+                    if (result is RemoteActionResult.Failure) {
+                        handleAutomationState(AutomationRunState.Failure(result.message))
+                    }
+                }
+                automationPreparationJob = job
+                job.invokeOnCompletion {
+                    if (automationPreparationJob == job) automationPreparationJob = null
+                }
+                return AutomationStartDecision.RemoteStarted
             }
-        }
-        automationPreparationJob = job
-        job.invokeOnCompletion {
-            if (automationPreparationJob == job) {
-                automationPreparationJob = null
+            AutomationStartDecision.Started -> {
+                cancelParagraphSelection()
+                handleAutomationState(AutomationRunState.Running("자동화 준비 중"))
+                val request = AutomationRunRequest(
+                    promptTemplate = state.promptTemplate,
+                    repeatCountText = state.repeatCountText,
+                    targetApp = state.selectedTargetApp
+                )
+                val job = scope.launch {
+                    try {
+                        executeAutomation.executeLocal(request)
+                    } catch (error: CancellationException) {
+                        handleAutomationState(AutomationRunState.Stopped)
+                        throw error
+                    } catch (error: Exception) {
+                        handleAutomationState(
+                            AutomationRunState.Failure(error.message ?: "자동화 준비 중 오류가 발생했습니다.")
+                        )
+                    }
+                }
+                automationPreparationJob = job
+                job.invokeOnCompletion {
+                    if (automationPreparationJob == job) {
+                        automationPreparationJob = null
+                    }
+                }
+                return AutomationStartDecision.Started
             }
+            AutomationStartDecision.PermissionRequired,
+            AutomationStartDecision.Rejected -> return decision
         }
-        return AutomationStartDecision.Started
     }
 
     fun openPromptHistory() {
@@ -865,22 +775,20 @@ class MainViewModel(
     }
 
     fun cancelAutomation() {
+        val wasRemoteRunActive = isRemoteRunActive
         isRemoteRunActive = false
-        if (_uiState.value.automationMode == AutomationMode.SENDER) {
-            val preparationJob = automationPreparationJob
-            automationPreparationJob = null
-            manageRemoteAutomation.forceStop(::handleAutomationState)
-            preparationJob?.cancel()
-            return
-        }
         val preparationJob = automationPreparationJob
-        if (preparationJob?.isActive == true) {
-            preparationJob.cancel()
-            handleAutomationState(AutomationRunState.Stopped)
-            return
-        }
+        val isPreparationActive = preparationJob?.isActive == true
+        automationPreparationJob = null
+        preparationJob?.cancel()
 
-        automation.cancel()
+        executeAutomation.cancel(
+            mode = _uiState.value.automationMode,
+            isRemoteRunActive = wasRemoteRunActive,
+            isPreparationActive = isPreparationActive,
+            onStateChange = ::handleAutomationState,
+            onCancelLocal = { automation.cancel() }
+        )
     }
 
     fun onAutomationModeSelected(mode: AutomationMode) {

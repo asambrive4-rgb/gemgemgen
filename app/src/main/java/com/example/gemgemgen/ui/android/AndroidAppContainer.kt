@@ -32,6 +32,7 @@ import com.example.gemgemgen.automation.usecase.CloseGeminiAppUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
+import com.example.gemgemgen.automation.usecase.ExecuteAutomationUseCase
 import com.example.gemgemgen.automation.usecase.StartAutomationUseCase
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
@@ -91,6 +92,16 @@ class AndroidAppContainer(context: Context) {
             automationStartRecorder = recordAutomationStart,
             automation = automation
         )
+        val manageRemoteAutomation = ManageRemoteAutomationUseCase(
+            gateway = AndroidRemoteAutomationGateway(appContext),
+            automationStartRecorder = recordAutomationStart,
+            wildcardSetRepository = AndroidWildcardSetRepository(appContext)
+        )
+        val executeAutomation = ExecuteAutomationUseCase(
+            startAutomation = startAutomation,
+            manageRemoteAutomation = manageRemoteAutomation,
+            promptHistoryStore = promptHistoryStore
+        )
         MainViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(
                 AndroidEnvironmentGateway(appContext)
@@ -115,12 +126,9 @@ class AndroidAppContainer(context: Context) {
             ),
             checkAutomationStart = checkAutomationStart,
             startAutomation = startAutomation,
+            executeAutomation = executeAutomation,
             wildcardFileRepository = AndroidWildcardFileRepository(appContext),
-            manageRemoteAutomation = ManageRemoteAutomationUseCase(
-                gateway = AndroidRemoteAutomationGateway(appContext),
-                automationStartRecorder = recordAutomationStart,
-                wildcardSetRepository = AndroidWildcardSetRepository(appContext)
-            ),
+            manageRemoteAutomation = manageRemoteAutomation,
             soundAlertGateway = AndroidSoundAlertGateway(appContext),
             promptHistoryStore = promptHistoryStore,
             themePaletteStore = themePaletteStore

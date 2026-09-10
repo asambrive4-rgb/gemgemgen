@@ -40,6 +40,8 @@ import com.example.gemgemgen.ui.WildcardAppActions
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
 import com.example.gemgemgen.wildcard.android.WildcardFolderStore
+import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
+import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
 import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
 import com.example.gemgemgen.remote.domain.AutomationMode
 
@@ -113,20 +115,25 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectWildcardFolder() {
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
-            if (!wildcardViewModel.requestFolderSelection()) return
-            wildcardViewModel.onFolderChanged()
-            selectedTab = MainTab.WILDCARD
-            mainViewModel.refreshStatus()
-            return
+        when (
+            WildcardFolderAccessPolicy.decideAction(
+                hasAllFilesAccess = AndroidWildcardDirectStorage.hasAllFilesAccess(),
+                isWildcardDirectoryAccessible = mainUiState.environmentStatus.isWildcardDirectoryAccessible
+            )
+        ) {
+            WildcardFolderAction.OpenDirectFolder -> {
+                if (!wildcardViewModel.requestFolderSelection()) return
+                wildcardViewModel.onFolderChanged()
+                selectedTab = MainTab.WILDCARD
+                mainViewModel.refreshStatus()
+            }
+            WildcardFolderAction.OpenStorageSettings -> {
+                openWildcardStorageSettings()
+            }
+            WildcardFolderAction.LaunchSafPicker -> {
+                selectSafWildcardFolder()
+            }
         }
-
-        if (!mainUiState.environmentStatus.isWildcardDirectoryAccessible) {
-            openWildcardStorageSettings()
-            return
-        }
-
-        selectSafWildcardFolder()
     }
 
     fun selectMainTab(tab: MainTab) {

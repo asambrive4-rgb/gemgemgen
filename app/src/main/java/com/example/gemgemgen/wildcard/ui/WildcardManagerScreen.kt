@@ -48,7 +48,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import com.example.gemgemgen.ui.blockMainTabSwipe
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
@@ -329,7 +328,6 @@ internal fun WildcardManagerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .blockMainTabSwipe()
                     )
                 } else {
                     // 클린 화이트 인셋 베드 텍스트 에디터
@@ -340,8 +338,7 @@ internal fun WildcardManagerScreen(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .blockMainTabSwipe(),
+                            .weight(1f),
                         enabled = uiState.canEditText,
                         placeholder = {
                             Text(

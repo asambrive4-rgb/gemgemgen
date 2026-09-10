@@ -76,7 +76,6 @@ import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.ui.AppMultilineTextField
-import com.example.gemgemgen.ui.blockMainTabSwipe
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlin.math.roundToInt
@@ -996,9 +995,7 @@ private fun CountSection(
             },
             valueRange = AnalysisTxtCountPolicy.MIN_COUNT.toFloat()..
                 AnalysisTxtCountPolicy.MAX_COUNT.toFloat(),
-            steps = 27,
-            // 가로 드래그가 탭 스와이프와 겹치지 않도록 분리
-            modifier = Modifier.blockMainTabSwipe()
+            steps = 27
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1175,8 +1172,7 @@ private fun TxtResultSection(
             onValueChange = {},
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 160.dp, max = 200.dp)
-                .blockMainTabSwipe(),
+                .heightIn(min = 160.dp, max = 200.dp),
             readOnly = true,
             shape = RoundedCornerShape(12.dp),
             colors = appTextFieldColors(),
@@ -1185,9 +1181,7 @@ private fun TxtResultSection(
         OutlinedTextField(
             value = resultFileName,
             onValueChange = onResultFileNameChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .blockMainTabSwipe(),
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = appTextFieldColors(),
             singleLine = true,
@@ -1225,9 +1219,7 @@ private fun CustomHintSection(
         OutlinedTextField(
             value = customHint,
             onValueChange = onCustomHintChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .blockMainTabSwipe(),
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
             colors = appTextFieldColors(),
             singleLine = false,
