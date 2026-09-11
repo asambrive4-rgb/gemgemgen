@@ -49,6 +49,13 @@ class ManageRemoteAutomationUseCase(
         return gateway.disconnect()
     }
 
+    suspend fun cleanMemory(): RemoteActionResult {
+        if (!status.value.canSend) {
+            return RemoteActionResult.Failure("연결된 수신 기기를 찾지 못했습니다.")
+        }
+        return gateway.cleanMemory()
+    }
+
     suspend fun start(
         request: AutomationRunRequest,
         onStateChange: (AutomationRunState) -> Unit
@@ -89,6 +96,7 @@ class ManageRemoteAutomationUseCase(
                     promptTemplate = request.promptTemplate,
                     repeatCountText = request.repeatCountText,
                     targetApp = request.targetApp,
+                    flowImageCount = request.flowImageCount,
                     wildcards = wildcards
                 ),
                 onStateChange = { state ->

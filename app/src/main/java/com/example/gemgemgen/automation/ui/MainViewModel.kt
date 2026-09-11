@@ -214,6 +214,29 @@ class MainViewModel(
         }
     }
 
+    fun onFlowImageCountSelected(count: Int) {
+        _uiState.update {
+            if (it.isRunning) it else it.copy(flowImageCount = count)
+        }
+        persistFlowImageCountAsLastRunDefault(count)
+    }
+
+    private fun persistFlowImageCountAsLastRunDefault(count: Int) {
+        val state = _uiState.value
+        scope.launch {
+            withContext(dispatchers.io) {
+                lastRunSnapshotStore.save(
+                    LastRunSnapshot(
+                        promptTemplate = state.promptTemplate,
+                        repeatCountText = state.repeatCountText,
+                        targetApp = state.selectedTargetApp,
+                        flowImageCount = count
+                    )
+                )
+            }
+        }
+    }
+
     fun onRepeatCountChange(value: String) {
         val normalized = RepeatCountParser.normalizeInput(value)
         if (_uiState.value.isRunning) {
@@ -245,7 +268,8 @@ class MainViewModel(
                     LastRunSnapshot(
                         promptTemplate = state.promptTemplate,
                         repeatCountText = repeatCountText,
-                        targetApp = state.selectedTargetApp
+                        targetApp = state.selectedTargetApp,
+                        flowImageCount = state.flowImageCount
                     )
                 )
             }
@@ -371,11 +395,28 @@ class MainViewModel(
     }
 
     fun cleanDeviceMemory() {
+        val mode = _uiState.value.automationMode
+        if (mode == AutomationMode.SENDER) {
+            runMaintenanceAction(
+                canExecute = { it.canCleanMemory },
+                unavailableMessage = { AutomationUiText.memoryCleanupUnavailableMessage(it) },
+                startingText = { AutomationUiText.memoryCleanupStartingText(mode) },
+                canceledText = { AutomationUiText.memoryCleanupCanceledText(mode) },
+                action = {
+                    when (val result = manageRemoteAutomation.cleanMemory()) {
+                        RemoteActionResult.Success -> MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
+                        is RemoteActionResult.Failure -> MaintenanceResult.Failure(result.message)
+                    }
+                }
+            )
+            return
+        }
+
         runMaintenanceAction(
             canExecute = { it.canCleanMemory },
             unavailableMessage = { AutomationUiText.memoryCleanupUnavailableMessage(it) },
-            startingText = { AutomationUiText.memoryCleanupStartingText() },
-            canceledText = { AutomationUiText.memoryCleanupCanceledText() },
+            startingText = { AutomationUiText.memoryCleanupStartingText(mode) },
+            canceledText = { AutomationUiText.memoryCleanupCanceledText(mode) },
             action = { appMaintenance.cleanMemory() }
         )
     }
@@ -512,7 +553,8 @@ class MainViewModel(
                 val request = AutomationRunRequest(
                     promptTemplate = state.promptTemplate,
                     repeatCountText = state.repeatCountText,
-                    targetApp = state.selectedTargetApp
+                    targetApp = state.selectedTargetApp,
+                        flowImageCount = state.flowImageCount
                 )
                 val job = scope.launch {
                     val result = executeAutomation.executeRemote(request, ::handleAutomationState)
@@ -532,7 +574,8 @@ class MainViewModel(
                 val request = AutomationRunRequest(
                     promptTemplate = state.promptTemplate,
                     repeatCountText = state.repeatCountText,
-                    targetApp = state.selectedTargetApp
+                    targetApp = state.selectedTargetApp,
+                        flowImageCount = state.flowImageCount
                 )
                 val job = scope.launch {
                     try {
@@ -671,6 +714,7 @@ class MainViewModel(
                         it.repeatCountText
                     },
                     selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp,
+                    flowImageCount = lastRunSnapshot?.flowImageCount ?: it.flowImageCount,
                     promptHistoryItems = historyItems
                 )
             }

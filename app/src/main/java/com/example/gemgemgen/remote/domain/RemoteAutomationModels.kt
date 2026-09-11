@@ -4,12 +4,14 @@ package com.example.gemgemgen.remote.domain
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.wildcard.domain.WildcardSet
+import com.example.gemgemgen.core.AppDefaults
 
 data class RemoteAutomationRequest(
     val requestId: String,
     val promptTemplate: String,
     val repeatCountText: String,
     val targetApp: AutomationTargetApp,
+    val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
     val wildcards: List<WildcardSet> = emptyList()
 )
 

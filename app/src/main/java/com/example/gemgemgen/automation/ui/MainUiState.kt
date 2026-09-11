@@ -16,6 +16,7 @@ import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 data class MainUiState(
     val promptTemplate: String = "",
     val selectedTargetApp: AutomationTargetApp = AutomationTargetApp.GEMINI,
+    val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
     val repeatCountText: String = AppDefaults.DEFAULT_REPEAT_COUNT.toString(),
     val environmentStatus: EnvironmentStatus = EnvironmentStatus(),
     val environmentSetupInfo: EnvironmentSetupInfo = EnvironmentSetupInfo(),
@@ -80,9 +81,13 @@ data class MainUiState(
         )
 
     val canCleanMemory: Boolean
-        get() = environmentStatus.isAccessibilityServiceEnabled &&
-            !isRunning &&
-            !isMaintenanceBusy
+        get() = when (automationMode) {
+            AutomationMode.SENDER -> remoteAutomationStatus.canSend && !isRunning && !isMaintenanceBusy
+            AutomationMode.RECEIVER -> false
+            AutomationMode.NORMAL -> environmentStatus.isAccessibilityServiceEnabled &&
+                !isRunning &&
+                !isMaintenanceBusy
+        }
 }
 
 data class MaintenanceState(

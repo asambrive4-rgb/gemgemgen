@@ -20,6 +20,7 @@ interface RemoteAutomationGateway {
         onStateChange: (AutomationRunState) -> Unit
     )
     fun forceStop(requestId: String?)
+    suspend fun cleanMemory(): RemoteActionResult
 }
 
 class NoOpRemoteAutomationGateway : RemoteAutomationGateway {
@@ -53,5 +54,9 @@ class NoOpRemoteAutomationGateway : RemoteAutomationGateway {
         currentStatus.value = currentStatus.value.copy(
             automationState = AutomationRunState.Stopped
         )
+    }
+
+    override suspend fun cleanMemory(): RemoteActionResult {
+        return RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
     }
 }

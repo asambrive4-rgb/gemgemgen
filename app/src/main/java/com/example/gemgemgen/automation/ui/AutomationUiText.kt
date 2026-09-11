@@ -9,6 +9,7 @@ import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
 import com.example.gemgemgen.automation.domain.SelfAppControlPolicy
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
+import com.example.gemgemgen.remote.domain.AutomationMode
 
 object AutomationUiText {
     fun accessibilityPromptTitle(): String = "접근성 서비스 필요"
@@ -58,9 +59,13 @@ object AutomationUiText {
         return error.message ?: "알 수 없는 오류가 발생했습니다."
     }
 
-    fun memoryCleanupStartingText(): String = "메모리 정리 중..."
+    fun memoryCleanupStartingText(mode: AutomationMode = AutomationMode.NORMAL): String {
+        return if (mode == AutomationMode.SENDER) "수신 기기 메모리 정리 중..." else "메모리 정리 중..."
+    }
 
-    fun memoryCleanupCanceledText(): String = "메모리 정리를 취소했습니다."
+    fun memoryCleanupCanceledText(mode: AutomationMode = AutomationMode.NORMAL): String {
+        return if (mode == AutomationMode.SENDER) "수신 기기 메모리 정리를 취소했습니다." else "메모리 정리를 취소했습니다."
+    }
 
     fun unknownMemoryCleanupErrorMessage(error: Throwable): String {
         return error.message ?: "메모리 정리 중 알 수 없는 오류가 발생했습니다."
@@ -70,6 +75,10 @@ object AutomationUiText {
         return when {
             state.isRunning -> "자동화 실행 중에는 메모리를 정리할 수 없습니다."
             state.isMaintenanceBusy -> "유지보수 작업이 이미 진행 중입니다."
+            state.automationMode == AutomationMode.SENDER && !state.remoteAutomationStatus.canSend ->
+                "연결된 수신 기기를 찾지 못했습니다."
+            state.automationMode == AutomationMode.RECEIVER ->
+                "수신 모드에서는 메모리를 직접 정리할 수 없습니다."
             !state.environmentStatus.isAccessibilityServiceEnabled ->
                 "접근성 서비스를 먼저 켜주세요."
             else -> "메모리 정리를 지금 실행할 수 없습니다."

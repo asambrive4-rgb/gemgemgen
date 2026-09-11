@@ -81,7 +81,8 @@ class RunAutomationUseCaseTest {
             request = AutomationRunRequest(
                 promptTemplate = "test template",
                 repeatCountText = "2",
-                targetApp = AutomationTargetApp.FLOW
+                targetApp = AutomationTargetApp.FLOW,
+                flowImageCount = 3
             ),
             onStateChange = {}
         )
@@ -94,6 +95,7 @@ class RunAutomationUseCaseTest {
             listOf(NewChatMode.Initial, NewChatMode.Subsequent),
             service.newChatModes
         )
+        assertEquals(3, service.configuredImageCount)
     }
 
     @Test
@@ -440,7 +442,12 @@ class RunAutomationUseCaseTest {
 
     private class FakePromptAutomationGateway(
         var autoComplete: Boolean
-    ) : PromptAutomationGateway {
+) : PromptAutomationGateway, FlowConfigurableGateway {
+        var configuredImageCount: Int? = null
+
+        override fun setFlowImageCount(count: Int) {
+            configuredImageCount = count
+        }
         val sentPrompts = mutableListOf<String>()
         val newChatModes = mutableListOf<NewChatMode>()
         var failOnPrompt: String? = null

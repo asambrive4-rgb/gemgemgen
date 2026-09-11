@@ -70,6 +70,29 @@ internal class FlowAccessibilityNodeFinder(
     /**
      * 생성 옵션 패널(비율, 개수, 모델)을 펼치는 토글 버튼(예: '이미지\nx1', '이미지\nx4')을 찾는다.
      */
+    /**
+     * 이미지 생성 개수(1~4) 탭 노드를 찾는다 (예: 'x1\n탭 4개 중 1번째').
+     */
+    fun findImageCountOption(count: Int): AccessibilityNodeInfo? {
+        val targetPrefix = "x$count"
+        return nodes().firstOrNull { node ->
+            val desc = node.contentDescription?.toString()?.trim() ?: ""
+            (desc.startsWith(targetPrefix, ignoreCase = true) || desc.equals(targetPrefix, ignoreCase = true)) &&
+                node.isClickable
+        }
+    }
+
+    /**
+     * 현재 옵션 패널에서 선택되어 있는 이미지 생성 개수(1~4)를 반환한다.
+     */
+    fun findSelectedImageCount(): Int? {
+        for (count in 1..4) {
+            val node = findImageCountOption(count)
+            if (node?.isSelected == true) return count
+        }
+        return null
+    }
+
     fun findOptionPanelToggle(): AccessibilityNodeInfo? {
         val nodeList = nodes()
         return nodeList.firstOrNull { node ->

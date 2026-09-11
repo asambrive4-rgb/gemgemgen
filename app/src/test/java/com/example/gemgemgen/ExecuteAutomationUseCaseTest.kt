@@ -395,5 +395,7 @@ class ExecuteAutomationUseCaseTest {
         override fun forceStop(requestId: String?) {
             forceStopCalled = true
         }
+
+        override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
     }
 }

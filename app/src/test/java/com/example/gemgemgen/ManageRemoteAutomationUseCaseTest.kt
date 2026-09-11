@@ -210,6 +210,8 @@ class ManageRemoteAutomationUseCaseTest {
         override fun forceStop(requestId: String?) {
             forceStoppedRequestId = requestId
         }
+
+        override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
     }
 
     private class RecordingAutomationStartRecorder : AutomationStartRecorder {

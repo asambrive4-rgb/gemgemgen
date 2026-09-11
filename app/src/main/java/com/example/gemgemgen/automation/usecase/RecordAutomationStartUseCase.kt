@@ -22,7 +22,8 @@ class RecordAutomationStartUseCase(
                 LastRunSnapshot(
                     promptTemplate = request.promptTemplate,
                     repeatCountText = request.repeatCountText,
-                    targetApp = request.targetApp
+                    targetApp = request.targetApp,
+                    flowImageCount = request.flowImageCount
                 )
             )
             promptHistoryStore?.record(

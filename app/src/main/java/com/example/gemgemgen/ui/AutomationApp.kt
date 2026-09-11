@@ -37,6 +37,7 @@ internal data class AutomationAppActions(
     val onOpenWildcardStorageSettings: () -> Unit,
     val onOpenAccessibilitySettings: () -> Unit,
     val onTargetAppSelected: (AutomationTargetApp) -> Unit,
+    val onFlowImageCountSelected: (Int) -> Unit = {},
     val onPromptTemplateChange: (String) -> Unit,
     val onWildcardTokenSuggestionClick: (String) -> Unit,
     val onUndoPromptEdit: () -> Unit,
@@ -48,7 +49,6 @@ internal data class AutomationAppActions(
     val onCopyPromptToClipboard: () -> Unit,
     val onPasteFromClipboard: () -> Unit,
     val onCloseGeminiApp: () -> Unit,
-    val onTerminateGeminiApp: () -> Unit,
     val onCleanDeviceMemory: () -> Unit,
     val onTerminateSelfApp: () -> Unit,
     val onRepeatCountChange: (String) -> Unit,
@@ -186,6 +186,7 @@ internal fun AutomationApp(
                     onOpenAccessibilitySettings =
                         automationActions.onOpenAccessibilitySettings,
                     onTargetAppSelected = automationActions.onTargetAppSelected,
+                    onFlowImageCountSelected = automationActions.onFlowImageCountSelected,
                     onPromptTemplateChange = automationActions.onPromptTemplateChange,
                     onWildcardTokenSuggestionClick =
                         automationActions.onWildcardTokenSuggestionClick,
@@ -203,7 +204,6 @@ internal fun AutomationApp(
                         automationActions.onCopyPromptToClipboard,
                     onPasteFromClipboard = automationActions.onPasteFromClipboard,
                     onCloseGeminiApp = automationActions.onCloseGeminiApp,
-                    onTerminateGeminiApp = automationActions.onTerminateGeminiApp,
                     onCleanDeviceMemory = automationActions.onCleanDeviceMemory,
                     onTerminateSelfApp = automationActions.onTerminateSelfApp,
                     onRepeatCountChange = automationActions.onRepeatCountChange,

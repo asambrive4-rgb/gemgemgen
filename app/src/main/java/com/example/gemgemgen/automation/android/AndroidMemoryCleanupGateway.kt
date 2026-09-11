@@ -1,26 +1,25 @@
-// 역할: 디바이스 케어 앱을 실행하거나 시스템 메모리를 정리하도록 돕습니다.
+// 역할: Google 앱 상세 설정 화면을 열어 강제 중지를 통해 메모리를 정리하도록 돕습니다.
 package com.example.gemgemgen.automation.android
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
+import com.example.gemgemgen.core.AppDefaults
 
 class AndroidMemoryCleanupGateway(
-    private val context: Context
+    private val context: Context,
+    private val targetPackageName: String = AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME
 ) : MemoryCleanupGateway {
     override suspend fun cleanMemory(): MemoryCleanupResult {
         val service = GeminiAccessibilityService.activeService
             ?: return MemoryCleanupResult.AccessibilityUnavailable
 
         return service.cleanDeviceMemory {
-            val launchIntent = Intent(DEVICE_CARE_DASHBOARD_ACTION).apply {
-                setPackage(DEVICE_CARE_PACKAGE_NAME)
-                component = ComponentName(
-                    DEVICE_CARE_PACKAGE_NAME,
-                    DEVICE_CARE_DASHBOARD_ACTIVITY
-                )
+            val launchIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", targetPackageName, null)
                 addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -35,13 +34,5 @@ class AndroidMemoryCleanupGateway(
                 false
             }
         }
-    }
-
-    private companion object {
-        const val DEVICE_CARE_PACKAGE_NAME = "com.samsung.android.lool"
-        const val DEVICE_CARE_DASHBOARD_ACTION =
-            "com.samsung.android.sm.ACTION_DASHBOARD"
-        const val DEVICE_CARE_DASHBOARD_ACTIVITY =
-            "com.samsung.android.sm.score.ui.ScoreBoardActivity"
     }
 }

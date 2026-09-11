@@ -2,6 +2,7 @@
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.FlowAccessibilityNodeFinder
+import com.example.gemgemgen.core.AppDefaults
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,5 +36,11 @@ class FlowAccessibilityNodeFinderTest {
         val keywords = FlowAccessibilityNodeFinder.OPTION_TOGGLE_KEYWORDS
         assertTrue(keywords.contains("이미지"))
         assertTrue(keywords.contains("Image"))
+    }
+
+    @Test
+    fun flowImageCountDefaults_matchSpecification() {
+        assertEquals(4, AppDefaults.DEFAULT_FLOW_IMAGE_COUNT)
+        assertEquals(listOf(1, 2, 3, 4), AppDefaults.FLOW_IMAGE_COUNT_OPTIONS)
     }
 }

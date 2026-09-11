@@ -19,7 +19,9 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.example.gemgemgen.R
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
+import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.domain.AutomationRunState
+import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
 import com.example.gemgemgen.remote.domain.AutomationMode
@@ -167,6 +169,7 @@ class RemoteAutomationReceiverService : Service() {
                 is RemoteProtocolMessage.DisconnectRequest -> handleDisconnect(message, writer)
                 is RemoteProtocolMessage.RunRequest -> handleRun(message, writer, socket)
                 is RemoteProtocolMessage.CancelRequest -> handleCancel(message)
+                is RemoteProtocolMessage.CleanMemoryRequest -> handleCleanMemory(message, writer)
                 else -> Unit
             }
         }
@@ -329,6 +332,84 @@ class RemoteAutomationReceiverService : Service() {
             session?.executionJob?.cancelAndJoin()
             withContext(Dispatchers.Main.immediate) {
                 executeRemoteAutomation.cancel()
+            }
+        }
+    }
+
+    private suspend fun handleCleanMemory(
+        message: RemoteProtocolMessage.CleanMemoryRequest,
+        writer: PrintWriter
+    ) {
+        if (!isAuthenticated(message.senderId, message.token)) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.CleanMemoryResult(
+                        success = false,
+                        message = "등록되지 않은 송신 기기입니다."
+                    )
+                )
+            )
+            return
+        }
+
+        val runState = AndroidAutomationRuntimeProvider.get(this).runState.value
+        if (runState is AutomationRunState.Running || activeSession != null) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.CleanMemoryResult(
+                        success = false,
+                        message = "수신 기기에서 자동화 실행 중에는 메모리를 정리할 수 없습니다."
+                    )
+                )
+            )
+            return
+        }
+
+        val memoryGateway = AndroidMemoryCleanupGateway(this)
+        val result = memoryGateway.cleanMemory()
+        when (result) {
+            MemoryCleanupResult.Success -> {
+                RemoteAutomationStateHub.update {
+                    it.copy(message = "원격 요청으로 메모리를 정리했습니다.")
+                }
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.CleanMemoryResult(
+                            success = true,
+                            message = "수신 기기 메모리를 정리했습니다."
+                        )
+                    )
+                )
+            }
+            MemoryCleanupResult.AccessibilityUnavailable -> {
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.CleanMemoryResult(
+                            success = false,
+                            message = "수신 기기의 접근성 서비스가 꺼져 있습니다."
+                        )
+                    )
+                )
+            }
+            MemoryCleanupResult.InProgress -> {
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.CleanMemoryResult(
+                            success = false,
+                            message = "수신 기기에서 메모리 정리가 이미 진행 중입니다."
+                        )
+                    )
+                )
+            }
+            is MemoryCleanupResult.Failure -> {
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.CleanMemoryResult(
+                            success = false,
+                            message = "수신 기기 메모리 정리 실패: ${result.message}"
+                        )
+                    )
+                )
             }
         }
     }

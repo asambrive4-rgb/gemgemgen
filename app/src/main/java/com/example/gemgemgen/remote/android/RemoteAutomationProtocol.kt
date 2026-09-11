@@ -5,6 +5,7 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.wildcard.domain.WildcardSet
+import com.example.gemgemgen.core.AppDefaults
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -47,6 +48,14 @@ internal sealed interface RemoteProtocolMessage {
         val requestId: String,
         val state: AutomationRunState
     ) : RemoteProtocolMessage
+    data class CleanMemoryRequest(
+        val senderId: String,
+        val token: String
+    ) : RemoteProtocolMessage
+    data class CleanMemoryResult(
+        val success: Boolean,
+        val message: String = ""
+    ) : RemoteProtocolMessage
 }
 
 internal object RemoteAutomationProtocol {
@@ -79,6 +88,7 @@ internal object RemoteAutomationProtocol {
                 put("prompt", message.request.promptTemplate)
                 put("repeatCount", message.request.repeatCountText)
                 put("targetApp", message.request.targetApp.storageValue)
+                put("flowImageCount", message.request.flowImageCount)
                 if (message.request.wildcards.isNotEmpty()) {
                     put("wildcards", buildJsonArray {
                         message.request.wildcards.forEach { set ->
@@ -113,6 +123,16 @@ internal object RemoteAutomationProtocol {
                 put("type", "state")
                 put("requestId", message.requestId)
                 putState(message.state)
+            }
+            is RemoteProtocolMessage.CleanMemoryRequest -> buildJsonObject {
+                put("type", "cleanMemory")
+                put("senderId", message.senderId)
+                put("token", message.token)
+            }
+            is RemoteProtocolMessage.CleanMemoryResult -> buildJsonObject {
+                put("type", "cleanMemoryResult")
+                put("success", message.success)
+                put("message", message.message)
             }
         }.toString()
     }
@@ -152,6 +172,7 @@ internal object RemoteAutomationProtocol {
                         promptTemplate = value.string("prompt"),
                         repeatCountText = value.string("repeatCount"),
                         targetApp = AutomationTargetApp.fromStorageValue(value.string("targetApp")),
+                        flowImageCount = value.intOrNull("flowImageCount") ?: AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
                         wildcards = wildcards
                     )
                 )
@@ -172,6 +193,14 @@ internal object RemoteAutomationProtocol {
             "state" -> RemoteProtocolMessage.StateUpdate(
                 requestId = value.string("requestId"),
                 state = value.toRunState()
+            )
+            "cleanMemory" -> RemoteProtocolMessage.CleanMemoryRequest(
+                senderId = value.string("senderId"),
+                token = value.string("token")
+            )
+            "cleanMemoryResult" -> RemoteProtocolMessage.CleanMemoryResult(
+                success = value.boolean("success"),
+                message = value.string("message")
             )
             else -> null
         }

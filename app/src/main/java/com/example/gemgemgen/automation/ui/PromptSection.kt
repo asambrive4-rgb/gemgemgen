@@ -1,6 +1,12 @@
 // 역할: 프롬프트 텍스트 입력창, 대상 앱 선택 토글, 와일드카드 칩 영역을 화면에 표시합니다.
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import com.example.gemgemgen.core.AppDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
@@ -34,8 +40,6 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,10 +48,7 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,10 +84,11 @@ internal fun PromptSection(
     showPromptActions: Boolean = true,
     showWildcardSuggestions: Boolean = true,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
+    flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
+    onFlowImageCountSelected: (Int) -> Unit = {},
     onPromptTemplateChange: (String) -> Unit,
     onWildcardTokenSuggestionClick: (String) -> Unit = {},
     onCloseGeminiApp: () -> Unit,
-    onTerminateGeminiApp: () -> Unit,
     onCleanDeviceMemory: () -> Unit,
     onTerminateSelfApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
@@ -152,6 +154,18 @@ internal fun PromptSection(
             }
         }
 
+        AnimatedVisibility(
+            visible = selectedTargetApp == AutomationTargetApp.FLOW,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            FlowImageCountRow(
+                selectedCount = flowImageCount,
+                enabled = isTargetSelectionEnabled,
+                onCountSelected = onFlowImageCountSelected
+            )
+        }
+
         if (showWildcardSuggestions && suggestionTokens.isNotEmpty()) {
             WildcardTokenSuggestionBar(
                 tokens = suggestionTokens,
@@ -183,7 +197,6 @@ internal fun PromptSection(
                 canCopyPrompt = canCopyPrompt,
                 isTargetSelectionEnabled = isTargetSelectionEnabled,
                 onCloseGeminiApp = onCloseGeminiApp,
-                onTerminateGeminiApp = onTerminateGeminiApp,
                 onCleanDeviceMemory = onCleanDeviceMemory,
                 onTerminateSelfApp = onTerminateSelfApp,
                 onUndoPromptEdit = onUndoPromptEdit,
@@ -215,7 +228,6 @@ internal fun PromptActionRow(
     canCopyPrompt: Boolean,
     isTargetSelectionEnabled: Boolean,
     onCloseGeminiApp: () -> Unit,
-    onTerminateGeminiApp: () -> Unit,
     onCleanDeviceMemory: () -> Unit,
     onTerminateSelfApp: () -> Unit,
     onUndoPromptEdit: () -> Unit,
@@ -225,14 +237,12 @@ internal fun PromptActionRow(
     onPasteFromClipboard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var geminiMenuExpanded by remember { mutableStateOf(false) }
-
     FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(2.5.dp, Alignment.End),
         verticalArrangement = Arrangement.spacedBy(2.5.dp)
     ) {
-        // 섬 1: 앱 자체 종료(왼쪽) + Gemini 종료/재시작
+        // 섬 1: 앱 자체 종료(왼쪽) + Gemini 리셋
         ActionIsland {
             OutlinedButton(
                 onClick = onTerminateSelfApp,
@@ -264,54 +274,33 @@ internal fun PromptActionRow(
                     )
                 }
             }
-            Box {
-                OutlinedButton(
-                    onClick = { geminiMenuExpanded = true },
-                    enabled = canCloseGemini && !isMaintenanceBusy,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = AppTheme.colors.card,
-                        contentColor = AppTheme.colors.textPrimary
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                    modifier = Modifier
-                        .height(28.dp)
-                        .semantics { contentDescription = "Gemini 앱 종료" },
-                    border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+            OutlinedButton(
+                onClick = onCloseGeminiApp,
+                enabled = canCloseGemini && !isMaintenanceBusy,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = AppTheme.colors.card,
+                    contentColor = AppTheme.colors.textPrimary
+                ),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                modifier = Modifier
+                    .height(28.dp)
+                    .semantics { contentDescription = "Gemini 앱 리셋" },
+                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Image(
-                            imageVector = GeminiGradientLogo,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "종료",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-                DropdownMenu(
-                    expanded = geminiMenuExpanded,
-                    onDismissRequest = { geminiMenuExpanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("종료만") },
-                        onClick = {
-                            geminiMenuExpanded = false
-                            onTerminateGeminiApp()
-                        }
+                    Image(
+                        imageVector = GeminiGradientLogo,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
                     )
-                    DropdownMenuItem(
-                        text = { Text("재시작") },
-                        onClick = {
-                            geminiMenuExpanded = false
-                            onCloseGeminiApp()
-                        }
+                    Text(
+                        text = "리셋",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -613,4 +602,96 @@ private val GeminiGradientLogo: ImageVector by lazy {
         curveTo(11.5f, 9.5f, 12f, 2f, 12f, 2f)
         close()
     }.build()
+}
+
+@Composable
+private fun FlowImageCountRow(
+    selectedCount: Int,
+    enabled: Boolean,
+    onCountSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "생성 개수",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = AppTheme.colors.textSecondary
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppDefaults.FLOW_IMAGE_COUNT_OPTIONS.forEach { count ->
+                FlowImageCountChip(
+                    count = count,
+                    selected = selectedCount == count,
+                    enabled = enabled,
+                    onClick = { onCountSelected(count) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlowImageCountChip(
+    count: Int,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val containerColor = if (selected) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.card
+    }
+    val contentColor = if (selected) {
+        AppTheme.colors.onPrimary
+    } else {
+        AppTheme.colors.textSecondary
+    }
+    val shape = RoundedCornerShape(12.dp)
+
+    Surface(
+        modifier = Modifier
+            .height(26.dp)
+            .shadow(
+                elevation = if (selected) 2.dp else 1.dp,
+                shape = shape,
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+            )
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = onClick
+            ),
+        shape = shape,
+        color = containerColor,
+        contentColor = contentColor,
+        border = if (selected) {
+            BorderStroke(1.dp, AppTheme.colors.primary)
+        } else {
+            BorderStroke(1.dp, AppTheme.colors.cardBorder)
+        }
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "${count}장",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            )
+        }
+    }
 }

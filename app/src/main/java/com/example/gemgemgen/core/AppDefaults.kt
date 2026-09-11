@@ -20,4 +20,6 @@ object AppDefaults {
         "com.sarvesh.nullkeyboard/.NullKeyboardService"
     )
     const val DEFAULT_REPEAT_COUNT = 10
+    const val DEFAULT_FLOW_IMAGE_COUNT = 4
+    val FLOW_IMAGE_COUNT_OPTIONS: List<Int> = listOf(1, 2, 3, 4)
 }

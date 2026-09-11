@@ -11,6 +11,24 @@ import org.junit.Test
 
 class RemoteAutomationProtocolTest {
     @Test
+    fun runRequest_roundTripsFlowImageCount() {
+        val message = RemoteProtocolMessage.RunRequest(
+            senderId = "tablet",
+            token = "token",
+            request = RemoteAutomationRequest(
+                requestId = "request-flow",
+                promptTemplate = "flow prompt",
+                repeatCountText = "3",
+                targetApp = AutomationTargetApp.FLOW,
+                flowImageCount = 2
+            )
+        )
+
+        val decoded = RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(message)) as? RemoteProtocolMessage.RunRequest
+        assertEquals(2, decoded?.request?.flowImageCount)
+    }
+
+    @Test
     fun runRequest_roundTripsMultilinePrompt() {
         val message = RemoteProtocolMessage.RunRequest(
             senderId = "tablet",
@@ -84,6 +102,29 @@ class RemoteAutomationProtocolTest {
         val failure = RemoteProtocolMessage.DisconnectResult(
             success = false,
             message = "등록되지 않은 송신 기기입니다."
+        )
+        assertEquals(success, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(success)))
+        assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))
+    }
+
+    @Test
+    fun cleanMemoryRequest_roundTrips() {
+        val message = RemoteProtocolMessage.CleanMemoryRequest(
+            senderId = "tablet-id",
+            token = "sample-token-123"
+        )
+        assertEquals(message, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(message)))
+    }
+
+    @Test
+    fun cleanMemoryResult_roundTrips() {
+        val success = RemoteProtocolMessage.CleanMemoryResult(
+            success = true,
+            message = "수신 기기 메모리를 정리했습니다."
+        )
+        val failure = RemoteProtocolMessage.CleanMemoryResult(
+            success = false,
+            message = "접근성 서비스가 꺼져 있습니다."
         )
         assertEquals(success, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(success)))
         assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))

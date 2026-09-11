@@ -36,6 +36,7 @@ class ExecuteRemoteAutomationUseCase(
                 promptTemplate = request.promptTemplate,
                 repeatCountText = request.repeatCountText,
                 targetApp = request.targetApp,
+                flowImageCount = request.flowImageCount,
                 initialWildcards = request.wildcards.ifEmpty { null }
             ),
             onStateChange = onStateChange

@@ -799,6 +799,45 @@ class MainViewModelTest {
     }
 
     @Test
+    fun cleanDeviceMemory_inSenderMode_delegatesToRemoteGateway() {
+        val remoteGateway = object : com.example.gemgemgen.remote.usecase.RemoteAutomationGateway {
+            var cleanCount = 0
+            private val currentStatus = kotlinx.coroutines.flow.MutableStateFlow(
+                com.example.gemgemgen.remote.domain.RemoteAutomationStatus(
+                    mode = AutomationMode.SENDER,
+                    discoveredDeviceName = "S24 FE",
+                    isPaired = true
+                )
+            )
+            override val status: kotlinx.coroutines.flow.StateFlow<com.example.gemgemgen.remote.domain.RemoteAutomationStatus> = currentStatus
+
+            override fun selectMode(mode: AutomationMode) {
+                currentStatus.value = currentStatus.value.copy(mode = mode)
+            }
+            override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
+            override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
+            override suspend fun send(
+                request: com.example.gemgemgen.remote.domain.RemoteAutomationRequest,
+                onStateChange: (AutomationRunState) -> Unit
+            ) = Unit
+            override fun forceStop(requestId: String?) = Unit
+            override suspend fun cleanMemory(): RemoteActionResult {
+                cleanCount += 1
+                return RemoteActionResult.Success
+            }
+        }
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(
+            manageRemoteAutomation = manageRemote
+        )
+
+        viewModel.cleanDeviceMemory()
+
+        assertEquals(1, remoteGateway.cleanCount)
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("수신 기기 메모리를 정리했습니다"))
+    }
+
+    @Test
     fun cleanDeviceMemory_updatesFailureAndAccessibilityResults() {
         val failureGateway = FakeMemoryCleanupGateway(
             MemoryCleanupResult.Failure("clean button missing")
@@ -1538,6 +1577,8 @@ class MainViewModelTest {
         override fun forceStop(requestId: String?) {
             lastStateCallback?.invoke(AutomationRunState.Stopped)
         }
+
+        override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
     }
 
     private companion object {

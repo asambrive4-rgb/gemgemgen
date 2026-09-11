@@ -15,6 +15,7 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.NewChatMode
+import com.example.gemgemgen.automation.usecase.FlowConfigurableGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.core.AppDefaults
 import kotlin.coroutines.resume
@@ -25,7 +26,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var closeAppCompletion: ((CloseGeminiAppResult) -> Unit)? = null
     private var memoryCleanupToken: Any? = null
     private var memoryCleanupCompletion: ((MemoryCleanupResult) -> Unit)? = null
-    private var memoryCleanupAutomation: DeviceCareMemoryAutomation? = null
+    private var memoryCleanupAutomation: GoogleAppForceStopAutomation? = null
     private var previousMemoryPackageRestriction: Array<String>? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
@@ -126,15 +127,15 @@ class GeminiAccessibilityService : AccessibilityService() {
             handler.post {
                 if (memoryCleanupToken !== token) return@post
                 previousMemoryPackageRestriction = serviceInfo?.packageNames?.copyOf()
-                restrictPackagesToDeviceCare()
-                memoryCleanupAutomation = DeviceCareMemoryAutomation(
+                clearPackageRestriction()
+                memoryCleanupAutomation = GoogleAppForceStopAutomation(
                     handler = handler,
                     rootProvider = { rootInActiveWindow },
                     currentPackageProvider = {
                         rootInActiveWindow?.packageName?.toString()
                     },
                     performBack = { performGlobalAction(GLOBAL_ACTION_BACK) },
-                    launchDashboard = launchDashboard,
+                    launchDetails = launchDashboard,
                     onFinished = { result -> finishMemoryCleanup(token, result) }
                 )
                 memoryCleanupAutomation?.start()
@@ -200,10 +201,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         applyAccessibilitySubscription(packageNamesFor(targetApp))
     }
 
-    private fun restrictPackagesToDeviceCare() {
-        applyAccessibilitySubscription(arrayOf(DEVICE_CARE_PACKAGE_NAME))
-    }
-
     private fun clearPackageRestriction() {
         applyAccessibilitySubscription(packageNames = null)
     }
@@ -236,7 +233,10 @@ class GeminiAccessibilityService : AccessibilityService() {
         private val delegate: PromptAutomationGateway,
         private val targetApp: AutomationTargetApp,
         private val service: GeminiAccessibilityService
-    ) : PromptAutomationGateway {
+) : PromptAutomationGateway, FlowConfigurableGateway {
+        override fun setFlowImageCount(count: Int) {
+            (delegate as? FlowConfigurableGateway)?.setFlowImageCount(count)
+        }
         override fun sendPrompt(
             prompt: String,
             newChatMode: NewChatMode,
@@ -477,7 +477,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         private const val CARD_CLOSE_WAIT_MS = 450L
         private const val MAX_TASK_CLOSE_CLICKS = 10
         private const val TITLE_ANCESTOR_SEARCH_DEPTH = 4
-        private const val DEVICE_CARE_PACKAGE_NAME = "com.samsung.android.lool"
         private const val TAP_GESTURE_DURATION_MS = 60L
     }
 }

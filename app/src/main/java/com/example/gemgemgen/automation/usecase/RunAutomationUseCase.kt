@@ -1,7 +1,9 @@
+// 역할: AI 앱 프롬프트 전송 자동화 루프를 실행하고 진행 상태를 관리합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.core.AppDispatchers
@@ -17,6 +19,7 @@ data class AutomationRunRequest(
     val promptTemplate: String,
     val repeatCountText: String,
     val targetApp: AutomationTargetApp,
+    val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
     val initialWildcards: List<WildcardSet>? = null
 )
 
@@ -179,7 +182,8 @@ class RunAutomationUseCase(
             promptTemplate = request.promptTemplate,
             repeatCount = sessionRepeatCount ?: preparedRun.repeatCount,
             wildcards = preparedRun.wildcards,
-            promptPlan = preparedRun.promptPlan
+            promptPlan = preparedRun.promptPlan,
+            flowImageCount = request.flowImageCount
         )
         currentRun = run
 
@@ -234,6 +238,9 @@ class RunAutomationUseCase(
         updateRunState(run, "프롬프트 생성 완료", onStateChange)
 
         val isFirstPromptWithoutMarker = run.targetApp == AutomationTargetApp.FLOW && run.successCount == 0
+        if (isFirstPromptWithoutMarker) {
+            (run.promptGateway as? FlowConfigurableGateway)?.setFlowImageCount(run.flowImageCount)
+        }
         run.promptGateway.sendPrompt(
             prompt = finalPrompt,
             newChatMode = if (isFirstPromptWithoutMarker) NewChatMode.Initial else NewChatMode.Subsequent,
@@ -327,6 +334,7 @@ class RunAutomationUseCase(
         var repeatCount: Int,
         val wildcards: List<WildcardSet>,
         val promptPlan: PromptGenerator.CompiledPrompt,
+        val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
         var currentIndex: Int = 0,
         var successCount: Int = 0,
         var finished: Boolean = false

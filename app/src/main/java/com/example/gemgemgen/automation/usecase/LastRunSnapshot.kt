@@ -3,11 +3,13 @@ package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.RepeatCountParser
+import com.example.gemgemgen.core.AppDefaults
 
 data class LastRunSnapshot(
     val promptTemplate: String,
     val repeatCountText: String,
-    val targetApp: AutomationTargetApp
+    val targetApp: AutomationTargetApp,
+    val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT
 )
 
 class LastRunSnapshotStore(
@@ -22,7 +24,8 @@ class LastRunSnapshotStore(
         return LastRunSnapshot(
             promptTemplate = promptTemplate,
             repeatCountText = RepeatCountParser.normalizeInput(repeatCountText),
-            targetApp = snapshot.targetApp
+            targetApp = snapshot.targetApp,
+            flowImageCount = snapshot.flowImageCount
         )
     }
 
@@ -39,4 +42,3 @@ interface LastRunSnapshotRepository {
     fun load(): LastRunSnapshot?
     fun save(snapshot: LastRunSnapshot)
 }
-

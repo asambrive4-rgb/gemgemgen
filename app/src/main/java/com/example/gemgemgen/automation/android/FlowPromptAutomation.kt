@@ -1,4 +1,4 @@
-﻿// 역할: Flow 앱을 대상으로 프롬프트 입력과 전송 동작을 자동 수행합니다.
+// 역할: Flow 앱을 대상으로 프롬프트 입력과 전송 동작을 자동 수행합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect
@@ -8,6 +8,8 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.usecase.NewChatMode
+import com.example.gemgemgen.automation.usecase.FlowConfigurableGateway
+import com.example.gemgemgen.core.AppDefaults
 
 internal class FlowPromptAutomation(
     handler: Handler,
@@ -16,7 +18,12 @@ internal class FlowPromptAutomation(
 ) : AccessibilityPromptAutomation(
     handler = handler,
     targetAppName = "Flow"
-) {
+), FlowConfigurableGateway {
+    private var targetImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT
+
+    override fun setFlowImageCount(count: Int) {
+        targetImageCount = count
+    }
     private val nodeFinder = FlowAccessibilityNodeFinder(rootProvider)
 
     override fun onRunFinished() {
@@ -136,12 +143,24 @@ internal class FlowPromptAutomation(
 
         // 2. 옵션 패널이 이미 열려 있는 경우 (하단 모델 바가 보이는 상태): 모델 바 클릭하여 목록 열기
         val modelBar = nodeFinder.findCurrentModelSelectorButton()
-        if (modelBar != null && tapNodeOrPerformClick(modelBar)) {
-            handler.postDelayed(
-                { ensureModelPro(attempt + 1, startedAtMillis, onStateChange, onDone) },
-                PANEL_TOGGLE_WAIT_MS
-            )
-            return
+        if (modelBar != null) {
+            val countOption = nodeFinder.findImageCountOption(targetImageCount)
+            if (countOption != null && !countOption.isSelected) {
+                tapNodeOrPerformClick(countOption)
+                onStateChange(AutomationRunState.Running("이미지 생성 수 ${targetImageCount}장 선택 중"))
+                handler.postDelayed(
+                    { ensureModelPro(attempt + 1, startedAtMillis, onStateChange, onDone) },
+                    COUNT_SELECT_WAIT_MS
+                )
+                return
+            }
+            if (tapNodeOrPerformClick(modelBar)) {
+                handler.postDelayed(
+                    { ensureModelPro(attempt + 1, startedAtMillis, onStateChange, onDone) },
+                    PANEL_TOGGLE_WAIT_MS
+                )
+                return
+            }
         }
 
         // 3. 옵션 패널이 닫혀 있는 경우: '이미지' 토글 버튼을 눌러 옵션 패널 펼치기
@@ -179,6 +198,7 @@ internal class FlowPromptAutomation(
         const val PLACEHOLDER_TEXT = "무엇을 만들고 싶으신가요?"
         const val MODEL_SELECT_WAIT_MS = 300L
         const val PANEL_TOGGLE_WAIT_MS = 400L
+        const val COUNT_SELECT_WAIT_MS = 250L
         const val INPUT_TAP_SETTLE_MS = 150L
     }
 }
