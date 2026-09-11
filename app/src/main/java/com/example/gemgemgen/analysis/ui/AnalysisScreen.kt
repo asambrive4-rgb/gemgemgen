@@ -73,7 +73,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
@@ -345,11 +344,6 @@ private fun RoleModelRow(
                         text = "3.5 Lite",
                         selected = modelId == MODEL_GEMINI_3_5_FLASH_LITE,
                         onClick = { onModelSelected(MODEL_GEMINI_3_5_FLASH_LITE) }
-                    )
-                    NeuPillChip(
-                        text = "3.1 Lite",
-                        selected = modelId == MODEL_GEMINI_3_1_FLASH_LITE,
-                        onClick = { onModelSelected(MODEL_GEMINI_3_1_FLASH_LITE) }
                     )
                     NeuPillChip(
                         text = "3.6 Flash",

@@ -4,7 +4,7 @@ package com.example.gemgemgen
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
@@ -25,7 +25,7 @@ class AnalysisModelMemoryTest {
         )
 
         manager.setRoleProvider(AnalysisModelRole.MASKING, AnalysisProvider.GEMINI)
-        manager.setRoleModel(AnalysisModelRole.MASKING, MODEL_GEMINI_3_1_FLASH_LITE)
+        manager.setRoleModel(AnalysisModelRole.MASKING, MODEL_GEMINI_3_5_FLASH_LITE)
         manager.setRoleProvider(AnalysisModelRole.GENERATION, AnalysisProvider.GROK)
         manager.setRoleModel(AnalysisModelRole.GENERATION, MODEL_GROK_4_5)
 
@@ -33,7 +33,7 @@ class AnalysisModelMemoryTest {
         val generation = manager.getRoleSetting(AnalysisModelRole.GENERATION)
 
         assertEquals(AnalysisProvider.GEMINI, masking.provider)
-        assertEquals(MODEL_GEMINI_3_1_FLASH_LITE, masking.modelId)
+        assertEquals(MODEL_GEMINI_3_5_FLASH_LITE, masking.modelId)
         assertEquals(AnalysisProvider.GROK, generation.provider)
         assertEquals(MODEL_GROK_4_5, generation.modelId)
     }

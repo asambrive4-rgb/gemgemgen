@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_1_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
@@ -532,11 +531,6 @@ private fun ClassifyCriteriaContent(
                             label = "3.5 Lite",
                             selected = dialog.modelId == MODEL_GEMINI_3_5_FLASH_LITE,
                             onClick = { actions.onClassifyModelSelected(MODEL_GEMINI_3_5_FLASH_LITE) }
-                        )
-                        DialogModelChip(
-                            label = "3.1 Lite",
-                            selected = dialog.modelId == MODEL_GEMINI_3_1_FLASH_LITE,
-                            onClick = { actions.onClassifyModelSelected(MODEL_GEMINI_3_1_FLASH_LITE) }
                         )
                         DialogModelChip(
                             label = "3.6 Flash",
