@@ -1,3 +1,4 @@
+// 역할: 안드로이드 시스템에서 접근성, 배터리, 오버레이 권한 상태를 직접 조회합니다.
 package com.example.gemgemgen.environment.android
 
 import android.Manifest
@@ -64,6 +65,9 @@ class AndroidEnvironmentGateway(
                 ),
                 isChatGptInstalled = packageInstallChecker.isInstalled(
                     AppDefaults.CHATGPT_PACKAGE_NAME
+                ),
+                isFlowInstalled = packageInstallChecker.isInstalled(
+                    AppDefaults.FLOW_PACKAGE_NAME
                 ),
                 isAccessibilityServiceEnabled = accessibilityStatus.isEnabled(),
                 hasWriteSecureSettingsPermission = secureSettingsPermission.isGranted(),

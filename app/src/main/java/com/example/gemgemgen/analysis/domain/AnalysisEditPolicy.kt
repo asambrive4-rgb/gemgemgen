@@ -1,3 +1,4 @@
+// 역할: 분석 결과 텍스트의 세그먼트 벾위와 수정 편집 규칙을 관리합니다.
 package com.example.gemgemgen.analysis.domain
 
 data class AnalysisSourceRange(

@@ -1,4 +1,5 @@
-﻿package com.example.gemgemgen
+// 역할: 테마 색상 및 팔레트 변경 로직을 검증합니다.
+package com.example.gemgemgen
 
 import androidx.compose.ui.graphics.Color
 import com.example.gemgemgen.ui.theme.AppThemeMode

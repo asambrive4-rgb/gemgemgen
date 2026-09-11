@@ -1,3 +1,4 @@
+// 역할: 원격 연결 수신 서비스의 시작과 종료 생명주기를 제어합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

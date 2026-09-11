@@ -1,3 +1,4 @@
+// 역할: 마지막으로 실행했던 자동화 설정과 프롬프트 스냅샷을 로컬에 적절히 영구 저장합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context

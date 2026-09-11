@@ -1,3 +1,4 @@
+// 역할: 사용자가 입력한 반복 횟수 텍스트를 안전한 정수 숫자로 변환하고 검증합니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.core.AppDefaults

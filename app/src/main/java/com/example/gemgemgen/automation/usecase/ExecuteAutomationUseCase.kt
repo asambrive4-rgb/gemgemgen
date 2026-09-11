@@ -1,3 +1,4 @@
+// 역할: 준비된 프롬프트 목록을 순차적으로 대상 앱에 자동 입력하고 전송하는 실행을 담당합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

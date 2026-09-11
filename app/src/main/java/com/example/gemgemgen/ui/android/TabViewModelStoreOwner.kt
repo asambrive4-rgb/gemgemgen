@@ -1,3 +1,4 @@
+// 역할: 탭 전환 시 뷰모델이 소멸되지 않고 유지되도록 관리하는 저장소 소유자입니다.
 package com.example.gemgemgen.ui.android
 
 import androidx.lifecycle.ViewModelStore

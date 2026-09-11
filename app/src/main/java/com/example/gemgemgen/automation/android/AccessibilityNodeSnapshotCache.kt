@@ -1,3 +1,4 @@
+// 역할: 접근성 서비스의 화면 노드 검색 속도를 높이기 위해 노드 스냅샷을 캐시합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.SystemClock

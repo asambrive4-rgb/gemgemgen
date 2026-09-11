@@ -1,3 +1,4 @@
+// 역할: 와일드카드 폴더에 대한 읽기 및 쓰기 권한 접근 허용 여부를 판정합니다.
 package com.example.gemgemgen.wildcard.domain
 
 enum class WildcardFolderAction {

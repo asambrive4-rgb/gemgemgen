@@ -1,3 +1,4 @@
+// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd

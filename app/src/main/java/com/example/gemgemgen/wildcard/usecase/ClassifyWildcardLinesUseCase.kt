@@ -1,3 +1,4 @@
+// 역할: AI 모델을 호출하여 와일드카드 파일 내의 단어들을 의미별로 자동 분류합니다.
 package com.example.gemgemgen.wildcard.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole

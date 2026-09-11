@@ -1,3 +1,4 @@
+// 역할: 앱 전반에서 필요한 저장소, 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.Context

@@ -1,3 +1,4 @@
+// 역할: 화면의 빈 공간 터치 시 키보드를 닫고 입력창 포커스를 해제하는 UI 수식어를 제공합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.gestures.awaitEachGesture

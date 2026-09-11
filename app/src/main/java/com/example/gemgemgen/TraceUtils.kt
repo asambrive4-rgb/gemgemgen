@@ -1,3 +1,4 @@
+// 역할: 앱 실행 중 성능 병목과 주요 처리 구간을 측정하는 추적 로그 유틸리티를 제공합니다.
 package com.example.gemgemgen
 
 import android.os.Trace

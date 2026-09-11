@@ -1,3 +1,4 @@
+// 역할: 프롬프트 내의 와일드카드 토큰을 실제 텍스트 파일의 단어로 무작위 치환합니다.
 package com.example.gemgemgen.wildcard.domain
 
 /**

@@ -1,3 +1,4 @@
+// 역할: 화면 노드 조작, 제스처 탭 전송, 패키지 가시성 제어 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -40,6 +41,15 @@ class GeminiAccessibilityService : AccessibilityService() {
             rootProvider = { rootInActiveWindow }
         )
     }
+    private val flowAutomation by lazy {
+        FlowPromptAutomation(
+            handler = handler,
+            rootProvider = { rootInActiveWindow },
+            tapAtCoordinates = { x, y, onCompleted ->
+                tapCoordinates(x, y, onCompleted)
+            }
+        )
+    }
 
     override fun onServiceConnected() {
         activeService = this
@@ -71,6 +81,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         val delegate = when (targetApp) {
             AutomationTargetApp.GEMINI -> geminiAutomation
             AutomationTargetApp.CHATGPT -> chatGptAutomation
+            AutomationTargetApp.FLOW -> flowAutomation
         }
         return PackageScopedPromptAutomation(
             delegate = delegate,
@@ -217,6 +228,7 @@ class GeminiAccessibilityService : AccessibilityService() {
                 AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME
             )
             AutomationTargetApp.CHATGPT -> arrayOf(AppDefaults.CHATGPT_PACKAGE_NAME)
+            AutomationTargetApp.FLOW -> arrayOf(AppDefaults.FLOW_PACKAGE_NAME)
         }
     }
 
@@ -252,6 +264,29 @@ class GeminiAccessibilityService : AccessibilityService() {
             delegate.cancelCurrentRun()
             service.clearPackageRestriction()
         }
+    }
+
+    private fun tapCoordinates(x: Float, y: Float, onCompleted: (() -> Unit)? = null): Boolean {
+        val tapPath = Path().apply {
+            moveTo(x, y)
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(tapPath, 0L, TAP_GESTURE_DURATION_MS))
+            .build()
+
+        return dispatchGesture(
+            gesture,
+            object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    onCompleted?.invoke()
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    onCompleted?.invoke()
+                }
+            },
+            handler
+        )
     }
 
     private fun tapDexRecentsButton(onCompleted: () -> Unit): Boolean {
@@ -443,5 +478,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         private const val MAX_TASK_CLOSE_CLICKS = 10
         private const val TITLE_ANCESTOR_SEARCH_DEPTH = 4
         private const val DEVICE_CARE_PACKAGE_NAME = "com.samsung.android.lool"
+        private const val TAP_GESTURE_DURATION_MS = 60L
     }
 }

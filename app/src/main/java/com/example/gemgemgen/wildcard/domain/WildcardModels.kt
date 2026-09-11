@@ -1,3 +1,4 @@
+// 역할: 와일드카드 파일, 단어 목록, 와일드카드 세트 데이터 모델을 정의합니다.
 package com.example.gemgemgen.wildcard.domain
 
 data class WildcardSet(

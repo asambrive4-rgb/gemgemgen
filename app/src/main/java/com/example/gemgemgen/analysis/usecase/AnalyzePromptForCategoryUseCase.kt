@@ -1,3 +1,4 @@
+// 역할: 선택된 카테고리에 맞춰 AI에 분석을 요청하고 가공된 결과를 반환합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory

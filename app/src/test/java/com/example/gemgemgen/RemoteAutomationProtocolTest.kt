@@ -1,3 +1,4 @@
+// 역할: 원격 기기 간 통신 패킷 직렬화 및 역직렬화 프로토콜을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

@@ -1,3 +1,4 @@
+// 역할: 와일드카드 AI 단어 분류 코디네이터의 상태 전이를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole

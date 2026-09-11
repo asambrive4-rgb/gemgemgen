@@ -1,3 +1,4 @@
+// 역할: 분석 대상 세그먼트 추출 및 벾위 판정 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory

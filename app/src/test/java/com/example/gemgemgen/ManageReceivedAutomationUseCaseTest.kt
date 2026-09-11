@@ -1,3 +1,4 @@
+// 역할: 원격에서 수신된 자동화 요청 관리 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.remote.usecase.ManageReceivedAutomationUseCase

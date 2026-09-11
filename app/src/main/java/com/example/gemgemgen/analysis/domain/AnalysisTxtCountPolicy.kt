@@ -1,3 +1,4 @@
+// 역할: 생성된 분석 텍스트의 줄 수 및 항목 개수 제한 정책을 관리합니다.
 package com.example.gemgemgen.analysis.domain
 
 object AnalysisTxtCountPolicy {

@@ -1,3 +1,4 @@
+// 역할: 와일드카드 텍스트 파일 파싱 및 키워드 추출 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

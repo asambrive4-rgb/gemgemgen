@@ -1,3 +1,4 @@
+// 역할: 접근성 서비스 일치 및 활성화 감지 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

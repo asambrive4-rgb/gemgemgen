@@ -1,3 +1,4 @@
+// 역할: 와일드카드 텍스트 파일의 생성, 수정, 이름 변경, 삭제 작업을 수행합니다.
 package com.example.gemgemgen.wildcard.usecase
 
 import com.example.gemgemgen.wildcard.domain.WildcardFileException

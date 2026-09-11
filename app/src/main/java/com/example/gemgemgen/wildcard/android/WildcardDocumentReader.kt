@@ -1,3 +1,4 @@
+// 역할: 저장소 프레임워크(SAF) URI를 통해 외부 폴더의 와일드카드 문서를 읽어옵니다.
 package com.example.gemgemgen.wildcard.android
 
 import android.content.Context

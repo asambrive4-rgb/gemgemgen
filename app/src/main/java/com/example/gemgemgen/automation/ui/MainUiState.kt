@@ -1,3 +1,4 @@
+// 역할: 메인 자동화 화면의 모든 입력값, 설정, 환경 상태를 담는 통합 상태 데이터를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

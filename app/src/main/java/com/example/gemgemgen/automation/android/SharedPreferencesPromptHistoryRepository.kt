@@ -1,3 +1,4 @@
+// 역할: 사용자가 이전에 실행했던 프롬프트 입력 기록 목록을 로컬에 저장하고 불러옵니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context

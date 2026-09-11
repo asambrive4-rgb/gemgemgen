@@ -1,3 +1,4 @@
+// 역할: Gemini 분석 통신 게이트웨이의 요청 및 응답 처리를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.android.AndroidGeminiAnalysisGateway

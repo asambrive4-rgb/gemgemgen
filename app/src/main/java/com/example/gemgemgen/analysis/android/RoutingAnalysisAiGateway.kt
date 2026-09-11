@@ -1,3 +1,4 @@
+// 역할: 선택된 AI 서비스(Gemini/Grok)에 따라 알맞은 분석 게이트웨이로 요청을 전달합니다.
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload

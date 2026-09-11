@@ -1,3 +1,4 @@
+// 역할: 프롬프트 입력창에서 토큰 입력 시 사용 가능한 와일드카드 목록을 자동완성 추천합니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.wildcard.domain.WildcardFileParser

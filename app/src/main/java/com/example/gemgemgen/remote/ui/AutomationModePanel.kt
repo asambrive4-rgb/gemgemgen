@@ -1,3 +1,4 @@
+// 역할: 메인 화면 상단에서 로컬 모드와 원격 수신 모드를 전환하는 토글 패널을 화면에 표시합니다.
 package com.example.gemgemgen.remote.ui
 
 import androidx.compose.foundation.BorderStroke

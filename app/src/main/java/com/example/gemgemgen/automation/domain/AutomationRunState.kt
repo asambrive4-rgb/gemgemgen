@@ -1,3 +1,4 @@
+// 역할: 자동화의 준비, 실행 중, 일시 정지, 완료, 오류 등 진행 상태를 정의합니다.
 package com.example.gemgemgen.automation.domain
 
 sealed interface AutomationRunState {

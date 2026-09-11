@@ -1,3 +1,4 @@
+// 역할: 자동화 화면의 안내 문구 변환 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

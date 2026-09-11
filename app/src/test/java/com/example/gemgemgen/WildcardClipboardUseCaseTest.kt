@@ -1,3 +1,4 @@
+// 역할: 와일드카드 텍스트 클립보드 복사 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.core.AppDispatchers

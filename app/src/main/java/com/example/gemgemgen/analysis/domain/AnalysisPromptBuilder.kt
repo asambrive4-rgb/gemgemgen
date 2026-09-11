@@ -1,3 +1,4 @@
+// 역할: 카테고리와 옵션에 맞춰 AI 모델에 전송할 분석 프롬프트를 조립합니다.
 package com.example.gemgemgen.analysis.domain
 
 import kotlinx.serialization.json.JsonArray

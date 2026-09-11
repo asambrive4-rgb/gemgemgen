@@ -1,3 +1,4 @@
+// 역할: Gemini AI 모델과 통신하여 프롬프트 분석 및 추천 요청을 수행합니다.
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload

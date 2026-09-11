@@ -1,3 +1,4 @@
+// 역할: 화면 좌표 기준으로 가장 가깝거나 클릭 가능한 최적의 접근성 노드를 선택합니다.
 package com.example.gemgemgen.automation.android
 
 data class NodeBounds(

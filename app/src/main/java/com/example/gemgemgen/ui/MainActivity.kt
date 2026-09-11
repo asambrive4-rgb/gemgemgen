@@ -1,3 +1,4 @@
+// 역할: 앱의 기본 안드로이드 액티비티로 컴포즈 UI 화면을 기기에 표시합니다.
 package com.example.gemgemgen.ui
 
 import android.os.Bundle

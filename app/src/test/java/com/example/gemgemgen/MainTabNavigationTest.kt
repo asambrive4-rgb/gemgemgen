@@ -1,3 +1,4 @@
+// 역할: 메인 화면의 탭 전환 및 네비게이션 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.ui.MainTab

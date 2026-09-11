@@ -1,3 +1,4 @@
+// 역할: Grok 계정 로그인 세션의 생성, 갱신 및 로그아웃을 처리합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.core.AppDispatchers

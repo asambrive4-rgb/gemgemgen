@@ -1,3 +1,4 @@
+// 역할: 자기 앱 닫기 및 숨기기 제어 정책 판단을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason

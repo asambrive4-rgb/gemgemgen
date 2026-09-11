@@ -1,3 +1,4 @@
+// 역할: 부드러운 입체 그림자 효과를 가진 뉴모피즘 카드 및 버튼 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.foundation.BorderStroke

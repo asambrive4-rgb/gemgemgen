@@ -1,3 +1,4 @@
+// 역할: Grok 인증 및 토큰 갱신 처리를 위한 포트 인터페이스를 정의합니다.
 package com.example.gemgemgen.analysis.usecase
 
 data class GrokDeviceLoginChallenge(

@@ -1,3 +1,4 @@
+// 역할: 상단 탭 전환과 전체 화면 네비게이션 구조를 담는 앱의 최상위 UI 진입점입니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.text.input.TextFieldState

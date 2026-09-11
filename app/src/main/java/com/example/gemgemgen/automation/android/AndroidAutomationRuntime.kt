@@ -21,6 +21,7 @@ class AndroidTargetAppLauncher(
         val packageName = when (targetApp) {
             AutomationTargetApp.GEMINI -> AppDefaults.GEMINI_PACKAGE_NAME
             AutomationTargetApp.CHATGPT -> AppDefaults.CHATGPT_PACKAGE_NAME
+            AutomationTargetApp.FLOW -> AppDefaults.FLOW_PACKAGE_NAME
         }
         val launchIntent = context.packageManager
             .getLaunchIntentForPackage(packageName)

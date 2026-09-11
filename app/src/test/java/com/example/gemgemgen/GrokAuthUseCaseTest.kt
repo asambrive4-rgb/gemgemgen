@@ -1,3 +1,4 @@
+// 역할: Grok 계정 로그인 및 토큰 발급 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole

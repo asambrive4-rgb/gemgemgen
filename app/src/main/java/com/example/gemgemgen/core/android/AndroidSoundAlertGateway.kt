@@ -1,3 +1,4 @@
+// 역할: 안드로이드 시스템 알림음 및 효과음을 스피커로 재생합니다.
 package com.example.gemgemgen.core.android
 
 import android.content.Context

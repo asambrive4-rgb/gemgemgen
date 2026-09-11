@@ -1,3 +1,4 @@
+// 역할: 분석 화면에 표시되는 각종 안내 문구와 에러 메시지를 제공합니다.
 package com.example.gemgemgen.analysis.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisProvider

@@ -1,3 +1,4 @@
+// 역할: 선택된 와일드카드 토큰이나 단어 목록을 클립보드에 복사합니다.
 package com.example.gemgemgen.wildcard.usecase
 
 import com.example.gemgemgen.core.ClipboardGateway

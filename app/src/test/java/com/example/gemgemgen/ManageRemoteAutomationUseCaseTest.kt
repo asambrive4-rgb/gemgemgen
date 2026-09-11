@@ -1,3 +1,4 @@
+// 역할: 원격 자동화 서비스 제어 및 상태 관리 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

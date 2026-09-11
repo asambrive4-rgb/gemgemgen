@@ -1,3 +1,4 @@
+// 역할: 분석 화면의 현재 입력값, 진행 상태, 분석 결과 및 팝업 상태를 표현합니다.
 package com.example.gemgemgen.analysis.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory

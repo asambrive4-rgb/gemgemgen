@@ -1,3 +1,4 @@
+// 역할: 사용자가 입력한 Gemini API 키의 저장, 조회 및 삭제를 처리합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole

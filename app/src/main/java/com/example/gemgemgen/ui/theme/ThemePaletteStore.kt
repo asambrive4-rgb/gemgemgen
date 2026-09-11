@@ -1,3 +1,4 @@
+// 역할: 사용자가 선택한 테마 색상 설정을 로컬에 저장하고 복원합니다.
 package com.example.gemgemgen.ui.theme
 
 import android.content.Context

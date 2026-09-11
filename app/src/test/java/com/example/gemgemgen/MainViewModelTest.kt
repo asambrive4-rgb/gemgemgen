@@ -1,3 +1,4 @@
+// 역할: 메인 뷰모델의 상태 변경 및 비즈니스 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.ui.text.TextRange

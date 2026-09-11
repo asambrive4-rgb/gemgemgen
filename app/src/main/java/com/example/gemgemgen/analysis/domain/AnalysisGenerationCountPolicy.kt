@@ -1,3 +1,4 @@
+// 역할: AI 분석 시 요청할 생성 후보 개수의 유효 벾위를 제한하고 결정합니다.
 package com.example.gemgemgen.analysis.domain
 
 /**

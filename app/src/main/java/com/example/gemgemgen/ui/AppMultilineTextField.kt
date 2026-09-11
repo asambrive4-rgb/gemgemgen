@@ -1,3 +1,4 @@
+// 역할: 긴 텍스트 입력과 스크롤, 자리표시자를 지원하는 공용 다중 행 텍스트 입력창 UI를 제공합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi

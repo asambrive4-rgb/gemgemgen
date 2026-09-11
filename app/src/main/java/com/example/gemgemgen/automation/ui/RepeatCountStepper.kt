@@ -1,3 +1,4 @@
+// 역할: 반복 실행 횟수를 숫자로 직접 입력하거나 증감 버튼으로 조절하는 UI를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke

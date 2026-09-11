@@ -1,3 +1,4 @@
+// 역할: AI 분석 결과를 텍스트 파일 형식의 결과물로 생성하고 저장합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory

@@ -1,3 +1,4 @@
+// 역할: 자동화 실패 시 대기 시간 계산 및 재시도 제한 정책을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

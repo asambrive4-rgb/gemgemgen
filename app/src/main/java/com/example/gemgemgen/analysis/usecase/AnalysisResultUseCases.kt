@@ -1,3 +1,4 @@
+// 역할: 분석 결과 텍스트를 클립보드에 복사하거나 프롬프트 입력창으로 전달합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment

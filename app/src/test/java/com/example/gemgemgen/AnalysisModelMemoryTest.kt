@@ -1,3 +1,4 @@
+// 역할: 분석 모델 사용량 및 메모리 보관 상태를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole

@@ -1,3 +1,4 @@
+// 역할: 기기에 등록된 접근성 서비스 중 우리 앱의 서비스 활성화 여부를 대조 판정합니다.
 package com.example.gemgemgen.environment.android
 
 object AccessibilityServiceMatcher {

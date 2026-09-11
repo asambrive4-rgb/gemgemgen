@@ -1,3 +1,4 @@
+// 역할: 와일드카드 파일 퀐색, 내용 편집, 저장 및 AI 분류 이벤트를 관리합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel

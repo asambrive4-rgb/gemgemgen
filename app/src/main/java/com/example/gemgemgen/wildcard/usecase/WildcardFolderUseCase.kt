@@ -1,3 +1,4 @@
+// 역할: 사용자가 와일드카드 저장 폴더를 선택하고 경로를 검증하는 작업을 처리합니다.
 package com.example.gemgemgen.wildcard.usecase
 
 sealed interface FolderSelectionResult {

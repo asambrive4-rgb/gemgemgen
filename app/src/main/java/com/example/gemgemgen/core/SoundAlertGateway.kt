@@ -1,3 +1,4 @@
+// 역할: 자동화 완료 또는 오류 시 시스템 알림음을 재생하는 인터페이스를 정의합니다.
 package com.example.gemgemgen.core
 
 /**

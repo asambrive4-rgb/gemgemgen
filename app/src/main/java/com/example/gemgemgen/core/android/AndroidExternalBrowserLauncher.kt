@@ -1,3 +1,4 @@
+// 역할: 외부 기본 웹 브라우저 앱을 호출하여 지정된 웹 URL을 엽니다.
 package com.example.gemgemgen.core.android
 
 import android.content.ActivityNotFoundException

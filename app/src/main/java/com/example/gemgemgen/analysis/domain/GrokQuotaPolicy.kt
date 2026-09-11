@@ -1,3 +1,4 @@
+// 역할: Grok 서비스의 남은 호출 횟수와 쿼터 고갈 여부를 계산하고 판정합니다.
 package com.example.gemgemgen.analysis.domain
 
 /**

@@ -1,3 +1,4 @@
+// 역할: 다른 앱 화면 위에 오버레이되어 진행 상황을 보여주는 플로팅 바 UI를 화면에 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress

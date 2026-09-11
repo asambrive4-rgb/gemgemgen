@@ -1,3 +1,4 @@
+// 역할: 사용자가 드래그하여 이동한 플로팅 바의 화면 위치 좌표를 저장하고 복원합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context

@@ -1,3 +1,4 @@
+// 역할: 분석 모델 데이터 구조와 상태 변환 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL

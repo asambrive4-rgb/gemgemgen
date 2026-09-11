@@ -1,3 +1,4 @@
+// 역할: 앱 시작 전 유지보수 및 메모리 확보 유스케이스 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase

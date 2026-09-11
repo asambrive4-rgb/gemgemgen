@@ -1,3 +1,4 @@
+// 역할: 삼성 디바이스 케어 촜적화 기능을 접근성으로 자동 클릭하여 메모리를 확보합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler

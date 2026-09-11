@@ -1,3 +1,4 @@
+// 역할: ChatGPT 앱 화면의 접근성 노드 퀐색 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.ChatGptAccessibilityNodeFinder

@@ -1,3 +1,4 @@
+// 역할: 와일드카드 관리 뷰모델의 파일 퀐색 및 편집 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

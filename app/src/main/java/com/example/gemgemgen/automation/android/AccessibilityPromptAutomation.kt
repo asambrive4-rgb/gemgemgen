@@ -1,3 +1,4 @@
+// 역할: 접근성 서비스를 통해 외부 AI 앱의 화면 요소를 찾고 프롬프트를 자동 입력합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -80,6 +81,16 @@ internal abstract class AccessibilityPromptAutomation(
 
     protected abstract fun findSendNode(): AccessibilityNodeInfo?
 
+    protected open fun performSendClick(sendNode: AccessibilityNodeInfo): Boolean {
+        val clickableNode = findClickableNodeOrParent(sendNode)
+        return clickableNode != null && clickableNode.isEnabled &&
+            clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }
+
+    protected open fun isSendConfirmed(prompt: String): Boolean {
+        return checkPromptInputAfterSend(prompt) == PromptInputAfterSend.Empty
+    }
+
     protected open fun recoverFromInputFailure(
         onStateChange: (AutomationRunState) -> Unit
     ) = Unit
@@ -108,6 +119,22 @@ internal abstract class AccessibilityPromptAutomation(
             ?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
     }
 
+    protected open fun applyPromptText(
+        inputNode: AccessibilityNodeInfo,
+        prompt: String,
+        onDone: (Boolean) -> Unit
+    ) {
+        inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        val arguments = Bundle().apply {
+            putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                prompt
+            )
+        }
+        val applied = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        onDone(applied)
+    }
+
     private fun setPromptText(
         prompt: String,
         attempt: Int,
@@ -122,33 +149,39 @@ internal abstract class AccessibilityPromptAutomation(
 
         val inputNode = findInputNode()
         if (inputNode != null) {
-            inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-            val arguments = Bundle().apply {
-                putCharSequence(
-                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                    prompt
-                )
-            }
-            if (inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
-                onStateChange(AutomationRunState.Running("프롬프트 입력 반영 확인 중"))
-                postDelayedOnRun(runToken, INPUT_CONFIRM_WAIT_MS) {
-                    if (isPromptTextApplied(prompt)) {
-                        onStateChange(AutomationRunState.Running("프롬프트 입력 완료"))
-                        onDone()
-                    } else {
-                        handlePromptInputFailure(
-                            prompt = prompt,
-                            attempt = attempt,
-                            runToken = runToken,
-                            startedAtMillis = startedAtMillis,
-                            failureMessage = "$targetAppName 프롬프트 입력 반영 실패",
-                            onStateChange = onStateChange,
-                            onDone = onDone
-                        )
+            applyPromptText(inputNode, prompt) { applied ->
+                if (!isActiveRun(runToken)) return@applyPromptText
+                if (applied) {
+                    onStateChange(AutomationRunState.Running("프롬프트 입력 반영 확인 중"))
+                    postDelayedOnRun(runToken, INPUT_CONFIRM_WAIT_MS) {
+                        if (isPromptTextApplied(prompt)) {
+                            onStateChange(AutomationRunState.Running("프롬프트 입력 완료"))
+                            onDone()
+                        } else {
+                            handlePromptInputFailure(
+                                prompt = prompt,
+                                attempt = attempt,
+                                runToken = runToken,
+                                startedAtMillis = startedAtMillis,
+                                failureMessage = "$targetAppName 프롬프트 입력 반영 실패",
+                                onStateChange = onStateChange,
+                                onDone = onDone
+                            )
+                        }
                     }
+                } else {
+                    handlePromptInputFailure(
+                        prompt = prompt,
+                        attempt = attempt,
+                        runToken = runToken,
+                        startedAtMillis = startedAtMillis,
+                        failureMessage = "$targetAppName 프롬프트 입력 실패",
+                        onStateChange = onStateChange,
+                        onDone = onDone
+                    )
                 }
-                return
             }
+            return
         }
 
         handlePromptInputFailure(
@@ -204,31 +237,26 @@ internal abstract class AccessibilityPromptAutomation(
         onStateChange(AutomationRunState.Running("보내기 버튼 활성화 대기 중 (#$attempt)"))
 
         val node = findSendNode()
-        val clickableNode = node?.let(::findClickableNodeOrParent)
-        if (clickableNode != null && clickableNode.isEnabled &&
-            clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        ) {
+        if (node != null && performSendClick(node)) {
             onStateChange(AutomationRunState.Running("보내기 클릭 후 전송 확인 중"))
             postDelayedOnRun(runToken, SEND_CONFIRM_WAIT_MS) {
-                when (checkPromptInputAfterSend(prompt)) {
-                    PromptInputAfterSend.Empty -> onDone()
-                    PromptInputAfterSend.StillPresent,
-                    PromptInputAfterSend.Unknown -> {
-                        retryOrFail(
+                if (isSendConfirmed(prompt)) {
+                    onDone()
+                } else {
+                    retryOrFail(
+                        startedAtMillis = startedAtMillis,
+                        failureMessage =
+                            "$targetAppName 보내기 클릭 후 전송 완료를 확인하지 못함",
+                        onStateChange = onStateChange
+                    ) {
+                        clickSendWhenReady(
+                            prompt = prompt,
+                            attempt = attempt + 1,
+                            runToken = runToken,
                             startedAtMillis = startedAtMillis,
-                            failureMessage =
-                                "$targetAppName 보내기 클릭 후 전송 완료를 확인하지 못함",
-                            onStateChange = onStateChange
-                        ) {
-                            clickSendWhenReady(
-                                prompt = prompt,
-                                attempt = attempt + 1,
-                                runToken = runToken,
-                                startedAtMillis = startedAtMillis,
-                                onStateChange = onStateChange,
-                                onDone = onDone
-                            )
-                        }
+                            onStateChange = onStateChange,
+                            onDone = onDone
+                        )
                     }
                 }
             }

@@ -1,3 +1,4 @@
+// 역할: 프롬프트 편집 세션의 문단 및 커서 위치 관리 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.PromptEditorSession

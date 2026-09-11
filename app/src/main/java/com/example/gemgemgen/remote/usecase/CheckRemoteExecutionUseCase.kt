@@ -1,3 +1,4 @@
+// 역할: 현재 수신된 원격 명령이 실행 가능한 상태인지 점검합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.remote.domain.RemoteExecutionConditions

@@ -1,3 +1,4 @@
+// 역할: 기기 저장소의 와일드카드 텍스트 파일들을 읽고 쓰는 파일 입출력을 처리합니다.
 package com.example.gemgemgen.wildcard.android
 
 import android.content.Context

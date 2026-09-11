@@ -1,3 +1,4 @@
+// 역할: 프롬프트 편집기의 되돌리기 및 다시실행 히스토리 관리를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.PromptUndoHistory

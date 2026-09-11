@@ -1,3 +1,4 @@
+// 역할: 자동화 시작 시 실행 기록 생성 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp

@@ -1,3 +1,4 @@
+// 역할: 원격으로 전달받은 프롬프트와 옵션을 기반으로 로컬 자동화를 대리 실행합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

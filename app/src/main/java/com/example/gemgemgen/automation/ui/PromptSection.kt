@@ -1,3 +1,4 @@
+// 역할: 프롬프트 텍스트 입력창, 대상 앱 선택 토글, 와일드카드 칩 영역을 화면에 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke

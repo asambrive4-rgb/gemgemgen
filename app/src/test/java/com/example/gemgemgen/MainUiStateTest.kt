@@ -1,3 +1,4 @@
+// 역할: 메인 화면 UI 상태의 기본값과 파생 상태 계산을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

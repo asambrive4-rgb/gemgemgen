@@ -1,3 +1,4 @@
+// 역할: 프롬프트 분석 및 개선에 사용할 수 있는 카테고리 종류를 정의합니다.
 package com.example.gemgemgen.analysis.domain
 
 enum class AnalysisCategory(val label: String) {

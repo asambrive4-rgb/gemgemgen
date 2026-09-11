@@ -1,3 +1,4 @@
+// 역할: 과거에 실행했던 프롬프트 기록들을 바텀시트 목록으로 보여주고 재사용을 돕습니다.
 package com.example.gemgemgen.automation.ui
 
 import android.widget.Toast

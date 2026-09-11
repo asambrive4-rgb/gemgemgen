@@ -1,3 +1,4 @@
+// 역할: 접근성 권한, 배터리 촜적화 예외, 키보드 설정 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent

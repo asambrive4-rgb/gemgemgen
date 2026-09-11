@@ -1,3 +1,4 @@
+// 역할: 원격 기기 간 주고받는 메시지 형식과 패킷 프로토콜을 정의합니다.
 package com.example.gemgemgen.remote.android
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

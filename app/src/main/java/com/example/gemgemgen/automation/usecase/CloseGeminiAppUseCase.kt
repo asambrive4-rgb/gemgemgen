@@ -1,3 +1,4 @@
+// 역할: 자동화 완료 후 Gemini 앱을 안전하게 종료하도록 요청합니다.
 package com.example.gemgemgen.automation.usecase
 
 sealed interface CloseGeminiAppResult {

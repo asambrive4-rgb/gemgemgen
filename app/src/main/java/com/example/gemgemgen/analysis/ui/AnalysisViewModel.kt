@@ -1,3 +1,4 @@
+// 역할: AI 분석 요청을 관리하고 화면에 필요한 데이터 상태와 이벤트를 중계합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState

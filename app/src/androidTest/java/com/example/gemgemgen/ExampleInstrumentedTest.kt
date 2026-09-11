@@ -1,3 +1,4 @@
+// 역할: 안드로이드 기기 환경에서 앱의 기본 실행 컨텍스트를 검증합니다.
 package com.example.gemgemgen
 
 import androidx.test.platform.app.InstrumentationRegistry

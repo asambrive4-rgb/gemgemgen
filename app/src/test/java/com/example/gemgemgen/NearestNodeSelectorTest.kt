@@ -1,3 +1,4 @@
+// 역할: 화면 좌표 기준 최단 거리 접근성 노드 선정 알고리즘을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

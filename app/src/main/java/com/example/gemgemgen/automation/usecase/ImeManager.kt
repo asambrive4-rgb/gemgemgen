@@ -1,3 +1,4 @@
+// 역할: 자동화 입력 시 충돌을 방지하기 위해 가상 키보드를 내리거나 입력을 제어합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.core.AppDefaults

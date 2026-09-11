@@ -1,3 +1,4 @@
+// 역할: 디바이스 케어 앱을 통한 메모리 촜적화 자동화 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.MemoryCleanupNodeLabels

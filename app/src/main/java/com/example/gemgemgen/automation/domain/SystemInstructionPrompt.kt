@@ -1,3 +1,4 @@
+// 역할: AI 모델에 기본으로 주입할 공통 시스템 지침 프롬프트 문구를 정의합니다.
 package com.example.gemgemgen.automation.domain
 
 /**

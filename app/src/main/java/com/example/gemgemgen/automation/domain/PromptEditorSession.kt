@@ -1,3 +1,4 @@
+// 역할: 프롬프트 편집기 내에서 문단 단위 편집 상태와 커서 위치를 관리합니다.
 package com.example.gemgemgen.automation.domain
 
 /**

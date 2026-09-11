@@ -1,3 +1,4 @@
+// 역할: Gemini 앱 화면에서 텍스트 입력창, 전송 버튼, 새 대화 버튼 노드를 퀐색합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect

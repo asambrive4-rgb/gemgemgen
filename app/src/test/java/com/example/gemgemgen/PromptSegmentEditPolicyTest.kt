@@ -1,3 +1,4 @@
+// 역할: 프롬프트 세그먼트 치환 및 벾위 계산 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.PromptSegmentEditPolicy

@@ -1,3 +1,4 @@
+// 역할: 외부에서 전달된 원격 실행 요청 큐를 관리하고 승인 및 반려를 처리합니다.
 package com.example.gemgemgen.remote.usecase
 
 import java.util.concurrent.atomic.AtomicReference

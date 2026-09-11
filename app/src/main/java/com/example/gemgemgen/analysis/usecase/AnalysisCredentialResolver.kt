@@ -1,3 +1,4 @@
+// 역할: AI 서비스 호출에 필요한 API 키나 인증 토큰이 유효하게 등록되었는지 확인합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole

@@ -1,3 +1,4 @@
+// 역할: 분석할 대상 프롬프트의 유효성을 검증하고 이전 분석 캐시를 확인합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory

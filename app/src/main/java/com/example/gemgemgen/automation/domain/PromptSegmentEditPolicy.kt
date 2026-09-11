@@ -1,3 +1,4 @@
+// 역할: 프롬프트 내 특정 구문의 치환 및 삽입 편집 규칙을 처리합니다.
 package com.example.gemgemgen.automation.domain
 
 import kotlin.math.abs

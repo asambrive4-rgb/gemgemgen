@@ -1,3 +1,4 @@
+// 역할: 분석 화면에서 사용하는 API 키 등록, 인증, 알림 다이얼로그 표시를 총괄합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.animation.AnimatedContent

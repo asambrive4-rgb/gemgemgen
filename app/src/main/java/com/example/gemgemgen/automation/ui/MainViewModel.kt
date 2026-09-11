@@ -1,3 +1,4 @@
+// 역할: 메인 화면의 사용자 입력을 처리하고 자동화 실행 및 환경 상태를 총괄 관리합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState

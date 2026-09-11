@@ -1,3 +1,4 @@
+// 역할: 프롬프트 텍스트를 문단별로 나누고 특정 문단을 교체하는 편집 규칙을 처리합니다.
 package com.example.gemgemgen.automation.domain
 
 data class PromptParagraphRange(

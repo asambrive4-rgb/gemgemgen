@@ -1,3 +1,4 @@
+// 역할: AI 단어 분류 기능의 실행, 결과 검토 및 저장 단계를 조율합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole

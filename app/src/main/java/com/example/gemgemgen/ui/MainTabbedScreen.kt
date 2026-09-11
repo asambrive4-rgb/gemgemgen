@@ -1,3 +1,4 @@
+// 역할: 탭 바를 통해 기능별 메인 화면을 전환하여 보여주는 화면 레이아웃을 구성합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.BorderStroke

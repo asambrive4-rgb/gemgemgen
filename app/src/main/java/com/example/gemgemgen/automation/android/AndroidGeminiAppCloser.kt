@@ -1,3 +1,4 @@
+// 역할: 자동화 완료 후 백그라운드에 열려 있는 Gemini 앱 프로세스를 종료합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context

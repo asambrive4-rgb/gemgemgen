@@ -1,3 +1,4 @@
+// 역할: 자동화 시작 시 자기 앱 닫기 또는 숨기기 허용 여부 정책을 판정합니다.
 package com.example.gemgemgen.automation.domain
 
 /**

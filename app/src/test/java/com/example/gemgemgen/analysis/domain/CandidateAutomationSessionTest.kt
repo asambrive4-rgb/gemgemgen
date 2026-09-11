@@ -1,3 +1,4 @@
+// 역할: 후보 프롬프트 자동화 세션의 생성 및 상태 관리를 검증합니다.
 package com.example.gemgemgen.analysis.domain
 
 import org.junit.Assert.assertEquals

@@ -1,3 +1,4 @@
+// 역할: 앱 전반에서 사용하는 기본 색상 값과 다크 및 라이트 모드 색상 토큰을 정의합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.runtime.Composable

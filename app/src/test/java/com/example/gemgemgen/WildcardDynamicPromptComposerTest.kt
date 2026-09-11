@@ -1,3 +1,4 @@
+// 역할: 와일드카드 토큰의 동적 치환 및 프롬프트 완성을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer

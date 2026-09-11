@@ -1,3 +1,4 @@
+// 역할: 자동화 실행 파이프라인의 대상 앱별 세션 마커 전송 및 프롬프트 반복 생성을 검증하는 단위 테스트
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*
@@ -66,6 +67,33 @@ class RunAutomationUseCaseTest {
             service.newChatModes
         )
         assertEquals(listOf(1, 2, 3), generatedIndexes)
+    }
+
+    @Test
+    fun run_withFlowTarget_skipsMarkerAndSendsInitialModeOnFirstPromptOnly() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = true)
+        val automation = automation(
+            service = service,
+            generateFinalPrompt = { _, _, index -> "flow prompt $index" }
+        )
+
+        automation.run(
+            request = AutomationRunRequest(
+                promptTemplate = "test template",
+                repeatCountText = "2",
+                targetApp = AutomationTargetApp.FLOW
+            ),
+            onStateChange = {}
+        )
+
+        assertEquals(
+            listOf("flow prompt 1", "flow prompt 2"),
+            service.sentPrompts
+        )
+        assertEquals(
+            listOf(NewChatMode.Initial, NewChatMode.Subsequent),
+            service.newChatModes
+        )
     }
 
     @Test

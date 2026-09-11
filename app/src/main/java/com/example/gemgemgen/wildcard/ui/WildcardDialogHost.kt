@@ -1,3 +1,4 @@
+// 역할: 와일드카드 화면의 생성, 이름 변경, 삭제, 분류 다이얼로그 팝업을 총괄 표시합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.compose.animation.AnimatedContent

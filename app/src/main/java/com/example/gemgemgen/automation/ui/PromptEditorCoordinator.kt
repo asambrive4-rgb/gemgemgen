@@ -1,4 +1,5 @@
-﻿package com.example.gemgemgen.automation.ui
+// 역할: 프롬프트 입력창의 텍스트 편집, 세그먼트 치환, 히스토리 이벤트를 조율합니다.
+package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd

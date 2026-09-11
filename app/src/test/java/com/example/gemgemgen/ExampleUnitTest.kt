@@ -1,3 +1,4 @@
+// 역할: 기본 단위 테스트 프레임워크 동작 환경을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

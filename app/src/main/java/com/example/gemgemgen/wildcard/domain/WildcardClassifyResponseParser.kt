@@ -1,3 +1,4 @@
+// 역할: AI의 단어 분류 응답 텍스트를 파싱하여 카테고리별 단어 그룹으로 변환합니다.
 package com.example.gemgemgen.wildcard.domain
 
 import kotlinx.serialization.json.Json

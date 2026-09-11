@@ -173,6 +173,7 @@ class RunAutomationUseCase(
         }
 
         val run = CurrentRun(
+            targetApp = request.targetApp,
             imeSession = (imeSwitchResult as ImeSwitchResult.Success).session,
             promptGateway = promptGateway,
             promptTemplate = request.promptTemplate,
@@ -194,7 +195,11 @@ class RunAutomationUseCase(
             return
         }
 
-        sendMarker(run, onStateChange)
+        if (request.targetApp == AutomationTargetApp.FLOW) {
+            sendNextPrompt(run, onStateChange)
+        } else {
+            sendMarker(run, onStateChange)
+        }
     }
 
     private fun sendMarker(
@@ -228,9 +233,10 @@ class RunAutomationUseCase(
 
         updateRunState(run, "프롬프트 생성 완료", onStateChange)
 
+        val isFirstPromptWithoutMarker = run.targetApp == AutomationTargetApp.FLOW && run.successCount == 0
         run.promptGateway.sendPrompt(
             prompt = finalPrompt,
-            newChatMode = NewChatMode.Subsequent,
+            newChatMode = if (isFirstPromptWithoutMarker) NewChatMode.Initial else NewChatMode.Subsequent,
             onStateChange = childStateCallback(run, onStateChange),
             onDone = {
                 run.successCount += 1
@@ -314,6 +320,7 @@ class RunAutomationUseCase(
     }
 
     private data class CurrentRun(
+        val targetApp: AutomationTargetApp,
         val imeSession: ImeSwitchSession,
         val promptGateway: PromptAutomationGateway,
         val promptTemplate: String,

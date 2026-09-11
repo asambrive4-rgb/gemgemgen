@@ -1,3 +1,4 @@
+// 역할: 실제 자동화 실행 유스케이스의 단계별 순차 진행 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

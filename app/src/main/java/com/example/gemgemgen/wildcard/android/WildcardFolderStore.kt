@@ -1,3 +1,4 @@
+// 역할: 선택된 와일드카드 루트 디렉토리 경로 설정을 영구 저장합니다.
 package com.example.gemgemgen.wildcard.android
 
 import android.content.Context

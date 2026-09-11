@@ -1,3 +1,4 @@
+// 역할: 와일드카드 파일 내 텍스트 편집 및 중복 제거 정책을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

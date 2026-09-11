@@ -1,3 +1,4 @@
+// 역할: 와일드카드 단어 분류 파싱 및 그룹화 알고리즘을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName

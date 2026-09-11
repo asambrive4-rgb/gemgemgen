@@ -1,3 +1,4 @@
+// 역할: 와일드카드 규칙에 따른 최종 프롬프트 생성 알고리즘을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

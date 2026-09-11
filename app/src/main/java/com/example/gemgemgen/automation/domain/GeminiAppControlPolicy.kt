@@ -1,3 +1,4 @@
+// 역할: Gemini 앱 자동 실행 및 강제 종료 허용 여부 정책을 판정합니다.
 package com.example.gemgemgen.automation.domain
 
 /**

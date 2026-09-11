@@ -1,3 +1,4 @@
+// 역할: 반복 실행 횟수 문자열의 정수 파싱 및 벾위 제한 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

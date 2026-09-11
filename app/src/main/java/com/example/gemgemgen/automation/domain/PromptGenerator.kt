@@ -1,3 +1,4 @@
+// 역할: 와일드카드 규칙과 반복 설정을 갓해 실제 전송할 프롬프트 목록을 생성합니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.wildcard.domain.WildcardSet

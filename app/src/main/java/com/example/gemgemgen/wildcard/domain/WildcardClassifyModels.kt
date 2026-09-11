@@ -1,3 +1,4 @@
+// 역할: 와일드카드 텍스트 항목들의 AI 자동 분류 그룹 및 태그 데이터를 정의합니다.
 package com.example.gemgemgen.wildcard.domain
 
 data class WildcardClassifyGroup(

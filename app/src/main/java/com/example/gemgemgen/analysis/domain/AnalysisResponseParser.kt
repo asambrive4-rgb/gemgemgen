@@ -1,3 +1,4 @@
+// 역할: AI 모델의 응답 텍스트를 파싱하여 카테고리별 분석 결과 세그먼트로 변환합니다.
 package com.example.gemgemgen.analysis.domain
 
 import kotlinx.serialization.json.Json

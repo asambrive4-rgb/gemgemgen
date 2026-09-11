@@ -1,3 +1,4 @@
+// 역할: 와일드카드 관리 화면의 파일 목록 아이템 및 UI 상태 모델을 정의합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole

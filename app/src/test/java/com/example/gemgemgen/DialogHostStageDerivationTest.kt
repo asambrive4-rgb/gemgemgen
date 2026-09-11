@@ -1,3 +1,4 @@
+// 역할: 다이얼로그 호스트의 화면 상태별 팝업 표시 단계를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisProvider

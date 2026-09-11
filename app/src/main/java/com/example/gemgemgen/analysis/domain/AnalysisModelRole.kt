@@ -1,3 +1,4 @@
+// 역할: 분석에 사용되는 AI 모델의 역할과 분류 유형을 정의합니다.
 package com.example.gemgemgen.analysis.domain
 
 /**

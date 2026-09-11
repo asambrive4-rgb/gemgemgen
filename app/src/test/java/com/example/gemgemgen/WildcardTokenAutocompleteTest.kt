@@ -1,3 +1,4 @@
+// 역할: 와일드카드 토큰 자동완성 제안 목록 추출을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete

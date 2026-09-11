@@ -1,3 +1,4 @@
+// 역할: 자동화 시작 전제 조건을 점검하고 실제 실행 작업을 트리거합니다.
 package com.example.gemgemgen.automation.usecase
 
 fun interface OverlayPermissionGateway {

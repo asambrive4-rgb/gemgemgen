@@ -1,3 +1,4 @@
+// 역할: 머티리얼 디자인 시스템과 커스텀 색상을 갓한 앱의 기본 테마를 적용합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme

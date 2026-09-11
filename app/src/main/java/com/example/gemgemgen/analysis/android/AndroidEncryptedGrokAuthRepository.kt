@@ -1,3 +1,4 @@
+// 역할: 기기 보안 저장소에 암호화된 Grok 인증 토큰을 저장하고 관리합니다.
 package com.example.gemgemgen.analysis.android
 
 import android.content.Context

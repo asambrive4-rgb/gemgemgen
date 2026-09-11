@@ -1,3 +1,4 @@
+// 역할: 와일드카드 편집기 세션의 텍스트 변경 감지를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.wildcard.domain.WildcardEditorSession

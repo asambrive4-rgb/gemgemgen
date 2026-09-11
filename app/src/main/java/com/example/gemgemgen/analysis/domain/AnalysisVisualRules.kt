@@ -1,3 +1,4 @@
+// 역할: 분석 화면에서 사용하는 시각적 강조 색상 및 태그 표시 규칙을 정의합니다.
 package com.example.gemgemgen.analysis.domain
 
 /** 분석과 후보 생성이 함께 사용하는 시각 변환·보존 규칙. */

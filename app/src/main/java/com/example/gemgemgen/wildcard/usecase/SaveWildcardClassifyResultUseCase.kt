@@ -1,3 +1,4 @@
+// 역할: AI가 분류한 단어 그룹들을 각각의 새 와일드카드 파일로 분할 저장합니다.
 package com.example.gemgemgen.wildcard.usecase
 
 import com.example.gemgemgen.core.AppDispatchers

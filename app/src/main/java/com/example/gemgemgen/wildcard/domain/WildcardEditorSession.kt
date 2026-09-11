@@ -1,3 +1,4 @@
+// 역할: 와일드카드 텍스트 파일의 편집 상태, 수정 여부, 커서 위치를 관리합니다.
 package com.example.gemgemgen.wildcard.domain
 
 data class WildcardEditorSession(

@@ -1,3 +1,4 @@
+// 역할: AI 분석 요청 상태, 결과 데이터 및 세그먼트 모델을 정의합니다.
 package com.example.gemgemgen.analysis.domain
 
 enum class AnalysisStatus {

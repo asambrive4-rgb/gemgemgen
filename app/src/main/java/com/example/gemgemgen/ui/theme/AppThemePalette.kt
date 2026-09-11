@@ -1,3 +1,4 @@
+// 역할: 앱에서 지원하는 테마 색상 팔레트 옵션들을 정의합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.runtime.Composable

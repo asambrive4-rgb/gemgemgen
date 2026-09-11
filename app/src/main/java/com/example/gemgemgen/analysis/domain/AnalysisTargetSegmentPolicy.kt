@@ -1,3 +1,4 @@
+// 역할: 프롬프트 전체 또는 특정 문단 단위 분석 대상 선정 규칙을 판정합니다.
 package com.example.gemgemgen.analysis.domain
 
 import com.example.gemgemgen.wildcard.domain.WildcardFileParser

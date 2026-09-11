@@ -1,3 +1,4 @@
+// 역할: 자동화 실행 전 대상 앱 상태와 생성된 프롬프트 목록을 준비하고 검증합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.PromptGenerator

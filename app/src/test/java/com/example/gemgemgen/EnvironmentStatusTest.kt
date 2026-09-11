@@ -1,3 +1,4 @@
+// 역할: 접근성 및 배터리 등 시스템 환경 권한 상태 판단을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

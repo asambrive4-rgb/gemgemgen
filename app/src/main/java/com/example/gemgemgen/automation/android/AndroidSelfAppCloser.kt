@@ -1,3 +1,4 @@
+// 역할: 자동화 실행 시작 시 방해되지 않도록 본인 앱을 백그라운드로 전환하거나 닫습니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context

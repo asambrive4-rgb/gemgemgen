@@ -1,3 +1,4 @@
+// 역할: 와일드카드 폴더 경로 표시용 포맷팅 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.wildcard.ui.WildcardFolderPathFormatter

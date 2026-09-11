@@ -1,3 +1,4 @@
+// 역할: 다중 행 텍스트 입력창 컴포넌트의 테스트 및 터치 UI 동작을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.foundation.layout.width

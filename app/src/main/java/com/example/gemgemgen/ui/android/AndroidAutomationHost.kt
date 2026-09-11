@@ -1,3 +1,4 @@
+// 역할: 접근성 서비스와의 연결 통로를 제공하고 자동화 화면을 감싸는 호스트 컴포넌트입니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest

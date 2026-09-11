@@ -1,3 +1,4 @@
+// 역할: 앱 실행에 필요한 접근성, 배터리, 오버레이 권한의 활성화 여부 상태를 정의합니다.
 package com.example.gemgemgen.environment.domain
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
@@ -5,6 +6,7 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 data class EnvironmentStatus(
     val isGeminiInstalled: Boolean = false,
     val isChatGptInstalled: Boolean = false,
+    val isFlowInstalled: Boolean = false,
     val isAccessibilityServiceEnabled: Boolean = false,
     val hasWriteSecureSettingsPermission: Boolean = false,
     val isWildcardDirectoryAccessible: Boolean = false,
@@ -24,6 +26,7 @@ data class EnvironmentStatus(
         return when (targetApp) {
             AutomationTargetApp.GEMINI -> isGeminiInstalled
             AutomationTargetApp.CHATGPT -> isChatGptInstalled
+            AutomationTargetApp.FLOW -> isFlowInstalled
         }
     }
 

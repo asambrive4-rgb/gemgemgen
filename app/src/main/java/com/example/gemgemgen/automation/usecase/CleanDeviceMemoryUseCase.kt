@@ -1,3 +1,4 @@
+// 역할: 디바이스 케어를 통한 메모리 정리 작업을 요청하고 결과를 반환합니다.
 package com.example.gemgemgen.automation.usecase
 
 sealed interface MemoryCleanupResult {

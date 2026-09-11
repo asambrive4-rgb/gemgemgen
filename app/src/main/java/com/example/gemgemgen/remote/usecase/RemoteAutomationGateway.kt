@@ -1,3 +1,4 @@
+// 역할: 원격 통신 네트워크 채널 연결 및 송수신 인터페이스를 정의합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

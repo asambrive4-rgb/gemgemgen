@@ -1,3 +1,4 @@
+// 역할: 안드로이드 시스템 설정 화면이나 외부 앱으로의 화면 이동을 처리합니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.ActivityNotFoundException

@@ -1,3 +1,4 @@
+// 역할: 사용자가 지정한 와일드카드 폴더 경로를 저장하고 유효성을 관리합니다.
 package com.example.gemgemgen.wildcard.android
 
 import android.content.Context

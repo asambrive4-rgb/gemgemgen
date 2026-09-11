@@ -1,3 +1,4 @@
+// 역할: AI 분석 시작 조건 및 차단 정책 판정 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory

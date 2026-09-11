@@ -1,3 +1,4 @@
+// 역할: 자동화 시작 유스케이스의 트리거 및 조건 처리를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision

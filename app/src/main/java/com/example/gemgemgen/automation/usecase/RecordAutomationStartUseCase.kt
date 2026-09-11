@@ -1,3 +1,4 @@
+// 역할: 자동화가 시작될 때 사용된 프롬프트와 옵션을 히스토리에 기록합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.core.AppDispatchers

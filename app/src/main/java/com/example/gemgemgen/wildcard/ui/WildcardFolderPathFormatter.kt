@@ -1,3 +1,4 @@
+// 역할: 복잡한 기기 파일 경로를 사용자가 읽기 쉬운 간결한 경로 문구로 변환합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import java.net.URLDecoder

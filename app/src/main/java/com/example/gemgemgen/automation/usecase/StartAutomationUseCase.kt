@@ -1,3 +1,4 @@
+// 역할: 자동화 시작 여부 판단 및 실행을 중개하는 유스케이스 (ExecuteAutomationUseCase로 통합 중)
 package com.example.gemgemgen.automation.usecase
 
 @Deprecated("ExecuteAutomationUseCase에 통합되었습니다. ExecuteAutomationUseCase를 직접 사용하세요.")

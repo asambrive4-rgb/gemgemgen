@@ -1,3 +1,4 @@
+// 역할: 과거 프롬프트 기록 저장소 인터페이스를 정의합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp

@@ -1,3 +1,4 @@
+// 역할: 와일드카드 파일 내 줄 추가, 수정, 삭제 시 중복 방지와 정렬 규칙을 처리합니다.
 package com.example.gemgemgen.wildcard.domain
 
 data class WildcardTextEditResult(

@@ -1,3 +1,4 @@
+// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 사용자 인터랙션을 화면에 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.BorderStroke

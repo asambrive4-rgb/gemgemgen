@@ -1,3 +1,4 @@
+// 역할: 프롬프트 문단 단위 분할 및 교체 편집 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.PromptParagraphEditPolicy

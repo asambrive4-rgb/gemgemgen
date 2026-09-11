@@ -1,3 +1,4 @@
+// 역할: 와일드카드 디렉토리 접근 권한 정책을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy

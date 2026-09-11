@@ -1,3 +1,4 @@
+// 역할: Grok 호출 한도 및 사용량 쿼터 계산 로직을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.GrokQuotaPolicy

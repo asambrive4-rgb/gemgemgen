@@ -1,3 +1,4 @@
+// 역할: 메모리와 로컬 파일에 저장된 와일드카드 세트 목록을 동기화하여 제공합니다.
 package com.example.gemgemgen.wildcard.android
 
 import android.content.Context

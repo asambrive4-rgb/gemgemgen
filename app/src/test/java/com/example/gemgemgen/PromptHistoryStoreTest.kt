@@ -1,3 +1,4 @@
+// 역할: 프롬프트 실행 기록 저장 및 조회 리포지토리 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp

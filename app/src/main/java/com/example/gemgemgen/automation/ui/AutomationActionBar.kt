@@ -1,3 +1,4 @@
+// 역할: 메인 화면 하단에서 자동화 시작, 일시정지, 중단 제어 버튼 영역을 화면에 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke

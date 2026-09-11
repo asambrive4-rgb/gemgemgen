@@ -1,3 +1,4 @@
+// 역할: 자동화 화면과 플로팅 바에 표시되는 상태 메시지 및 버튼 문구를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

@@ -1,3 +1,4 @@
+// 역할: 기기 보안 저장소에 암호화된 Gemini API 키를 저장하고 불러옵니다.
 package com.example.gemgemgen.analysis.android
 
 import android.content.Context

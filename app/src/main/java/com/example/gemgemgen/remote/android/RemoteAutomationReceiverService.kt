@@ -1,3 +1,4 @@
+// 역할: 백그라운드 포그라운드 서비스로 상주하며 원격 기기의 자동화 요청을 수신합니다.
 package com.example.gemgemgen.remote.android
 
 import android.app.KeyguardManager

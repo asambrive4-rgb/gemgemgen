@@ -1,3 +1,4 @@
+// 역할: 안드로이드 접근성 서비스와 연동되는 자동화 런타임 인스턴스를 제공합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context

@@ -1,3 +1,4 @@
+// 역할: Gemini 앱을 대상으로 프롬프트 입력과 전송 동작을 자동 수행합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler

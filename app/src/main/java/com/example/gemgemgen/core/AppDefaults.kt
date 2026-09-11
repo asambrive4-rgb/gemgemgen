@@ -1,9 +1,11 @@
+// 역할: 앱 전반에서 사용하는 기본 설정값과 타임아웃 상수를 정의합니다.
 package com.example.gemgemgen.core
 
 object AppDefaults {
     const val GEMINI_PACKAGE_NAME = "com.google.android.apps.bard"
     const val GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME = "com.google.android.googlequicksearchbox"
     const val CHATGPT_PACKAGE_NAME = "com.openai.chatgpt"
+    const val FLOW_PACKAGE_NAME = "com.google.android.apps.labs.whisk"
     /** 공식 Firefox 앱. Grok OAuth 로그인 URL 열 때 우선 사용. */
     const val FIREFOX_PACKAGE_NAME = "org.mozilla.firefox"
     const val WILDCARD_DIRECTORY = "Documents/wildcard"

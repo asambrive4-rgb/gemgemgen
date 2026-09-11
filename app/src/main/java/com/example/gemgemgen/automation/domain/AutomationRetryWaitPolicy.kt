@@ -1,3 +1,4 @@
+// 역할: 자동화 실행 실패나 노드 미발견 시 대기 시간과 재시도 정책을 검토하고 결정합니다.
 package com.example.gemgemgen.automation.domain
 
 object AutomationRetryWaitPolicy {

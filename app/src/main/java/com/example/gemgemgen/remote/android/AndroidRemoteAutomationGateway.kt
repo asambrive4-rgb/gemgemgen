@@ -1,3 +1,4 @@
+// 역할: 네트워크 소켓을 열어 원격 기기와 통신하고 명령을 수신합니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context

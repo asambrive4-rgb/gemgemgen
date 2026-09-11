@@ -1,3 +1,4 @@
+// 역할: 프롬프트 입력, 대상 앱 선택, 실행 카운터가 포함된 메인 자동화 화면을 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement

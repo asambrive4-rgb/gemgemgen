@@ -1,3 +1,4 @@
+// 역할: 가상 키보드(IME) 상태 제어 및 숨김 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*

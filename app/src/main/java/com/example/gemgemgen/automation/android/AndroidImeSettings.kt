@@ -1,3 +1,4 @@
+// 역할: 가상 키보드(IME) 설정 화면으로 사용자를 안내하거나 현재 키보드 상태를 조회합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context

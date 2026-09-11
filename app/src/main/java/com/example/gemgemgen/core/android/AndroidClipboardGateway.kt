@@ -1,3 +1,4 @@
+// 역할: 안드로이드 시스템 클립보드 서비스를 사용하여 텍스트 복사를 수행합니다.
 package com.example.gemgemgen.core.android
 
 import android.content.ClipData

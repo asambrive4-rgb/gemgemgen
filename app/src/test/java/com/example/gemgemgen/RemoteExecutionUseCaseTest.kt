@@ -1,3 +1,4 @@
+// 역할: 수신된 원격 명령의 실행 처리 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.remote.usecase.CheckRemoteExecutionUseCase

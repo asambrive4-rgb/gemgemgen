@@ -1,3 +1,4 @@
+// 역할: 디바이스 케어 앱을 실행하거나 시스템 메모리를 정리하도록 돕습니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.ComponentName

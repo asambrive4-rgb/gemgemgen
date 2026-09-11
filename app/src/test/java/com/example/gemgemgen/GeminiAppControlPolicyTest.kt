@@ -1,3 +1,4 @@
+// 역할: Gemini 앱 자동 제어 및 프로세스 관리 정책을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason

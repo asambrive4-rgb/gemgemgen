@@ -1,3 +1,4 @@
+// 역할: Grok 계정 연동을 위한 기기 인증 및 토큰 발급을 처리합니다.
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.usecase.AnalysisException

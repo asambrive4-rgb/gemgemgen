@@ -1,3 +1,4 @@
+// 역할: AI 분석을 시작하기 위해 필요한 필수 조건과 차단 사유를 판정합니다.
 package com.example.gemgemgen.analysis.domain
 
 /**

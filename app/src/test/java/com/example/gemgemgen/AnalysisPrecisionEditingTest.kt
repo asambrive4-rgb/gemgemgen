@@ -1,3 +1,4 @@
+// 역할: 정밀 분석 결과의 세그먼트 편집 및 치환 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisCascadingTrace

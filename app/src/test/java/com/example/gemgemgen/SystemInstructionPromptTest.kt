@@ -1,3 +1,4 @@
+// 역할: AI 모델 시스템 지침 프롬프트의 텍스트 조립을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.SystemInstructionPrompt

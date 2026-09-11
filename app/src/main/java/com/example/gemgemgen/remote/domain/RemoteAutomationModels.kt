@@ -1,3 +1,4 @@
+// 역할: 원격 제어 요청 데이터, 응답 패킷 및 상태 모델을 정의합니다.
 package com.example.gemgemgen.remote.domain
 
 import com.example.gemgemgen.automation.domain.AutomationRunState

@@ -1,3 +1,4 @@
+// 역할: 원격 자동화 수신 기록 및 세션 연결 정보를 메모리와 로컬에 보관합니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context

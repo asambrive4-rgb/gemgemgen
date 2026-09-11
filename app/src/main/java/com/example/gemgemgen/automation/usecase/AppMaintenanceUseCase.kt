@@ -1,3 +1,4 @@
+// 역할: 앱 실행 전 메모리 확보 및 백그라운드 환경 정리 작업을 조율합니다.
 package com.example.gemgemgen.automation.usecase
 
 sealed interface MaintenanceResult {

@@ -1,3 +1,4 @@
+// 역할: ChatGPT 앱 화면에서 입력창, 전송 버튼, 응답 영역 노드를 퀐색합니다.
 package com.example.gemgemgen.automation.android
 
 import android.view.accessibility.AccessibilityNodeInfo

@@ -1,3 +1,4 @@
+// 역할: Grok 서비스의 사용량 한도 및 결제 쿼터 상태를 조회합니다.
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.GrokQuotaPolicy
