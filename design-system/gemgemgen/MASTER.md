@@ -10,34 +10,37 @@
 **프로젝트:** GemGemGen (Android Native / Jetpack Compose)  
 **기반 스택:** `jetpack-compose`, Material 3, Kotlin Coroutines & Flow  
 **디자인 컨셉:** 소프트 3D 뉴모피즘 (Clay & Pebble)  
-**최신 갱신일:** 2026-09-10  
+**최신 갱신일:** 2026-09-13  
 
 ---
 
 ## 1. 비주얼 조형 규격: 소프트 3D 뉴모피즘 (Clay & Pebble)
 
-평면적(Flat) 네모 상자를 지양하고, **만지고 싶은 조약돌 형태(Pebble Shape)**와 **쫀득한 입체감(Soft 3D / Clay Extrusion)**을 유지합니다.  
+평면적(Flat) 네모 상자를 지양하고, **만지고 싶은 조약돌 형태(Pebble Shape)**와 **선명한 볼드 테두리 및 쫀득한 입체감(Soft 3D / Clay Extrusion)**을 유지합니다.  
 모든 화면은 하드코딩 대신 공통 컴포넌트 라이브러리인 [`NeumorphicElements.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/ui/theme/NeumorphicElements.kt)를 사용합니다.
 
 ### 1) 3D 조약돌 카드 (`NeuCard`)
 - **역할:** 주요 섹션 컨테이너, 프롬프트 카드, 설정 그룹
-- **라운딩:** `22.dp` (`RoundedCornerShape(22.dp)`)
+- **라운딩:** `18.dp` (`RoundedCornerShape(18.dp)`)
 - **입체감:** 기본 `elevation = 6.dp`
-- **그림자:** `AppTheme.colors.shadowDark` 기반 양방향 그림자 (ambient 0.5f, spot 0.4f) + 1dp `cardBorder`
+- **그림자 & 테두리:** `AppTheme.colors.shadowDark` 기반 양방향 그림자 (ambient 0.5f, spot 0.4f) + 2dp `cardBorder` (선명한 볼드 라인감)
 
 ### 2) 3D 음각 인셋 베드 (`NeuInsetBed`)
 - **역할:** 텍스트 입력창 뒷배경, 상단 탭 트랙, 유틸리티 액션 아일랜드
-- **라운딩:** `14~16.dp`
-- **효과:** 바닥면이 오목하게 파인 음각 질감(`AppTheme.colors.insetBed` + 1dp `insetBorder`)으로 입력 및 트랙 위계 분리
+- **라운딩:** `14.dp` (`RoundedCornerShape(14.dp)`)
+- **효과:** 바닥면이 오목하게 파인 음각 질감(`AppTheme.colors.insetBed` + 1.5dp `insetBorder`)으로 입력 및 트랙 위계 분리
 
-### 3) 쫀득한 조약돌 칩 (`NeuPillChip`)
-- **역할:** 타겟 앱 선택(Gemini/ChatGPT), AI 모델 선택, 필터 칩
-- **라운딩:** `14.dp` (패딩: 가로 12dp, 세로 6dp)
-- **피드백:** 선택 시 `AppTheme.colors.primary` 배경과 은은한 글로우 그림자(elevation 4.dp) 발광
+### 3) 쫀득한 조약돌 칩 (`NeuPillChip`) 및 모드 토글
+- **역할:** 타겟 앱 선택(Gemini/ChatGPT/Flow), 자동화 모드 토글(일반/송신/수신), AI 모델 선택, 필터 칩
+- **라운딩:** `10.dp` (`RoundedCornerShape(10.dp)`) (패딩: 가로 12dp, 세로 6dp)
+- **테두리 규칙 (선택 위계):** 
+  - **선택(Active) 시:** `1.5.dp` 볼드 테두리 (`AppTheme.colors.primary`) 및 배경 하이라이트 부여
+  - **비선택(Inactive) 시:** **테두리 완전 제거 (`border = null`)**하여 불필요한 시각적 번잡함을 배제하고 선택 상태를 극대화
+- **피드백:** 선택 시 `AppTheme.colors.primary` 배경과 은은한 글로우 그림자(elevation 3.dp) 발광
 
 ### 4) 쫀득한 클레이 버튼 (`NeuButton`)
 - **역할:** 시작/중지, 생성, 복사, 저장 등 주요 터치 액션
-- **라운딩:** `16.dp`
+- **라운딩:** `12.dp` (`RoundedCornerShape(12.dp)`) (테두리: 1.5dp)
 - **입체감:** Primary 버튼(elevation 6.dp), Secondary 서브 버튼(elevation 3.dp)
 - **비활성 피드백:** 비활성화 시 `alpha = 0.5f` 및 `elevation = 0.dp`로 자연스럽게 바닥으로 가라앉는 시각적 피드백 제공
 
@@ -71,8 +74,8 @@
 
 | UI 요소 | 시각적 높이 / 크기 | 외부 터치 히트박스 보장 규격 | 간격 리듬 |
 | :--- | :--- | :--- | :--- |
-| **소형 조약돌 칩** (`NeuPillChip`) | 높이 26~30dp, 라운딩 14~15dp | **최소 36~44dp** 확보 (Box 패딩 또는 히트박스 영역) | 가로 간격 6~8dp |
-| **스텝퍼 조절 버튼** (+ / -) | 크기 28~32dp | **최소 36~40dp** 클릭 영역 유지 | 인접 요소 간격 4~8dp |
+| **소형 조약돌 칩** (`NeuPillChip`) | 높이 26~30dp, 라운딩 10dp, 선택 시 테두리 1.5dp (비선택 시 테두리 없음) | **최소 36~44dp** 확보 (Box 패딩 또는 히트박스 영역) | 가로 간격 6~8dp |
+| **스텝퍼 조절 버튼** (+ / -) | 크기 28~32dp, 라운딩 8~10dp, 테두리 1.5dp | **최소 36~40dp** 클릭 영역 유지 | 인접 요소 간격 4~8dp |
 | **유틸리티 액션 버튼** | 높이 36dp, 라운딩 12dp | **36~44dp** 유지 | 버튼 간격 8dp |
 | **메인 액션 바 버튼** (실행/생성) | 높이 48~52dp, 라운딩 16dp | **48~52dp** | 하단 여백 12~16dp |
 | **화면 레이아웃 패딩** | - | 외곽 패딩 16dp, 섹션 간격 12dp, 아이템 8dp/4dp | 8dp 그리드 리듬 |

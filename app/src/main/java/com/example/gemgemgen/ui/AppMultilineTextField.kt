@@ -173,7 +173,7 @@ fun AppMultilineTextField(
         Modifier
     }
 
-    val fieldShape = RoundedCornerShape(16.dp)
+    val fieldShape = RoundedCornerShape(14.dp)
 
     OutlinedTextField(
         state = state,

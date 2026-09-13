@@ -151,11 +151,6 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         selectedTab = tab
     }
 
-    fun handoffSavedAnalysisToAutomation(replacedSource: String) {
-        mainViewModel.replacePromptTemplateEntirely(replacedSource)
-        selectMainTab(MainTab.AUTOMATION)
-    }
-
     fun bringMainActivityToFront() {
         platformNavigator.bringMainActivityToFront()
     }
@@ -293,9 +288,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onClearFocus = clearInputFocus,
             onSourcePromptChange = analysisViewModel::onSourcePromptChange,
             onImportFromAutomation = {
-                analysisViewModel.importSourcePromptFromAutomation(
-                    mainViewModel.currentPromptTemplateText()
-                )
+                analysisViewModel.importSourcePromptFromAutomation()
             },
             onCategorySelected = analysisViewModel::onCategorySelected,
             onClearTargetSegment = analysisViewModel::clearTargetSegment,
@@ -310,27 +303,20 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onCustomHintChange = analysisViewModel::onCustomHintChange,
             onResultFileNameChange = analysisViewModel::onResultFileNameChange,
             onApplyCandidate = { index ->
-                analysisViewModel.applyCandidate(
-                    index = index,
-                    applyToAutomation = mainViewModel::replacePromptTemplateSegment
-                )
+                analysisViewModel.applyCandidate(index = index)
             },
             onCopyCandidate = analysisViewModel::copyCandidate,
             onRestoreOriginalPrompt = {
-                analysisViewModel.restoreOriginalPrompt(
-                    restoreInAutomation = mainViewModel::replacePromptTemplateSegment
-                )
+                analysisViewModel.restoreOriginalPrompt()
             },
             onCopyResults = analysisViewModel::copyGeneratedResults,
             onSaveResults = {
-                analysisViewModel.saveGeneratedResults(
-                    onSuccess = ::handoffSavedAnalysisToAutomation
-                )
+                analysisViewModel.saveGeneratedResults()
+                selectMainTab(MainTab.AUTOMATION)
             },
             onConfirmOverwrite = {
-                analysisViewModel.confirmOverwrite(
-                    onSuccess = ::handoffSavedAnalysisToAutomation
-                )
+                analysisViewModel.confirmOverwrite()
+                selectMainTab(MainTab.AUTOMATION)
             },
             onDismissOverwrite = analysisViewModel::dismissOverwrite,
             onShowKeyDialog = analysisViewModel::showKeyDialog,

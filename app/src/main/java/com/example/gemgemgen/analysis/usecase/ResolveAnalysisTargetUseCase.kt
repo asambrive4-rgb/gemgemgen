@@ -3,22 +3,24 @@ package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisEditPolicy
+import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
+import com.example.gemgemgen.analysis.domain.MaskingAnalysisCacheSnapshot
 
 data class AnalysisReportCache(
-    val sourcePrompt: String,
-    val category: AnalysisCategory,
-    val targetSegment: AnalysisTargetSegment?,
+    override val sourcePrompt: String,
+    override val category: AnalysisCategory,
+    override val targetSegment: AnalysisTargetSegment?,
     val report: AnalysisReport,
     /** Goal 추론에 쓰인 방향 칩 hint 목록 (순서 유지) */
-    val selectedHints: List<String> = emptyList(),
+    override val selectedHints: List<String> = emptyList(),
     /** Goal 추론에 쓰인 사용자 추가 요구사항 */
-    val customHint: String = ""
-)
+    override val customHint: String = ""
+) : MaskingAnalysisCacheSnapshot
 
 data class AnalyzeAndMaskResult(
     val cache: AnalysisReportCache,
@@ -156,13 +158,15 @@ class ResolveAnalysisTargetUseCase(
         selectedHints: List<String>,
         customHint: String
     ): CachedReport {
-        if (cache != null &&
-            cache.sourcePrompt == source &&
-            cache.category == category &&
-            cache.targetSegment == targetSegment &&
-            cache.selectedHints == selectedHints &&
-            cache.customHint == customHint
-        ) {
+        val needsAnalyze = AnalysisMaskingPolicy.shouldAnalyzeMasking(
+            source = source,
+            category = category,
+            targetSegment = targetSegment,
+            cache = cache,
+            selectedHints = selectedHints,
+            customHint = customHint
+        )
+        if (!needsAnalyze && cache != null) {
             return CachedReport(report = cache.report, cache = cache, didAnalyze = false)
         }
         val report = analyzePrompt.analyze(

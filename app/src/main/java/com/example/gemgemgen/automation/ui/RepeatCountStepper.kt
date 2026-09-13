@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +33,7 @@ internal fun RepeatCountStepper(
     modifier: Modifier = Modifier
 ) {
     val currentVal = RepeatCountParser.parse(repeatCountText)
+    val buttonShape = RoundedCornerShape(8.dp)
 
     Row(
         modifier = modifier,
@@ -64,7 +64,7 @@ internal fun RepeatCountStepper(
                                 if (currentVal > 1) {
                                     Modifier.shadow(
                                         elevation = 2.dp,
-                                        shape = CircleShape,
+                                        shape = buttonShape,
                                         ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
                                         spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
                                     )
@@ -72,7 +72,7 @@ internal fun RepeatCountStepper(
                                     Modifier
                                 }
                             )
-                            .clip(CircleShape)
+                            .clip(buttonShape)
                             .background(
                                 color = if (currentVal > 1) {
                                     AppTheme.colors.card
@@ -82,10 +82,10 @@ internal fun RepeatCountStepper(
                             )
                             .border(
                                 BorderStroke(
-                                    1.dp,
+                                    1.5.dp,
                                     if (currentVal > 1) AppTheme.colors.cardBorder else AppTheme.colors.cardBorder.copy(alpha = 0.4f)
                                 ),
-                                CircleShape
+                                buttonShape
                             ),
                         contentAlignment = Alignment.Center
                     ) {
@@ -128,16 +128,16 @@ internal fun RepeatCountStepper(
                             .then(
                                 if (currentVal < 999) {
                                     Modifier.shadow(
-                                        elevation = 2.dp,
-                                        shape = CircleShape,
-                                        ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
-                                        spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
-                                    )
-                                } else {
+                                         elevation = 2.dp,
+                                         shape = buttonShape,
+                                         ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
+                                         spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
+                                     )
+                                 } else {
                                     Modifier
                                 }
                             )
-                            .clip(CircleShape)
+                            .clip(buttonShape)
                             .background(
                                 color = if (currentVal < 999) {
                                     AppTheme.colors.card
@@ -147,10 +147,10 @@ internal fun RepeatCountStepper(
                             )
                             .border(
                                 BorderStroke(
-                                    1.dp,
+                                    1.5.dp,
                                     if (currentVal < 999) AppTheme.colors.cardBorder else AppTheme.colors.cardBorder.copy(alpha = 0.4f)
                                 ),
-                                CircleShape
+                                buttonShape
                             ),
                         contentAlignment = Alignment.Center
                     ) {

@@ -35,6 +35,7 @@ import com.example.gemgemgen.automation.usecase.ExecuteAutomationUseCase
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.core.android.AndroidSoundAlertGateway
+import com.example.gemgemgen.core.PromptWorkspace
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
 import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
@@ -79,6 +80,7 @@ class AndroidAppContainer(context: Context) {
     )
 
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
+    val promptWorkspace = PromptWorkspace()
 
     val mainViewModelFactory: ViewModelProvider.Factory = factory<MainViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
@@ -116,7 +118,8 @@ class AndroidAppContainer(context: Context) {
             manageRemoteAutomation = manageRemoteAutomation,
             soundAlertGateway = AndroidSoundAlertGateway(appContext),
             promptHistoryStore = promptHistoryStore,
-            themePaletteStore = themePaletteStore
+            themePaletteStore = themePaletteStore,
+            promptWorkspace = promptWorkspace
         )
     }
 
@@ -155,7 +158,8 @@ class AndroidAppContainer(context: Context) {
             saveWildcardFile = SaveAnalysisWildcardFileUseCase(
                 repository = AndroidWildcardFileRepository(appContext),
                 copyResults = copyResults
-            )
+            ),
+            promptWorkspace = promptWorkspace
         )
     }
 

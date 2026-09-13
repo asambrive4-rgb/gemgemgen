@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
+import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
@@ -27,6 +28,7 @@ import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.PromptWorkspace
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -45,6 +47,7 @@ class AnalysisViewModel(
     private val copyResults: CopyAnalysisResultsUseCase,
     private val saveWildcardFile: SaveAnalysisWildcardFileUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers(),
+    private val promptWorkspace: PromptWorkspace? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
@@ -129,7 +132,7 @@ class AnalysisViewModel(
      * 자동화 탭에 입력된 원본 프롬프트로 분석 원문을 통째로 교체한다.
      * 비어 있으면 원문은 유지하고 안내만 표시한다.
      */
-    fun importSourcePromptFromAutomation(text: String) {
+    fun importSourcePromptFromAutomation(text: String = promptWorkspace?.currentPrompt?.value.orEmpty()) {
         if (text.isBlank()) {
             showError("자동화에 입력된 텍스트가 없습니다.")
             return
@@ -266,10 +269,10 @@ class AnalysisViewModel(
         val snapshot = _uiState.value
         val source = currentSourcePrompt()
         val directionInput = currentDirectionInput(snapshot)
-        val needsMaskingAnalysis = willNeedMaskingAnalysis(
+        val needsMaskingAnalysis = AnalysisMaskingPolicy.shouldAnalyzeMasking(
             source = source,
             category = snapshot.selectedCategory,
-            existingTarget = snapshot.targetSegment,
+            targetSegment = snapshot.targetSegment,
             cache = analysisCache,
             selectedHints = directionInput.selectedHints,
             customHint = directionInput.customHint
@@ -408,11 +411,11 @@ class AnalysisViewModel(
      */
     fun applyCandidate(
         index: Int,
-        applyToAutomation: (
+        applyToAutomation: ((
             expectedSegment: String,
             replacement: String,
             preferredStartIndex: Int
-        ) -> Int?
+        ) -> Int?)? = null
     ) {
         val state = _uiState.value
         if (state.resultPresentation != AnalysisResultPresentation.CARDS) return
@@ -441,7 +444,10 @@ class AnalysisViewModel(
         scope.launch {
             try {
                 copyResults.copyText(candidate)
-                val appliedStartIndex = applyToAutomation(
+                val replacer = applyToAutomation ?: { exp, rep, start ->
+                    promptWorkspace?.replaceSegment(exp, rep, start)
+                }
+                val appliedStartIndex = replacer(
                     expectedSegment,
                     candidate,
                     preferredStartIndex
@@ -498,15 +504,18 @@ class AnalysisViewModel(
 
     /** 자동화 프롬프트에 마지막으로 적용한 후보를 최초 분석 원문으로 복원한다. */
     fun restoreOriginalPrompt(
-        restoreInAutomation: (
+        restoreInAutomation: ((
             expectedSegment: String,
             originalSegment: String,
             preferredStartIndex: Int
-        ) -> Int?
+        ) -> Int?)? = null
     ) {
         if (_uiState.value.isBusy) return
         val session = candidateAutomationSession ?: return
-        val restoredStartIndex = restoreInAutomation(
+        val replacer = restoreInAutomation ?: { exp, rep, start ->
+            promptWorkspace?.replaceSegment(exp, rep, start)
+        }
+        val restoredStartIndex = replacer(
             session.appliedCandidate,
             session.targetSegment.text,
             session.automationSegmentStartIndex
@@ -531,28 +540,6 @@ class AnalysisViewModel(
         }
     }
 
-    /**
-     * 생성 시 캐시로 분석 결과를 재사용하지 못하면 마스킹 모델 분석이 필요하다.
-     * (ResolveAnalysisTargetUseCase.getOrAnalyzeReport 캐시 조건과 동일)
-     * 칩·추가 요구사항이 바뀌면 variationGoal이 달라지므로 재분석한다.
-     */
-    private fun willNeedMaskingAnalysis(
-        source: String,
-        category: AnalysisCategory?,
-        existingTarget: AnalysisTargetSegment?,
-        cache: AnalysisReportCache?,
-        selectedHints: List<String>,
-        customHint: String
-    ): Boolean {
-        if (category == null) return false
-        return cache == null ||
-            cache.sourcePrompt != source ||
-            cache.category != category ||
-            cache.targetSegment != existingTarget ||
-            cache.selectedHints != selectedHints ||
-            cache.customHint != customHint
-    }
-
     private fun computeNeedsMaskingAnalysis(
         source: String = currentSourcePrompt(),
         category: AnalysisCategory? = _uiState.value.selectedCategory,
@@ -561,10 +548,10 @@ class AnalysisViewModel(
         state: AnalysisUiState = _uiState.value
     ): Boolean {
         val directionInput = currentDirectionInput(state)
-        return willNeedMaskingAnalysis(
+        return AnalysisMaskingPolicy.shouldAnalyzeMasking(
             source = source,
             category = category,
-            existingTarget = targetSegment,
+            targetSegment = targetSegment,
             cache = cache,
             selectedHints = directionInput.selectedHints,
             customHint = directionInput.customHint
@@ -754,6 +741,7 @@ class AnalysisViewModel(
                                 error = ""
                             )
                         }
+                        promptWorkspace?.handoffEntirely(result.replacedSource)
                         onSuccess?.invoke(result.replacedSource)
                     }
                 }

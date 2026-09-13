@@ -1,4 +1,4 @@
-// 역할: 부드러운 입체 그림자 효과를 가진 뉴모피즘 카드 및 버튼 UI 요소를 제공합니다.
+// 역할: 볼드 테두리와 완화된 둥근 모서리(Squircle)를 적용한 뉴모피즘 카드, 버튼, 인셋 베드 및 칩 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.foundation.BorderStroke
@@ -29,12 +29,12 @@ import androidx.compose.ui.unit.sp
 
 /**
  * 3D 조약돌 카드 (Extruded Pebble Card)
- * 부드러운 엠보싱 섀도우와 미세 테두리로 바닥에서 솟아오른 듯한 깊이감을 줍니다.
+ * 부드러운 엠보싱 섀도우와 선명한 볼드 테두리로 바닥에서 솟아오른 듯한 깊이감을 줍니다.
  */
 @Composable
 fun NeuCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(22.dp),
+    shape: Shape = RoundedCornerShape(18.dp),
     backgroundColor: Color = AppTheme.colors.card,
     borderColor: Color = AppTheme.colors.cardBorder,
     elevation: Dp = 6.dp,
@@ -48,7 +48,7 @@ fun NeuCard(
                 ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.5f),
                 spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f)
             )
-            .border(BorderStroke(1.dp, borderColor), shape),
+            .border(BorderStroke(2.dp, borderColor), shape),
         shape = shape,
         color = backgroundColor,
         content = content
@@ -62,7 +62,7 @@ fun NeuCard(
 @Composable
 fun NeuInsetBed(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(16.dp),
+    shape: Shape = RoundedCornerShape(14.dp),
     backgroundColor: Color = AppTheme.colors.insetBed,
     borderColor: Color = AppTheme.colors.insetBorder,
     content: @Composable () -> Unit
@@ -71,7 +71,7 @@ fun NeuInsetBed(
         modifier = modifier
             .clip(shape)
             .background(backgroundColor)
-            .border(BorderStroke(1.dp, borderColor), shape)
+            .border(BorderStroke(1.5.dp, borderColor), shape)
     ) {
         content()
     }
@@ -86,7 +86,7 @@ fun NeuPillChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(14.dp),
+    shape: Shape = RoundedCornerShape(10.dp),
     enabled: Boolean = true
 ) {
     val containerColor = if (selected) {
@@ -99,23 +99,23 @@ fun NeuPillChip(
     } else {
         AppTheme.colors.textSecondary
     }
-    val borderColor = if (selected) {
-        AppTheme.colors.primary
+    val borderStroke = if (selected) {
+        BorderStroke(1.5.dp, AppTheme.colors.primary)
     } else {
-        AppTheme.colors.cardBorder
+        null
     }
 
     Box(
         modifier = modifier
             .shadow(
-                elevation = if (selected) 4.dp else 2.dp,
+                elevation = if (selected) 3.dp else 0.dp,
                 shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.4f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f),
+                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.25f) else AppTheme.colors.shadowDark.copy(alpha = 0.15f)
             )
             .clip(shape)
             .background(containerColor)
-            .border(BorderStroke(1.dp, borderColor), shape)
+            .then(if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
@@ -138,7 +138,7 @@ fun NeuButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isPrimary: Boolean = true,
-    shape: Shape = RoundedCornerShape(16.dp),
+    shape: Shape = RoundedCornerShape(12.dp),
     content: @Composable RowScope.() -> Unit
 ) {
     val backgroundColor = if (isPrimary) AppTheme.colors.primary else AppTheme.colors.card
@@ -159,7 +159,7 @@ fun NeuButton(
                 ambientColor = if (isPrimary) AppTheme.colors.primary.copy(alpha = 0.4f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
                 spotColor = if (isPrimary) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
             )
-            .border(BorderStroke(1.dp, borderColor), shape)
+            .border(BorderStroke(1.5.dp, borderColor), shape)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),

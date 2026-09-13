@@ -2,6 +2,7 @@
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Handler
@@ -33,19 +34,19 @@ class GeminiAccessibilityService : AccessibilityService() {
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
             handler = handler,
-            rootProvider = { rootInActiveWindow }
+            rootProvider = { findTargetRoot(AutomationTargetApp.GEMINI) }
         )
     }
     private val chatGptAutomation by lazy {
         ChatGptPromptAutomation(
             handler = handler,
-            rootProvider = { rootInActiveWindow }
+            rootProvider = { findTargetRoot(AutomationTargetApp.CHATGPT) }
         )
     }
     private val flowAutomation by lazy {
         FlowPromptAutomation(
             handler = handler,
-            rootProvider = { rootInActiveWindow },
+            rootProvider = { findTargetRoot(AutomationTargetApp.FLOW) },
             tapAtCoordinates = { x, y, onCompleted ->
                 tapCoordinates(x, y, onCompleted)
             }
@@ -215,7 +216,26 @@ class GeminiAccessibilityService : AccessibilityService() {
         val info = serviceInfo ?: return
         info.eventTypes = 0
         info.packageNames = packageNames
+        info.flags = info.flags or
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+            AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         setServiceInfo(info)
+    }
+
+    private fun findTargetRoot(targetApp: AutomationTargetApp): AccessibilityNodeInfo? {
+        val targetPackages = packageNamesFor(targetApp)
+        val activeRoot = rootInActiveWindow
+        if (activeRoot != null && activeRoot.packageName?.toString() in targetPackages) {
+            return activeRoot
+        }
+
+        // Fallback: 플로팅 오버레이나 시스템 창이 포커스를 점유하고 있을 때,
+        // windows 목록에서 대상 앱의 윈도우 루트를 탐색하여 반환합니다.
+        return runCatching {
+            windows.firstOrNull { window ->
+                window.root?.packageName?.toString() in targetPackages
+            }?.root
+        }.getOrNull() ?: activeRoot
     }
 
     private fun packageNamesFor(targetApp: AutomationTargetApp): Array<String> {

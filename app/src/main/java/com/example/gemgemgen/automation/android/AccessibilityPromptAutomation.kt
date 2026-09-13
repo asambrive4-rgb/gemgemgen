@@ -1,4 +1,4 @@
-// 역할: 접근성 서비스를 통해 외부 AI 앱의 화면 요소를 찾고 프롬프트를 자동 입력합니다.
+// 역할: 접근성 서비스를 통해 외부 AI 앱의 화면 요소를 찾고 프롬프트를 자동 입력하며 응답 대기 흐름을 제어합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -241,7 +241,12 @@ internal abstract class AccessibilityPromptAutomation(
             onStateChange(AutomationRunState.Running("보내기 클릭 후 전송 확인 중"))
             postDelayedOnRun(runToken, SEND_CONFIRM_WAIT_MS) {
                 if (isSendConfirmed(prompt)) {
-                    onDone()
+                    waitForResponseIfSupported(
+                        runToken = runToken,
+                        startedAtMillis = startedAtMillis,
+                        onStateChange = onStateChange,
+                        onDone = onDone
+                    )
                 } else {
                     retryOrFail(
                         startedAtMillis = startedAtMillis,
@@ -312,13 +317,22 @@ internal abstract class AccessibilityPromptAutomation(
         return null
     }
 
-    private fun isActiveRun(token: Any): Boolean = activeRunToken === token
+    protected open fun waitForResponseIfSupported(
+        runToken: Any,
+        startedAtMillis: Long,
+        onStateChange: (AutomationRunState) -> Unit,
+        onDone: () -> Unit
+    ) {
+        onDone()
+    }
+
+    protected fun isActiveRun(token: Any): Boolean = activeRunToken === token
 
     private fun postOnRun(token: Any, block: () -> Unit) {
         postDelayedOnRun(token, 0L, block)
     }
 
-    private fun postDelayedOnRun(token: Any, delayMillis: Long, block: () -> Unit) {
+    protected fun postDelayedOnRun(token: Any, delayMillis: Long, block: () -> Unit) {
         handler.postDelayed(
             {
                 if (!isActiveRun(token)) return@postDelayed

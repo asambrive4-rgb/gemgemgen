@@ -37,6 +37,8 @@ import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.remote.usecase.NoOpRemoteAutomationGateway
 import com.example.gemgemgen.core.NoOpSoundAlertGateway
 import com.example.gemgemgen.core.SoundAlertGateway
+import com.example.gemgemgen.core.PromptWorkspace
+import com.example.gemgemgen.core.PromptHandoffEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -78,6 +80,7 @@ class MainViewModel(
     private val soundAlertGateway: SoundAlertGateway = NoOpSoundAlertGateway,
     private val promptHistoryStore: PromptHistoryStore? = null,
     private val themePaletteStore: com.example.gemgemgen.ui.theme.ThemePaletteStore? = null,
+    private val promptWorkspace: PromptWorkspace? = null,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val executeAutomation: ExecuteAutomationUseCase = ExecuteAutomationUseCase(
         checkAutomationStart = checkAutomationStart,
@@ -169,6 +172,23 @@ class MainViewModel(
             }
         }
         loadInitialState()
+        promptWorkspace?.let { workspace ->
+            workspace.segmentReplacer = ::replacePromptTemplateSegment
+            scope.launch {
+                promptEditor.editorUiState.collect { editorState ->
+                    workspace.updateCurrentPrompt(editorState.promptTemplate)
+                }
+            }
+            scope.launch {
+                workspace.handoffEvents.collect { event ->
+                    when (event) {
+                        is PromptHandoffEvent.ReplaceEntirely -> {
+                            replacePromptTemplateEntirely(event.replacement)
+                        }
+                    }
+                }
+            }
+        }
         refreshStatus()
     }
 

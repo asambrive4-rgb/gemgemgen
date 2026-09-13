@@ -1,4 +1,4 @@
-// 역할: Gemini 앱 화면에서 텍스트 입력창, 전송 버튼, 새 대화 버튼 노드를 퀐색합니다.
+// 역할: Gemini 앱 화면에서 텍스트 입력창, 전송 버튼, 응답 생성 완료 감지 및 새 대화 버튼 노드를 탐색합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect
@@ -27,6 +27,43 @@ internal class GeminiAccessibilityNodeFinder(
 
     fun findNodeByTextOrDescription(value: String): AccessibilityNodeInfo? {
         return nodes().firstOrNull { node -> node.matchesTextOrDescription(value) }
+    }
+
+    fun isResponseGenerating(): Boolean {
+        return nodes().any { node ->
+            STOP_GENERATING_DESCRIPTIONS.any { desc -> node.matchesTextOrDescription(desc) }
+        }
+    }
+
+    fun hasResponseCompleted(): Boolean {
+        val currentNodes = nodes()
+        val hasStopButton = currentNodes.any { node ->
+            STOP_GENERATING_DESCRIPTIONS.any { desc -> node.matchesTextOrDescription(desc) }
+        }
+        if (hasStopButton) return false
+
+        return currentNodes.any { node ->
+            RESPONSE_COMPLETED_IDLE_DESCRIPTIONS.any { desc -> node.matchesTextOrDescription(desc) }
+        }
+    }
+
+    fun hasActiveChatOptionsNode(): Boolean {
+        return nodes().any { node ->
+            ACTIVE_CHAT_OPTIONS_DESCRIPTIONS.any { desc -> node.matchesTextOrDescription(desc) }
+        }
+    }
+
+    fun findDirectNewChatNode(): AccessibilityNodeInfo? {
+        // 전송 후 일반 대화방으로 UI가 전환되어 "옵션 더보기" 버튼이 나타났는지 먼저 검증합니다.
+        // 아직 나타나지 않았다면 찰나의 '새 임시 채팅' 버튼 상태이므로 클릭하지 않도록 null을 반환합니다.
+        if (!hasActiveChatOptionsNode()) {
+            return null
+        }
+
+        return nodes().firstOrNull { node ->
+            DIRECT_NEW_CHAT_DESCRIPTIONS.any { desc -> node.matchesTextOrDescription(desc) } &&
+                TEMP_CHAT_EXCLUSION_KEYWORDS.none { keyword -> node.matchesTextOrDescription(keyword) }
+        }
     }
 
     fun findNewChatNearestToSearch(): AccessibilityNodeInfo? {
@@ -160,7 +197,13 @@ internal class GeminiAccessibilityNodeFinder(
     private val NodeBounds.area: Long
         get() = width.toLong() * height.toLong()
 
-    private companion object {
+    internal companion object {
+        val DIRECT_NEW_CHAT_DESCRIPTIONS = listOf("새 채팅", "새 대화", "New chat")
+        val ACTIVE_CHAT_OPTIONS_DESCRIPTIONS = listOf("옵션 더보기", "More options")
+        val TEMP_CHAT_EXCLUSION_KEYWORDS = listOf("임시", "temporary")
+        val STOP_GENERATING_DESCRIPTIONS = listOf("중지", "응답 중지", "생성 중지", "Stop", "Stop generating")
+        val RESPONSE_COMPLETED_IDLE_DESCRIPTIONS = listOf("마이크", "Open Gemini Live", "음성", "보내기", "Send")
+
         val GEMINI_ACCESSIBILITY_PACKAGES = setOf(
             AppDefaults.GEMINI_PACKAGE_NAME,
             AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME

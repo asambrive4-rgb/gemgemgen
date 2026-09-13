@@ -256,7 +256,7 @@ internal fun PromptActionRow(
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "GemGemGen 앱 종료" },
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -286,7 +286,7 @@ internal fun PromptActionRow(
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "Gemini 앱 리셋" },
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -316,7 +316,7 @@ internal fun PromptActionRow(
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "메모리 정리" },
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -345,7 +345,7 @@ internal fun PromptActionRow(
                 modifier = Modifier
                     .height(28.dp)
                     .semantics { contentDescription = "[SI 삽입]" },
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
             ) {
                 Text(
                     text = "[SI 삽입]",
@@ -363,7 +363,7 @@ internal fun PromptActionRow(
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Undo,
@@ -385,7 +385,7 @@ internal fun PromptActionRow(
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
             ) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
@@ -402,7 +402,7 @@ internal fun PromptActionRow(
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                 modifier = Modifier.height(28.dp),
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
             ) {
                 Text(
                     text = "가져오기",
@@ -420,7 +420,7 @@ internal fun PromptActionRow(
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(0.dp),
                 modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
             ) {
                 Icon(
                     imageVector = Icons.Default.ContentPaste,
@@ -476,12 +476,12 @@ internal fun WildcardTokenSuggestionBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         tokens.forEach { token ->
-            val shape = RoundedCornerShape(12.dp)
+            val shape = RoundedCornerShape(10.dp)
             Surface(
                 onClick = { onTokenClick(token) },
                 shape = shape,
                 color = AppTheme.colors.card,
-                border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.4f)),
+                border = BorderStroke(1.5.dp, AppTheme.colors.primary.copy(alpha = 0.4f)),
                 modifier = Modifier
                     .shadow(
                         elevation = 2.dp,
@@ -512,7 +512,7 @@ private fun ActionIsland(
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
+        border = BorderStroke(1.5.dp, AppTheme.colors.insetBorder),
         color = AppTheme.colors.insetBed,
         modifier = modifier
     ) {
@@ -542,13 +542,13 @@ private fun TargetAppButton(
     } else {
         AppTheme.colors.textSecondary
     }
-    val shape = RoundedCornerShape(15.dp)
+    val shape = RoundedCornerShape(10.dp)
 
     Surface(
         modifier = Modifier
             .height(30.dp)
             .shadow(
-                elevation = if (selected) 3.dp else 1.dp,
+                elevation = if (selected) 3.dp else 0.dp,
                 shape = shape,
                 ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
                 spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
@@ -563,9 +563,9 @@ private fun TargetAppButton(
         color = containerColor,
         contentColor = contentColor,
         border = if (selected) {
-            BorderStroke(1.dp, AppTheme.colors.primary)
+            BorderStroke(1.5.dp, AppTheme.colors.primary)
         } else {
-            BorderStroke(1.dp, AppTheme.colors.cardBorder)
+            null
         }
     ) {
         Box(
@@ -657,13 +657,13 @@ private fun FlowImageCountChip(
     } else {
         AppTheme.colors.textSecondary
     }
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(10.dp)
 
     Surface(
         modifier = Modifier
             .height(26.dp)
             .shadow(
-                elevation = if (selected) 2.dp else 1.dp,
+                elevation = if (selected) 2.dp else 0.dp,
                 shape = shape,
                 ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
                 spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
@@ -678,9 +678,9 @@ private fun FlowImageCountChip(
         color = containerColor,
         contentColor = contentColor,
         border = if (selected) {
-            BorderStroke(1.dp, AppTheme.colors.primary)
+            BorderStroke(1.5.dp, AppTheme.colors.primary)
         } else {
-            BorderStroke(1.dp, AppTheme.colors.cardBorder)
+            null
         }
     ) {
         Box(

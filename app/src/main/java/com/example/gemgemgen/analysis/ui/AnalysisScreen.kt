@@ -665,7 +665,7 @@ private fun StickyBottomActionPanel(
             if (uiState.status == AnalysisStatus.GENERATING) {
                 NeuButton(
                     onClick = onCancelWork,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(PrimaryActionButtonHeight),
@@ -682,7 +682,7 @@ private fun StickyBottomActionPanel(
                     onClick = onGenerateTxt,
                     enabled = uiState.canGenerate,
                     isPrimary = true,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(PrimaryActionButtonHeight)
@@ -735,7 +735,7 @@ private fun TargetSegmentBody(
     modifier: Modifier = Modifier
 ) {
     val hasSegment = targetSegment != null
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(18.dp)
     NeuCard(
         modifier = modifier,
         shape = shape,
