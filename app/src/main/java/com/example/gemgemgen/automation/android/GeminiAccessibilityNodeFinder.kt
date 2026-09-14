@@ -1,4 +1,4 @@
-// 역할: Gemini 앱 화면에서 텍스트 입력창, 전송 버튼, 새 대화 버튼 노드를 탐색합니다.
+// 역할: Gemini 앱 화면에서 텍스트 입력창, 전송 버튼, 옵션 더보기와 연계된 새 대화 버튼 노드를 탐색합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect
@@ -27,6 +27,17 @@ internal class GeminiAccessibilityNodeFinder(
 
     fun findNodeByTextOrDescription(value: String): AccessibilityNodeInfo? {
         return nodes().firstOrNull { node -> node.matchesTextOrDescription(value) }
+    }
+
+    fun hasMoreOptions(): Boolean {
+        return nodes().any { it.matchesTextOrDescription(MORE_OPTIONS_DESCRIPTION) }
+    }
+
+    fun findNewChatWithMoreOptions(): AccessibilityNodeInfo? {
+        val currentNodes = nodes()
+        val hasMoreOptions = currentNodes.any { it.matchesTextOrDescription(MORE_OPTIONS_DESCRIPTION) }
+        if (!hasMoreOptions) return null
+        return currentNodes.firstOrNull { it.matchesTextOrDescription(NEW_CHAT_DESCRIPTION) }
     }
 
     fun findNewChatNearestToSearch(): AccessibilityNodeInfo? {
@@ -161,6 +172,9 @@ internal class GeminiAccessibilityNodeFinder(
         get() = width.toLong() * height.toLong()
 
     internal companion object {
+        const val NEW_CHAT_DESCRIPTION = "새 채팅"
+        const val MORE_OPTIONS_DESCRIPTION = "옵션 더보기"
+
         val GEMINI_ACCESSIBILITY_PACKAGES = setOf(
             AppDefaults.GEMINI_PACKAGE_NAME,
             AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME

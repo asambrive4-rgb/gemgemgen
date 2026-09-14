@@ -1,4 +1,4 @@
-// 역할: Gemini 앱을 대상으로 프롬프트 입력과 전송 동작을 자동 수행합니다.
+// 역할: Gemini 앱을 대상으로 화면 상태에 맞춘 새 대화 전환과 프롬프트 자동 입력을 수행합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler
@@ -93,7 +93,13 @@ internal class GeminiPromptAutomation(
     ) {
         onStateChange(AutomationRunState.Running("새 채팅 찾는 중 (#$attempt)"))
 
-        val node = nodeFinder.findNodeByTextOrDescription("새 채팅")
+        if (!nodeFinder.hasMoreOptions()) {
+            onStateChange(AutomationRunState.Running("이미 새 대화 상태임 (새 채팅 클릭 생략)"))
+            onDone()
+            return
+        }
+
+        val node = nodeFinder.findNewChatWithMoreOptions()
         if (node != null && clickNodeOrParent(node)) {
             onStateChange(AutomationRunState.Running("새 채팅 클릭 완료"))
             onDone()
