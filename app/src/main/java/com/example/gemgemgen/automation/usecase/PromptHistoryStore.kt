@@ -51,6 +51,6 @@ class PromptHistoryStore(
     }
 
     companion object {
-        const val DEFAULT_MAX_HISTORY_COUNT = 10
+        const val DEFAULT_MAX_HISTORY_COUNT = 4
     }
 }

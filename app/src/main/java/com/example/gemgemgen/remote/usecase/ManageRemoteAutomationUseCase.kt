@@ -56,6 +56,17 @@ class ManageRemoteAutomationUseCase(
         return gateway.cleanMemory()
     }
 
+    suspend fun switchGeminiAccount(
+        accountId: String,
+        alias: String,
+        identifier: String
+    ): RemoteActionResult {
+        if (!status.value.canSend) {
+            return RemoteActionResult.Failure("연결된 수신 기기를 찾지 못했습니다.")
+        }
+        return gateway.switchGeminiAccount(accountId, alias, identifier)
+    }
+
     suspend fun start(
         request: AutomationRunRequest,
         onStateChange: (AutomationRunState) -> Unit

@@ -32,15 +32,40 @@ data class MainUiState(
     val isParagraphSelectionMode: Boolean = false,
     val selectedParagraphRange: PromptParagraphRange? = null,
     val paragraphSelectionMessage: String = "",
-    val canUndoPromptEdit: Boolean = false,
+    val canNavigateHistoryBack: Boolean = false,
+    val canNavigateHistoryForward: Boolean = false,
+    val isHistoryIndicatorVisible: Boolean = false,
+    val historyDotCount: Int = 0,
+    val activeHistoryDotIndex: Int = 0,
     val maintenanceState: MaintenanceState = MaintenanceState(),
     /** 와일드카드 파일 기반 토큰 추천 후보 (입력창 위 칩용). */
     val wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
     val showPromptHistory: Boolean = false,
     val promptHistoryItems: List<com.example.gemgemgen.automation.domain.PromptHistoryItem> = emptyList(),
     val selectedThemePalette: com.example.gemgemgen.ui.theme.AppThemePalette = com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
-    val selectedThemeMode: com.example.gemgemgen.ui.theme.AppThemeMode = com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT
+    val selectedThemeMode: com.example.gemgemgen.ui.theme.AppThemeMode = com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT,
+    val geminiAccounts: List<com.example.gemgemgen.automation.domain.GeminiAccountProfile> = emptyList(),
+    val showGeminiAccountDialog: Boolean = false,
+    val isSwitchingGeminiAccount: Boolean = false,
+    val switchingAccountProgressPhase: String = "",
+    val switchingAccountProgressMessage: String = "",
+    val accountSwitchError: String? = null,
+    val lastFailedTargetAccount: com.example.gemgemgen.automation.domain.GeminiAccountProfile? = null
 ) {
+    val activeGeminiAccount: com.example.gemgemgen.automation.domain.GeminiAccountProfile?
+        get() = geminiAccounts.firstOrNull { it.isActive } ?: geminiAccounts.firstOrNull()
+
+    val nextGeminiAccount: com.example.gemgemgen.automation.domain.GeminiAccountProfile?
+        get() {
+            if (geminiAccounts.size <= 1) return null
+            val currentIndex = geminiAccounts.indexOfFirst { it.isActive }
+            val nextIndex = if (currentIndex in geminiAccounts.indices) {
+                (currentIndex + 1) % geminiAccounts.size
+            } else {
+                0
+            }
+            return geminiAccounts[nextIndex]
+        }
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()
 

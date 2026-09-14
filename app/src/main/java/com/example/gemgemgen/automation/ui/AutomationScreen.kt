@@ -61,7 +61,8 @@ internal fun AutomationScreen(
     onFlowImageCountSelected: (Int) -> Unit = {},
     onPromptTemplateChange: (String) -> Unit,
     onWildcardTokenSuggestionClick: (String) -> Unit = {},
-    onUndoPromptEdit: () -> Unit,
+    onNavigateHistoryBack: () -> Unit,
+    onNavigateHistoryForward: () -> Unit,
     onInsertSystemInstruction: () -> Unit,
     onParagraphOffsetSelected: (Int) -> Unit,
     onDeleteSelectedParagraph: () -> Unit,
@@ -82,7 +83,16 @@ internal fun AutomationScreen(
     onSelectPromptHistoryItem: (PromptHistoryItem) -> Unit = {},
     onClearPromptHistory: () -> Unit = {},
     onSelectThemePalette: (AppThemePalette) -> Unit = {},
-    onSelectThemeMode: (com.example.gemgemgen.ui.theme.AppThemeMode) -> Unit = {}
+    onSelectThemeMode: (com.example.gemgemgen.ui.theme.AppThemeMode) -> Unit = {},
+    onOpenGeminiAccountDialog: () -> Unit = {},
+    onCloseGeminiAccountDialog: () -> Unit = {},
+    onSwitchGeminiAccount: (com.example.gemgemgen.automation.domain.GeminiAccountProfile) -> Unit = {},
+    onCycleNextGeminiAccount: () -> Unit = {},
+    onAddGeminiAccount: (alias: String, identifier: String) -> Unit = { _, _ -> },
+    onDeleteGeminiAccount: (id: String) -> Unit = {},
+    onRetrySwitchGeminiAccount: () -> Unit = {},
+    onOpenGeminiManualSwitch: () -> Unit = {},
+    onClearAccountSwitchError: () -> Unit = {}
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val suggestionTokens = rememberWildcardSuggestionTokens(
@@ -114,7 +124,11 @@ internal fun AutomationScreen(
                     selectedTargetApp = uiState.selectedTargetApp,
                     isTargetSelectionEnabled = !uiState.isRunning,
                     isParagraphSelectionMode = uiState.isParagraphSelectionMode,
-                    canUndoPromptEdit = uiState.canUndoPromptEdit,
+                    canNavigateHistoryBack = uiState.canNavigateHistoryBack,
+                    canNavigateHistoryForward = uiState.canNavigateHistoryForward,
+                    isHistoryIndicatorVisible = uiState.isHistoryIndicatorVisible,
+                    historyDotCount = uiState.historyDotCount,
+                    activeHistoryDotIndex = uiState.activeHistoryDotIndex,
                     canCopyPrompt = uiState.hasPromptTemplate && !uiState.isRunning,
                     canCloseGemini = uiState.canCloseGemini,
                     canCloseSelfApp = uiState.canCloseSelfApp,
@@ -134,7 +148,8 @@ internal fun AutomationScreen(
                     onCloseGeminiApp = onCloseGeminiApp,
                     onCleanDeviceMemory = onCleanDeviceMemory,
                     onTerminateSelfApp = onTerminateSelfApp,
-                    onUndoPromptEdit = onUndoPromptEdit,
+                    onNavigateHistoryBack = onNavigateHistoryBack,
+                    onNavigateHistoryForward = onNavigateHistoryForward,
                     onInsertSystemInstruction = onInsertSystemInstruction,
                     onParagraphOffsetSelected = onParagraphOffsetSelected,
                     onDeleteSelectedParagraph = onDeleteSelectedParagraph,
@@ -142,7 +157,9 @@ internal fun AutomationScreen(
                     onImportFromClipboard = onImportFromClipboard,
                     onCopyPromptToClipboard = onCopyPromptToClipboard,
                     onPasteFromClipboard = onPasteFromClipboard,
-                    onOpenPromptHistory = onOpenPromptHistory
+                    onOpenPromptHistory = onOpenPromptHistory,
+                    activeGeminiAccountAlias = uiState.activeGeminiAccount?.alias ?: "서브1",
+                    onOpenGeminiAccountDialog = onOpenGeminiAccountDialog
                 )
 
                 if (!isKeyboardVisible && uiState.automationMode != AutomationMode.RECEIVER) {
@@ -205,14 +222,19 @@ internal fun AutomationScreen(
                             canCloseSelfApp = uiState.canCloseSelfApp,
                             canCleanMemory = uiState.canCleanMemory,
                             isMaintenanceBusy = uiState.isMaintenanceBusy,
-                            canUndoPromptEdit = uiState.canUndoPromptEdit,
+                            canNavigateHistoryBack = uiState.canNavigateHistoryBack,
+                            canNavigateHistoryForward = uiState.canNavigateHistoryForward,
+                            isHistoryIndicatorVisible = uiState.isHistoryIndicatorVisible,
+                            historyDotCount = uiState.historyDotCount,
+                            activeHistoryDotIndex = uiState.activeHistoryDotIndex,
                             canCopyPrompt = uiState.hasPromptTemplate &&
                                 !uiState.isRunning,
                             isTargetSelectionEnabled = !uiState.isRunning,
                             onCloseGeminiApp = onCloseGeminiApp,
                             onCleanDeviceMemory = onCleanDeviceMemory,
                             onTerminateSelfApp = onTerminateSelfApp,
-                            onUndoPromptEdit = onUndoPromptEdit,
+                            onNavigateHistoryBack = onNavigateHistoryBack,
+                            onNavigateHistoryForward = onNavigateHistoryForward,
                             onInsertSystemInstruction = onInsertSystemInstruction,
                             onImportFromClipboard = onImportFromClipboard,
                             onCopyPromptToClipboard = onCopyPromptToClipboard,
@@ -262,6 +284,28 @@ internal fun AutomationScreen(
                     onDismiss = onClosePromptHistory
                 )
             }
+            if (uiState.showGeminiAccountDialog) {
+                GeminiAccountManagerDialog(
+                    showDialog = true,
+                    accounts = uiState.geminiAccounts,
+                    activeAccount = uiState.activeGeminiAccount,
+                    nextAccount = uiState.nextGeminiAccount,
+                    automationMode = uiState.automationMode,
+                    isSwitching = uiState.isSwitchingGeminiAccount,
+                    switchingPhase = uiState.switchingAccountProgressPhase,
+                    switchingMessage = uiState.switchingAccountProgressMessage,
+                    errorMessage = uiState.accountSwitchError,
+                    targetAccountForRetry = uiState.lastFailedTargetAccount,
+                    onDismiss = onCloseGeminiAccountDialog,
+                    onSwitchAccount = onSwitchGeminiAccount,
+                    onCycleNextAccount = onCycleNextGeminiAccount,
+                    onAddAccount = onAddGeminiAccount,
+                    onDeleteAccount = onDeleteGeminiAccount,
+                    onRetrySwitch = onRetrySwitchGeminiAccount,
+                    onOpenGeminiManual = onOpenGeminiManualSwitch,
+                    onClearError = onClearAccountSwitchError
+                )
+            }
         }
     }
 }
@@ -285,7 +329,8 @@ private fun AutomationAppPreview() {
             onOpenAccessibilitySettings = {},
             onTargetAppSelected = {},
             onPromptTemplateChange = {},
-            onUndoPromptEdit = {},
+            onNavigateHistoryBack = {},
+            onNavigateHistoryForward = {},
             onInsertSystemInstruction = {},
             onParagraphOffsetSelected = {},
             onDeleteSelectedParagraph = {},

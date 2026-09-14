@@ -114,7 +114,6 @@ class MainViewModelTest {
             TextRange(SystemInstructionPrompt.text.length),
             viewModel.promptTemplateTextFieldState.selection
         )
-        assertTrue(viewModel.uiState.value.canUndoPromptEdit)
     }
 
     @Test
@@ -137,7 +136,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun insertSystemInstruction_doubleTapPrependsAgainAndUndoRestores() {
+    fun insertSystemInstruction_doubleTapPrependsAgain() {
         val viewModel = viewModel()
         viewModel.onPromptTemplateChange("body")
 
@@ -150,12 +149,6 @@ class MainViewModelTest {
             SystemInstructionPrompt.text + "\n\n" + once,
             twice
         )
-
-        viewModel.undoPromptEdit()
-        assertEquals(once, viewModel.uiState.value.promptTemplate)
-
-        viewModel.undoPromptEdit()
-        assertEquals("body", viewModel.uiState.value.promptTemplate)
     }
 
     @Test
@@ -181,7 +174,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun replacePromptTemplateSegment_preservesOtherEditsAndSupportsUndo() {
+    fun replacePromptTemplateSegment_preservesOtherEditsAndReplacesSegment() {
         val viewModel = viewModel()
         viewModel.onPromptTemplateChange("quality, red hair and blue dress, masterpiece")
 
@@ -194,13 +187,6 @@ class MainViewModelTest {
         assertEquals(22, replacedStart)
         assertEquals(
             "quality, red hair and 검은 원피스, masterpiece",
-            viewModel.uiState.value.promptTemplate
-        )
-
-        viewModel.undoPromptEdit()
-
-        assertEquals(
-            "quality, red hair and blue dress, masterpiece",
             viewModel.uiState.value.promptTemplate
         )
     }
@@ -253,51 +239,63 @@ class MainViewModelTest {
     }
 
     @Test
-    fun undoPromptEdit_revertsContinuousTypingAsSingleStep() {
-        val viewModel = viewModel()
+    fun navigatePromptHistoryBackAndForward_traversesExecutionHistory() {
+        val repo = FakePromptHistoryRepository()
+        val store = PromptHistoryStore(repo)
+        store.record("과거 프롬프트 1", AutomationTargetApp.GEMINI)
+        store.record("과거 프롬프트 2 (최신)", AutomationTargetApp.GEMINI)
+        val viewModel = viewModel(promptHistoryStore = store)
+        viewModel.onPromptTemplateChange("현재 작성 중인 글")
 
-        viewModel.onPromptTemplateChange("인")
-        viewModel.onPromptTemplateChange("인물")
-        viewModel.onPromptTemplateChange("인물 설명")
+        assertTrue(viewModel.uiState.value.canNavigateHistoryBack)
+        assertTrue(!viewModel.uiState.value.canNavigateHistoryForward)
 
-        assertTrue(viewModel.uiState.value.canUndoPromptEdit)
+        // 뒤로 1단계: 최신 실행기록 복원
+        viewModel.navigatePromptHistoryBack()
+        assertEquals("과거 프롬프트 2 (최신)", viewModel.uiState.value.promptTemplate)
+        assertEquals("과거 프롬프트 2 (최신)", viewModel.promptTemplateTextFieldState.text.toString())
+        assertTrue(viewModel.uiState.value.isHistoryIndicatorVisible)
+        assertTrue(viewModel.uiState.value.canNavigateHistoryForward)
 
-        viewModel.undoPromptEdit()
+        // 뒤로 2단계: 그 전 실행기록 복원
+        viewModel.navigatePromptHistoryBack()
+        assertEquals("과거 프롬프트 1", viewModel.uiState.value.promptTemplate)
+        assertEquals("과거 프롬프트 1", viewModel.promptTemplateTextFieldState.text.toString())
+        assertTrue(!viewModel.uiState.value.canNavigateHistoryBack)
 
-        assertEquals("", viewModel.uiState.value.promptTemplate)
-        assertEquals("", viewModel.promptTemplateTextFieldState.text.toString())
-        assertTrue(!viewModel.uiState.value.canUndoPromptEdit)
+        // 앞으로 1단계: 최신 실행기록 복원
+        viewModel.navigatePromptHistoryForward()
+        assertEquals("과거 프롬프트 2 (최신)", viewModel.uiState.value.promptTemplate)
+
+        // 앞으로 2단계: 원래 초안(Draft) 복원 & 인디케이터 숨김
+        viewModel.navigatePromptHistoryForward()
+        assertEquals("현재 작성 중인 글", viewModel.uiState.value.promptTemplate)
+        assertEquals("현재 작성 중인 글", viewModel.promptTemplateTextFieldState.text.toString())
+        assertTrue(!viewModel.uiState.value.isHistoryIndicatorVisible)
+        assertTrue(!viewModel.uiState.value.canNavigateHistoryForward)
     }
 
     @Test
-    fun undoPromptEdit_afterDebounce_revertsOnlyLatestTypingGroup() {
-        val viewModel = viewModel()
+    fun runAutomation_recordsCurrentPromptAndHidesHistoryIndicator() {
+        val repo = FakePromptHistoryRepository()
+        val store = PromptHistoryStore(repo)
+        store.record("과거 기록 1", AutomationTargetApp.GEMINI)
+        val viewModel = viewModel(promptHistoryStore = store)
+        viewModel.onPromptTemplateChange("신규 실행 프롬프트")
 
-        viewModel.onPromptTemplateChange("인물")
-        Thread.sleep(800)
-        viewModel.onPromptTemplateChange("인물\n장소")
+        // 네비게이션으로 과거 기록을 보던 중 (인디케이터 노출 상태)
+        viewModel.navigatePromptHistoryBack()
+        assertTrue(viewModel.uiState.value.isHistoryIndicatorVisible)
 
-        viewModel.undoPromptEdit()
+        // 다시 신규 프롬프트 작성 후 자동화 시작
+        viewModel.onPromptTemplateChange("신규 실행 프롬프트")
+        val decision = viewModel.runAutomation()
+        assertTrue(decision is AutomationStartDecision.Started)
 
-        assertEquals("인물", viewModel.uiState.value.promptTemplate)
-        assertEquals("인물", viewModel.promptTemplateTextFieldState.text.toString())
-        assertTrue(viewModel.uiState.value.canUndoPromptEdit)
-    }
-
-    @Test
-    fun undoPromptEdit_afterWholeClipboardImport_restoresPreviousPrompt() {
-        val viewModel = viewModel(
-            clipboardText = "새 프롬프트",
-            lastRunSnapshotStore = LastRunSnapshotStore(
-                FakeLastRunSnapshotStorage(promptTemplate = "기존 프롬프트")
-            )
-        )
-
-        viewModel.importPromptFromClipboard()
-        viewModel.undoPromptEdit()
-
-        assertEquals("기존 프롬프트", viewModel.uiState.value.promptTemplate)
-        assertEquals("기존 프롬프트", viewModel.promptTemplateTextFieldState.text.toString())
+        // 인디케이터가 즉시 닫히고, 방금 실행한 프롬프트가 히스토리 1순위로 저장됨
+        assertTrue(!viewModel.uiState.value.isHistoryIndicatorVisible)
+        assertEquals("신규 실행 프롬프트", store.load().first().prompt)
+        assertEquals(2, store.load().size)
     }
 
     @Test
@@ -1081,12 +1079,6 @@ class MainViewModelTest {
         assertEquals("히스토리에서 고른 프롬프트", viewModel.uiState.value.promptTemplate)
         assertEquals("히스토리에서 고른 프롬프트", viewModel.promptTemplateTextFieldState.text.toString())
         assertTrue(!viewModel.uiState.value.showPromptHistory)
-
-        // 안전망 검증: undo 실행 시 원래 작성 중이던 텍스트로 복원되어야 함
-        assertTrue(viewModel.uiState.value.canUndoPromptEdit)
-        viewModel.undoPromptEdit()
-        assertEquals("현재 작성 중이던 텍스트", viewModel.uiState.value.promptTemplate)
-        assertEquals("현재 작성 중이던 텍스트", viewModel.promptTemplateTextFieldState.text.toString())
     }
 
     @Test

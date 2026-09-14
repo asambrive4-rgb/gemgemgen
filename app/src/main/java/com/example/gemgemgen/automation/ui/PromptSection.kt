@@ -1,14 +1,17 @@
-// 역할: 프롬프트 텍스트 입력창, 대상 앱 선택 토글, 와일드카드 칩 영역을 화면에 표시합니다.
+// 역할: 프롬프트 텍스트 입력창, 대상 앱 선택 토글, 와일드카드 칩 및 2단 조약돌 액션 바(시스템 관리·에디터 도구)를 화면에 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import com.example.gemgemgen.core.AppDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,8 +21,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -31,12 +32,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.ButtonDefaults
@@ -64,14 +67,17 @@ import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.theme.AppTheme
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PromptSection(
     promptTemplateState: TextFieldState,
     selectedTargetApp: AutomationTargetApp,
     isTargetSelectionEnabled: Boolean,
     isParagraphSelectionMode: Boolean,
-    canUndoPromptEdit: Boolean,
+    canNavigateHistoryBack: Boolean = false,
+    canNavigateHistoryForward: Boolean = false,
+    isHistoryIndicatorVisible: Boolean = false,
+    historyDotCount: Int = 0,
+    activeHistoryDotIndex: Int = 0,
     canCopyPrompt: Boolean,
     canCloseGemini: Boolean,
     canCloseSelfApp: Boolean,
@@ -91,7 +97,8 @@ internal fun PromptSection(
     onCloseGeminiApp: () -> Unit,
     onCleanDeviceMemory: () -> Unit,
     onTerminateSelfApp: () -> Unit,
-    onUndoPromptEdit: () -> Unit,
+    onNavigateHistoryBack: () -> Unit = {},
+    onNavigateHistoryForward: () -> Unit = {},
     onInsertSystemInstruction: () -> Unit,
     onParagraphOffsetSelected: (Int) -> Unit,
     onDeleteSelectedParagraph: () -> Unit,
@@ -99,7 +106,9 @@ internal fun PromptSection(
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
     onPasteFromClipboard: () -> Unit,
-    onOpenPromptHistory: () -> Unit = {}
+    onOpenPromptHistory: () -> Unit = {},
+    activeGeminiAccountAlias: String = "서브1",
+    onOpenGeminiAccountDialog: () -> Unit = {}
 ) {
     val suggestionTokens = rememberWildcardSuggestionTokens(
         promptTemplateState = promptTemplateState,
@@ -108,7 +117,7 @@ internal fun PromptSection(
         isTargetSelectionEnabled = isTargetSelectionEnabled
     )
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -116,12 +125,12 @@ internal fun PromptSection(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = "프롬프트 템플릿",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
                     color = AppTheme.colors.textPrimary
                 )
                 Row(
@@ -142,14 +151,14 @@ internal fun PromptSection(
             IconButton(
                 onClick = onOpenPromptHistory,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(30.dp)
                     .semantics { contentDescription = "프롬프트 기록" }
             ) {
                 Icon(
                     imageVector = Icons.Default.History,
                     contentDescription = null,
                     tint = AppTheme.colors.textSecondary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -193,17 +202,24 @@ internal fun PromptSection(
                 canCloseSelfApp = canCloseSelfApp,
                 canCleanMemory = canCleanMemory,
                 isMaintenanceBusy = isMaintenanceBusy,
-                canUndoPromptEdit = canUndoPromptEdit,
+                canNavigateHistoryBack = canNavigateHistoryBack,
+                canNavigateHistoryForward = canNavigateHistoryForward,
+                isHistoryIndicatorVisible = isHistoryIndicatorVisible,
+                historyDotCount = historyDotCount,
+                activeHistoryDotIndex = activeHistoryDotIndex,
                 canCopyPrompt = canCopyPrompt,
                 isTargetSelectionEnabled = isTargetSelectionEnabled,
                 onCloseGeminiApp = onCloseGeminiApp,
                 onCleanDeviceMemory = onCleanDeviceMemory,
                 onTerminateSelfApp = onTerminateSelfApp,
-                onUndoPromptEdit = onUndoPromptEdit,
+                onNavigateHistoryBack = onNavigateHistoryBack,
+                onNavigateHistoryForward = onNavigateHistoryForward,
                 onInsertSystemInstruction = onInsertSystemInstruction,
                 onImportFromClipboard = onImportFromClipboard,
                 onCopyPromptToClipboard = onCopyPromptToClipboard,
-                onPasteFromClipboard = onPasteFromClipboard
+                onPasteFromClipboard = onPasteFromClipboard,
+                activeGeminiAccountAlias = activeGeminiAccountAlias,
+                onOpenGeminiAccountDialog = onOpenGeminiAccountDialog
             )
         }
 
@@ -217,110 +233,95 @@ internal fun PromptSection(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PromptActionRow(
     canCloseGemini: Boolean,
     canCloseSelfApp: Boolean,
     canCleanMemory: Boolean,
     isMaintenanceBusy: Boolean = false,
-    canUndoPromptEdit: Boolean,
+    canNavigateHistoryBack: Boolean,
+    canNavigateHistoryForward: Boolean,
+    isHistoryIndicatorVisible: Boolean,
+    historyDotCount: Int,
+    activeHistoryDotIndex: Int,
     canCopyPrompt: Boolean,
     isTargetSelectionEnabled: Boolean,
     onCloseGeminiApp: () -> Unit,
     onCleanDeviceMemory: () -> Unit,
     onTerminateSelfApp: () -> Unit,
-    onUndoPromptEdit: () -> Unit,
+    onNavigateHistoryBack: () -> Unit,
+    onNavigateHistoryForward: () -> Unit,
     onInsertSystemInstruction: () -> Unit,
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
     onPasteFromClipboard: () -> Unit,
+    activeGeminiAccountAlias: String = "서브1",
+    onOpenGeminiAccountDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    FlowRow(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(2.5.dp, Alignment.End),
-        verticalArrangement = Arrangement.spacedBy(2.5.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        // 섬 1: 앱 자체 종료(왼쪽) + Gemini 리셋
-        ActionIsland {
-            OutlinedButton(
-                onClick = onTerminateSelfApp,
-                enabled = canCloseSelfApp && !isMaintenanceBusy,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = AppTheme.colors.card,
-                    contentColor = AppTheme.colors.textPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                modifier = Modifier
-                    .height(28.dp)
-                    .semantics { contentDescription = "GemGemGen 앱 종료" },
-                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+        // 1행: 시스템 & 디바이스 관리 바 (앱 종료, 리셋, 메모리 정리 ── 계정 뱃지)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 좌측: 앱 종료 + 리셋 + 메모리 정리
+            ActionIsland {
+                PebbleButton(
+                    onClick = onTerminateSelfApp,
+                    enabled = canCloseSelfApp && !isMaintenanceBusy,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "GemGemGen 앱 종료" }
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.PowerSettingsNew,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "앱 종료",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PowerSettingsNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "앱 종료",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
-            }
-            OutlinedButton(
-                onClick = onCloseGeminiApp,
-                enabled = canCloseGemini && !isMaintenanceBusy,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = AppTheme.colors.card,
-                    contentColor = AppTheme.colors.textPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                modifier = Modifier
-                    .height(28.dp)
-                    .semantics { contentDescription = "Gemini 앱 리셋" },
-                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+                PebbleButton(
+                    onClick = onCloseGeminiApp,
+                    enabled = canCloseGemini && !isMaintenanceBusy,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "Gemini 앱 리셋" }
                 ) {
-                    Image(
-                        imageVector = GeminiGradientLogo,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = "리셋",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Image(
+                            imageVector = GeminiGradientLogo,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "리셋",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
-            }
-            OutlinedButton(
-                onClick = onCleanDeviceMemory,
-                enabled = canCleanMemory && !isMaintenanceBusy,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = AppTheme.colors.card,
-                    contentColor = AppTheme.colors.textPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                modifier = Modifier
-                    .height(28.dp)
-                    .semantics { contentDescription = "메모리 정리" },
-                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+
+                PebbleButton(
+                    onClick = onCleanDeviceMemory,
+                    enabled = canCleanMemory && !isMaintenanceBusy,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "메모리 정리" }
                 ) {
                     Text(
                         text = "메모리 정리",
@@ -329,104 +330,142 @@ internal fun PromptActionRow(
                     )
                 }
             }
-        }
 
-        // 섬 2: SI 삽입 + Undo
-        ActionIsland {
-            OutlinedButton(
-                onClick = onInsertSystemInstruction,
-                enabled = isTargetSelectionEnabled,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = AppTheme.colors.card,
-                    contentColor = AppTheme.colors.textPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                modifier = Modifier
-                    .height(28.dp)
-                    .semantics { contentDescription = "[SI 삽입]" },
-                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
-            ) {
-                Text(
-                    text = "[SI 삽입]",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            OutlinedButton(
-                onClick = onUndoPromptEdit,
-                enabled = canUndoPromptEdit && isTargetSelectionEnabled,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = AppTheme.colors.card,
-                    contentColor = AppTheme.colors.textPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Undo,
-                    contentDescription = "Undo",
-                    modifier = Modifier.size(16.dp)
-                )
+            // 우측: 계정 관리 뱃지
+            ActionIsland {
+                PebbleButton(
+                    onClick = onOpenGeminiAccountDialog,
+                    enabled = !isMaintenanceBusy,
+                    borderColor = AppTheme.colors.primary,
+                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "Gemini 계정 관리" }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = AppTheme.colors.primary
+                        )
+                        Text(
+                            text = "ID: ${activeGeminiAccountAlias.ifBlank { "서브1" }}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.primary
+                        )
+                    }
+                }
             }
         }
 
-        // 섬 3: 복사 가져오기 붙여넣기
-        ActionIsland {
-            OutlinedButton(
-                onClick = onCopyPromptToClipboard,
-                enabled = canCopyPrompt,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = AppTheme.colors.card,
-                    contentColor = AppTheme.colors.textPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ContentCopy,
-                    contentDescription = "프롬프트 복사",
-                    modifier = Modifier.size(16.dp)
-                )
+        // 2행: 프롬프트 에디터 전용 툴바 (히스토리 네비게이션 ── SI 삽입 + 복사 + 가져오기)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 좌측: 히스토리 네비게이션 (가로세로 35dp 1:1 정사각형 조약돌)
+            ActionIsland {
+                PebbleButton(
+                    onClick = onNavigateHistoryBack,
+                    enabled = canNavigateHistoryBack && isTargetSelectionEnabled,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier
+                        .size(35.dp)
+                        .semantics { contentDescription = "이전 실행 기록" }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = isHistoryIndicatorVisible && historyDotCount > 1,
+                    enter = fadeIn() + expandHorizontally(),
+                    exit = fadeOut() + shrinkHorizontally()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(horizontal = 2.dp)
+                    ) {
+                        repeat(historyDotCount) { index ->
+                            val isSelected = index == activeHistoryDotIndex
+                            Box(
+                                modifier = Modifier
+                                    .size(if (isSelected) 7.dp else 5.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSelected) AppTheme.colors.primary
+                                        else AppTheme.colors.textSecondary.copy(alpha = 0.35f)
+                                    )
+                            )
+                        }
+                    }
+                }
+
+                PebbleButton(
+                    onClick = onNavigateHistoryForward,
+                    enabled = canNavigateHistoryForward && isTargetSelectionEnabled,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier
+                        .size(35.dp)
+                        .semantics { contentDescription = "다음 실행 기록" }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
             }
-            OutlinedButton(
-                onClick = onImportFromClipboard,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = AppTheme.colors.card,
-                    contentColor = AppTheme.colors.textPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                modifier = Modifier.height(28.dp),
-                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
-            ) {
-                Text(
-                    text = "가져오기",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            OutlinedButton(
-                onClick = onPasteFromClipboard,
-                enabled = isTargetSelectionEnabled,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = AppTheme.colors.card,
-                    contentColor = AppTheme.colors.textPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.size(width = 40.dp, height = 28.dp),
-                border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ContentPaste,
-                    contentDescription = "프롬프트 붙여넣기",
-                    modifier = Modifier.size(16.dp)
-                )
+
+            // 우측: SI 삽입 + 복사 + 가져오기 (여유있는 좌우 패딩)
+            ActionIsland {
+                PebbleButton(
+                    onClick = onInsertSystemInstruction,
+                    enabled = isTargetSelectionEnabled,
+                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "[SI 삽입]" }
+                ) {
+                    Text(
+                        text = "[SI 삽입]",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                PebbleButton(
+                    onClick = onCopyPromptToClipboard,
+                    enabled = canCopyPrompt,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier
+                        .size(width = 44.dp, height = 35.dp)
+                        .semantics { contentDescription = "프롬프트 복사" }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+
+                PebbleButton(
+                    onClick = onImportFromClipboard,
+                    contentPadding = PaddingValues(horizontal = 11.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "클립보드에서 가져오기" }
+                ) {
+                    Text(
+                        text = "가져오기",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -508,21 +547,53 @@ internal fun WildcardTokenSuggestionBar(
 @Composable
 private fun ActionIsland(
     modifier: Modifier = Modifier,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(3.dp),
     content: @Composable RowScope.() -> Unit
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.5.dp, AppTheme.colors.insetBorder),
+        border = BorderStroke(1.2.dp, AppTheme.colors.insetBorder),
         color = AppTheme.colors.insetBed,
         modifier = modifier
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+            horizontalArrangement = horizontalArrangement,
             verticalAlignment = Alignment.CenterVertically,
             content = content
         )
     }
+}
+
+@Composable
+private fun PebbleButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    borderColor: Color = AppTheme.colors.cardBorder,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+    content: @Composable RowScope.() -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = AppTheme.colors.card,
+            contentColor = AppTheme.colors.textPrimary,
+            disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.5f),
+            disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.38f)
+        ),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = if (enabled) 1.dp else 0.dp,
+            pressedElevation = 0.dp,
+            disabledElevation = 0.dp
+        ),
+        shape = RoundedCornerShape(10.dp),
+        contentPadding = contentPadding,
+        modifier = modifier.height(35.dp),
+        border = BorderStroke(1.2.dp, if (enabled) borderColor else borderColor.copy(alpha = 0.4f)),
+        content = content
+    )
 }
 
 @Composable
@@ -546,7 +617,7 @@ private fun TargetAppButton(
 
     Surface(
         modifier = Modifier
-            .height(30.dp)
+            .height(28.dp)
             .shadow(
                 elevation = if (selected) 3.dp else 0.dp,
                 shape = shape,

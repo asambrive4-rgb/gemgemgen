@@ -1,8 +1,7 @@
-// 역할: 화면 노드 조작, 제스처 탭 전송, 패키지 가시성 제어 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
+// 역할: 화면 노드 조작, 제스처 탭/스와이프 전송, 패키지 가시성 제어 및 Gemini 계정 자동 전환 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.os.Handler
@@ -28,25 +27,28 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var memoryCleanupToken: Any? = null
     private var memoryCleanupCompletion: ((MemoryCleanupResult) -> Unit)? = null
     private var memoryCleanupAutomation: GoogleAppForceStopAutomation? = null
+    private var accountSwitchToken: Any? = null
+    private var accountSwitchCompletion: ((GeminiAccountSwitchResult) -> Unit)? = null
+    private var accountSwitchAutomation: GeminiAccountSwitcherAutomation? = null
     private var previousMemoryPackageRestriction: Array<String>? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
             handler = handler,
-            rootProvider = { findTargetRoot(AutomationTargetApp.GEMINI) }
+            rootProvider = { rootInActiveWindow }
         )
     }
     private val chatGptAutomation by lazy {
         ChatGptPromptAutomation(
             handler = handler,
-            rootProvider = { findTargetRoot(AutomationTargetApp.CHATGPT) }
+            rootProvider = { rootInActiveWindow }
         )
     }
     private val flowAutomation by lazy {
         FlowPromptAutomation(
             handler = handler,
-            rootProvider = { findTargetRoot(AutomationTargetApp.FLOW) },
+            rootProvider = { rootInActiveWindow },
             tapAtCoordinates = { x, y, onCompleted ->
                 tapCoordinates(x, y, onCompleted)
             }
@@ -61,6 +63,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
+        finishAccountSwitch(GeminiAccountSwitchResult.Failure("접근성 서비스가 중단되었습니다."))
         finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 중단되었습니다."))
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
@@ -69,6 +72,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        finishAccountSwitch(GeminiAccountSwitchResult.Failure("접근성 서비스가 종료되었습니다."))
         finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 종료되었습니다."))
         if (activeService == this) {
             activeService = null
@@ -147,6 +151,75 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
     }
 
+    internal suspend fun switchGeminiAccount(
+        identifier: String,
+        alias: String,
+        onProgress: ((phase: String, message: String) -> Unit)? = null
+    ): GeminiAccountSwitchResult {
+        if (
+            accountSwitchToken != null ||
+            memoryCleanupToken != null ||
+            closeAppCompletion != null ||
+            ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
+        ) {
+            return GeminiAccountSwitchResult.Failure("다른 자동화 또는 작업이 진행 중입니다.")
+        }
+
+        return suspendCancellableCoroutine { continuation ->
+            val token = Any()
+            accountSwitchToken = token
+            accountSwitchCompletion = completion@{ result ->
+                if (accountSwitchToken !== token) return@completion
+                accountSwitchToken = null
+                accountSwitchCompletion = null
+                accountSwitchAutomation = null
+                clearPackageRestriction()
+                if (continuation.isActive) {
+                    continuation.resume(result)
+                }
+            }
+
+            handler.post {
+                if (accountSwitchToken !== token) return@post
+                clearPackageRestriction()
+                accountSwitchAutomation = GeminiAccountSwitcherAutomation(
+                    handler = handler,
+                    rootProvider = { rootInActiveWindow },
+                    allRootsProvider = {
+                        runCatching {
+                            windows.mapNotNull { it.root }
+                        }.getOrNull() ?: listOfNotNull(rootInActiveWindow)
+                    },
+                    activePackageProvider = { rootInActiveWindow?.packageName?.toString() },
+                    launchGemini = {
+                        val launchIntent = packageManager.getLaunchIntentForPackage(AppDefaults.GEMINI_PACKAGE_NAME)
+                        if (launchIntent != null) {
+                            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(launchIntent)
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    tapCoordinates = { x, y, onCompleted ->
+                        tapCoordinates(x, y, onCompleted)
+                    },
+                    dispatchGesture = { gesture, callback, gestureHandler ->
+                        dispatchGesture(gesture, callback, gestureHandler)
+                    },
+                    targetIdentifier = identifier,
+                    targetAlias = alias,
+                    onProgress = onProgress,
+                    onFinished = { result -> finishAccountSwitch(token, result) }
+                )
+                accountSwitchAutomation?.start()
+            }
+            continuation.invokeOnCancellation {
+                handler.post { cancelAccountSwitch(token) }
+            }
+        }
+    }
+
     /**
      * 최근 앱에서 [taskTitle] 카드의 닫기 버튼을 눌러 앱을 종료한다.
      * Gemini 종료와 같은 제스처/탐색 경로를 재사용한다.
@@ -216,26 +289,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         val info = serviceInfo ?: return
         info.eventTypes = 0
         info.packageNames = packageNames
-        info.flags = info.flags or
-            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-            AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         setServiceInfo(info)
-    }
-
-    private fun findTargetRoot(targetApp: AutomationTargetApp): AccessibilityNodeInfo? {
-        val targetPackages = packageNamesFor(targetApp)
-        val activeRoot = rootInActiveWindow
-        if (activeRoot != null && activeRoot.packageName?.toString() in targetPackages) {
-            return activeRoot
-        }
-
-        // Fallback: 플로팅 오버레이나 시스템 창이 포커스를 점유하고 있을 때,
-        // windows 목록에서 대상 앱의 윈도우 루트를 탐색하여 반환합니다.
-        return runCatching {
-            windows.firstOrNull { window ->
-                window.root?.packageName?.toString() in targetPackages
-            }?.root
-        }.getOrNull() ?: activeRoot
     }
 
     private fun packageNamesFor(targetApp: AutomationTargetApp): Array<String> {
@@ -481,6 +535,24 @@ class GeminiAccessibilityService : AccessibilityService() {
         memoryCleanupAutomation?.cancel()
         memoryCleanupAutomation = null
         restoreMemoryPackageRestriction()
+    }
+
+    private fun finishAccountSwitch(result: GeminiAccountSwitchResult) {
+        val token = accountSwitchToken ?: return
+        finishAccountSwitch(token, result)
+    }
+
+    private fun finishAccountSwitch(token: Any, result: GeminiAccountSwitchResult) {
+        if (accountSwitchToken !== token) return
+        accountSwitchCompletion?.invoke(result)
+    }
+
+    private fun cancelAccountSwitch(token: Any) {
+        if (accountSwitchToken !== token) return
+        accountSwitchToken = null
+        accountSwitchCompletion = null
+        accountSwitchAutomation = null
+        clearPackageRestriction()
     }
 
     companion object {

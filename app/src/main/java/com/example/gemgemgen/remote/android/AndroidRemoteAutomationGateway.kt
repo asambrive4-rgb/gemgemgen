@@ -341,6 +341,46 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         }
     }
 
+    override suspend fun switchGeminiAccount(
+        accountId: String,
+        alias: String,
+        identifier: String
+    ): RemoteActionResult = withContext(Dispatchers.IO) {
+        val target = endpoint ?: return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
+        val paired = store.pairedReceiver()
+            ?: return@withContext RemoteActionResult.Failure("수신 기기와 먼저 페어링해주세요.")
+
+        runCatching {
+            openSocket(target).use { socket ->
+                socket.soTimeout = 15_000
+                val writer = PrintWriter(socket.getOutputStream(), true)
+                val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.SwitchGeminiAccountRequest(
+                            senderId = store.installationId(),
+                            token = paired.token,
+                            accountId = accountId,
+                            alias = alias,
+                            identifier = identifier
+                        )
+                    )
+                )
+                val responseLine = reader.readLine()
+                    ?: return@withContext RemoteActionResult.Failure("수신 기기 응답이 없습니다.")
+                val message = RemoteAutomationProtocol.decode(responseLine) as? RemoteProtocolMessage.SwitchGeminiAccountResult
+                    ?: return@withContext RemoteActionResult.Failure("수신 기기 응답 형식이 올바르지 않습니다.")
+                if (message.success) {
+                    RemoteActionResult.Success
+                } else {
+                    RemoteActionResult.Failure(message.message.ifBlank { "수신 기기 계정 교체에 실패했습니다." })
+                }
+            }
+        }.getOrElse { error ->
+            RemoteActionResult.Failure("수신 기기 통신 실패: ${error.message ?: "알 수 없는 오류"}")
+        }
+    }
+
     private fun emitState(
         requestId: String,
         state: AutomationRunState,

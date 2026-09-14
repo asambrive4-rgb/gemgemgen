@@ -20,12 +20,14 @@ import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
+import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
-import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
+import com.example.gemgemgen.automation.android.SharedPreferencesGeminiAccountRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRepository
+import com.example.gemgemgen.automation.usecase.ManageGeminiAccountsUseCase
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
@@ -81,6 +83,8 @@ class AndroidAppContainer(context: Context) {
 
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
     val promptWorkspace = PromptWorkspace()
+    val geminiAccountRepository = SharedPreferencesGeminiAccountRepository(appContext)
+    val manageGeminiAccounts = ManageGeminiAccountsUseCase(geminiAccountRepository)
 
     val mainViewModelFactory: ViewModelProvider.Factory = factory<MainViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
@@ -119,7 +123,8 @@ class AndroidAppContainer(context: Context) {
             soundAlertGateway = AndroidSoundAlertGateway(appContext),
             promptHistoryStore = promptHistoryStore,
             themePaletteStore = themePaletteStore,
-            promptWorkspace = promptWorkspace
+            promptWorkspace = promptWorkspace,
+            manageGeminiAccounts = manageGeminiAccounts
         )
     }
 

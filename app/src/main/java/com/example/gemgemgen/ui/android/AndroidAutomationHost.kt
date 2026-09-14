@@ -262,7 +262,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onFlowImageCountSelected = mainViewModel::onFlowImageCountSelected,
             onPromptTemplateChange = mainViewModel::onPromptTemplateFromEditor,
             onWildcardTokenSuggestionClick = mainViewModel::applyWildcardTokenSuggestion,
-            onUndoPromptEdit = mainViewModel::undoPromptEdit,
+            onNavigateHistoryBack = mainViewModel::navigatePromptHistoryBack,
+            onNavigateHistoryForward = mainViewModel::navigatePromptHistoryForward,
             onInsertSystemInstruction = mainViewModel::insertSystemInstruction,
             onParagraphOffsetSelected = mainViewModel::selectPromptParagraphAt,
             onDeleteSelectedParagraph = mainViewModel::deleteSelectedPromptParagraph,
@@ -282,7 +283,16 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onOpenPromptHistory = mainViewModel::openPromptHistory,
             onClosePromptHistory = mainViewModel::closePromptHistory,
             onSelectPromptHistoryItem = mainViewModel::selectPromptHistoryItem,
-            onClearPromptHistory = mainViewModel::clearPromptHistory
+            onClearPromptHistory = mainViewModel::clearPromptHistory,
+            onOpenGeminiAccountDialog = mainViewModel::openGeminiAccountDialog,
+            onCloseGeminiAccountDialog = mainViewModel::closeGeminiAccountDialog,
+            onSwitchGeminiAccount = mainViewModel::switchGeminiAccount,
+            onCycleNextGeminiAccount = mainViewModel::cycleNextGeminiAccount,
+            onAddGeminiAccount = mainViewModel::addGeminiAccount,
+            onDeleteGeminiAccount = mainViewModel::deleteGeminiAccount,
+            onRetrySwitchGeminiAccount = mainViewModel::retrySwitchGeminiAccount,
+            onOpenGeminiManualSwitch = mainViewModel::openGeminiForManualSwitch,
+            onClearAccountSwitchError = mainViewModel::clearAccountSwitchError
         ),
         analysisActions = AnalysisAppActions(
             onClearFocus = clearInputFocus,

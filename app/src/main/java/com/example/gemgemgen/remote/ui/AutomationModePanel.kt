@@ -57,27 +57,27 @@ fun AutomationModePanel(
 ) {
     NeuCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        elevation = 3.dp
+        shape = RoundedCornerShape(16.dp),
+        elevation = 2.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             NeuInsetBed(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp),
-                shape = RoundedCornerShape(12.dp),
+                    .height(30.dp),
+                shape = RoundedCornerShape(10.dp),
                 backgroundColor = AppTheme.colors.insetBed,
                 borderColor = AppTheme.colors.insetBorder
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(3.dp),
+                        .padding(2.5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AutomationMode.entries.forEach { mode ->

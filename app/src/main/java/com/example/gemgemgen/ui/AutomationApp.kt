@@ -40,7 +40,8 @@ internal data class AutomationAppActions(
     val onFlowImageCountSelected: (Int) -> Unit = {},
     val onPromptTemplateChange: (String) -> Unit,
     val onWildcardTokenSuggestionClick: (String) -> Unit,
-    val onUndoPromptEdit: () -> Unit,
+    val onNavigateHistoryBack: () -> Unit,
+    val onNavigateHistoryForward: () -> Unit,
     val onInsertSystemInstruction: () -> Unit,
     val onParagraphOffsetSelected: (Int) -> Unit,
     val onDeleteSelectedParagraph: () -> Unit,
@@ -60,7 +61,16 @@ internal data class AutomationAppActions(
     val onOpenPromptHistory: () -> Unit = {},
     val onClosePromptHistory: () -> Unit = {},
     val onSelectPromptHistoryItem: (PromptHistoryItem) -> Unit = {},
-    val onClearPromptHistory: () -> Unit = {}
+    val onClearPromptHistory: () -> Unit = {},
+    val onOpenGeminiAccountDialog: () -> Unit = {},
+    val onCloseGeminiAccountDialog: () -> Unit = {},
+    val onSwitchGeminiAccount: (com.example.gemgemgen.automation.domain.GeminiAccountProfile) -> Unit = {},
+    val onCycleNextGeminiAccount: () -> Unit = {},
+    val onAddGeminiAccount: (alias: String, identifier: String) -> Unit = { _, _ -> },
+    val onDeleteGeminiAccount: (id: String) -> Unit = {},
+    val onRetrySwitchGeminiAccount: () -> Unit = {},
+    val onOpenGeminiManualSwitch: () -> Unit = {},
+    val onClearAccountSwitchError: () -> Unit = {}
 )
 
 internal data class WildcardAppActions(
@@ -190,7 +200,8 @@ internal fun AutomationApp(
                     onPromptTemplateChange = automationActions.onPromptTemplateChange,
                     onWildcardTokenSuggestionClick =
                         automationActions.onWildcardTokenSuggestionClick,
-                    onUndoPromptEdit = automationActions.onUndoPromptEdit,
+                    onNavigateHistoryBack = automationActions.onNavigateHistoryBack,
+                    onNavigateHistoryForward = automationActions.onNavigateHistoryForward,
                     onInsertSystemInstruction =
                         automationActions.onInsertSystemInstruction,
                     onParagraphOffsetSelected =
@@ -216,7 +227,16 @@ internal fun AutomationApp(
                     onSelectPromptHistoryItem = automationActions.onSelectPromptHistoryItem,
                     onClearPromptHistory = automationActions.onClearPromptHistory,
                     onSelectThemePalette = automationActions.onSelectThemePalette,
-                    onSelectThemeMode = automationActions.onSelectThemeMode
+                    onSelectThemeMode = automationActions.onSelectThemeMode,
+                    onOpenGeminiAccountDialog = automationActions.onOpenGeminiAccountDialog,
+                    onCloseGeminiAccountDialog = automationActions.onCloseGeminiAccountDialog,
+                    onSwitchGeminiAccount = automationActions.onSwitchGeminiAccount,
+                    onCycleNextGeminiAccount = automationActions.onCycleNextGeminiAccount,
+                    onAddGeminiAccount = automationActions.onAddGeminiAccount,
+                    onDeleteGeminiAccount = automationActions.onDeleteGeminiAccount,
+                    onRetrySwitchGeminiAccount = automationActions.onRetrySwitchGeminiAccount,
+                    onOpenGeminiManualSwitch = automationActions.onOpenGeminiManualSwitch,
+                    onClearAccountSwitchError = automationActions.onClearAccountSwitchError
                 )
             },
             MainTabPage(MainTab.ANALYSIS) {
