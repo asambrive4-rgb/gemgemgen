@@ -1,4 +1,4 @@
-// 역할: 입력창 활성화 탭과 SET_TEXT 및 붙여넣기 2중 주입을 통해 외부 AI 앱의 화면 요소에 프롬프트를 안전하게 자동 입력합니다.
+// 역할: 입력창 탭 활성화, SET_TEXT·붙여넣기 2중 주입 및 전송 버튼 재클릭 보강을 통해 프롬프트를 안전하게 자동 입력·전송합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -250,15 +250,29 @@ internal abstract class AccessibilityPromptAutomation(
             failureMessage = "$targetAppName 보내기 클릭 후 전송 완료를 확인하지 못함",
             notifyState = notifyState
         ) {
+            if (isSendConfirmed(prompt)) return@retryUntilFound true
+
+            // 이전 클릭이 씹혔거나 무시된 경우 최신 보내기 버튼을 찾아 재클릭
+            val node = findSendNode()
+            if (node != null) {
+                performSendClick(node)
+            }
             if (isSendConfirmed(prompt)) true else null
         }
         return confirmed == true
     }
 
     private fun checkPromptInputAfterSend(prompt: String): PromptInputAfterSend {
-        val inputText = findInputNode()?.text?.toString() ?: return PromptInputAfterSend.Unknown
+        val inputNode = findInputNode() ?: return PromptInputAfterSend.Unknown
+        val inputText = inputNode.text?.toString() ?: return PromptInputAfterSend.Unknown
+        val hint = inputNode.hintText?.toString()
 
-        return if (inputText.contains(prompt)) {
+        if (inputText.isBlank() || (hint != null && inputText == hint)) {
+            return PromptInputAfterSend.Empty
+        }
+
+        val sample = if (prompt.length > 50) prompt.take(50) else prompt
+        return if (inputText.contains(prompt) || inputText.contains(sample)) {
             PromptInputAfterSend.StillPresent
         } else {
             PromptInputAfterSend.Empty
