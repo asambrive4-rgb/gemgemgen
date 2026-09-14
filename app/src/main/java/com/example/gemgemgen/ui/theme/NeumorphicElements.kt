@@ -1,4 +1,4 @@
-// 역할: 볼드 테두리와 완화된 둥근 모서리(Squircle)를 적용한 뉴모피즘 카드, 버튼, 인셋 베드 및 칩 UI 요소를 제공합니다.
+// 역할: GPU 레이어 캐싱과 볼드 테두리를 적용한 뉴모피즘 카드, 버튼, 인셋 베드 및 칩 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.foundation.BorderStroke
@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -42,6 +43,7 @@ fun NeuCard(
 ) {
     Surface(
         modifier = modifier
+            .graphicsLayer()
             .shadow(
                 elevation = elevation,
                 shape = shape,
@@ -107,6 +109,7 @@ fun NeuPillChip(
 
     Box(
         modifier = modifier
+            .graphicsLayer()
             .shadow(
                 elevation = if (selected) 3.dp else 0.dp,
                 shape = shape,
@@ -153,6 +156,7 @@ fun NeuButton(
         color = if (enabled) backgroundColor else backgroundColor.copy(alpha = 0.5f),
         contentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.5f),
         modifier = modifier
+            .graphicsLayer()
             .shadow(
                 elevation = if (enabled) elevation else 0.dp,
                 shape = shape,

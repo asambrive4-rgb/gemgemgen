@@ -1,4 +1,4 @@
-// 역할: 메인 화면 하단에서 자동화 시작, 일시정지, 중단 제어 버튼 영역을 화면에 표시합니다.
+// 역할: 메인 화면 하단에서 리컴포지션을 격리하여 자동화 제어 버튼 및 실시간 상태를 부드럽게 화면에 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -46,18 +47,10 @@ internal fun AutomationActionBar(
     isRemoteSendMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val statusText = AutomationUiText.statusText(automationState)
-    val isError = automationState is AutomationRunState.Failure
-
-    val dotColor = when {
-        isError -> MaterialTheme.colorScheme.error
-        automationState is AutomationRunState.Running -> AppTheme.colors.primary
-        automationState is AutomationRunState.Success -> AppTheme.colors.primary
-        else -> AppTheme.colors.cardBorder
-    }
-
     NeuCard(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer(),
         shape = RoundedCornerShape(18.dp),
         elevation = 5.dp
     ) {
@@ -144,41 +137,62 @@ internal fun AutomationActionBar(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            AutomationStatusSection(
+                automationState = automationState,
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = 4.dp)
-            ) {
-                Surface(
-                    modifier = Modifier.size(8.dp),
-                    shape = RoundedCornerShape(50),
-                    color = dotColor
-                ) {}
-
-                if (automationState is AutomationRunState.Running &&
-                    automationState.currentIndex != null &&
-                    automationState.totalCount != null
-                ) {
-                    ProgressBadge(
-                        currentIndex = automationState.currentIndex,
-                        totalCount = automationState.totalCount
-                    )
-                }
-
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isError) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        AppTheme.colors.textSecondary
-                    }
-                )
-            }
+            )
         }
+    }
+}
+
+@Composable
+private fun AutomationStatusSection(
+    automationState: AutomationRunState,
+    modifier: Modifier = Modifier
+) {
+    val statusText = AutomationUiText.statusText(automationState)
+    val isError = automationState is AutomationRunState.Failure
+
+    val dotColor = when {
+        isError -> MaterialTheme.colorScheme.error
+        automationState is AutomationRunState.Running -> AppTheme.colors.primary
+        automationState is AutomationRunState.Success -> AppTheme.colors.primary
+        else -> AppTheme.colors.cardBorder
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier.graphicsLayer()
+    ) {
+        Surface(
+            modifier = Modifier.size(8.dp),
+            shape = RoundedCornerShape(50),
+            color = dotColor
+        ) {}
+
+        if (automationState is AutomationRunState.Running &&
+            automationState.currentIndex != null &&
+            automationState.totalCount != null
+        ) {
+            ProgressBadge(
+                currentIndex = automationState.currentIndex,
+                totalCount = automationState.totalCount
+            )
+        }
+
+        Text(
+            text = statusText,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = if (isError) {
+                MaterialTheme.colorScheme.error
+            } else {
+                AppTheme.colors.textSecondary
+            }
+        )
     }
 }
 

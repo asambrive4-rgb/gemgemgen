@@ -1,4 +1,4 @@
-// 역할: 다른 앱 화면 위에 오버레이되어 진행 상황을 보여주는 플로팅 바 UI를 화면에 표시합니다.
+// 역할: 다른 앱 화면 위에 오버레이되어 리컴포지션을 격리한 채 진행 상황을 보여주는 플로팅 바 UI를 화면에 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.isTerminal
@@ -57,6 +58,7 @@ private fun FloatingAutomationBar(
             modifier = Modifier
                 .width(470.dp)
                 .padding(8.dp)
+                .graphicsLayer()
                 .pointerInput(Unit) {
                     detectDragGesturesAfterLongPress(
                         onDragEnd = onDragEnd,

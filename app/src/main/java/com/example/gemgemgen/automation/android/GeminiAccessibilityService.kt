@@ -1,8 +1,11 @@
-// 역할: 화면 노드 조작, 제스처 탭/스와이프 전송, 백그라운드 코루틴 스코프 관리 및 Gemini 계정 자동 전환 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
+// 역할: 화면 노드 조작, 제스처 탭/스와이프, 클립보드 동기화 및 Gemini 계정 자동 전환 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
@@ -42,13 +45,15 @@ class GeminiAccessibilityService : AccessibilityService() {
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
             coroutineScope = serviceScope,
-            rootProvider = { rootInActiveWindow }
+            rootProvider = { rootInActiveWindow },
+            copyToClipboard = ::copyTextToClipboard
         )
     }
     private val chatGptAutomation by lazy {
         ChatGptPromptAutomation(
             coroutineScope = serviceScope,
-            rootProvider = { rootInActiveWindow }
+            rootProvider = { rootInActiveWindow },
+            copyToClipboard = ::copyTextToClipboard
         )
     }
     private val flowAutomation by lazy {
@@ -566,6 +571,11 @@ class GeminiAccessibilityService : AccessibilityService() {
         accountSwitchCompletion = null
         accountSwitchAutomation = null
         clearPackageRestriction()
+    }
+
+    private fun copyTextToClipboard(text: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("prompt", text))
     }
 
     companion object {

@@ -1,4 +1,4 @@
-// 역할: 화면 위에 항상 떠 있는 플로팅 자동화 제어 바의 표시 및 윈도우를 제어합니다.
+// 역할: 화면 위에 항상 떠 있는 플로팅 자동화 제어 바의 사전 준비, 프레임 분산 표시 및 윈도우를 제어합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.PixelFormat
@@ -30,6 +30,8 @@ internal class FloatingAutomationBarController(
     private var overlayView: ComposeView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var overlayLifecycleOwner: FloatingBarLifecycleOwner? = null
+    private var isAttached = false
+    private var isAttachScheduled = false
     private var currentPosition = positionStore.load()
     private var pendingDragX = 0f
     private var pendingDragY = 0f
@@ -39,26 +41,42 @@ internal class FloatingAutomationBarController(
         applyPendingDrag()
     }
 
+    /**
+     * 오버레이용 ComposeView를 미리 생성하고 뷰 트리를 바인딩하여 시작 시 인플레이션 지연을 방지합니다.
+     */
+    fun warmUp() {
+        if (overlayView != null) return
+        ensureOverlayViewCreated()
+    }
+
+    private fun ensureOverlayViewCreated(): ComposeView {
+        val existing = overlayView
+        if (existing != null) return existing
+
+        val lifecycleOwner = FloatingBarLifecycleOwner()
+        val view = ComposeView(activity).apply {
+            setViewTreeLifecycleOwner(lifecycleOwner)
+            setViewTreeViewModelStoreOwner(activity)
+            setViewTreeSavedStateRegistryOwner(activity)
+        }
+        overlayView = view
+        overlayLifecycleOwner = lifecycleOwner
+        return view
+    }
+
     fun showOrUpdate(
         uiStateFlow: StateFlow<AutomationBarUiState>,
         onCancelAutomation: () -> Unit,
         onRepeatCountChange: (String) -> Unit,
         onAutomationFinished: () -> Unit
     ) {
-        if (overlayView != null) return
+        if (isAttached || isAttachScheduled) return
 
-        val params = createLayoutParams()
-        val lifecycleOwner = FloatingBarLifecycleOwner().also { it.start() }
-        val view = ComposeView(activity).apply {
-            setViewTreeLifecycleOwner(lifecycleOwner)
-            setViewTreeViewModelStoreOwner(activity)
-            setViewTreeSavedStateRegistryOwner(activity)
+        val view = ensureOverlayViewCreated()
+        val lifecycleOwner = overlayLifecycleOwner ?: FloatingBarLifecycleOwner().also {
+            overlayLifecycleOwner = it
+            view.setViewTreeLifecycleOwner(it)
         }
-
-        overlayView = view
-        overlayLifecycleOwner = lifecycleOwner
-        layoutParams = params
-        windowManager.addView(view, params)
 
         view.setContent {
             FloatingAutomationBarOverlay(
@@ -70,11 +88,37 @@ internal class FloatingAutomationBarController(
                 onDragEnd = ::savePosition
             )
         }
+
+        val params = createLayoutParams()
+        layoutParams = params
+        isAttachScheduled = true
+
+        // 시작 버튼 클릭 렌더 프레임과 충돌하지 않도록 다음 Vsync 프레임으로 분산
+        choreographer.postFrameCallback {
+            if (!isAttachScheduled) return@postFrameCallback
+            isAttachScheduled = false
+            if (!isAttached && overlayView === view) {
+                lifecycleOwner.start()
+                try {
+                    windowManager.addView(view, params)
+                    isAttached = true
+                } catch (_: Exception) {
+                    // 오버레이 윈도우 추가 실패 방어
+                }
+            }
+        }
     }
 
     fun hide() {
-        val view = overlayView ?: return
-        windowManager.removeView(view)
+        isAttachScheduled = false
+        val view = overlayView
+        if (view != null && isAttached) {
+            try {
+                windowManager.removeView(view)
+            } catch (_: Exception) {
+            }
+            isAttached = false
+        }
         overlayView = null
         layoutParams = null
         choreographer.removeFrameCallback(dragFrameCallback)

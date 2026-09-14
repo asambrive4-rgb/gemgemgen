@@ -1,4 +1,4 @@
-// 역할: 코루틴 백그라운드 스케줄링을 통해 외부 AI 앱의 화면 요소를 탐색하고 프롬프트를 비차단 방식으로 자동 입력합니다.
+// 역할: 입력창 활성화 탭과 SET_TEXT 및 붙여넣기 2중 주입을 통해 외부 AI 앱의 화면 요소에 프롬프트를 안전하게 자동 입력합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -23,7 +23,8 @@ internal abstract class AccessibilityPromptAutomation(
     protected val coroutineScope: CoroutineScope,
     protected val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     protected val mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
-    private val targetAppName: String
+    private val targetAppName: String,
+    protected val copyToClipboard: ((String) -> Unit)? = null
 ) : PromptAutomationGateway {
     private var activeJob: Job? = null
 
@@ -101,14 +102,26 @@ internal abstract class AccessibilityPromptAutomation(
         inputNode: AccessibilityNodeInfo,
         prompt: String
     ): Boolean {
-        inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        clickNodeOrParent(inputNode)
+        delay(INPUT_CLICK_SETTLE_MS)
+
+        val targetNode = findInputNode() ?: inputNode
+        targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val arguments = Bundle().apply {
             putCharSequence(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
                 prompt
             )
         }
-        return inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+
+        if (!isPromptTextApplied(prompt)) {
+            copyToClipboard?.invoke(prompt)
+            targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            delay(INPUT_PASTE_SETTLE_MS)
+        }
+
+        return true
     }
 
     protected suspend fun <T> retryUntilFound(
@@ -119,9 +132,14 @@ internal abstract class AccessibilityPromptAutomation(
     ): T? {
         val startedAtMillis = SystemClock.uptimeMillis()
         var attempt = 1
+        var lastNotifiedMillis = 0L
 
         while (coroutineContext.isActive) {
-            notifyState(AutomationRunState.Running("$actionName (#$attempt)"))
+            val now = SystemClock.uptimeMillis()
+            if (attempt == 1 || now - lastNotifiedMillis >= STATE_NOTIFY_THROTTLE_MS) {
+                notifyState(AutomationRunState.Running("$actionName (#$attempt)"))
+                lastNotifiedMillis = now
+            }
             val result = action(attempt)
             if (result != null) {
                 return result
@@ -146,6 +164,7 @@ internal abstract class AccessibilityPromptAutomation(
         newChatMode: NewChatMode,
         notifyState: suspend (AutomationRunState) -> Unit
     ): Boolean {
+        delay(LAUNCH_SETTLE_WAIT_MS)
         val newChatSuccess = openNewChat(newChatMode, notifyState)
         if (!newChatSuccess) return false
 
@@ -193,6 +212,10 @@ internal abstract class AccessibilityPromptAutomation(
             failureMessage = "$targetAppName 프롬프트 입력 반영 실패",
             notifyState = notifyState
         ) {
+            val currentNode = findInputNode()
+            if (currentNode != null) {
+                applyPromptText(currentNode, prompt)
+            }
             if (isPromptTextApplied(prompt)) true else null
         }
         return retrySuccess == true
@@ -243,7 +266,14 @@ internal abstract class AccessibilityPromptAutomation(
     }
 
     private fun isPromptTextApplied(prompt: String): Boolean {
-        return findInputNode()?.text?.toString()?.contains(prompt) == true
+        val inputNode = findInputNode() ?: return false
+        val text = inputNode.text?.toString() ?: return false
+        val hint = inputNode.hintText?.toString()
+        if (hint != null && text == hint) {
+            return false
+        }
+        val sample = if (prompt.length > 50) prompt.take(50) else prompt
+        return text.contains(prompt) || text.contains(sample)
     }
 
     private fun findClickableNodeOrParent(
@@ -268,6 +298,10 @@ internal abstract class AccessibilityPromptAutomation(
     }
 
     private companion object {
+        const val LAUNCH_SETTLE_WAIT_MS = 300L
+        const val STATE_NOTIFY_THROTTLE_MS = 800L
+        const val INPUT_CLICK_SETTLE_MS = 150L
+        const val INPUT_PASTE_SETTLE_MS = 100L
         const val INPUT_CONFIRM_WAIT_MS = 500L
         const val SEND_CONFIRM_WAIT_MS = 500L
     }

@@ -1,4 +1,4 @@
-// 역할: 접근성 서비스와의 연결 통로를 제공하고 자동화 화면을 감싸는 호스트 컴포넌트입니다.
+// 역할: 접근성 서비스 연결 통로를 제공하고 Staggered Warm-up과 포커스 제어로 자동화 화면을 매끄럽게 호스팅합니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
@@ -23,7 +23,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
@@ -169,7 +171,6 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                         bringMainActivityToFront()
                     }
                 )
-                activity?.moveTaskToBack(true)
             }
             AutomationStartDecision.RemoteStarted -> Unit
             AutomationStartDecision.PermissionRequired -> {
@@ -198,15 +199,22 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // 스플릿/멀티윈도우: 다른 창을 탭해 우리 창이 포커스를 잃으면 커서·키보드 즉시 해제.
+    // 스플릿/멀티윈도우: 다른 창을 탭해 우리 창이 포커스를 잃으면 커서·키보드 즉시 해제. (초기 시작 시점 중복 트리거 방지)
     LaunchedEffect(windowInfo) {
         snapshotFlow { windowInfo.isWindowFocused }
             .distinctUntilChanged()
+            .drop(1)
             .collect { focused ->
                 if (!focused) {
                     clearInputFocus()
                 }
             }
+    }
+
+    // 첫 화면 렌더링이 완전히 안착된 후 300ms 시차를 두어 플로팅 오버레이를 준비(Staggered Warm-up)하여 콜드 스타트 지연 제거
+    LaunchedEffect(floatingBarController) {
+        delay(300L)
+        floatingBarController?.warmUp()
     }
 
     DisposableEffect(floatingBarController) {

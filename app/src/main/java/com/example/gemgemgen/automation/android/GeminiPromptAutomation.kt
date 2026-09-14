@@ -1,4 +1,4 @@
-// 역할: Gemini 앱을 대상으로 코루틴 비차단 방식을 통해 화면 상태에 맞춘 새 대화 전환과 프롬프트 자동 입력을 수행합니다.
+// 역할: Gemini 앱을 대상으로 코루틴 비차단 방식을 통해 새 대화 전환 및 클립보드 붙여넣기 연동 프롬프트 자동 입력을 수행합니다.
 package com.example.gemgemgen.automation.android
 
 import android.view.accessibility.AccessibilityNodeInfo
@@ -12,12 +12,14 @@ internal class GeminiPromptAutomation(
     coroutineScope: CoroutineScope,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
-    rootProvider: () -> AccessibilityNodeInfo?
+    rootProvider: () -> AccessibilityNodeInfo?,
+    copyToClipboard: ((String) -> Unit)? = null
 ) : AccessibilityPromptAutomation(
     coroutineScope = coroutineScope,
     dispatcher = dispatcher,
     mainDispatcher = mainDispatcher,
-    targetAppName = "Gemini"
+    targetAppName = "Gemini",
+    copyToClipboard = copyToClipboard
 ) {
     private val nodeFinder = GeminiAccessibilityNodeFinder(
         rootProvider = rootProvider,

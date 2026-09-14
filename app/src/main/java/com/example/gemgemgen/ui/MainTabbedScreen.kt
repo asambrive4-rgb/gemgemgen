@@ -1,4 +1,4 @@
-// 역할: 탭 바를 통해 기능별 메인 화면을 전환하여 보여주는 화면 레이아웃을 구성합니다.
+// 역할: GPU 레이어 캐싱을 적용한 탭 바를 통해 기능별 메인 화면을 부드럽게 전환하는 레이아웃을 구성합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.theme.AppTheme
@@ -55,7 +56,9 @@ internal fun MainTabbedScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(
             color = AppTheme.colors.canvas,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer()
         ) {
             Row(
                 modifier = Modifier
@@ -67,7 +70,8 @@ internal fun MainTabbedScreen(
                 NeuInsetBed(
                     modifier = Modifier
                         .weight(1f)
-                        .height(42.dp),
+                        .height(42.dp)
+                        .graphicsLayer(),
                     shape = RoundedCornerShape(21.dp),
                     backgroundColor = AppTheme.colors.insetBed,
                     borderColor = AppTheme.colors.insetBorder
@@ -134,6 +138,7 @@ internal fun MainTabbedScreen(
                             ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
                             spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
                         )
+                        .graphicsLayer()
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
