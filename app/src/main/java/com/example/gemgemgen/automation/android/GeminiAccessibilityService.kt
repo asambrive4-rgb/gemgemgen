@@ -136,6 +136,11 @@ class GeminiAccessibilityService : AccessibilityService() {
                 memoryCleanupAutomation = GoogleAppForceStopAutomation(
                     handler = handler,
                     rootProvider = { rootInActiveWindow },
+                    allRootsProvider = {
+                        runCatching {
+                            windows.mapNotNull { it.root }
+                        }.getOrNull() ?: listOfNotNull(rootInActiveWindow)
+                    },
                     currentPackageProvider = {
                         rootInActiveWindow?.packageName?.toString()
                     },

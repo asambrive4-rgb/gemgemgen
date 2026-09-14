@@ -10,6 +10,7 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 internal data class ForceStopNodeLabels(
     val settingsPackageNames: List<String> = listOf("com.android.settings"),
     val forceStopButtonIds: List<String> = listOf(
+        "com.android.settings:id/forcestop_button",
         "com.android.settings:id/button2_negative",
         "com.android.settings:id/force_stop_button",
         "com.android.settings:id/right_button"
@@ -59,6 +60,7 @@ internal fun isConfirmDialogButton(
 internal class GoogleAppForceStopAutomation(
     private val handler: Handler,
     private val rootProvider: () -> AccessibilityNodeInfo?,
+    private val allRootsProvider: () -> List<AccessibilityNodeInfo> = { listOfNotNull(rootProvider()) },
     private val currentPackageProvider: () -> String?,
     private val performBack: () -> Boolean,
     private val launchDetails: () -> Boolean,
@@ -115,8 +117,8 @@ internal class GoogleAppForceStopAutomation(
             }
 
             Phase.FIND_FORCE_STOP -> {
-                val root = rootProvider()
-                val forceStopNode = root?.let(::findForceStopNode)
+                val nodes = allNodes()
+                val forceStopNode = findForceStopNode(nodes)
                 if (forceStopNode != null) {
                     if (!forceStopNode.isEnabled) {
                         // 이미 비활성화(회색)된 상태면 프로세스가 종료되어 있는 상태이므로 성공 처리 후 복귀
@@ -130,7 +132,8 @@ internal class GoogleAppForceStopAutomation(
             }
 
             Phase.CLICK_FORCE_STOP -> {
-                val forceStopNode = rootProvider()?.let(::findForceStopNode)
+                val nodes = allNodes()
+                val forceStopNode = findForceStopNode(nodes)
                 if (forceStopNode != null) {
                     if (!forceStopNode.isEnabled) {
                         enter(Phase.CLOSE_SETTINGS)
@@ -145,8 +148,8 @@ internal class GoogleAppForceStopAutomation(
             }
 
             Phase.WAIT_CONFIRM_DIALOG -> {
-                val root = rootProvider()
-                val confirmNode = root?.let(::findConfirmDialogNode)
+                val nodes = allNodes()
+                val confirmNode = findConfirmDialogNode(nodes)
                 if (confirmNode != null) {
                     if (clickNodeOrParent(confirmNode)) {
                         enter(Phase.CLOSE_SETTINGS)
@@ -154,9 +157,11 @@ internal class GoogleAppForceStopAutomation(
                         retryOrFail("강제 중지 확인 버튼을 누르지 못했습니다.") { checkPhase() }
                     }
                 } else {
-                    // 다이얼로그 없이 바로 비활성화되었는지 확인
-                    val forceStopNode = root?.let(::findForceStopNode)
-                    if (forceStopNode != null && !forceStopNode.isEnabled) {
+                    // 확인 다이얼로그가 없는 특수 기기 대비 Fallback:
+                    // 충분한 대기 시간(1.5초) 후에도 팝업이 없고 강제 중지 버튼이 비활성화된 경우에만 완료 처리
+                    val elapsedMillis = SystemClock.uptimeMillis() - phaseStartedAtMillis
+                    val forceStopNode = findForceStopNode(nodes)
+                    if (elapsedMillis >= NO_DIALOG_FALLBACK_WAIT_MS && forceStopNode != null && !forceStopNode.isEnabled) {
                         enter(Phase.CLOSE_SETTINGS)
                     } else {
                         retryOrFail("강제 중지 확인 팝업을 찾지 못했습니다.") { checkPhase() }
@@ -201,8 +206,12 @@ internal class GoogleAppForceStopAutomation(
         return labels.settingsPackageNames.any { it.equals(currentPackage, ignoreCase = true) }
     }
 
-    private fun findForceStopNode(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val nodes = flattenNodes(root)
+    private fun allNodes(): List<AccessibilityNodeInfo> {
+        val roots = allRootsProvider().ifEmpty { listOfNotNull(rootProvider()) }
+        return roots.flatMap(::flattenNodes)
+    }
+
+    private fun findForceStopNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
         // 1순위: ID와 라벨 일치
         val exactMatch = nodes.firstOrNull { node ->
             val idMatches = node.viewIdResourceName != null && labels.forceStopButtonIds.contains(node.viewIdResourceName)
@@ -222,8 +231,7 @@ internal class GoogleAppForceStopAutomation(
         }
     }
 
-    private fun findConfirmDialogNode(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val nodes = flattenNodes(root)
+    private fun findConfirmDialogNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
         // 1순위: 팝업 확인 버튼 ID + 라벨 일치
         val exactMatch = nodes.firstOrNull { node ->
             val idMatches = node.viewIdResourceName != null && labels.confirmDialogButtonIds.contains(node.viewIdResourceName)
@@ -231,15 +239,17 @@ internal class GoogleAppForceStopAutomation(
         }
         if (exactMatch != null) return exactMatch
 
-        // 2순위: 라벨 일치 및 버튼 형태
-        val labelMatch = nodes.firstOrNull { node ->
-            hasLabel(node, labels.confirmDialogCandidates) && isButtonLike(node)
-        }
-        if (labelMatch != null) return labelMatch
-
-        // 3순위: AlertDialog positive button ID 일치
-        return nodes.firstOrNull { node ->
+        // 2순위: AlertDialog positive button ID 일치
+        val idMatch = nodes.firstOrNull { node ->
             node.viewIdResourceName != null && labels.confirmDialogButtonIds.contains(node.viewIdResourceName)
+        }
+        if (idMatch != null) return idMatch
+
+        // 3순위: 라벨 일치 및 버튼 형태 (취소 버튼 제외)
+        return nodes.firstOrNull { node ->
+            val isCancel = node.viewIdResourceName == "android:id/button2" ||
+                nodeValue(node)?.equals("취소", ignoreCase = true) == true
+            !isCancel && hasLabel(node, labels.confirmDialogCandidates) && isButtonLike(node)
         }
     }
 
@@ -297,5 +307,6 @@ internal class GoogleAppForceStopAutomation(
     private companion object {
         const val MAX_SETTINGS_BACKS = 3
         const val MAX_ANCESTOR_SEARCH_DEPTH = 8
+        const val NO_DIALOG_FALLBACK_WAIT_MS = 1500L
     }
 }

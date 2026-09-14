@@ -138,7 +138,7 @@ internal fun AutomationScreen(
                     selectedParagraphRange = uiState.selectedParagraphRange,
                     paragraphSelectionMessage = uiState.paragraphSelectionMessage,
                     wildcardTokenCandidates = uiState.wildcardTokenCandidates,
-                    showPromptActions = !isKeyboardVisible,
+                    showPromptActions = true,
                     showWildcardSuggestions = !isKeyboardVisible,
                     onTargetAppSelected = onTargetAppSelected,
                     flowImageCount = uiState.flowImageCount,
@@ -176,10 +176,10 @@ internal fun AutomationScreen(
                 } else if (isKeyboardVisible) {
                     val hasActionBarOnIme = uiState.automationMode != AutomationMode.RECEIVER
                     val bottomSpacerHeight = when {
-                        suggestionTokens.isNotEmpty() && hasActionBarOnIme -> 160.dp
-                        hasActionBarOnIme -> 120.dp
-                        suggestionTokens.isNotEmpty() -> 96.dp
-                        else -> 56.dp
+                        suggestionTokens.isNotEmpty() && hasActionBarOnIme -> 110.dp
+                        hasActionBarOnIme -> 68.dp
+                        suggestionTokens.isNotEmpty() -> 50.dp
+                        else -> 20.dp
                     }
                     Spacer(modifier = Modifier.height(bottomSpacerHeight))
                 }
@@ -216,30 +216,6 @@ internal fun AutomationScreen(
                                 onTokenClick = onWildcardTokenSuggestionClick
                             )
                         }
-
-                        PromptActionRow(
-                            canCloseGemini = uiState.canCloseGemini,
-                            canCloseSelfApp = uiState.canCloseSelfApp,
-                            canCleanMemory = uiState.canCleanMemory,
-                            isMaintenanceBusy = uiState.isMaintenanceBusy,
-                            canNavigateHistoryBack = uiState.canNavigateHistoryBack,
-                            canNavigateHistoryForward = uiState.canNavigateHistoryForward,
-                            isHistoryIndicatorVisible = uiState.isHistoryIndicatorVisible,
-                            historyDotCount = uiState.historyDotCount,
-                            activeHistoryDotIndex = uiState.activeHistoryDotIndex,
-                            canCopyPrompt = uiState.hasPromptTemplate &&
-                                !uiState.isRunning,
-                            isTargetSelectionEnabled = !uiState.isRunning,
-                            onCloseGeminiApp = onCloseGeminiApp,
-                            onCleanDeviceMemory = onCleanDeviceMemory,
-                            onTerminateSelfApp = onTerminateSelfApp,
-                            onNavigateHistoryBack = onNavigateHistoryBack,
-                            onNavigateHistoryForward = onNavigateHistoryForward,
-                            onInsertSystemInstruction = onInsertSystemInstruction,
-                            onImportFromClipboard = onImportFromClipboard,
-                            onCopyPromptToClipboard = onCopyPromptToClipboard,
-                            onPasteFromClipboard = onPasteFromClipboard
-                        )
 
                         if (uiState.automationMode != AutomationMode.RECEIVER) {
                             AutomationActionBar(

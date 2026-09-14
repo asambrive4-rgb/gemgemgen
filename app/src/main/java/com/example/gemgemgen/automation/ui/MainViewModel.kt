@@ -597,25 +597,31 @@ class MainViewModel(
             mode = state.automationMode
         )
 
+        var updatedHistory: List<PromptHistoryItem>? = null
         if (decision is AutomationStartDecision.Started || decision is AutomationStartDecision.RemoteStarted) {
-            val updatedHistory = promptHistoryStore?.record(
+            val history = promptHistoryStore?.record(
                 prompt = state.promptTemplate,
                 targetApp = state.selectedTargetApp
             ) ?: promptHistoryStore?.load().orEmpty()
-            promptEditor.onAutomationStarted(state.promptTemplate, updatedHistory.map { it.prompt })
-            _uiState.update { it.copy(promptHistoryItems = updatedHistory) }
+            updatedHistory = history
+            promptEditor.onAutomationStarted(state.promptTemplate, history.map { it.prompt })
         }
 
         when (decision) {
             AutomationStartDecision.RemoteStarted -> {
                 cancelParagraphSelection()
                 isRemoteRunActive = true
-                handleAutomationState(AutomationRunState.Running("S25 FE로 요청 전송 중"))
+                handleAutomationState(
+                    AutomationRunState.Running("S25 FE로 요청 전송 중"),
+                    additionalUpdate = { current ->
+                        if (updatedHistory != null) current.copy(promptHistoryItems = updatedHistory) else current
+                    }
+                )
                 val request = AutomationRunRequest(
                     promptTemplate = state.promptTemplate,
                     repeatCountText = state.repeatCountText,
                     targetApp = state.selectedTargetApp,
-                        flowImageCount = state.flowImageCount
+                    flowImageCount = state.flowImageCount
                 )
                 val job = scope.launch {
                     val result = executeAutomation.executeRemote(request, ::handleAutomationState)
@@ -631,12 +637,17 @@ class MainViewModel(
             }
             AutomationStartDecision.Started -> {
                 cancelParagraphSelection()
-                handleAutomationState(AutomationRunState.Running("자동화 준비 중"))
+                handleAutomationState(
+                    AutomationRunState.Running("자동화 준비 중"),
+                    additionalUpdate = { current ->
+                        if (updatedHistory != null) current.copy(promptHistoryItems = updatedHistory) else current
+                    }
+                )
                 val request = AutomationRunRequest(
                     promptTemplate = state.promptTemplate,
                     repeatCountText = state.repeatCountText,
                     targetApp = state.selectedTargetApp,
-                        flowImageCount = state.flowImageCount
+                    flowImageCount = state.flowImageCount
                 )
                 val job = scope.launch {
                     try {
@@ -789,7 +800,10 @@ class MainViewModel(
         }
     }
 
-    private fun handleAutomationState(state: AutomationRunState) {
+    private fun handleAutomationState(
+        state: AutomationRunState,
+        additionalUpdate: ((MainUiState) -> MainUiState)? = null
+    ) {
         if (_uiState.value.automationMode == AutomationMode.SENDER && isRemoteRunActive) {
             when (state) {
                 is AutomationRunState.Failure -> {
@@ -803,12 +817,13 @@ class MainViewModel(
                 else -> Unit
             }
         }
-        _uiState.update {
-            val coarseState = it.automationState.coarseAutomationStateFor(state)
-            if (it.automationState == coarseState) {
-                it
+        _uiState.update { current ->
+            val withAdditional = additionalUpdate?.invoke(current) ?: current
+            val coarseState = withAdditional.automationState.coarseAutomationStateFor(state)
+            if (withAdditional.automationState == coarseState && additionalUpdate == null) {
+                withAdditional
             } else {
-                it.copy(automationState = coarseState)
+                withAdditional.copy(automationState = coarseState)
             }
         }
         _automationBarUiState.update {

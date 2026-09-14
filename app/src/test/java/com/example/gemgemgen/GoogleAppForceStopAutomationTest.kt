@@ -15,6 +15,13 @@ class GoogleAppForceStopAutomationTest {
     fun forceStopButton_matchesResourceId() {
         assertTrue(
             isForceStopButton(
+                viewIdResourceName = "com.android.settings:id/forcestop_button",
+                nodeLabel = null,
+                labels = labels
+            )
+        )
+        assertTrue(
+            isForceStopButton(
                 viewIdResourceName = "com.android.settings:id/button2_negative",
                 nodeLabel = null,
                 labels = labels

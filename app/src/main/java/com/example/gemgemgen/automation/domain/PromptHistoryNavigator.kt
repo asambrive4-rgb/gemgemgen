@@ -1,4 +1,4 @@
-// 역할: 프롬프트 실행 기록 목록을 바탕으로 브라우저 방식의 앞/뒤 탐색, 초안(Draft) 보존, 점 인디케이터 위치 및 활성화 상태를 관리합니다.
+// 역할: 프롬프트 실행 기록 목록을 바탕으로 브라우저 방식의 앞/뒤 탐색, 초안(Draft) 보존, 순수 과거 기록 점 인디케이터 위치를 관리합니다.
 package com.example.gemgemgen.automation.domain
 
 class PromptHistoryNavigator(
@@ -20,10 +20,10 @@ class PromptHistoryNavigator(
         get() = _isNavigating && currentIndex < historyItems.size
 
     val dotCount: Int
-        get() = if (historyItems.isEmpty()) 0 else minOf(MAX_DOT_COUNT, historyItems.size + 1)
+        get() = minOf(MAX_HISTORY_COUNT, historyItems.size)
 
     val activeDotIndex: Int
-        get() = currentIndex.coerceIn(0, (dotCount - 1).coerceAtLeast(0))
+        get() = if (dotCount == 0) 0 else currentIndex.coerceIn(0, dotCount - 1)
 
     val isIndicatorVisible: Boolean
         get() = _isNavigating && historyItems.isNotEmpty()
@@ -59,14 +59,7 @@ class PromptHistoryNavigator(
         if (!_isNavigating) {
             draftPrompt = currentText
             _isNavigating = true
-            currentIndex = historyItems.size
-            val immediatePreviousIndex = historyItems.size - 1
-            val immediatePreviousPrompt = getPromptAt(immediatePreviousIndex)
-            if (immediatePreviousPrompt == currentText && immediatePreviousIndex > 0) {
-                currentIndex = immediatePreviousIndex - 1
-            } else {
-                currentIndex = immediatePreviousIndex
-            }
+            currentIndex = historyItems.size - 1
         } else {
             currentIndex--
         }
@@ -96,6 +89,5 @@ class PromptHistoryNavigator(
 
     companion object {
         const val MAX_HISTORY_COUNT = 4
-        const val MAX_DOT_COUNT = 5
     }
 }

@@ -2,12 +2,16 @@
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.runtime.getValue
 import com.example.gemgemgen.core.AppDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -368,7 +372,9 @@ internal fun PromptActionRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 좌측: 히스토리 네비게이션 (가로세로 35dp 1:1 정사각형 조약돌)
-            ActionIsland {
+            ActionIsland(
+                modifier = Modifier.animateContentSize()
+            ) {
                 PebbleButton(
                     onClick = onNavigateHistoryBack,
                     enabled = canNavigateHistoryBack && isTargetSelectionEnabled,
@@ -574,24 +580,40 @@ private fun PebbleButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
     content: @Composable RowScope.() -> Unit
 ) {
+    val animatedBorderColor by animateColorAsState(
+        targetValue = if (enabled) borderColor else borderColor.copy(alpha = 0.45f),
+        animationSpec = tween(durationMillis = 150),
+        label = "PebbleBorder"
+    )
+    val animatedContainerColor by animateColorAsState(
+        targetValue = if (enabled) AppTheme.colors.card else AppTheme.colors.card.copy(alpha = 0.65f),
+        animationSpec = tween(durationMillis = 150),
+        label = "PebbleContainer"
+    )
+    val animatedContentColor by animateColorAsState(
+        targetValue = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textPrimary.copy(alpha = 0.4f),
+        animationSpec = tween(durationMillis = 150),
+        label = "PebbleContent"
+    )
+
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = AppTheme.colors.card,
-            contentColor = AppTheme.colors.textPrimary,
-            disabledContainerColor = AppTheme.colors.card.copy(alpha = 0.5f),
-            disabledContentColor = AppTheme.colors.textPrimary.copy(alpha = 0.38f)
+            containerColor = animatedContainerColor,
+            contentColor = animatedContentColor,
+            disabledContainerColor = animatedContainerColor,
+            disabledContentColor = animatedContentColor
         ),
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = if (enabled) 1.dp else 0.dp,
+            defaultElevation = 0.dp,
             pressedElevation = 0.dp,
             disabledElevation = 0.dp
         ),
         shape = RoundedCornerShape(10.dp),
         contentPadding = contentPadding,
         modifier = modifier.height(35.dp),
-        border = BorderStroke(1.2.dp, if (enabled) borderColor else borderColor.copy(alpha = 0.4f)),
+        border = BorderStroke(1.2.dp, animatedBorderColor),
         content = content
     )
 }
