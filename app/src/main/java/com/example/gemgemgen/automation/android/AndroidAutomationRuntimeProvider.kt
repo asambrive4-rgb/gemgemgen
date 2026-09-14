@@ -2,6 +2,7 @@
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
+import com.example.gemgemgen.automation.usecase.AnimationScaleManager
 import com.example.gemgemgen.automation.usecase.ImeManager
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
@@ -21,6 +22,10 @@ object AndroidAutomationRuntimeProvider {
                 wildcardSetRepository = AndroidWildcardSetRepository(appContext),
                 promptGatewayProvider = ActivePromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext),
+                animationScaleManager = AnimationScaleManager(
+                    settings = AndroidAnimationScaleSettings(appContext),
+                    backupStore = SharedPreferencesAnimationScaleBackupStore(appContext)
+                ),
                 promptHistoryStore = com.example.gemgemgen.automation.usecase.PromptHistoryStore(
                     SharedPreferencesPromptHistoryRepository(appContext)
                 )

@@ -1,4 +1,4 @@
-// 역할: AI 앱 프롬프트 전송 자동화 루프를 실행하고 진행 상태를 관리합니다.
+// 역할: AI 앱 프롬프트 전송 자동화 루프를 실행하고 환경(입력기/애니메이션) 및 진행 상태를 관리합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -30,6 +30,7 @@ class RunAutomationUseCase(
     wildcardSetRepository: WildcardSetRepository,
     private val promptGatewayProvider: PromptAutomationGatewayProvider,
     private val targetAppLauncher: TargetAppLauncher,
+    private val animationScaleManager: AnimationScaleManager? = null,
     dispatchers: AppDispatchers = AppDispatchers(),
     promptGenerator: PromptGenerator = PromptGenerator(),
     private val generateFinalPrompt: ((String, List<WildcardSet>, Int) -> String)? = null,
@@ -175,9 +176,12 @@ class RunAutomationUseCase(
             return
         }
 
+        val animationSession = animationScaleManager?.disableAnimations()
+
         val run = CurrentRun(
             targetApp = request.targetApp,
             imeSession = (imeSwitchResult as ImeSwitchResult.Success).session,
+            animationSession = animationSession,
             promptGateway = promptGateway,
             promptTemplate = request.promptTemplate,
             repeatCount = sessionRepeatCount ?: preparedRun.repeatCount,
@@ -292,6 +296,10 @@ class RunAutomationUseCase(
         run.finished = true
         emitState(AutomationRunState.Running("원래 입력기로 복구 중"), onStateChange)
 
+        run.animationSession?.let { session ->
+            animationScaleManager?.restore(session)
+        }
+
         val finalState = when (val restoreResult = imeManager.restore(run.imeSession)) {
             ImeRestoreResult.Success -> state
             is ImeRestoreResult.Failure -> AutomationRunState.Failure(
@@ -329,6 +337,7 @@ class RunAutomationUseCase(
     private data class CurrentRun(
         val targetApp: AutomationTargetApp,
         val imeSession: ImeSwitchSession,
+        val animationSession: AnimationScaleSession?,
         val promptGateway: PromptAutomationGateway,
         val promptTemplate: String,
         var repeatCount: Int,

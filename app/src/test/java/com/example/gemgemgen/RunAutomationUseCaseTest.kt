@@ -1,4 +1,4 @@
-// 역할: 자동화 실행 파이프라인의 대상 앱별 세션 마커 전송 및 프롬프트 반복 생성을 검증하는 단위 테스트
+// 역할: 자동화 실행 파이프라인의 마커 전송, 반복 생성 및 환경(입력기/애니메이션) 제어를 검증하는 단위 테스트
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*
@@ -405,6 +405,67 @@ class RunAutomationUseCaseTest {
         assertEquals(null, automation.updateRepeatCount(9))
     }
 
+    @Test
+    fun run_disablesAnimationScalesOnStartAndRestoresOnFinish() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = true)
+        var currentScales = AnimationScales(1.0f, 1.0f, 1.0f)
+        val scaleSettings = object : AnimationScaleSettings {
+            override fun getScales(): AnimationScales = currentScales
+            override fun setScales(scales: AnimationScales): Boolean {
+                currentScales = scales
+                return true
+            }
+        }
+        val animManager = AnimationScaleManager(scaleSettings)
+        val automation = automation(
+            service = service,
+            animationScaleManager = animManager,
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
+        )
+
+        automation.run(
+            request = AutomationRunRequest(
+                promptTemplate = "test",
+                repeatCountText = "1",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+
+        assertEquals(AnimationScales(1.0f, 1.0f, 1.0f), currentScales)
+    }
+
+    @Test
+    fun cancel_restoresAnimationScales() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = false)
+        var currentScales = AnimationScales(0.5f, 0.5f, 0.5f)
+        val scaleSettings = object : AnimationScaleSettings {
+            override fun getScales(): AnimationScales = currentScales
+            override fun setScales(scales: AnimationScales): Boolean {
+                currentScales = scales
+                return true
+            }
+        }
+        val animManager = AnimationScaleManager(scaleSettings)
+        val automation = automation(
+            service = service,
+            animationScaleManager = animManager,
+            generateFinalPrompt = { _, _, index -> "prompt $index" }
+        )
+
+        automation.run(
+            request = AutomationRunRequest(
+                promptTemplate = "test",
+                repeatCountText = "2",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+        assertEquals(AnimationScales.ZERO, currentScales)
+
+        automation.cancel()
+
+        assertEquals(AnimationScales(0.5f, 0.5f, 0.5f), currentScales)
+    }
+
     private var defaultImeId = ORIGINAL_IME_ID
 
     private fun automation(
@@ -412,6 +473,7 @@ class RunAutomationUseCaseTest {
         loadWildcardSets: (Set<String>) -> List<WildcardSet> = { emptyList() },
         onGatewayRequest: (AutomationTargetApp) -> Unit = {},
         onLaunch: (AutomationTargetApp) -> Boolean = { true },
+        animationScaleManager: AnimationScaleManager? = null,
         generateFinalPrompt: (String, List<WildcardSet>, Int) -> String
     ): RunAutomationUseCase {
         defaultImeId = ORIGINAL_IME_ID
@@ -435,6 +497,7 @@ class RunAutomationUseCaseTest {
                 service
             },
             targetAppLauncher = TargetAppLauncher(onLaunch),
+            animationScaleManager = animationScaleManager,
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
             generateFinalPrompt = generateFinalPrompt
         )
