@@ -1,17 +1,22 @@
-// 역할: ChatGPT 앱을 대상으로 프롬프트 입력과 전송 동작을 자동 수행합니다.
+// 역할: ChatGPT 앱을 대상으로 코루틴 비차단 방식을 통해 프롬프트 입력과 전송 동작을 자동 수행합니다.
 package com.example.gemgemgen.automation.android
 
-import android.os.Handler
-import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.usecase.NewChatMode
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 
 internal class ChatGptPromptAutomation(
-    handler: Handler,
+    coroutineScope: CoroutineScope,
+    dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     rootProvider: () -> AccessibilityNodeInfo?
 ) : AccessibilityPromptAutomation(
-    handler = handler,
+    coroutineScope = coroutineScope,
+    dispatcher = dispatcher,
+    mainDispatcher = mainDispatcher,
     targetAppName = "ChatGPT"
 ) {
     private val nodeFinder = ChatGptAccessibilityNodeFinder(rootProvider)
@@ -20,23 +25,13 @@ internal class ChatGptPromptAutomation(
         nodeFinder.invalidateCache()
     }
 
-    override fun openNewChat(
+    override suspend fun openNewChat(
         newChatMode: NewChatMode,
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        when (newChatMode) {
-            NewChatMode.Initial -> clickMenuForInitialChat(
-                attempt = 1,
-                onStateChange = onStateChange,
-                onDone = onDone
-            )
-
-            NewChatMode.Subsequent -> clickDirectNewChat(
-                attempt = 1,
-                onStateChange = onStateChange,
-                onDone = onDone
-            )
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        return when (newChatMode) {
+            NewChatMode.Initial -> clickMenuForInitialChat(notifyState)
+            NewChatMode.Subsequent -> clickDirectNewChat(notifyState)
         }
     }
 
@@ -48,105 +43,81 @@ internal class ChatGptPromptAutomation(
         return nodeFinder.findSendNode()
     }
 
-    override fun recoverFromInputFailure(
-        onStateChange: (AutomationRunState) -> Unit
+    override suspend fun recoverFromInputFailure(
+        notifyState: suspend (AutomationRunState) -> Unit
     ) {
         val closeNode = nodeFinder.findTooManyRequestsCloseNode() ?: return
 
-        onStateChange(AutomationRunState.Running("ChatGPT 요청 제한 알림 닫는 중"))
+        notifyState(AutomationRunState.Running("ChatGPT 요청 제한 알림 닫는 중"))
         val clicked = clickNodeOrParent(closeNode)
         if (clicked) {
-            onStateChange(AutomationRunState.Running("ChatGPT 요청 제한 알림 닫기 완료"))
+            notifyState(AutomationRunState.Running("ChatGPT 요청 제한 알림 닫기 완료"))
         }
     }
 
-    private fun clickMenuForInitialChat(
-        attempt: Int,
-        startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        onStateChange(AutomationRunState.Running("ChatGPT 메뉴 여는 중 (#$attempt)"))
-
+    private suspend fun clickMenuForInitialChat(
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
         val alreadyVisibleChat = if (nodeFinder.isMenuOpen()) {
             nodeFinder.findInitialChatNode()
         } else {
             null
         }
         if (alreadyVisibleChat != null) {
-            clickInitialChat(
-                attempt = 1,
-                onStateChange = onStateChange,
-                onDone = onDone
-            )
-            return
+            return clickInitialChat(notifyState)
         }
 
-        val menuNode = nodeFinder.findMenuNode()
-        if (menuNode != null && clickNodeOrParent(menuNode)) {
-            onStateChange(AutomationRunState.Running("ChatGPT 메뉴 열기 완료"))
-            clickInitialChat(
-                attempt = 1,
-                onStateChange = onStateChange,
-                onDone = onDone
-            )
-            return
-        }
-
-        retryOrFail(
-            startedAtMillis = startedAtMillis,
+        val menuOpened = retryUntilFound(
+            actionName = "ChatGPT 메뉴 여는 중",
             failureMessage = "ChatGPT 메뉴를 찾지 못했습니다.",
-            onStateChange = onStateChange
+            notifyState = notifyState
         ) {
-            clickMenuForInitialChat(attempt + 1, startedAtMillis, onStateChange, onDone)
+            val menuNode = nodeFinder.findMenuNode()
+            if (menuNode != null && clickNodeOrParent(menuNode)) {
+                notifyState(AutomationRunState.Running("ChatGPT 메뉴 열기 완료"))
+                true
+            } else {
+                null
+            }
         }
+        if (menuOpened != true) return false
+
+        return clickInitialChat(notifyState)
     }
 
-    private fun clickInitialChat(
-        attempt: Int,
-        startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        onStateChange(AutomationRunState.Running("ChatGPT 채팅 버튼 찾는 중 (#$attempt)"))
-
-        val chatNode = nodeFinder.findInitialChatNode()
-        if (chatNode != null && clickNodeOrParent(chatNode)) {
-            onStateChange(AutomationRunState.Running("ChatGPT 채팅 버튼 클릭 완료"))
-            onDone()
-            return
-        }
-
-        retryOrFail(
-            startedAtMillis = startedAtMillis,
+    private suspend fun clickInitialChat(
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        return retryUntilFound(
+            actionName = "ChatGPT 채팅 버튼 찾는 중",
             failureMessage = "ChatGPT 채팅 버튼을 찾지 못했습니다.",
-            onStateChange = onStateChange
+            notifyState = notifyState
         ) {
-            clickInitialChat(attempt + 1, startedAtMillis, onStateChange, onDone)
-        }
+            val chatNode = nodeFinder.findInitialChatNode()
+            if (chatNode != null && clickNodeOrParent(chatNode)) {
+                notifyState(AutomationRunState.Running("ChatGPT 채팅 버튼 클릭 완료"))
+                true
+            } else {
+                null
+            }
+        } == true
     }
 
-    private fun clickDirectNewChat(
-        attempt: Int,
-        startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        onStateChange(AutomationRunState.Running("ChatGPT 새 채팅 찾는 중 (#$attempt)"))
-
-        val newChatNode = nodeFinder.findNewChatNode()
-        if (newChatNode != null && clickNodeOrParent(newChatNode)) {
-            onStateChange(AutomationRunState.Running("ChatGPT 새 채팅 클릭 완료"))
-            onDone()
-            return
-        }
-
-        retryOrFail(
-            startedAtMillis = startedAtMillis,
+    private suspend fun clickDirectNewChat(
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        return retryUntilFound(
+            actionName = "ChatGPT 새 채팅 찾는 중",
             failureMessage = "ChatGPT 새 채팅 버튼을 찾지 못했습니다.",
-            onStateChange = onStateChange
+            notifyState = notifyState
         ) {
-            clickDirectNewChat(attempt + 1, startedAtMillis, onStateChange, onDone)
-        }
+            val newChatNode = nodeFinder.findNewChatNode()
+            if (newChatNode != null && clickNodeOrParent(newChatNode)) {
+                notifyState(AutomationRunState.Running("ChatGPT 새 채팅 클릭 완료"))
+                true
+            } else {
+                null
+            }
+        } == true
     }
 }

@@ -1,20 +1,31 @@
-// 역할: 접근성 서비스를 통해 외부 AI 앱의 화면 요소를 찾고 프롬프트를 자동 입력합니다.
+// 역할: 코루틴 백그라운드 스케줄링을 통해 외부 AI 앱의 화면 요소를 탐색하고 프롬프트를 비차단 방식으로 자동 입력합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
-import android.os.Handler
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.automation.domain.AutomationRetryWaitPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 
 internal abstract class AccessibilityPromptAutomation(
-    protected val handler: Handler,
+    protected val coroutineScope: CoroutineScope,
+    protected val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    protected val mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     private val targetAppName: String
 ) : PromptAutomationGateway {
-    private var activeRunToken: Any? = null
+    private var activeJob: Job? = null
 
     override fun sendPrompt(
         prompt: String,
@@ -22,60 +33,46 @@ internal abstract class AccessibilityPromptAutomation(
         onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
-        clearActiveRunToken()
-        val token = Any()
-        activeRunToken = token
+        cancelCurrentRun()
 
-        val guardedState: (AutomationRunState) -> Unit = guardedState@{ state ->
-            if (!isActiveRun(token)) return@guardedState
-            if (state is AutomationRunState.Failure || state is AutomationRunState.Stopped) {
-                clearRunToken(token)
+        val notifyState: suspend (AutomationRunState) -> Unit = { state ->
+            withContext(mainDispatcher) {
+                onStateChange(state)
             }
-            onStateChange(state)
-        }
-        val guardedDone: () -> Unit = guardedDone@{
-            if (!isActiveRun(token)) return@guardedDone
-            clearRunToken(token)
-            onDone()
         }
 
-        postOnRun(token) {
-            openNewChat(
-                newChatMode = newChatMode,
-                onStateChange = guardedState,
-                onDone = {
-                    setPromptText(
-                        prompt = prompt,
-                        attempt = 1,
-                        runToken = token,
-                        onStateChange = guardedState,
-                        onDone = {
-                            clickSendWhenReady(
-                                prompt = prompt,
-                                attempt = 1,
-                                runToken = token,
-                                onStateChange = guardedState,
-                                onDone = guardedDone
-                            )
-                        }
-                    )
+        activeJob = coroutineScope.launch(dispatcher) {
+            try {
+                val flowSuccess = executePromptFlow(prompt, newChatMode, notifyState)
+                if (flowSuccess) {
+                    withContext(mainDispatcher) {
+                        onDone()
+                    }
                 }
-            )
+            } catch (_: CancellationException) {
+                // 정상 취소
+            } catch (error: Throwable) {
+                withContext(mainDispatcher) {
+                    onStateChange(AutomationRunState.Failure("자동화 실행 실패: ${error.message}"))
+                }
+            } finally {
+                onRunFinished()
+            }
         }
     }
 
     override fun cancelCurrentRun() {
-        clearActiveRunToken()
+        activeJob?.cancel()
+        activeJob = null
         onRunFinished()
     }
 
     protected open fun onRunFinished() = Unit
 
-    protected abstract fun openNewChat(
+    protected abstract suspend fun openNewChat(
         newChatMode: NewChatMode,
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    )
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean
 
     protected abstract fun findInputNode(): AccessibilityNodeInfo?
 
@@ -91,39 +88,19 @@ internal abstract class AccessibilityPromptAutomation(
         return checkPromptInputAfterSend(prompt) == PromptInputAfterSend.Empty
     }
 
-    protected open fun recoverFromInputFailure(
-        onStateChange: (AutomationRunState) -> Unit
+    protected open suspend fun recoverFromInputFailure(
+        notifyState: suspend (AutomationRunState) -> Unit
     ) = Unit
-
-    protected fun retryOrFail(
-        startedAtMillis: Long,
-        failureMessage: String,
-        onStateChange: (AutomationRunState) -> Unit,
-        retry: () -> Unit
-    ) {
-        val token = activeRunToken
-        if (token == null) return
-
-        val elapsedMillis = SystemClock.uptimeMillis() - startedAtMillis
-        val retryWaitMillis = AutomationRetryWaitPolicy.nextDelayMillis(elapsedMillis)
-
-        if (retryWaitMillis == null) {
-            onStateChange(AutomationRunState.Failure(failureMessage))
-        } else {
-            postDelayedOnRun(token, retryWaitMillis, retry)
-        }
-    }
 
     protected fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
         return findClickableNodeOrParent(node)
             ?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
     }
 
-    protected open fun applyPromptText(
+    protected open suspend fun applyPromptText(
         inputNode: AccessibilityNodeInfo,
-        prompt: String,
-        onDone: (Boolean) -> Unit
-    ) {
+        prompt: String
+    ): Boolean {
         inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val arguments = Bundle().apply {
             putCharSequence(
@@ -131,156 +108,128 @@ internal abstract class AccessibilityPromptAutomation(
                 prompt
             )
         }
-        val applied = inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-        onDone(applied)
+        return inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
     }
 
-    private fun setPromptText(
-        prompt: String,
-        attempt: Int,
-        runToken: Any,
-        startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        if (!isActiveRun(runToken)) return
-
-        onStateChange(AutomationRunState.Running("입력창 찾는 중 (#$attempt)"))
-
-        val inputNode = findInputNode()
-        if (inputNode != null) {
-            applyPromptText(inputNode, prompt) { applied ->
-                if (!isActiveRun(runToken)) return@applyPromptText
-                if (applied) {
-                    onStateChange(AutomationRunState.Running("프롬프트 입력 반영 확인 중"))
-                    postDelayedOnRun(runToken, INPUT_CONFIRM_WAIT_MS) {
-                        if (isPromptTextApplied(prompt)) {
-                            onStateChange(AutomationRunState.Running("프롬프트 입력 완료"))
-                            onDone()
-                        } else {
-                            handlePromptInputFailure(
-                                prompt = prompt,
-                                attempt = attempt,
-                                runToken = runToken,
-                                startedAtMillis = startedAtMillis,
-                                failureMessage = "$targetAppName 프롬프트 입력 반영 실패",
-                                onStateChange = onStateChange,
-                                onDone = onDone
-                            )
-                        }
-                    }
-                } else {
-                    handlePromptInputFailure(
-                        prompt = prompt,
-                        attempt = attempt,
-                        runToken = runToken,
-                        startedAtMillis = startedAtMillis,
-                        failureMessage = "$targetAppName 프롬프트 입력 실패",
-                        onStateChange = onStateChange,
-                        onDone = onDone
-                    )
-                }
-            }
-            return
-        }
-
-        handlePromptInputFailure(
-            prompt = prompt,
-            attempt = attempt,
-            runToken = runToken,
-            startedAtMillis = startedAtMillis,
-            failureMessage = "$targetAppName 입력창 못 찾음",
-            onStateChange = onStateChange,
-            onDone = onDone
-        )
-    }
-
-    private fun handlePromptInputFailure(
-        prompt: String,
-        attempt: Int,
-        runToken: Any,
-        startedAtMillis: Long,
+    protected suspend fun <T> retryUntilFound(
+        actionName: String,
         failureMessage: String,
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        if (!isActiveRun(runToken)) return
+        notifyState: suspend (AutomationRunState) -> Unit,
+        action: suspend (attempt: Int) -> T?
+    ): T? {
+        val startedAtMillis = SystemClock.uptimeMillis()
+        var attempt = 1
 
-        recoverFromInputFailure(onStateChange)
+        while (coroutineContext.isActive) {
+            notifyState(AutomationRunState.Running("$actionName (#$attempt)"))
+            val result = action(attempt)
+            if (result != null) {
+                return result
+            }
 
-        retryOrFail(
-            startedAtMillis = startedAtMillis,
-            failureMessage = failureMessage,
-            onStateChange = onStateChange
-        ) {
-            setPromptText(
-                prompt = prompt,
-                attempt = attempt + 1,
-                runToken = runToken,
-                startedAtMillis = startedAtMillis,
-                onStateChange = onStateChange,
-                onDone = onDone
-            )
+            val elapsedMillis = SystemClock.uptimeMillis() - startedAtMillis
+            val retryWaitMillis = AutomationRetryWaitPolicy.nextDelayMillis(elapsedMillis)
+
+            if (retryWaitMillis == null) {
+                notifyState(AutomationRunState.Failure(failureMessage))
+                return null
+            }
+
+            delay(retryWaitMillis)
+            attempt++
         }
+        return null
     }
 
-    private fun clickSendWhenReady(
+    private suspend fun executePromptFlow(
         prompt: String,
-        attempt: Int,
-        runToken: Any,
-        startedAtMillis: Long = SystemClock.uptimeMillis(),
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        if (!isActiveRun(runToken)) return
+        newChatMode: NewChatMode,
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        val newChatSuccess = openNewChat(newChatMode, notifyState)
+        if (!newChatSuccess) return false
 
-        onStateChange(AutomationRunState.Running("보내기 버튼 활성화 대기 중 (#$attempt)"))
+        val inputSuccess = setPromptText(prompt, notifyState)
+        if (!inputSuccess) return false
 
-        val node = findSendNode()
-        if (node != null && performSendClick(node)) {
-            onStateChange(AutomationRunState.Running("보내기 클릭 후 전송 확인 중"))
-            postDelayedOnRun(runToken, SEND_CONFIRM_WAIT_MS) {
-                if (isSendConfirmed(prompt)) {
-                    onDone()
-                } else {
-                    retryOrFail(
-                        startedAtMillis = startedAtMillis,
-                        failureMessage =
-                            "$targetAppName 보내기 클릭 후 전송 완료를 확인하지 못함",
-                        onStateChange = onStateChange
-                    ) {
-                        clickSendWhenReady(
-                            prompt = prompt,
-                            attempt = attempt + 1,
-                            runToken = runToken,
-                            startedAtMillis = startedAtMillis,
-                            onStateChange = onStateChange,
-                            onDone = onDone
-                        )
-                    }
-                }
-            }
-            return
-        }
+        val sendSuccess = clickSendWhenReady(prompt, notifyState)
+        if (!sendSuccess) return false
 
-        retryOrFail(
-            startedAtMillis = startedAtMillis,
-            failureMessage = if (node == null) {
-                "$targetAppName 보내기 못 찾음"
-            } else {
-                "$targetAppName 보내기 버튼이 아직 활성화되지 않음"
-            },
-            onStateChange = onStateChange
+        return true
+    }
+
+    private suspend fun setPromptText(
+        prompt: String,
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        val inputNode = retryUntilFound(
+            actionName = "입력창 찾는 중",
+            failureMessage = "$targetAppName 입력창 못 찾음",
+            notifyState = notifyState
         ) {
-            clickSendWhenReady(
-                prompt = prompt,
-                attempt = attempt + 1,
-                runToken = runToken,
-                startedAtMillis = startedAtMillis,
-                onStateChange = onStateChange,
-                onDone = onDone
-            )
+            val node = findInputNode()
+            if (node == null) {
+                recoverFromInputFailure(notifyState)
+            }
+            node
+        } ?: return false
+
+        val applied = applyPromptText(inputNode, prompt)
+        if (!applied) {
+            notifyState(AutomationRunState.Failure("$targetAppName 프롬프트 입력 실패"))
+            return false
         }
+
+        notifyState(AutomationRunState.Running("프롬프트 입력 반영 확인 중"))
+        delay(INPUT_CONFIRM_WAIT_MS)
+
+        if (isPromptTextApplied(prompt)) {
+            notifyState(AutomationRunState.Running("프롬프트 입력 완료"))
+            return true
+        }
+
+        val retrySuccess = retryUntilFound(
+            actionName = "프롬프트 입력 반영 재확인 중",
+            failureMessage = "$targetAppName 프롬프트 입력 반영 실패",
+            notifyState = notifyState
+        ) {
+            if (isPromptTextApplied(prompt)) true else null
+        }
+        return retrySuccess == true
+    }
+
+    private suspend fun clickSendWhenReady(
+        prompt: String,
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        val sendSuccess = retryUntilFound(
+            actionName = "보내기 버튼 활성화 대기 중",
+            failureMessage = "$targetAppName 보내기 못 찾음",
+            notifyState = notifyState
+        ) {
+            val node = findSendNode()
+            if (node != null && performSendClick(node)) {
+                true
+            } else {
+                null
+            }
+        } ?: return false
+
+        notifyState(AutomationRunState.Running("보내기 클릭 후 전송 확인 중"))
+        delay(SEND_CONFIRM_WAIT_MS)
+
+        if (isSendConfirmed(prompt)) {
+            return true
+        }
+
+        val confirmed = retryUntilFound(
+            actionName = "전송 완료 확인 중",
+            failureMessage = "$targetAppName 보내기 클릭 후 전송 완료를 확인하지 못함",
+            notifyState = notifyState
+        ) {
+            if (isSendConfirmed(prompt)) true else null
+        }
+        return confirmed == true
     }
 
     private fun checkPromptInputAfterSend(prompt: String): PromptInputAfterSend {
@@ -310,36 +259,6 @@ internal abstract class AccessibilityPromptAutomation(
         }
 
         return null
-    }
-
-    private fun isActiveRun(token: Any): Boolean = activeRunToken === token
-
-    private fun postOnRun(token: Any, block: () -> Unit) {
-        postDelayedOnRun(token, 0L, block)
-    }
-
-    private fun postDelayedOnRun(token: Any, delayMillis: Long, block: () -> Unit) {
-        handler.postDelayed(
-            {
-                if (!isActiveRun(token)) return@postDelayed
-                block()
-            },
-            token,
-            delayMillis
-        )
-    }
-
-    private fun clearRunToken(token: Any) {
-        if (activeRunToken !== token) return
-        activeRunToken = null
-        handler.removeCallbacksAndMessages(token)
-        onRunFinished()
-    }
-
-    private fun clearActiveRunToken() {
-        val token = activeRunToken ?: return
-        activeRunToken = null
-        handler.removeCallbacksAndMessages(token)
     }
 
     private enum class PromptInputAfterSend {

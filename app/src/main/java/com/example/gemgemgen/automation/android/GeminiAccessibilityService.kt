@@ -1,4 +1,4 @@
-// 역할: 화면 노드 조작, 제스처 탭/스와이프 전송, 패키지 가시성 제어 및 Gemini 계정 자동 전환 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
+// 역할: 화면 노드 조작, 제스처 탭/스와이프 전송, 백그라운드 코루틴 스코프 관리 및 Gemini 계정 자동 전환 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -19,10 +19,16 @@ import com.example.gemgemgen.automation.usecase.FlowConfigurableGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.core.AppDefaults
 import kotlin.coroutines.resume
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 class GeminiAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var closeAppCompletion: ((CloseGeminiAppResult) -> Unit)? = null
     private var memoryCleanupToken: Any? = null
     private var memoryCleanupCompletion: ((MemoryCleanupResult) -> Unit)? = null
@@ -35,19 +41,19 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
-            handler = handler,
+            coroutineScope = serviceScope,
             rootProvider = { rootInActiveWindow }
         )
     }
     private val chatGptAutomation by lazy {
         ChatGptPromptAutomation(
-            handler = handler,
+            coroutineScope = serviceScope,
             rootProvider = { rootInActiveWindow }
         )
     }
     private val flowAutomation by lazy {
         FlowPromptAutomation(
-            handler = handler,
+            coroutineScope = serviceScope,
             rootProvider = { rootInActiveWindow },
             tapAtCoordinates = { x, y, onCompleted ->
                 tapCoordinates(x, y, onCompleted)
@@ -67,6 +73,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 중단되었습니다."))
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
+        serviceScope.coroutineContext.cancelChildren()
         handler.removeCallbacksAndMessages(null)
         clearPackageRestriction()
     }
@@ -79,6 +86,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
+        serviceScope.cancel()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }

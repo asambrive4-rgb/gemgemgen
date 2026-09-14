@@ -1,4 +1,4 @@
-// 역할: Gemini 앱 화면에서 텍스트 입력창, 전송 버튼, 옵션 더보기와 연계된 새 대화 버튼 노드를 탐색합니다.
+// 역할: Gemini 앱 화면에서 텍스트 입력창, 전송 버튼, 옵션 더보기와 연계된 새 대화 버튼 노드를 지연 평가 방식으로 탐색합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect
@@ -18,40 +18,38 @@ internal class GeminiAccessibilityNodeFinder(
     fun findInputNode(): AccessibilityNodeInfo? {
         findNodeByViewId(inputResourceId)?.let { return it }
 
-        return nodes()
-            .firstOrNull { node ->
-                node.className?.toString()?.contains("EditText", ignoreCase = true) == true ||
-                    node.isEditable
-            }
+        return nodesSequence().firstOrNull { node ->
+            node.className?.toString()?.contains("EditText", ignoreCase = true) == true ||
+                node.isEditable
+        }
     }
 
     fun findNodeByTextOrDescription(value: String): AccessibilityNodeInfo? {
-        return nodes().firstOrNull { node -> node.matchesTextOrDescription(value) }
+        return nodesSequence().firstOrNull { node -> node.matchesTextOrDescription(value) }
     }
 
     fun hasMoreOptions(): Boolean {
-        return nodes().any { it.matchesTextOrDescription(MORE_OPTIONS_DESCRIPTION) }
+        return nodesSequence().any { it.matchesTextOrDescription(MORE_OPTIONS_DESCRIPTION) }
     }
 
     fun findNewChatWithMoreOptions(): AccessibilityNodeInfo? {
-        val currentNodes = nodes()
-        val hasMoreOptions = currentNodes.any { it.matchesTextOrDescription(MORE_OPTIONS_DESCRIPTION) }
-        if (!hasMoreOptions) return null
-        return currentNodes.firstOrNull { it.matchesTextOrDescription(NEW_CHAT_DESCRIPTION) }
+        if (!hasMoreOptions()) return null
+        return nodesSequence().firstOrNull { it.matchesTextOrDescription(NEW_CHAT_DESCRIPTION) }
     }
 
     fun findNewChatNearestToSearch(): AccessibilityNodeInfo? {
-        val nodes = nodes()
-        val searchNode = nodes.firstOrNull { node ->
+        val searchNode = nodesSequence().firstOrNull { node ->
             node.matchesTextOrDescription("채팅 검색")
         } ?: return null
-        val candidates = nodes.filter { node ->
-            node.matchesTextOrDescription("새 채팅")
-        }.mapNotNull { node ->
-            val bounds = node.nodeBounds() ?: return@mapNotNull null
-            node to bounds
-        }
         val searchBounds = searchNode.nodeBounds() ?: return null
+
+        val candidates = nodesSequence()
+            .filter { node -> node.matchesTextOrDescription("새 채팅") }
+            .mapNotNull { node ->
+                val bounds = node.nodeBounds() ?: return@mapNotNull null
+                node to bounds
+            }
+            .toList()
 
         return NearestNodeSelector.nearestTo(
             anchor = searchBounds,
@@ -62,10 +60,14 @@ internal class GeminiAccessibilityNodeFinder(
     fun findSidebarScrollableNode(): AccessibilityNodeInfo? {
         val root = rootProvider() ?: return null
         val rootBounds = root.nodeBounds()
-        val nodes = nodesIn(root)
-        if (!nodes.hasOpenSidebarSignal(rootBounds)) return null
+        val hasSidebarSignal = nodesSequence().any { node ->
+            node.matchesTextOrDescription("사이드바 닫기") ||
+                (node.matchesTextOrDescription("Gemini") &&
+                    node.nodeBounds()?.isLikelySidebarHeader(rootBounds) == true)
+        }
+        if (!hasSidebarSignal) return null
 
-        return nodes.asSequence()
+        return nodesSequence()
             .filter { node -> node.isScrollable }
             .mapNotNull { node ->
                 val bounds = node.nodeBounds() ?: return@mapNotNull null
@@ -88,24 +90,10 @@ internal class GeminiAccessibilityNodeFinder(
         }
     }
 
-    private fun nodes(): List<AccessibilityNodeInfo> {
-        return snapshotCache.getOrLoad(rootProvider()) { root -> nodesIn(root) }
-    }
-
-    private fun nodesIn(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-
-        fun visit(node: AccessibilityNodeInfo) {
-            if (node.isGeminiPackage()) {
-                nodes += node
-            }
-            for (index in 0 until node.childCount) {
-                node.getChild(index)?.let(::visit)
-            }
+    private fun nodesSequence(): Sequence<AccessibilityNodeInfo> {
+        return AccessibilityNodeTraversal.lazyTraverse(rootProvider()) { pkg ->
+            pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
         }
-
-        visit(root)
-        return nodes
     }
 
     private fun AccessibilityNodeInfo.matchesTextOrDescription(value: String): Boolean {
@@ -115,17 +103,6 @@ internal class GeminiAccessibilityNodeFinder(
 
     private fun AccessibilityNodeInfo.isGeminiPackage(): Boolean {
         return packageName?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
-    }
-
-    private fun List<AccessibilityNodeInfo>.hasOpenSidebarSignal(
-        rootBounds: NodeBounds?
-    ): Boolean {
-        return any { node ->
-            node.matchesTextOrDescription("사이드바 닫기")
-        } || any { node ->
-            node.matchesTextOrDescription("Gemini") &&
-                node.nodeBounds()?.isLikelySidebarHeader(rootBounds) == true
-        }
     }
 
     private fun AccessibilityNodeInfo.nodeBounds(): NodeBounds? {

@@ -1,4 +1,4 @@
-// 역할: ChatGPT 앱 화면에서 입력창, 전송 버튼, 응답 영역 노드를 퀐색합니다.
+// 역할: ChatGPT 앱 화면에서 입력창, 전송 버튼, 응답 영역 노드를 지연 평가 방식으로 탐색합니다.
 package com.example.gemgemgen.automation.android
 
 import android.view.accessibility.AccessibilityNodeInfo
@@ -14,7 +14,7 @@ internal class ChatGptAccessibilityNodeFinder(
     }
 
     fun findInputNode(): AccessibilityNodeInfo? {
-        return nodes().firstOrNull { node ->
+        return nodesSequence().firstOrNull { node ->
             node.className?.toString()?.contains("EditText", ignoreCase = true) == true ||
                 node.isEditable
         }
@@ -34,9 +34,8 @@ internal class ChatGptAccessibilityNodeFinder(
         findFirstNodeByDescriptions(NEW_CHAT_DESCRIPTIONS)?.let { return it }
 
         // 2) 이전 버전 및 다국어: 사이드바 하단 '채팅'/'Chat' 텍스트 노드 탐색
-        val nodeList = nodes()
         for (candidate in INITIAL_CHAT_TEXTS) {
-            val textMatch = nodeList.firstOrNull { node ->
+            val textMatch = nodesSequence().firstOrNull { node ->
                 node.text?.toString()?.trim()?.equals(candidate, ignoreCase = true) == true ||
                     node.contentDescription?.toString()?.trim()?.equals(candidate, ignoreCase = true) == true
             }
@@ -55,7 +54,7 @@ internal class ChatGptAccessibilityNodeFinder(
     }
 
     fun findTooManyRequestsCloseNode(): AccessibilityNodeInfo? {
-        val hasTooManyRequestsMessage = nodes().any { node ->
+        val hasTooManyRequestsMessage = nodesSequence().any { node ->
             node.text?.toString()?.contains(TOO_MANY_REQUESTS_MESSAGE, ignoreCase = true) == true
         }
         if (!hasTooManyRequestsMessage) return null
@@ -65,16 +64,15 @@ internal class ChatGptAccessibilityNodeFinder(
 
     private fun findNodeByDescription(value: String): AccessibilityNodeInfo? {
         val trimmed = value.trim()
-        return nodes().firstOrNull { node ->
+        return nodesSequence().firstOrNull { node ->
             node.contentDescription?.toString()?.trim()?.equals(trimmed, ignoreCase = true) == true
         }
     }
 
     private fun findFirstNodeByDescriptions(candidates: List<String>): AccessibilityNodeInfo? {
-        val nodeList = nodes()
         for (candidate in candidates) {
             val trimmed = candidate.trim()
-            val match = nodeList.firstOrNull { node ->
+            val match = nodesSequence().firstOrNull { node ->
                 node.contentDescription?.toString()?.trim()?.equals(trimmed, ignoreCase = true) == true
             }
             if (match != null) return match
@@ -82,21 +80,9 @@ internal class ChatGptAccessibilityNodeFinder(
         return null
     }
 
-    private fun nodes(): List<AccessibilityNodeInfo> {
-        return snapshotCache.getOrLoad(rootProvider()) { root ->
-            val nodes = mutableListOf<AccessibilityNodeInfo>()
-
-            fun visit(node: AccessibilityNodeInfo) {
-                if (node.packageName?.toString() == AppDefaults.CHATGPT_PACKAGE_NAME) {
-                    nodes += node
-                }
-                for (index in 0 until node.childCount) {
-                    node.getChild(index)?.let(::visit)
-                }
-            }
-
-            visit(root)
-            nodes
+    private fun nodesSequence(): Sequence<AccessibilityNodeInfo> {
+        return AccessibilityNodeTraversal.lazyTraverse(rootProvider()) { pkg ->
+            pkg?.toString() == AppDefaults.CHATGPT_PACKAGE_NAME
         }
     }
 
