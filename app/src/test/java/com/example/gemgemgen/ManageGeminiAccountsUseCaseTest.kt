@@ -82,4 +82,44 @@ class ManageGeminiAccountsUseCaseTest {
         assertEquals(sub2Id, afterDelete[0].id)
         assertTrue(afterDelete[0].isActive)
     }
+
+    @Test
+    fun upsertAndActivateAccount_whenNewAccount_addsAndActivates() {
+        val initial = useCase.getAccounts()
+        assertEquals(1, initial.size)
+        assertTrue(initial[0].isActive)
+
+        val updated = useCase.upsertAndActivateAccount(
+            id = "remote-id-123",
+            alias = "원격계정",
+            identifier = "remote@test.com"
+        )
+
+        assertEquals(2, updated.size)
+        val newAcc = updated.first { it.id == "remote-id-123" }
+        assertEquals("원격계정", newAcc.alias)
+        assertEquals("remote@test.com", newAcc.identifier)
+        assertTrue(newAcc.isActive)
+
+        val oldAcc = updated.first { it.id != "remote-id-123" }
+        assertFalse(oldAcc.isActive)
+    }
+
+    @Test
+    fun upsertAndActivateAccount_whenExistingAccount_updatesAndActivates() {
+        useCase.addAccount("서브2", "sub2@test.com")
+        val accounts = useCase.getAccounts()
+        val sub2Id = accounts[1].id
+
+        val updated = useCase.upsertAndActivateAccount(
+            id = sub2Id,
+            alias = "변경된서브2",
+            identifier = "sub2@test.com"
+        )
+
+        assertEquals(2, updated.size)
+        val activeAcc = updated.first { it.isActive }
+        assertEquals(sub2Id, activeAcc.id)
+        assertEquals("변경된서브2", activeAcc.alias)
+    }
 }

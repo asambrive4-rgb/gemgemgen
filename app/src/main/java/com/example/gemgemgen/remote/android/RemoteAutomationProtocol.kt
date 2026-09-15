@@ -56,17 +56,6 @@ internal sealed interface RemoteProtocolMessage {
         val success: Boolean,
         val message: String = ""
     ) : RemoteProtocolMessage
-    data class SwitchGeminiAccountRequest(
-        val senderId: String,
-        val token: String,
-        val accountId: String,
-        val alias: String,
-        val identifier: String
-    ) : RemoteProtocolMessage
-    data class SwitchGeminiAccountResult(
-        val success: Boolean,
-        val message: String = ""
-    ) : RemoteProtocolMessage
 }
 
 internal object RemoteAutomationProtocol {
@@ -145,19 +134,6 @@ internal object RemoteAutomationProtocol {
                 put("success", message.success)
                 put("message", message.message)
             }
-            is RemoteProtocolMessage.SwitchGeminiAccountRequest -> buildJsonObject {
-                put("type", "switchGeminiAccount")
-                put("senderId", message.senderId)
-                put("token", message.token)
-                put("accountId", message.accountId)
-                put("alias", message.alias)
-                put("identifier", message.identifier)
-            }
-            is RemoteProtocolMessage.SwitchGeminiAccountResult -> buildJsonObject {
-                put("type", "switchGeminiAccountResult")
-                put("success", message.success)
-                put("message", message.message)
-            }
         }.toString()
     }
 
@@ -223,17 +199,6 @@ internal object RemoteAutomationProtocol {
                 token = value.string("token")
             )
             "cleanMemoryResult" -> RemoteProtocolMessage.CleanMemoryResult(
-                success = value.boolean("success"),
-                message = value.string("message")
-            )
-            "switchGeminiAccount" -> RemoteProtocolMessage.SwitchGeminiAccountRequest(
-                senderId = value.string("senderId"),
-                token = value.string("token"),
-                accountId = value.string("accountId"),
-                alias = value.string("alias"),
-                identifier = value.string("identifier")
-            )
-            "switchGeminiAccountResult" -> RemoteProtocolMessage.SwitchGeminiAccountResult(
                 success = value.boolean("success"),
                 message = value.string("message")
             )

@@ -23,7 +23,6 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
 import com.example.gemgemgen.automation.android.GeminiAccessibilityService
-import com.example.gemgemgen.automation.android.GeminiAccountSwitchResult
 import com.example.gemgemgen.automation.domain.GeminiAccountProfile
 import com.example.gemgemgen.automation.usecase.GeminiAccountRepository
 import com.example.gemgemgen.automation.usecase.ManageGeminiAccountsUseCase
@@ -885,148 +884,18 @@ class MainViewModel(
     }
 
     fun switchGeminiAccount(account: GeminiAccountProfile) {
-        scope.launch {
-            _uiState.update {
-                it.copy(
-                    isSwitchingGeminiAccount = true,
-                    switchingAccountProgressPhase = "1/4",
-                    switchingAccountProgressMessage = "Gemini 앱 실행 확인 중...",
-                    accountSwitchError = null,
-                    lastFailedTargetAccount = null
-                )
-            }
-            val mode = _uiState.value.automationMode
-            if (mode == AutomationMode.SENDER) {
-                _uiState.update {
-                    it.copy(maintenanceState = MaintenanceState(isBusy = true, message = "수신 기기 계정 교체 중: [${account.alias}]..."))
-                }
-                when (val result = manageRemoteAutomation.switchGeminiAccount(account.id, account.alias, account.identifier)) {
-                    is RemoteActionResult.Success -> {
-                        val updated = manageGeminiAccounts.activateAccount(account.id)
-                        _uiState.update {
-                            it.copy(
-                                geminiAccounts = updated,
-                                isSwitchingGeminiAccount = false,
-                                showGeminiAccountDialog = false,
-                                switchingAccountProgressPhase = "",
-                                switchingAccountProgressMessage = "",
-                                accountSwitchError = null,
-                                lastFailedTargetAccount = null,
-                                maintenanceState = MaintenanceState(isBusy = false, message = "수신 기기 Gemini 계정을 [${account.alias}]로 전환했습니다.")
-                            )
-                        }
-                    }
-                    is RemoteActionResult.Failure -> {
-                        if (_uiState.value.isRunning) {
-                            cancelAutomation()
-                        }
-                        _uiState.update {
-                            it.copy(
-                                isSwitchingGeminiAccount = false,
-                                switchingAccountProgressPhase = "",
-                                switchingAccountProgressMessage = "",
-                                accountSwitchError = result.message,
-                                lastFailedTargetAccount = account,
-                                automationState = AutomationRunState.Failure(result.message),
-                                maintenanceState = MaintenanceState(isBusy = false, message = "계정 전환 실패: ${result.message}")
-                            )
-                        }
-                    }
-                }
-            } else {
-                val service = GeminiAccessibilityService.activeService
-                Log.d("MainViewModel", "switchGeminiAccount local: service=$service, identifier=${account.identifier}")
-                if (service != null && account.identifier.isNotBlank()) {
-                    _uiState.update {
-                        it.copy(maintenanceState = MaintenanceState(isBusy = true, message = "Gemini 계정 교체 중: [${account.alias}]..."))
-                    }
-                    when (val result = service.switchGeminiAccount(
-                        identifier = account.identifier,
-                        alias = account.alias,
-                        onProgress = { phase, msg ->
-                            _uiState.update { current ->
-                                current.copy(
-                                    switchingAccountProgressPhase = phase,
-                                    switchingAccountProgressMessage = msg,
-                                    maintenanceState = MaintenanceState(isBusy = true, message = "[$phase] $msg")
-                                )
-                            }
-                        }
-                    )) {
-                        is GeminiAccountSwitchResult.Success -> {
-                            val updated = manageGeminiAccounts.activateAccount(account.id)
-                            _uiState.update {
-                                it.copy(
-                                    geminiAccounts = updated,
-                                    isSwitchingGeminiAccount = false,
-                                    showGeminiAccountDialog = false,
-                                    switchingAccountProgressPhase = "",
-                                    switchingAccountProgressMessage = "",
-                                    accountSwitchError = null,
-                                    lastFailedTargetAccount = null,
-                                    maintenanceState = MaintenanceState(isBusy = false, message = result.message)
-                                )
-                            }
-                        }
-                        is GeminiAccountSwitchResult.Failure -> {
-                            if (_uiState.value.isRunning) {
-                                cancelAutomation()
-                            }
-                            _uiState.update {
-                                it.copy(
-                                    isSwitchingGeminiAccount = false,
-                                    switchingAccountProgressPhase = "",
-                                    switchingAccountProgressMessage = "",
-                                    accountSwitchError = result.message,
-                                    lastFailedTargetAccount = account,
-                                    automationState = AutomationRunState.Failure(result.message),
-                                    maintenanceState = MaintenanceState(isBusy = false, message = "계정 전환 실패: ${result.message}")
-                                )
-                            }
-                        }
-                        GeminiAccountSwitchResult.Unavailable -> {
-                            val updated = manageGeminiAccounts.activateAccount(account.id)
-                            _uiState.update {
-                                it.copy(
-                                    geminiAccounts = updated,
-                                    isSwitchingGeminiAccount = false,
-                                    showGeminiAccountDialog = false,
-                                    switchingAccountProgressPhase = "",
-                                    switchingAccountProgressMessage = "",
-                                    accountSwitchError = null,
-                                    lastFailedTargetAccount = null,
-                                    maintenanceState = MaintenanceState(isBusy = false, message = "Gemini 계정을 [${account.alias}]로 전환했습니다.")
-                                )
-                            }
-                        }
-                    }
-                } else if (service == null) {
-                    _uiState.update {
-                        it.copy(
-                            isSwitchingGeminiAccount = false,
-                            switchingAccountProgressPhase = "",
-                            switchingAccountProgressMessage = "",
-                            accountSwitchError = "접근성 서비스가 연결되지 않았습니다. 안드로이드 설정에서 접근성 권한을 켜주세요.",
-                            lastFailedTargetAccount = account,
-                            maintenanceState = MaintenanceState(isBusy = false, message = "접근성 서비스가 연결되지 않았습니다. 안드로이드 설정에서 접근성 권한을 확인해주세요.")
-                        )
-                    }
-                } else {
-                    val updated = manageGeminiAccounts.activateAccount(account.id)
-                    _uiState.update {
-                        it.copy(
-                            geminiAccounts = updated,
-                            isSwitchingGeminiAccount = false,
-                            showGeminiAccountDialog = false,
-                            switchingAccountProgressPhase = "",
-                            switchingAccountProgressMessage = "",
-                            accountSwitchError = null,
-                            lastFailedTargetAccount = null,
-                            maintenanceState = MaintenanceState(isBusy = false, message = "Gemini 계정 [${account.alias}] 활성화됨 (식별자 미입력)")
-                        )
-                    }
-                }
-            }
+        val updated = manageGeminiAccounts.activateAccount(account.id)
+        _uiState.update {
+            it.copy(
+                geminiAccounts = updated,
+                isSwitchingGeminiAccount = false,
+                showGeminiAccountDialog = false,
+                switchingAccountProgressPhase = "",
+                switchingAccountProgressMessage = "",
+                accountSwitchError = null,
+                lastFailedTargetAccount = null,
+                maintenanceState = MaintenanceState(isBusy = false, message = "Gemini 계정을 [${account.alias}]로 전환했습니다.")
+            )
         }
     }
 

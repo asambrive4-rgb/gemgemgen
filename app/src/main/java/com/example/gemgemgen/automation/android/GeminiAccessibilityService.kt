@@ -1,4 +1,4 @@
-// 역할: 화면 노드 조작, 제스처 탭/스와이프, 클립보드 동기화 및 Gemini 계정 자동 전환 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
+// 역할: 화면 노드 조작, 제스처 탭/스와이프, 클립보드 동기화 및 앱 제어 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -36,9 +36,6 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var memoryCleanupToken: Any? = null
     private var memoryCleanupCompletion: ((MemoryCleanupResult) -> Unit)? = null
     private var memoryCleanupAutomation: GoogleAppForceStopAutomation? = null
-    private var accountSwitchToken: Any? = null
-    private var accountSwitchCompletion: ((GeminiAccountSwitchResult) -> Unit)? = null
-    private var accountSwitchAutomation: GeminiAccountSwitcherAutomation? = null
     private var previousMemoryPackageRestriction: Array<String>? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
@@ -74,7 +71,6 @@ class GeminiAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
-        finishAccountSwitch(GeminiAccountSwitchResult.Failure("접근성 서비스가 중단되었습니다."))
         finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 중단되었습니다."))
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
@@ -84,7 +80,6 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
-        finishAccountSwitch(GeminiAccountSwitchResult.Failure("접근성 서비스가 종료되었습니다."))
         finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 종료되었습니다."))
         if (activeService == this) {
             activeService = null
@@ -169,74 +164,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
     }
 
-    internal suspend fun switchGeminiAccount(
-        identifier: String,
-        alias: String,
-        onProgress: ((phase: String, message: String) -> Unit)? = null
-    ): GeminiAccountSwitchResult {
-        if (
-            accountSwitchToken != null ||
-            memoryCleanupToken != null ||
-            closeAppCompletion != null ||
-            ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
-        ) {
-            return GeminiAccountSwitchResult.Failure("다른 자동화 또는 작업이 진행 중입니다.")
-        }
-
-        return suspendCancellableCoroutine { continuation ->
-            val token = Any()
-            accountSwitchToken = token
-            accountSwitchCompletion = completion@{ result ->
-                if (accountSwitchToken !== token) return@completion
-                accountSwitchToken = null
-                accountSwitchCompletion = null
-                accountSwitchAutomation = null
-                clearPackageRestriction()
-                if (continuation.isActive) {
-                    continuation.resume(result)
-                }
-            }
-
-            handler.post {
-                if (accountSwitchToken !== token) return@post
-                clearPackageRestriction()
-                accountSwitchAutomation = GeminiAccountSwitcherAutomation(
-                    handler = handler,
-                    rootProvider = { rootInActiveWindow },
-                    allRootsProvider = {
-                        runCatching {
-                            windows.mapNotNull { it.root }
-                        }.getOrNull() ?: listOfNotNull(rootInActiveWindow)
-                    },
-                    activePackageProvider = { rootInActiveWindow?.packageName?.toString() },
-                    launchGemini = {
-                        val launchIntent = packageManager.getLaunchIntentForPackage(AppDefaults.GEMINI_PACKAGE_NAME)
-                        if (launchIntent != null) {
-                            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                            startActivity(launchIntent)
-                            true
-                        } else {
-                            false
-                        }
-                    },
-                    tapCoordinates = { x, y, onCompleted ->
-                        tapCoordinates(x, y, onCompleted)
-                    },
-                    dispatchGesture = { gesture, callback, gestureHandler ->
-                        dispatchGesture(gesture, callback, gestureHandler)
-                    },
-                    targetIdentifier = identifier,
-                    targetAlias = alias,
-                    onProgress = onProgress,
-                    onFinished = { result -> finishAccountSwitch(token, result) }
-                )
-                accountSwitchAutomation?.start()
-            }
-            continuation.invokeOnCancellation {
-                handler.post { cancelAccountSwitch(token) }
-            }
-        }
-    }
 
     /**
      * 최근 앱에서 [taskTitle] 카드의 닫기 버튼을 눌러 앱을 종료한다.
@@ -555,23 +482,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         restoreMemoryPackageRestriction()
     }
 
-    private fun finishAccountSwitch(result: GeminiAccountSwitchResult) {
-        val token = accountSwitchToken ?: return
-        finishAccountSwitch(token, result)
-    }
-
-    private fun finishAccountSwitch(token: Any, result: GeminiAccountSwitchResult) {
-        if (accountSwitchToken !== token) return
-        accountSwitchCompletion?.invoke(result)
-    }
-
-    private fun cancelAccountSwitch(token: Any) {
-        if (accountSwitchToken !== token) return
-        accountSwitchToken = null
-        accountSwitchCompletion = null
-        accountSwitchAutomation = null
-        clearPackageRestriction()
-    }
 
     private fun copyTextToClipboard(text: String) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager

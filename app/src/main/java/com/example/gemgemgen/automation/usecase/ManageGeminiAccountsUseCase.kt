@@ -49,6 +49,43 @@ class ManageGeminiAccountsUseCase(
         return updated
     }
 
+    /**
+     * 원격 수신 등 외부에서 전달된 계정을 동기화하여 활성화한다.
+     * 이미 ID 또는 식별자(이메일)가 일치하는 계정이 있으면 활성화하고, 없으면 신규 등록 후 활성화한다.
+     */
+    fun upsertAndActivateAccount(id: String, alias: String, identifier: String): List<GeminiAccountProfile> {
+        val current = getAccounts()
+        val existing = current.firstOrNull {
+            it.id == id || (identifier.isNotBlank() && it.identifier.equals(identifier.trim(), ignoreCase = true))
+        }
+
+        val updated = if (existing != null) {
+            current.map {
+                if (it.id == existing.id) {
+                    it.copy(
+                        alias = if (alias.isNotBlank()) alias.trim() else it.alias,
+                        identifier = if (identifier.isNotBlank()) identifier.trim() else it.identifier,
+                        isActive = true
+                    )
+                } else {
+                    it.copy(isActive = false)
+                }
+            }
+        } else {
+            val newAccount = GeminiAccountProfile(
+                id = id.ifBlank { UUID.randomUUID().toString() },
+                alias = alias.trim().ifBlank { "서브${current.size + 1}" },
+                identifier = identifier.trim(),
+                order = (current.maxOfOrNull { it.order } ?: 0) + 1,
+                isActive = true
+            )
+            current.map { it.copy(isActive = false) } + newAccount
+        }
+
+        repository.saveAccounts(updated)
+        return updated
+    }
+
     fun addAccount(alias: String, identifier: String): List<GeminiAccountProfile> {
         val current = getAccounts()
         val trimmedAlias = alias.trim().ifBlank { "서브${current.size + 1}" }
