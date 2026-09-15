@@ -22,6 +22,7 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.FlowConfigurableGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
+import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
 import com.example.gemgemgen.core.AppDefaults
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
@@ -107,6 +108,14 @@ class GeminiAccessibilityService : AccessibilityService() {
         return PackageScopedPromptAutomation(
             delegate = delegate,
             targetApp = targetApp,
+            service = this
+        )
+    }
+
+    internal fun variationGateway(): VariationPromptAutomationGateway {
+        return PackageScopedVariationPromptAutomation(
+            delegate = geminiAutomation,
+            targetApp = AutomationTargetApp.GEMINI,
             service = this
         )
     }
@@ -369,6 +378,40 @@ class GeminiAccessibilityService : AccessibilityService() {
                 newChatMode = newChatMode,
                 onStateChange = { state ->
                     if (state is AutomationRunState.Failure || state is AutomationRunState.Stopped) {
+                        service.clearPackageRestriction()
+                    }
+                    onStateChange(state)
+                },
+                onDone = {
+                    service.clearPackageRestriction()
+                    onDone()
+                }
+            )
+        }
+
+        override fun cancelCurrentRun() {
+            delegate.cancelCurrentRun()
+            service.clearPackageRestriction()
+        }
+    }
+
+    private class PackageScopedVariationPromptAutomation(
+        private val delegate: VariationPromptAutomationGateway,
+        private val targetApp: AutomationTargetApp,
+        private val service: GeminiAccessibilityService
+    ) : VariationPromptAutomationGateway {
+        override fun pastePromptOnly(
+            prompt: String,
+            onStateChange: (AutomationRunState) -> Unit,
+            onDone: () -> Unit
+        ) {
+            service.restrictPackagesTo(targetApp)
+            delegate.pastePromptOnly(
+                prompt = prompt,
+                onStateChange = { state ->
+                    if (state is AutomationRunState.Failure ||
+                        state is AutomationRunState.Stopped
+                    ) {
                         service.clearPackageRestriction()
                     }
                     onStateChange(state)

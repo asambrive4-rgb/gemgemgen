@@ -1,4 +1,4 @@
-// 역할: 프롬프트 텍스트 입력창, 대상 앱 선택 토글, 와일드카드 칩 및 2단 조약돌 액션 바(시스템 관리·에디터 도구)를 화면에 표시합니다.
+// 역할: 프롬프트 입력, 대상 앱 선택, 와일드카드 칩 및 삽입·변주를 포함한 조약돌 액션 바를 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -72,6 +72,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.ui.AppMultilineTextField
@@ -120,7 +121,12 @@ internal fun PromptSection(
     onPasteFromClipboard: () -> Unit,
     onOpenPromptHistory: () -> Unit = {},
     activeGeminiAccountAlias: String = "서브1",
-    onOpenGeminiAccountDialog: () -> Unit = {}
+    onOpenGeminiAccountDialog: () -> Unit = {},
+    showVariationButton: Boolean = true,
+    isVariationButtonEnabled: Boolean = true,
+    variationAutomationState: AutomationRunState = AutomationRunState.Idle,
+    onRunVariation: () -> Unit = {},
+    onOpenVariationPromptConfigDialog: () -> Unit = {}
 ) {
     val suggestionTokens = rememberWildcardSuggestionTokens(
         promptTemplateState = promptTemplateState,
@@ -233,7 +239,12 @@ internal fun PromptSection(
                 onCopyPromptToClipboard = onCopyPromptToClipboard,
                 onPasteFromClipboard = onPasteFromClipboard,
                 activeGeminiAccountAlias = activeGeminiAccountAlias,
-                onOpenGeminiAccountDialog = onOpenGeminiAccountDialog
+                onOpenGeminiAccountDialog = onOpenGeminiAccountDialog,
+                showVariationButton = showVariationButton,
+                isVariationButtonEnabled = isVariationButtonEnabled,
+                variationAutomationState = variationAutomationState,
+                onRunVariation = onRunVariation,
+                onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
             )
         }
 
@@ -242,6 +253,18 @@ internal fun PromptSection(
                 text = maintenanceMessage,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (showVariationButton && variationAutomationState != AutomationRunState.Idle) {
+            Text(
+                text = variationStatusText(variationAutomationState),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (variationAutomationState is AutomationRunState.Failure) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    AppTheme.colors.textSecondary
+                }
             )
         }
     }
@@ -273,6 +296,11 @@ internal fun PromptActionRow(
     onPasteFromClipboard: () -> Unit,
     activeGeminiAccountAlias: String = "서브1",
     onOpenGeminiAccountDialog: () -> Unit = {},
+    showVariationButton: Boolean = true,
+    isVariationButtonEnabled: Boolean = true,
+    variationAutomationState: AutomationRunState = AutomationRunState.Idle,
+    onRunVariation: () -> Unit = {},
+    onOpenVariationPromptConfigDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -379,8 +407,10 @@ internal fun PromptActionRow(
 
         // 2행: 프롬프트 에디터 전용 툴바 (히스토리 네비게이션 ── SI 삽입 + 복사 + 가져오기)
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 좌측: 히스토리 네비게이션 (가로세로 35dp 1:1 정사각형 조약돌)
@@ -443,7 +473,7 @@ internal fun PromptActionRow(
                 }
             }
 
-            // 우측: 상단 삽입 + 하단 삽입 + 복사 + 가져오기 (롱클릭 시 문구 관리 다이얼로그)
+            // 우측: 상단 삽입 + 하단 삽입 + 변주 + 복사 + 가져오기
             ActionIsland {
                 PebbleButton(
                     onClick = onInsertTopInstruction,
@@ -475,6 +505,27 @@ internal fun PromptActionRow(
                     )
                 }
 
+                if (showVariationButton) {
+                    PebbleButton(
+                        onClick = onRunVariation,
+                        onLongClick = onOpenVariationPromptConfigDialog,
+                        enabled = isVariationButtonEnabled,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.semantics { contentDescription = "변주" }
+                    ) {
+                        Text(
+                            text = if (variationAutomationState is AutomationRunState.Running) {
+                                "변주 중"
+                            } else {
+                                "변주"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
                 PebbleButton(
                     onClick = onCopyPromptToClipboard,
                     enabled = canCopyPrompt,
@@ -504,6 +555,16 @@ internal fun PromptActionRow(
                 }
             }
         }
+    }
+}
+
+private fun variationStatusText(state: AutomationRunState): String {
+    return when (state) {
+        AutomationRunState.Idle -> ""
+        is AutomationRunState.Running -> state.step
+        AutomationRunState.Success -> "변주 프롬프트를 붙여넣었습니다. 보내지 않았습니다."
+        AutomationRunState.Stopped -> "변주 작업을 중지했습니다."
+        is AutomationRunState.Failure -> "변주 실패: ${state.message}"
     }
 }
 

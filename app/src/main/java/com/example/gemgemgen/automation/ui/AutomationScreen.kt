@@ -1,4 +1,4 @@
-// 역할: 프롬프트 입력, 대상 앱 선택, 실행 카운터가 포함된 메인 자동화 화면을 구성합니다.
+// 역할: 프롬프트 입력, 변주 실행, 대상 앱 선택, 실행 카운터가 포함된 메인 자동화 화면을 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +33,7 @@ import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
+import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.ui.AutomationModePairDialog
 import com.example.gemgemgen.remote.ui.AutomationModePanel
@@ -96,7 +97,11 @@ internal fun AutomationScreen(
     onDeleteGeminiAccount: (id: String) -> Unit = {},
     onRetrySwitchGeminiAccount: () -> Unit = {},
     onOpenGeminiManualSwitch: () -> Unit = {},
-    onClearAccountSwitchError: () -> Unit = {}
+    onClearAccountSwitchError: () -> Unit = {},
+    onRunVariation: () -> Unit = {},
+    onOpenVariationPromptConfigDialog: () -> Unit = {},
+    onCloseVariationPromptConfigDialog: () -> Unit = {},
+    onSaveVariationPromptConfig: (VariationPromptConfig) -> Unit = {}
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val suggestionTokens = rememberWildcardSuggestionTokens(
@@ -165,7 +170,15 @@ internal fun AutomationScreen(
                     onPasteFromClipboard = onPasteFromClipboard,
                     onOpenPromptHistory = onOpenPromptHistory,
                     activeGeminiAccountAlias = uiState.activeGeminiAccount?.alias ?: "서브1",
-                    onOpenGeminiAccountDialog = onOpenGeminiAccountDialog
+                    onOpenGeminiAccountDialog = onOpenGeminiAccountDialog,
+                    showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
+                    isVariationButtonEnabled = uiState.canInteractWithVariation,
+                    variationAutomationState = uiState.variationAutomationState,
+                    onRunVariation = {
+                        onClearFocus()
+                        onRunVariation()
+                    },
+                    onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
                 )
 
                 if (!isKeyboardVisible && uiState.automationMode != AutomationMode.RECEIVER) {
@@ -295,6 +308,14 @@ internal fun AutomationScreen(
                     initialTab = uiState.instructionConfigDialogInitialTab,
                     onSave = onSaveInstructionConfig,
                     onDismiss = onCloseInstructionConfigDialog
+                )
+            }
+            if (uiState.showVariationPromptConfigDialog) {
+                VariationPromptConfigDialog(
+                    showDialog = true,
+                    config = uiState.variationPromptConfig,
+                    onSave = onSaveVariationPromptConfig,
+                    onDismiss = onCloseVariationPromptConfigDialog
                 )
             }
         }

@@ -1,3 +1,4 @@
+// 역할: 현재 기기의 접근성 자동화 게이트웨이와 대상 앱 실행기를 제공하는 안드로이드 연결부입니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -6,11 +7,19 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.usecase.TargetAppLauncher
+import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
+import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGatewayProvider
 import com.example.gemgemgen.core.AppDefaults
 
 object ActivePromptAutomationGatewayProvider : PromptAutomationGatewayProvider {
     override fun current(targetApp: AutomationTargetApp): PromptAutomationGateway? {
         return GeminiAccessibilityService.activeService?.gatewayFor(targetApp)
+    }
+}
+
+object ActiveVariationPromptAutomationGatewayProvider : VariationPromptAutomationGatewayProvider {
+    override fun current(): VariationPromptAutomationGateway? {
+        return GeminiAccessibilityService.activeService?.variationGateway()
     }
 }
 

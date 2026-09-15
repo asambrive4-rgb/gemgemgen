@@ -21,6 +21,8 @@ import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
+import com.example.gemgemgen.automation.android.ActiveVariationPromptAutomationGatewayProvider
+import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
@@ -28,6 +30,7 @@ import com.example.gemgemgen.automation.android.SharedPreferencesGeminiAccountRe
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptInstructionRepository
+import com.example.gemgemgen.automation.android.SharedPreferencesVariationPromptRepository
 import com.example.gemgemgen.automation.usecase.ManageGeminiAccountsUseCase
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
@@ -35,6 +38,7 @@ import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationUseCase
+import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
 import com.example.gemgemgen.automation.ui.MainViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.core.android.AndroidSoundAlertGateway
@@ -87,6 +91,7 @@ class AndroidAppContainer(context: Context) {
     val geminiAccountRepository = SharedPreferencesGeminiAccountRepository(appContext)
     val manageGeminiAccounts = ManageGeminiAccountsUseCase(geminiAccountRepository)
     val promptInstructionRepository = SharedPreferencesPromptInstructionRepository(appContext)
+    val variationPromptRepository = SharedPreferencesVariationPromptRepository(appContext)
 
     val mainViewModelFactory: ViewModelProvider.Factory = factory<MainViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
@@ -127,7 +132,12 @@ class AndroidAppContainer(context: Context) {
             themePaletteStore = themePaletteStore,
             promptWorkspace = promptWorkspace,
             manageGeminiAccounts = manageGeminiAccounts,
-            promptInstructionRepository = promptInstructionRepository
+            promptInstructionRepository = promptInstructionRepository,
+            variationPromptRepository = variationPromptRepository,
+            runVariationPrompt = RunVariationPromptUseCase(
+                gatewayProvider = ActiveVariationPromptAutomationGatewayProvider,
+                targetAppLauncher = AndroidTargetAppLauncher(appContext)
+            )
         )
     }
 

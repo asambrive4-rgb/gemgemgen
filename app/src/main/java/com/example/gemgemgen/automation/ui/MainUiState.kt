@@ -1,4 +1,4 @@
-// 역할: 메인 자동화 화면의 모든 입력값, 설정, 환경 상태를 담는 통합 상태 데이터를 정의합니다.
+// 역할: 메인 자동화 화면의 입력값, 변주 설정, 환경 상태를 담는 통합 상태 데이터를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -6,6 +6,7 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.SelfAppControlPolicy
+import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
@@ -55,7 +56,10 @@ data class MainUiState(
         com.example.gemgemgen.automation.domain.PromptInstructionConfig.DEFAULT,
     val showInstructionConfigDialog: Boolean = false,
     val instructionConfigDialogInitialTab: com.example.gemgemgen.automation.domain.InstructionTab =
-        com.example.gemgemgen.automation.domain.InstructionTab.TOP
+        com.example.gemgemgen.automation.domain.InstructionTab.TOP,
+    val variationPromptConfig: VariationPromptConfig = VariationPromptConfig.DEFAULT,
+    val variationAutomationState: AutomationRunState = AutomationRunState.Idle,
+    val showVariationPromptConfigDialog: Boolean = false
 ) {
     val activeGeminiAccount: com.example.gemgemgen.automation.domain.GeminiAccountProfile?
         get() = geminiAccounts.firstOrNull { it.isActive } ?: geminiAccounts.firstOrNull()
@@ -82,12 +86,30 @@ data class MainUiState(
 
     val canRun: Boolean
         get() = when (automationMode) {
-            AutomationMode.NORMAL -> hasRunRequirements && !isRunning
+            AutomationMode.NORMAL -> hasRunRequirements && !isRunning && !isVariationRunning
             AutomationMode.SENDER -> hasPromptTemplate &&
                 remoteAutomationStatus.canSend &&
-                !isRunning
+                !isRunning &&
+                !isVariationRunning
             AutomationMode.RECEIVER -> false
         }
+
+    val isVariationRunning: Boolean
+        get() = variationAutomationState is AutomationRunState.Running
+
+    val canRunVariation: Boolean
+        get() = automationMode != AutomationMode.RECEIVER &&
+            environmentStatus.isGeminiInstalled &&
+            environmentStatus.isAccessibilityServiceEnabled &&
+            !isRunning &&
+            !isMaintenanceBusy &&
+            !isVariationRunning
+
+    val canInteractWithVariation: Boolean
+        get() = automationMode != AutomationMode.RECEIVER &&
+            !isRunning &&
+            !isMaintenanceBusy &&
+            !isVariationRunning
 
     val isMaintenanceBusy: Boolean
         get() = maintenanceState.isBusy
@@ -99,23 +121,27 @@ data class MainUiState(
         get() = GeminiAppControlPolicy.canClose(
             isGeminiInstalled = environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
-            isAutomationRunning = isRunning,
+            isAutomationRunning = isRunning || isVariationRunning,
             isClosingInProgress = isMaintenanceBusy
         )
 
     val canCloseSelfApp: Boolean
         get() = SelfAppControlPolicy.canClose(
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
-            isAutomationRunning = isRunning,
+            isAutomationRunning = isRunning || isVariationRunning,
             isClosingInProgress = isMaintenanceBusy
         )
 
     val canCleanMemory: Boolean
         get() = when (automationMode) {
-            AutomationMode.SENDER -> remoteAutomationStatus.canSend && !isRunning && !isMaintenanceBusy
+            AutomationMode.SENDER -> remoteAutomationStatus.canSend &&
+                !isRunning &&
+                !isVariationRunning &&
+                !isMaintenanceBusy
             AutomationMode.RECEIVER -> false
             AutomationMode.NORMAL -> environmentStatus.isAccessibilityServiceEnabled &&
                 !isRunning &&
+                !isVariationRunning &&
                 !isMaintenanceBusy
         }
 }

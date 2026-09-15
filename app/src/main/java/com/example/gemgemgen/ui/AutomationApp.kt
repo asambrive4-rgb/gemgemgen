@@ -11,6 +11,7 @@ import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
+import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.automation.ui.AutomationScreen
 import com.example.gemgemgen.automation.ui.MainUiState
@@ -74,7 +75,11 @@ internal data class AutomationAppActions(
     val onDeleteGeminiAccount: (id: String) -> Unit = {},
     val onRetrySwitchGeminiAccount: () -> Unit = {},
     val onOpenGeminiManualSwitch: () -> Unit = {},
-    val onClearAccountSwitchError: () -> Unit = {}
+    val onClearAccountSwitchError: () -> Unit = {},
+    val onRunVariation: () -> Unit = {},
+    val onOpenVariationPromptConfigDialog: () -> Unit = {},
+    val onCloseVariationPromptConfigDialog: () -> Unit = {},
+    val onSaveVariationPromptConfig: (VariationPromptConfig) -> Unit = {}
 )
 
 internal data class WildcardAppActions(
@@ -248,7 +253,11 @@ internal fun AutomationApp(
                     onDeleteGeminiAccount = automationActions.onDeleteGeminiAccount,
                     onRetrySwitchGeminiAccount = automationActions.onRetrySwitchGeminiAccount,
                     onOpenGeminiManualSwitch = automationActions.onOpenGeminiManualSwitch,
-                    onClearAccountSwitchError = automationActions.onClearAccountSwitchError
+                    onClearAccountSwitchError = automationActions.onClearAccountSwitchError,
+                    onRunVariation = automationActions.onRunVariation,
+                    onOpenVariationPromptConfigDialog = automationActions.onOpenVariationPromptConfigDialog,
+                    onCloseVariationPromptConfigDialog = automationActions.onCloseVariationPromptConfigDialog,
+                    onSaveVariationPromptConfig = automationActions.onSaveVariationPromptConfig
                 )
             },
             MainTabPage(MainTab.ANALYSIS) {

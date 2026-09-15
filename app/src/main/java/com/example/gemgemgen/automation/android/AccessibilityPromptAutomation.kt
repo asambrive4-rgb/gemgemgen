@@ -1,4 +1,4 @@
-// 역할: 입력창 탭 활성화, SET_TEXT·붙여넣기 2중 주입 및 전송 버튼 재클릭 보강을 통해 프롬프트를 안전하게 자동 입력·전송합니다.
+// 역할: 입력창 탭 활성화, SET_TEXT·붙여넣기 2중 주입 및 전송 보강으로 프롬프트를 자동 입력하거나 붙여넣기만 합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -8,6 +8,7 @@ import com.example.gemgemgen.automation.domain.AutomationRetryWaitPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
+import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -25,7 +26,7 @@ internal abstract class AccessibilityPromptAutomation(
     protected val mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     private val targetAppName: String,
     protected val copyToClipboard: ((String) -> Unit)? = null
-) : PromptAutomationGateway {
+) : PromptAutomationGateway, VariationPromptAutomationGateway {
     private var activeJob: Job? = null
 
     override fun sendPrompt(
@@ -52,6 +53,41 @@ internal abstract class AccessibilityPromptAutomation(
                 }
             } catch (_: CancellationException) {
                 // 정상 취소
+            } catch (error: Throwable) {
+                withContext(mainDispatcher) {
+                    onStateChange(AutomationRunState.Failure("자동화 실행 실패: ${error.message}"))
+                }
+            } finally {
+                onRunFinished()
+            }
+        }
+    }
+
+    override fun pastePromptOnly(
+        prompt: String,
+        onStateChange: (AutomationRunState) -> Unit,
+        onDone: () -> Unit
+    ) {
+        cancelCurrentRun()
+
+        val notifyState: suspend (AutomationRunState) -> Unit = { state ->
+            withContext(mainDispatcher) {
+                onStateChange(state)
+            }
+        }
+
+        activeJob = coroutineScope.launch(dispatcher) {
+            try {
+                val flowSuccess = executePromptPasteOnlyFlow(prompt, notifyState)
+                if (flowSuccess) {
+                    withContext(mainDispatcher) {
+                        onDone()
+                    }
+                }
+            } catch (_: CancellationException) {
+                withContext(mainDispatcher) {
+                    onStateChange(AutomationRunState.Stopped)
+                }
             } catch (error: Throwable) {
                 withContext(mainDispatcher) {
                     onStateChange(AutomationRunState.Failure("자동화 실행 실패: ${error.message}"))
@@ -175,6 +211,17 @@ internal abstract class AccessibilityPromptAutomation(
         if (!sendSuccess) return false
 
         return true
+    }
+
+    private suspend fun executePromptPasteOnlyFlow(
+        prompt: String,
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        delay(LAUNCH_SETTLE_WAIT_MS)
+        val newChatSuccess = openNewChat(NewChatMode.Initial, notifyState)
+        if (!newChatSuccess) return false
+
+        return setPromptText(prompt, notifyState)
     }
 
     private suspend fun setPromptText(

@@ -304,7 +304,11 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onDeleteGeminiAccount = mainViewModel::deleteGeminiAccount,
             onRetrySwitchGeminiAccount = mainViewModel::retrySwitchGeminiAccount,
             onOpenGeminiManualSwitch = mainViewModel::openGeminiForManualSwitch,
-            onClearAccountSwitchError = mainViewModel::clearAccountSwitchError
+            onClearAccountSwitchError = mainViewModel::clearAccountSwitchError,
+            onRunVariation = { mainViewModel.runVariation() },
+            onOpenVariationPromptConfigDialog = mainViewModel::openVariationPromptConfigDialog,
+            onCloseVariationPromptConfigDialog = mainViewModel::closeVariationPromptConfigDialog,
+            onSaveVariationPromptConfig = mainViewModel::saveVariationPromptConfig
         ),
         analysisActions = AnalysisAppActions(
             onClearFocus = clearInputFocus,

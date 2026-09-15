@@ -1,4 +1,4 @@
-// 역할: 메인 화면의 사용자 입력을 처리하고 자동화 실행 및 환경 상태를 총괄 관리합니다.
+// 역할: 메인 화면의 입력, 일반 자동화, 현재 기기 변주 실행 및 환경 상태를 총괄 관리합니다.
 package com.example.gemgemgen.automation.ui
 
 import android.util.Log
@@ -11,10 +11,14 @@ import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.RepeatCountParser
+import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.PromptInstructionRepository
+import com.example.gemgemgen.automation.usecase.VariationPromptRepository
+import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
+import com.example.gemgemgen.automation.usecase.VariationStartDecision
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
@@ -62,6 +66,13 @@ import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.MaintenanceResult
+
+private data class MainInitialState(
+    val lastRunSnapshot: LastRunSnapshot?,
+    val historyItems: List<PromptHistoryItem>,
+    val instructionConfig: PromptInstructionConfig,
+    val variationConfig: VariationPromptConfig
+)
 
 class MainViewModel(
     private val checkEnvironmentStatus: CheckEnvironmentStatusUseCase,
@@ -124,6 +135,8 @@ class MainViewModel(
             override fun load(): PromptInstructionConfig = current
             override fun save(config: PromptInstructionConfig) { current = config }
         },
+    private val variationPromptRepository: VariationPromptRepository? = null,
+    private val runVariationPrompt: RunVariationPromptUseCase? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
@@ -424,6 +437,62 @@ class MainViewModel(
                 showInstructionConfigDialog = false
             )
         }
+    }
+
+    fun openVariationPromptConfigDialog() {
+        _uiState.update { it.copy(showVariationPromptConfigDialog = true) }
+    }
+
+    fun closeVariationPromptConfigDialog() {
+        _uiState.update { it.copy(showVariationPromptConfigDialog = false) }
+    }
+
+    fun saveVariationPromptConfig(config: VariationPromptConfig) {
+        scope.launch {
+            withContext(dispatchers.io) {
+                variationPromptRepository?.save(config)
+            }
+        }
+        _uiState.update {
+            it.copy(
+                variationPromptConfig = config,
+                showVariationPromptConfigDialog = false
+            )
+        }
+    }
+
+    /** 현재 기기에서 Gemini 새 채팅을 열고 변주 프롬프트를 붙여넣기만 합니다. */
+    fun runVariation(selectedText: String? = null): VariationStartDecision {
+        val state = _uiState.value
+        if (!state.canRunVariation) {
+            val message = when {
+                state.automationMode == AutomationMode.RECEIVER ->
+                    "수신 모드에서는 변주를 실행할 수 없습니다."
+                state.isRunning -> "자동화 실행 중에는 변주를 실행할 수 없습니다."
+                state.isMaintenanceBusy -> "유지보수 작업이 진행 중입니다."
+                !state.environmentStatus.isGeminiInstalled ->
+                    "Gemini 앱을 먼저 설치해주세요."
+                !state.environmentStatus.isAccessibilityServiceEnabled ->
+                    "접근성 서비스를 먼저 켜주세요."
+                else -> "변주를 지금 실행할 수 없습니다."
+            }
+            val rejected = VariationStartDecision.Rejected(message)
+            handleVariationState(AutomationRunState.Failure(message))
+            return rejected
+        }
+
+        val prompt = state.variationPromptConfig.buildPrompt(selectedText)
+        val useCase = runVariationPrompt
+        if (useCase == null) {
+            val message = "변주 자동화가 준비되지 않았습니다."
+            handleVariationState(AutomationRunState.Failure(message))
+            return VariationStartDecision.Rejected(message)
+        }
+
+        return useCase.start(
+            prompt = prompt,
+            onStateChange = ::handleVariationState
+        )
     }
 
     /**
@@ -771,7 +840,7 @@ class MainViewModel(
     }
 
     fun onAutomationModeSelected(mode: AutomationMode) {
-        if (_uiState.value.isRunning) return
+        if (_uiState.value.isRunning || _uiState.value.isVariationRunning) return
         isRemoteRunActive = false
         handleAutomationState(AutomationRunState.Idle)
         manageRemoteAutomation.selectMode(mode)
@@ -823,13 +892,18 @@ class MainViewModel(
 
     private fun loadInitialState() {
         scope.launch {
-            val (lastRunSnapshot, historyItems, instructionConfig) = withContext(dispatchers.io) {
-                Triple(
+            val initialState = withContext(dispatchers.io) {
+                MainInitialState(
                     lastRunSnapshotStore.load(),
                     promptHistoryStore?.load().orEmpty(),
-                    promptInstructionRepository.load()
+                    promptInstructionRepository.load(),
+                    variationPromptRepository?.load() ?: VariationPromptConfig.DEFAULT
                 )
             }
+            val lastRunSnapshot = initialState.lastRunSnapshot
+            val historyItems = initialState.historyItems
+            val instructionConfig = initialState.instructionConfig
+            val variationConfig = initialState.variationConfig
             val current = _uiState.value
             val defaultRepeatCountText = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
             val restoredPrompt = if (current.promptTemplate.isBlank()) {
@@ -852,7 +926,8 @@ class MainViewModel(
                     selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp,
                     flowImageCount = lastRunSnapshot?.flowImageCount ?: it.flowImageCount,
                     promptHistoryItems = historyItems,
-                    promptInstructionConfig = instructionConfig
+                    promptInstructionConfig = instructionConfig,
+                    variationPromptConfig = variationConfig
                 )
             }
             val restoredState = uiState.value
@@ -892,6 +967,10 @@ class MainViewModel(
         _automationBarUiState.update {
             if (it.automationState == state) it else it.copy(automationState = state)
         }
+    }
+
+    private fun handleVariationState(state: AutomationRunState) {
+        _uiState.update { it.copy(variationAutomationState = state) }
     }
 
     private fun AutomationRunState.coarseAutomationStateFor(
