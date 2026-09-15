@@ -63,7 +63,11 @@ internal fun AutomationScreen(
     onWildcardTokenSuggestionClick: (String) -> Unit = {},
     onNavigateHistoryBack: () -> Unit,
     onNavigateHistoryForward: () -> Unit,
-    onInsertSystemInstruction: () -> Unit,
+    onInsertTopInstruction: () -> Unit = {},
+    onInsertBottomInstruction: () -> Unit = {},
+    onOpenInstructionConfigDialog: (com.example.gemgemgen.automation.domain.InstructionTab) -> Unit = {},
+    onCloseInstructionConfigDialog: () -> Unit = {},
+    onSaveInstructionConfig: (com.example.gemgemgen.automation.domain.PromptInstructionConfig) -> Unit = {},
     onParagraphOffsetSelected: (Int) -> Unit,
     onDeleteSelectedParagraph: () -> Unit,
     onReplaceSelectedParagraph: (String) -> Unit,
@@ -150,7 +154,9 @@ internal fun AutomationScreen(
                     onTerminateSelfApp = onTerminateSelfApp,
                     onNavigateHistoryBack = onNavigateHistoryBack,
                     onNavigateHistoryForward = onNavigateHistoryForward,
-                    onInsertSystemInstruction = onInsertSystemInstruction,
+                    onInsertTopInstruction = onInsertTopInstruction,
+                    onInsertBottomInstruction = onInsertBottomInstruction,
+                    onOpenInstructionConfigDialog = onOpenInstructionConfigDialog,
                     onParagraphOffsetSelected = onParagraphOffsetSelected,
                     onDeleteSelectedParagraph = onDeleteSelectedParagraph,
                     onReplaceSelectedParagraph = onReplaceSelectedParagraph,
@@ -282,6 +288,15 @@ internal fun AutomationScreen(
                     onClearError = onClearAccountSwitchError
                 )
             }
+            if (uiState.showInstructionConfigDialog) {
+                PromptInstructionConfigDialog(
+                    showDialog = true,
+                    config = uiState.promptInstructionConfig,
+                    initialTab = uiState.instructionConfigDialogInitialTab,
+                    onSave = onSaveInstructionConfig,
+                    onDismiss = onCloseInstructionConfigDialog
+                )
+            }
         }
     }
 }
@@ -307,7 +322,9 @@ private fun AutomationAppPreview() {
             onPromptTemplateChange = {},
             onNavigateHistoryBack = {},
             onNavigateHistoryForward = {},
-            onInsertSystemInstruction = {},
+            onInsertTopInstruction = {},
+            onInsertBottomInstruction = {},
+            onOpenInstructionConfigDialog = {},
             onParagraphOffsetSelected = {},
             onDeleteSelectedParagraph = {},
             onReplaceSelectedParagraph = {},

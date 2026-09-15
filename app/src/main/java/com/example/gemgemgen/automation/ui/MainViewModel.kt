@@ -7,11 +7,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
+import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
+import com.example.gemgemgen.automation.usecase.PromptInstructionRepository
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
@@ -115,6 +118,12 @@ class MainViewModel(
             override fun saveAccounts(accounts: List<GeminiAccountProfile>) { list = accounts }
         }
     ),
+    private val promptInstructionRepository: PromptInstructionRepository =
+        object : PromptInstructionRepository {
+            private var current = PromptInstructionConfig.DEFAULT
+            override fun load(): PromptInstructionConfig = current
+            override fun save(config: PromptInstructionConfig) { current = config }
+        },
     coroutineScope: CoroutineScope? = null
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
@@ -360,12 +369,61 @@ class MainViewModel(
     }
 
     /**
-     * 프롬프트 템플릿 맨 앞에 System Instruction을 붙인다.
-     * 본문이 있으면 SI와 본문 사이에 빈 줄 1개. Undo 가능. 실행 중에는 무시.
-     * 연속 탭 시 SI가 다시 앞에 붙는다.
+     * 프롬프트 템플릿 맨 앞에 상단 인스트럭션을 붙인다.
+     * 문구가 설정되어 있지 않으면 설정 다이얼로그를 띄운다.
      */
+    fun insertTopInstruction() {
+        val config = _uiState.value.promptInstructionConfig
+        if (config.topInstruction.isBlank()) {
+            openInstructionConfigDialog(InstructionTab.TOP)
+            return
+        }
+        promptEditor.insertTopInstruction(config.topInstruction, _uiState.value.isRunning)
+    }
+
+    /**
+     * 프롬프트 템플릿 맨 뒤에 하단 인스트럭션을 붙인다.
+     * 문구가 설정되어 있지 않으면 설정 다이얼로그를 띄워 입력을 유도한다.
+     */
+    fun insertBottomInstruction() {
+        val config = _uiState.value.promptInstructionConfig
+        val bottom = config.bottomInstruction
+        if (bottom.isNullOrBlank()) {
+            openInstructionConfigDialog(InstructionTab.BOTTOM)
+            return
+        }
+        promptEditor.insertBottomInstruction(bottom, _uiState.value.isRunning)
+    }
+
     fun insertSystemInstruction() {
-        promptEditor.insertSystemInstruction(_uiState.value.isRunning)
+        insertTopInstruction()
+    }
+
+    fun openInstructionConfigDialog(initialTab: InstructionTab = InstructionTab.TOP) {
+        _uiState.update {
+            it.copy(
+                showInstructionConfigDialog = true,
+                instructionConfigDialogInitialTab = initialTab
+            )
+        }
+    }
+
+    fun closeInstructionConfigDialog() {
+        _uiState.update { it.copy(showInstructionConfigDialog = false) }
+    }
+
+    fun saveInstructionConfig(config: PromptInstructionConfig) {
+        scope.launch {
+            withContext(dispatchers.io) {
+                promptInstructionRepository.save(config)
+            }
+        }
+        _uiState.update {
+            it.copy(
+                promptInstructionConfig = config,
+                showInstructionConfigDialog = false
+            )
+        }
     }
 
     /**
@@ -765,8 +823,12 @@ class MainViewModel(
 
     private fun loadInitialState() {
         scope.launch {
-            val (lastRunSnapshot, historyItems) = withContext(dispatchers.io) {
-                lastRunSnapshotStore.load() to (promptHistoryStore?.load().orEmpty())
+            val (lastRunSnapshot, historyItems, instructionConfig) = withContext(dispatchers.io) {
+                Triple(
+                    lastRunSnapshotStore.load(),
+                    promptHistoryStore?.load().orEmpty(),
+                    promptInstructionRepository.load()
+                )
             }
             val current = _uiState.value
             val defaultRepeatCountText = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
@@ -789,7 +851,8 @@ class MainViewModel(
                     },
                     selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp,
                     flowImageCount = lastRunSnapshot?.flowImageCount ?: it.flowImageCount,
-                    promptHistoryItems = historyItems
+                    promptHistoryItems = historyItems,
+                    promptInstructionConfig = instructionConfig
                 )
             }
             val restoredState = uiState.value

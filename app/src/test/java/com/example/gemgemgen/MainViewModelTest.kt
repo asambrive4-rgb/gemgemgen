@@ -15,6 +15,7 @@ import com.example.gemgemgen.wildcard.ui.*
 import com.example.gemgemgen.wildcard.domain.*
 import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.example.gemgemgen.remote.domain.*
@@ -149,6 +150,71 @@ class MainViewModelTest {
             SystemInstructionPrompt.text + "\n\n" + once,
             twice
         )
+    }
+
+    @Test
+    fun insertTopInstruction_prependsToEmptyPrompt() {
+        val viewModel = viewModel()
+
+        viewModel.insertTopInstruction()
+
+        assertEquals(
+            SystemInstructionPrompt.text,
+            viewModel.uiState.value.promptTemplate
+        )
+        assertEquals(
+            SystemInstructionPrompt.text,
+            viewModel.promptTemplateTextFieldState.text.toString()
+        )
+        assertEquals(
+            TextRange(SystemInstructionPrompt.text.length),
+            viewModel.promptTemplateTextFieldState.selection
+        )
+    }
+
+    @Test
+    fun insertBottomInstruction_whenBottomNull_opensInstructionConfigDialogWithBottomTab() {
+        val viewModel = viewModel()
+
+        viewModel.insertBottomInstruction()
+
+        assertTrue(viewModel.uiState.value.showInstructionConfigDialog)
+        assertEquals(InstructionTab.BOTTOM, viewModel.uiState.value.instructionConfigDialogInitialTab)
+    }
+
+    @Test
+    fun insertBottomInstruction_withConfiguredBottom_appendsToExistingPrompt() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("user body")
+        viewModel.saveInstructionConfig(
+            PromptInstructionConfig(
+                topInstruction = "Custom Top",
+                bottomInstruction = "Custom Bottom"
+            )
+        )
+
+        viewModel.insertBottomInstruction()
+
+        val expected = "user body\n\nCustom Bottom"
+        assertEquals(expected, viewModel.uiState.value.promptTemplate)
+        assertEquals(expected, viewModel.promptTemplateTextFieldState.text.toString())
+        assertEquals(TextRange(expected.length), viewModel.promptTemplateTextFieldState.selection)
+    }
+
+    @Test
+    fun saveInstructionConfig_updatesConfigAndClosesDialog() {
+        val viewModel = viewModel()
+        viewModel.openInstructionConfigDialog(InstructionTab.TOP)
+        assertTrue(viewModel.uiState.value.showInstructionConfigDialog)
+
+        val newConfig = PromptInstructionConfig(
+            topInstruction = "New Top",
+            bottomInstruction = "New Bottom"
+        )
+        viewModel.saveInstructionConfig(newConfig)
+
+        assertFalse(viewModel.uiState.value.showInstructionConfigDialog)
+        assertEquals(newConfig, viewModel.uiState.value.promptInstructionConfig)
     }
 
     @Test

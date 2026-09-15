@@ -256,19 +256,37 @@ class PromptEditorCoordinator(
  }
  }
 
- fun insertSystemInstruction(isBlocked: Boolean = false) {
- if (isBlocked) return
+ fun insertTopInstruction(topInstruction: String, isBlocked: Boolean = false) {
+ if (isBlocked || topInstruction.isBlank()) return
  syncPromptTemplateFromTextField()
  val currentText = promptTemplateValue
- val newText = SystemInstructionPrompt.prependTo(currentText)
+ val newText = if (currentText.isEmpty()) topInstruction else "$topInstruction\n\n$currentText"
  if (currentText == newText) return
 
  ignoredPromptChangeText = newText
  val cursorAfter = if (currentText.isEmpty()) {
- SystemInstructionPrompt.text.length
+ topInstruction.length
  } else {
- SystemInstructionPrompt.text.length + 2
+ topInstruction.length + 2
  }
+ textFieldState.edit {
+ replace(0, length, newText)
+ selection = TextRange(cursorAfter.coerceIn(0, newText.length))
+ }
+ promptTemplateValue = newText
+ promptHistoryNavigator.onUserTyping(newText)
+ publishEditorSession(promptEditorSession.afterWholeReplace(newText))
+ }
+
+ fun insertBottomInstruction(bottomInstruction: String, isBlocked: Boolean = false) {
+ if (isBlocked || bottomInstruction.isBlank()) return
+ syncPromptTemplateFromTextField()
+ val currentText = promptTemplateValue
+ val newText = if (currentText.isEmpty()) bottomInstruction else "$currentText\n\n$bottomInstruction"
+ if (currentText == newText) return
+
+ ignoredPromptChangeText = newText
+ val cursorAfter = newText.length
  textFieldState.edit {
  replace(0, length, newText)
  selection = TextRange(cursorAfter.coerceIn(0, newText.length))

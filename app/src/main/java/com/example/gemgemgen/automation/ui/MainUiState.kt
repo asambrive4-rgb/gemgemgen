@@ -50,7 +50,12 @@ data class MainUiState(
     val switchingAccountProgressPhase: String = "",
     val switchingAccountProgressMessage: String = "",
     val accountSwitchError: String? = null,
-    val lastFailedTargetAccount: com.example.gemgemgen.automation.domain.GeminiAccountProfile? = null
+    val lastFailedTargetAccount: com.example.gemgemgen.automation.domain.GeminiAccountProfile? = null,
+    val promptInstructionConfig: com.example.gemgemgen.automation.domain.PromptInstructionConfig =
+        com.example.gemgemgen.automation.domain.PromptInstructionConfig.DEFAULT,
+    val showInstructionConfigDialog: Boolean = false,
+    val instructionConfigDialogInitialTab: com.example.gemgemgen.automation.domain.InstructionTab =
+        com.example.gemgemgen.automation.domain.InstructionTab.TOP
 ) {
     val activeGeminiAccount: com.example.gemgemgen.automation.domain.GeminiAccountProfile?
         get() = geminiAccounts.firstOrNull { it.isActive } ?: geminiAccounts.firstOrNull()

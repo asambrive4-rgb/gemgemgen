@@ -42,7 +42,11 @@ internal data class AutomationAppActions(
     val onWildcardTokenSuggestionClick: (String) -> Unit,
     val onNavigateHistoryBack: () -> Unit,
     val onNavigateHistoryForward: () -> Unit,
-    val onInsertSystemInstruction: () -> Unit,
+    val onInsertTopInstruction: () -> Unit = {},
+    val onInsertBottomInstruction: () -> Unit = {},
+    val onOpenInstructionConfigDialog: (com.example.gemgemgen.automation.domain.InstructionTab) -> Unit = {},
+    val onCloseInstructionConfigDialog: () -> Unit = {},
+    val onSaveInstructionConfig: (com.example.gemgemgen.automation.domain.PromptInstructionConfig) -> Unit = {},
     val onParagraphOffsetSelected: (Int) -> Unit,
     val onDeleteSelectedParagraph: () -> Unit,
     val onReplaceSelectedParagraph: (String) -> Unit,
@@ -202,8 +206,16 @@ internal fun AutomationApp(
                         automationActions.onWildcardTokenSuggestionClick,
                     onNavigateHistoryBack = automationActions.onNavigateHistoryBack,
                     onNavigateHistoryForward = automationActions.onNavigateHistoryForward,
-                    onInsertSystemInstruction =
-                        automationActions.onInsertSystemInstruction,
+                    onInsertTopInstruction =
+                        automationActions.onInsertTopInstruction,
+                    onInsertBottomInstruction =
+                        automationActions.onInsertBottomInstruction,
+                    onOpenInstructionConfigDialog =
+                        automationActions.onOpenInstructionConfigDialog,
+                    onCloseInstructionConfigDialog =
+                        automationActions.onCloseInstructionConfigDialog,
+                    onSaveInstructionConfig =
+                        automationActions.onSaveInstructionConfig,
                     onParagraphOffsetSelected =
                         automationActions.onParagraphOffsetSelected,
                     onDeleteSelectedParagraph =

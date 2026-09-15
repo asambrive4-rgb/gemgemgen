@@ -14,9 +14,14 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.getValue
 import com.example.gemgemgen.core.AppDefaults
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material3.Surface
+import androidx.compose.ui.draw.clip
+import com.example.gemgemgen.automation.domain.InstructionTab
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +44,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -103,7 +109,9 @@ internal fun PromptSection(
     onTerminateSelfApp: () -> Unit,
     onNavigateHistoryBack: () -> Unit = {},
     onNavigateHistoryForward: () -> Unit = {},
-    onInsertSystemInstruction: () -> Unit,
+    onInsertTopInstruction: () -> Unit,
+    onInsertBottomInstruction: () -> Unit,
+    onOpenInstructionConfigDialog: (InstructionTab) -> Unit,
     onParagraphOffsetSelected: (Int) -> Unit,
     onDeleteSelectedParagraph: () -> Unit,
     onReplaceSelectedParagraph: (String) -> Unit,
@@ -218,7 +226,9 @@ internal fun PromptSection(
                 onTerminateSelfApp = onTerminateSelfApp,
                 onNavigateHistoryBack = onNavigateHistoryBack,
                 onNavigateHistoryForward = onNavigateHistoryForward,
-                onInsertSystemInstruction = onInsertSystemInstruction,
+                onInsertTopInstruction = onInsertTopInstruction,
+                onInsertBottomInstruction = onInsertBottomInstruction,
+                onOpenInstructionConfigDialog = onOpenInstructionConfigDialog,
                 onImportFromClipboard = onImportFromClipboard,
                 onCopyPromptToClipboard = onCopyPromptToClipboard,
                 onPasteFromClipboard = onPasteFromClipboard,
@@ -255,7 +265,9 @@ internal fun PromptActionRow(
     onTerminateSelfApp: () -> Unit,
     onNavigateHistoryBack: () -> Unit,
     onNavigateHistoryForward: () -> Unit,
-    onInsertSystemInstruction: () -> Unit,
+    onInsertTopInstruction: () -> Unit,
+    onInsertBottomInstruction: () -> Unit,
+    onOpenInstructionConfigDialog: (InstructionTab) -> Unit,
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
     onPasteFromClipboard: () -> Unit,
@@ -431,18 +443,35 @@ internal fun PromptActionRow(
                 }
             }
 
-            // 우측: SI 삽입 + 복사 + 가져오기 (여유있는 좌우 패딩)
+            // 우측: 상단 삽입 + 하단 삽입 + 복사 + 가져오기 (롱클릭 시 문구 관리 다이얼로그)
             ActionIsland {
                 PebbleButton(
-                    onClick = onInsertSystemInstruction,
+                    onClick = onInsertTopInstruction,
+                    onLongClick = { onOpenInstructionConfigDialog(InstructionTab.TOP) },
                     enabled = isTargetSelectionEnabled,
-                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
-                    modifier = Modifier.semantics { contentDescription = "[SI 삽입]" }
+                    contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "상단 삽입" }
                 ) {
                     Text(
-                        text = "[SI 삽입]",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
+                        text = "상단 삽입",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+
+                PebbleButton(
+                    onClick = onInsertBottomInstruction,
+                    onLongClick = { onOpenInstructionConfigDialog(InstructionTab.BOTTOM) },
+                    enabled = isTargetSelectionEnabled,
+                    contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "하단 삽입" }
+                ) {
+                    Text(
+                        text = "하단 삽입",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
                     )
                 }
 
@@ -451,25 +480,26 @@ internal fun PromptActionRow(
                     enabled = canCopyPrompt,
                     contentPadding = PaddingValues(0.dp),
                     modifier = Modifier
-                        .size(width = 44.dp, height = 35.dp)
+                        .size(width = 38.dp, height = 35.dp)
                         .semantics { contentDescription = "프롬프트 복사" }
                 ) {
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
                         contentDescription = null,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
                 PebbleButton(
                     onClick = onImportFromClipboard,
-                    contentPadding = PaddingValues(horizontal = 11.dp, vertical = 2.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                     modifier = Modifier.semantics { contentDescription = "클립보드에서 가져오기" }
                 ) {
                     Text(
                         text = "가져오기",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
                     )
                 }
             }
@@ -571,10 +601,12 @@ private fun ActionIsland(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PebbleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
     enabled: Boolean = true,
     borderColor: Color = AppTheme.colors.cardBorder,
     contentPadding: PaddingValues = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
@@ -596,26 +628,28 @@ private fun PebbleButton(
         label = "PebbleContent"
     )
 
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled,
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = animatedContainerColor,
-            contentColor = animatedContentColor,
-            disabledContainerColor = animatedContainerColor,
-            disabledContentColor = animatedContentColor
-        ),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            disabledElevation = 0.dp
-        ),
-        shape = RoundedCornerShape(10.dp),
-        contentPadding = contentPadding,
-        modifier = modifier.height(35.dp),
-        border = BorderStroke(1.2.dp, animatedBorderColor),
-        content = content
-    )
+    val shape = RoundedCornerShape(10.dp)
+    Surface(
+        modifier = modifier
+            .height(35.dp)
+            .clip(shape)
+            .combinedClickable(
+                enabled = enabled,
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        shape = shape,
+        color = animatedContainerColor,
+        contentColor = animatedContentColor,
+        border = BorderStroke(1.2.dp, animatedBorderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(contentPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            content = content
+        )
+    }
 }
 
 @Composable
