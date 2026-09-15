@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.Icon
@@ -30,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -126,30 +123,10 @@ fun VariationPromptConfigDialog(
                                         }
                                     )
                                     VariationActionChip(
-                                        text = "복사",
-                                        icon = Icons.Default.ContentCopy,
-                                        onClick = {
-                                            if (text.isNotEmpty()) {
-                                                clipboardManager.setText(AnnotatedString(text))
-                                            }
-                                        }
-                                    )
-                                    VariationActionChip(
-                                        text = "붙여넣기",
+                                        text = "가져오기",
                                         icon = Icons.Default.ContentPaste,
-                                        onClick = {
-                                            clipboardManager.getText()?.text?.let {
-                                                text = it
-                                            }
-                                        }
+                                        onClick = { text = clipboardManager.getText()?.text.orEmpty() }
                                     )
-                                    if (text.isNotEmpty()) {
-                                        VariationActionChip(
-                                            text = "지우기",
-                                            icon = Icons.Default.Clear,
-                                            onClick = { text = "" }
-                                        )
-                                    }
                                 }
                             }
 
@@ -185,7 +162,8 @@ fun VariationPromptConfigDialog(
                             onClick = onDismiss,
                             isPrimary = false,
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            contentModifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = "취소",
@@ -200,7 +178,8 @@ fun VariationPromptConfigDialog(
                             },
                             isPrimary = true,
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            contentModifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = "저장",

@@ -305,7 +305,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             onRetrySwitchGeminiAccount = mainViewModel::retrySwitchGeminiAccount,
             onOpenGeminiManualSwitch = mainViewModel::openGeminiForManualSwitch,
             onClearAccountSwitchError = mainViewModel::clearAccountSwitchError,
-            onRunVariation = { mainViewModel.runVariation() },
+            onRunVariation = { selectedText -> mainViewModel.runVariation(selectedText) },
             onOpenVariationPromptConfigDialog = mainViewModel::openVariationPromptConfigDialog,
             onCloseVariationPromptConfigDialog = mainViewModel::closeVariationPromptConfigDialog,
             onSaveVariationPromptConfig = mainViewModel::saveVariationPromptConfig

@@ -18,6 +18,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.ui.draw.clip
@@ -61,11 +64,14 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -125,7 +131,7 @@ internal fun PromptSection(
     showVariationButton: Boolean = true,
     isVariationButtonEnabled: Boolean = true,
     variationAutomationState: AutomationRunState = AutomationRunState.Idle,
-    onRunVariation: () -> Unit = {},
+    onRunVariation: (String?) -> Unit = {},
     onOpenVariationPromptConfigDialog: () -> Unit = {}
 ) {
     val suggestionTokens = rememberWildcardSuggestionTokens(
@@ -134,6 +140,7 @@ internal fun PromptSection(
         isParagraphSelectionMode = isParagraphSelectionMode,
         isTargetSelectionEnabled = isTargetSelectionEnabled
     )
+    val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
@@ -243,7 +250,15 @@ internal fun PromptSection(
                 showVariationButton = showVariationButton,
                 isVariationButtonEnabled = isVariationButtonEnabled,
                 variationAutomationState = variationAutomationState,
-                onRunVariation = onRunVariation,
+                onRunVariation = {
+                    val selectedText = variationSelectedTextAtPress.value
+                        ?: promptTemplateState.selectedTextOrNull()
+                    variationSelectedTextAtPress.value = null
+                    onRunVariation(selectedText)
+                },
+                onVariationPointerDown = {
+                    variationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
+                },
                 onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
             )
         }
@@ -300,6 +315,7 @@ internal fun PromptActionRow(
     isVariationButtonEnabled: Boolean = true,
     variationAutomationState: AutomationRunState = AutomationRunState.Idle,
     onRunVariation: () -> Unit = {},
+    onVariationPointerDown: (() -> Unit)? = null,
     onOpenVariationPromptConfigDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -407,10 +423,8 @@ internal fun PromptActionRow(
 
         // 2행: 프롬프트 에디터 전용 툴바 (히스토리 네비게이션 ── SI 삽입 + 복사 + 가져오기)
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 좌측: 히스토리 네비게이션 (가로세로 35dp 1:1 정사각형 조약돌)
@@ -508,9 +522,10 @@ internal fun PromptActionRow(
                 if (showVariationButton) {
                     PebbleButton(
                         onClick = onRunVariation,
+                        onPointerDown = onVariationPointerDown,
                         onLongClick = onOpenVariationPromptConfigDialog,
                         enabled = isVariationButtonEnabled,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                         modifier = Modifier.semantics { contentDescription = "변주" }
                     ) {
                         Text(
@@ -556,6 +571,24 @@ internal fun PromptActionRow(
             }
         }
     }
+}
+
+private fun TextFieldState.selectedTextOrNull(): String? {
+    return selectedPromptText(
+        text = text.toString(),
+        selectionStart = selection.start,
+        selectionEnd = selection.end
+    )
+}
+
+internal fun selectedPromptText(
+    text: String,
+    selectionStart: Int,
+    selectionEnd: Int
+): String? {
+    val rangeStart = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+    val rangeEnd = maxOf(selectionStart, selectionEnd).coerceIn(rangeStart, text.length)
+    return text.substring(rangeStart, rangeEnd).takeIf { rangeStart != rangeEnd }
 }
 
 private fun variationStatusText(state: AutomationRunState): String {
@@ -667,6 +700,7 @@ private fun ActionIsland(
 private fun PebbleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onPointerDown: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     enabled: Boolean = true,
     borderColor: Color = AppTheme.colors.cardBorder,
@@ -690,10 +724,27 @@ private fun PebbleButton(
     )
 
     val shape = RoundedCornerShape(10.dp)
+    val pointerDownModifier = if (enabled) {
+        onPointerDown?.let { callback ->
+            Modifier.pointerInput(callback) {
+                awaitEachGesture {
+                    awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial
+                    )
+                    callback()
+                    waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                }
+            }
+        } ?: Modifier
+    } else {
+        Modifier
+    }
     Surface(
         modifier = modifier
             .height(35.dp)
             .clip(shape)
+            .then(pointerDownModifier)
             .combinedClickable(
                 enabled = enabled,
                 onClick = onClick,

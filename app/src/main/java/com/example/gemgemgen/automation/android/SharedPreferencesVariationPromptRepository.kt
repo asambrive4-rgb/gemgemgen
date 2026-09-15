@@ -13,8 +13,12 @@ class SharedPreferencesVariationPromptRepository(
         context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     override fun load(): VariationPromptConfig {
-        val prompt = preferences.getString(KEY_VARIATION_PROMPT, null)
-            ?: VariationPromptConfig.DEFAULT_VARIATION_PROMPT
+        val savedPrompt = preferences.getString(KEY_VARIATION_PROMPT, null)
+        val prompt = if (savedPrompt == null || savedPrompt == LEGACY_DUMMY_PROMPT) {
+            VariationPromptConfig.DEFAULT_VARIATION_PROMPT
+        } else {
+            savedPrompt
+        }
         return VariationPromptConfig(prompt = prompt)
     }
 
@@ -27,5 +31,7 @@ class SharedPreferencesVariationPromptRepository(
     companion object {
         private const val PREFERENCES_NAME = "variation_prompt_preferences"
         private const val KEY_VARIATION_PROMPT = "variation_prompt"
+        private const val LEGACY_DUMMY_PROMPT =
+            "다음 프롬프트의 스타일과 핵심 의도를 유지하며, 새롭고 창의적인 변주(Variation)를 작성해주세요."
     }
 }

@@ -139,6 +139,7 @@ fun NeuPillChip(
 fun NeuButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier,
     enabled: Boolean = true,
     isPrimary: Boolean = true,
     shape: Shape = RoundedCornerShape(12.dp),
@@ -166,7 +167,7 @@ fun NeuButton(
             .border(BorderStroke(1.5.dp, borderColor), shape)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = contentModifier.padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
             content = content

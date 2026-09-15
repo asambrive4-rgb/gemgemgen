@@ -76,7 +76,7 @@ internal data class AutomationAppActions(
     val onRetrySwitchGeminiAccount: () -> Unit = {},
     val onOpenGeminiManualSwitch: () -> Unit = {},
     val onClearAccountSwitchError: () -> Unit = {},
-    val onRunVariation: () -> Unit = {},
+    val onRunVariation: (String?) -> Unit = {},
     val onOpenVariationPromptConfigDialog: () -> Unit = {},
     val onCloseVariationPromptConfigDialog: () -> Unit = {},
     val onSaveVariationPromptConfig: (VariationPromptConfig) -> Unit = {}

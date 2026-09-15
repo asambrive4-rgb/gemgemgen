@@ -98,7 +98,7 @@ internal fun AutomationScreen(
     onRetrySwitchGeminiAccount: () -> Unit = {},
     onOpenGeminiManualSwitch: () -> Unit = {},
     onClearAccountSwitchError: () -> Unit = {},
-    onRunVariation: () -> Unit = {},
+    onRunVariation: (String?) -> Unit = {},
     onOpenVariationPromptConfigDialog: () -> Unit = {},
     onCloseVariationPromptConfigDialog: () -> Unit = {},
     onSaveVariationPromptConfig: (VariationPromptConfig) -> Unit = {}
@@ -174,9 +174,9 @@ internal fun AutomationScreen(
                     showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                     isVariationButtonEnabled = uiState.canInteractWithVariation,
                     variationAutomationState = uiState.variationAutomationState,
-                    onRunVariation = {
+                    onRunVariation = { selectedText ->
                         onClearFocus()
-                        onRunVariation()
+                        onRunVariation(selectedText)
                     },
                     onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
                 )
