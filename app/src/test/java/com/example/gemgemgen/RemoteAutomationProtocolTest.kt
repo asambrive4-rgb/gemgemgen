@@ -128,4 +128,32 @@ class RemoteAutomationProtocolTest {
         )
         assertEquals(success, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(success)))
     }
+
+    @Test
+    fun switchGeminiAccountRequest_roundTrips() {
+        val message = RemoteProtocolMessage.SwitchGeminiAccountRequest(
+            senderId = "tablet-id",
+            token = "sample-token-123",
+            accountId = "acc-1",
+            accountAlias = "서브 계정 1",
+            accountIdentifier = "sub1@gmail.com"
+        )
+        assertEquals(message, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(message)))
+    }
+
+    @Test
+    fun switchGeminiAccountResult_roundTrips() {
+        val success = RemoteProtocolMessage.SwitchGeminiAccountResult(
+            success = true,
+            message = "Gemini 계정을 [서브 계정 1]로 전환했습니다.",
+            activeAccountId = "acc-1"
+        )
+        val failure = RemoteProtocolMessage.SwitchGeminiAccountResult(
+            success = false,
+            message = "기기에서 계정을 찾을 수 없습니다.",
+            activeAccountId = "acc-1"
+        )
+        assertEquals(success, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(success)))
+        assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))
+    }
 }

@@ -118,6 +118,10 @@ class ManageRemoteAutomationUseCase(
         onStateChange(AutomationRunState.Stopped)
     }
 
+    suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult {
+        return gateway.switchGeminiAccount(id = id, alias = alias, identifier = identifier)
+    }
+
     companion object {
         const val PAIRING_CODE_LENGTH = 4
     }

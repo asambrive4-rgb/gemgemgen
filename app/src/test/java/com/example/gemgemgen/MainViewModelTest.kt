@@ -823,6 +823,7 @@ class MainViewModelTest {
                 cleanCount += 1
                 return RemoteActionResult.Success
             }
+            override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult = RemoteActionResult.Success
         }
         val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
         val viewModel = viewModel(
@@ -1571,6 +1572,7 @@ class MainViewModelTest {
         }
 
         override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
+        override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult = RemoteActionResult.Success
     }
 
     private companion object {

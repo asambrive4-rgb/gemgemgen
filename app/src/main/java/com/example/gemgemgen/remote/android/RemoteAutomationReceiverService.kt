@@ -171,6 +171,7 @@ class RemoteAutomationReceiverService : Service() {
                 is RemoteProtocolMessage.RunRequest -> handleRun(message, writer, socket)
                 is RemoteProtocolMessage.CancelRequest -> handleCancel(message)
                 is RemoteProtocolMessage.CleanMemoryRequest -> handleCleanMemory(message, writer)
+                is RemoteProtocolMessage.SwitchGeminiAccountRequest -> handleSwitchGeminiAccount(message, writer)
                 else -> Unit
             }
         }
@@ -408,6 +409,120 @@ class RemoteAutomationReceiverService : Service() {
                         RemoteProtocolMessage.CleanMemoryResult(
                             success = false,
                             message = "수신 기기 메모리 정리 실패: ${result.message}"
+                        )
+                    )
+                )
+            }
+        }
+    }
+
+    private suspend fun handleSwitchGeminiAccount(
+        message: RemoteProtocolMessage.SwitchGeminiAccountRequest,
+        writer: PrintWriter
+    ) {
+        if (!isAuthenticated(message.senderId, message.token)) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.SwitchGeminiAccountResult(
+                        success = false,
+                        message = "등록되지 않은 송신 기기입니다.",
+                        activeAccountId = message.accountId
+                    )
+                )
+            )
+            return
+        }
+
+        val runState = AndroidAutomationRuntimeProvider.get(this).runState.value
+        if (runState is AutomationRunState.Running || activeSession != null) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.SwitchGeminiAccountResult(
+                        success = false,
+                        message = "수신 기기에서 자동화 실행 중에는 계정을 교체할 수 없습니다.",
+                        activeAccountId = message.accountId
+                    )
+                )
+            )
+            return
+        }
+
+        val conditions = withContext(Dispatchers.IO) {
+            executionConditions(com.example.gemgemgen.automation.domain.AutomationTargetApp.GEMINI)
+        }
+        val decision = CheckRemoteExecutionUseCase().decide(conditions, requiresWildcardDirectory = false)
+        if (decision is com.example.gemgemgen.remote.domain.RemoteExecutionDecision.Rejected) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.SwitchGeminiAccountResult(
+                        success = false,
+                        message = decision.message,
+                        activeAccountId = message.accountId
+                    )
+                )
+            )
+            return
+        }
+
+        val service = GeminiAccessibilityService.activeService
+        if (service == null) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.SwitchGeminiAccountResult(
+                        success = false,
+                        message = "수신 기기의 접근성 서비스가 켜져 있지 않습니다.",
+                        activeAccountId = message.accountId
+                    )
+                )
+            )
+            return
+        }
+
+        RemoteAutomationStateHub.update {
+            it.copy(message = "원격 요청으로 Gemini 계정 교체 중: [${message.accountAlias}]")
+        }
+
+        val result = service.switchGeminiAccount(
+            identifier = message.accountIdentifier,
+            alias = message.accountAlias
+        )
+
+        when (result) {
+            is com.example.gemgemgen.automation.android.GeminiAccountSwitchResult.Success -> {
+                RemoteAutomationStateHub.update {
+                    it.copy(message = "Gemini 계정을 [${message.accountAlias}]로 교체했습니다.")
+                }
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.SwitchGeminiAccountResult(
+                            success = true,
+                            message = result.message,
+                            activeAccountId = message.accountId
+                        )
+                    )
+                )
+            }
+            is com.example.gemgemgen.automation.android.GeminiAccountSwitchResult.Failure -> {
+                RemoteAutomationStateHub.update {
+                    it.copy(message = "Gemini 계정 교체 실패: ${result.message}")
+                }
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.SwitchGeminiAccountResult(
+                            success = false,
+                            message = result.message,
+                            activeAccountId = message.accountId
+                        )
+                    )
+                )
+            }
+            com.example.gemgemgen.automation.android.GeminiAccountSwitchResult.Unavailable -> {
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.SwitchGeminiAccountResult(
+                            success = false,
+                            message = "수신 기기 접근성 서비스를 사용할 수 없습니다.",
+                            activeAccountId = message.accountId
                         )
                     )
                 )

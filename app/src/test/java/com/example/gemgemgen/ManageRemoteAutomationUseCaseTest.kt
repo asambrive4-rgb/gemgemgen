@@ -212,6 +212,7 @@ class ManageRemoteAutomationUseCaseTest {
         }
 
         override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
+        override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult = RemoteActionResult.Success
     }
 
     private class RecordingAutomationStartRecorder : AutomationStartRecorder {

@@ -1,7 +1,8 @@
-// 역할: 화면 노드 조작, 제스처 탭/스와이프, 클립보드 동기화 및 앱 제어 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
+// 역할: 화면 노드 조작, 제스처 탭/스와이프, Gemini 계정 자동 전환, 클립보드 동기화 및 앱 제어 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -9,6 +10,7 @@ import android.content.Context
 import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -39,6 +41,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var previousMemoryPackageRestriction: Array<String>? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
+    private var accountSwitchAutomation: GeminiAccountSwitcherAutomation? = null
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
             coroutineScope = serviceScope,
@@ -73,6 +76,8 @@ class GeminiAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 중단되었습니다."))
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
+        accountSwitchAutomation?.cancel()
+        accountSwitchAutomation = null
         ProcessAutomationHolder.onAccessibilityLost()
         serviceScope.coroutineContext.cancelChildren()
         handler.removeCallbacksAndMessages(null)
@@ -85,6 +90,8 @@ class GeminiAccessibilityService : AccessibilityService() {
             activeService = null
         }
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
+        accountSwitchAutomation?.cancel()
+        accountSwitchAutomation = null
         ProcessAutomationHolder.onAccessibilityLost()
         serviceScope.cancel()
         handler.removeCallbacksAndMessages(null)
@@ -145,9 +152,9 @@ class GeminiAccessibilityService : AccessibilityService() {
                     handler = handler,
                     rootProvider = { rootInActiveWindow },
                     allRootsProvider = {
-                        runCatching {
-                            windows.mapNotNull { it.root }
-                        }.getOrNull() ?: listOfNotNull(rootInActiveWindow)
+                        val winRoots = runCatching { windows.mapNotNull { it.root } }.getOrNull().orEmpty()
+                        val activeRoot = runCatching { rootInActiveWindow }.getOrNull()
+                        (winRoots + listOfNotNull(activeRoot)).distinct()
                     },
                     currentPackageProvider = {
                         rootInActiveWindow?.packageName?.toString()
@@ -160,6 +167,96 @@ class GeminiAccessibilityService : AccessibilityService() {
             }
             continuation.invokeOnCancellation {
                 handler.post { cancelMemoryCleanup(token) }
+            }
+        }
+    }
+
+    internal suspend fun switchGeminiAccount(
+        identifier: String,
+        alias: String,
+        onProgress: ((phase: String, message: String) -> Unit)? = null
+    ): GeminiAccountSwitchResult {
+        if (
+            memoryCleanupToken != null ||
+            closeAppCompletion != null ||
+            accountSwitchAutomation != null ||
+            ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
+        ) {
+            return GeminiAccountSwitchResult.Failure("다른 자동화가 실행 중입니다.")
+        }
+
+        return suspendCancellableCoroutine { continuation ->
+            var automation: GeminiAccountSwitcherAutomation? = null
+            continuation.invokeOnCancellation {
+                handler.post {
+                    automation?.cancel()
+                    if (accountSwitchAutomation === automation) {
+                        accountSwitchAutomation = null
+                    }
+                }
+            }
+
+            handler.post {
+                applyAccessibilitySubscription(packageNamesFor(AutomationTargetApp.GEMINI) + packageName)
+                val switcher = GeminiAccountSwitcherAutomation(
+                    handler = handler,
+                    rootProvider = { rootInActiveWindow },
+                    allRootsProvider = {
+                        val winList = runCatching { windows }.getOrNull().orEmpty()
+                        for (w in winList) {
+                            val r = runCatching { w.root }.getOrNull()
+                            if (r != null && r.childCount == 0) {
+                                runCatching { r.refresh() }
+                            }
+                            Log.d("A11yWin", "win id=${w.id}, type=${w.type}, title=${w.title}, layer=${w.layer}, isFocused=${w.isFocused}, isActive=${w.isActive}, rootPkg=${r?.packageName}, childCount=${r?.childCount}")
+                        }
+                        val active = runCatching { rootInActiveWindow }.getOrNull()
+                        if (active != null && active.childCount == 0) {
+                            runCatching { active.refresh() }
+                        }
+                        Log.d("A11yWin", "activeRoot: winId=${active?.windowId}, pkg=${active?.packageName}, childCount=${active?.childCount}")
+                        val winRoots = winList.mapNotNull { runCatching { it.root }.getOrNull() }
+                        (winRoots + listOfNotNull(active)).distinct()
+                    },
+                    activePackageProvider = {
+                        rootInActiveWindow?.packageName?.toString()
+                    },
+                    launchGemini = {
+                        val launchIntent = packageManager.getLaunchIntentForPackage(AppDefaults.GEMINI_PACKAGE_NAME)
+                            ?: packageManager.getLaunchIntentForPackage(AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME)
+                        if (launchIntent != null) {
+                            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(launchIntent)
+                            true
+                        } else {
+                            false
+                        }
+                    },
+                    targetIdentifier = identifier,
+                    targetAlias = alias,
+                    tapAtCoordinates = { x, y -> tapCoordinates(x, y, null) },
+                    onProgress = onProgress,
+                    bringAppToForeground = {
+                        val bringIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                        }
+                        if (bringIntent != null) {
+                            startActivity(bringIntent)
+                        }
+                    },
+                    onFinished = { result ->
+                        clearPackageRestriction()
+                        if (accountSwitchAutomation === automation) {
+                            accountSwitchAutomation = null
+                        }
+                        if (continuation.isActive) {
+                            continuation.resume(result)
+                        }
+                    }
+                )
+                automation = switcher
+                accountSwitchAutomation = switcher
+                switcher.start()
             }
         }
     }
@@ -232,8 +329,12 @@ class GeminiAccessibilityService : AccessibilityService() {
 
     private fun applyAccessibilitySubscription(packageNames: Array<String>?) {
         val info = serviceInfo ?: return
-        info.eventTypes = 0
+        info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK
         info.packageNames = packageNames
+        info.flags = info.flags or
+            AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+            AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
         setServiceInfo(info)
     }
 
