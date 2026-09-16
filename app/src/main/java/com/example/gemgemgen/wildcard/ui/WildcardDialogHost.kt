@@ -11,8 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,11 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
+import com.example.gemgemgen.analysis.ui.ModelSelectorChips
 import com.example.gemgemgen.ui.theme.AppTheme
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -475,7 +469,6 @@ private fun ClassifyLoadingContent() {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ClassifyCriteriaContent(
     dialog: WildcardDialogType.ClassifyCriteria,
@@ -510,53 +503,14 @@ private fun ClassifyCriteriaContent(
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.colors.textPrimary
             )
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
+            ModelSelectorChips(
+                selectedProvider = dialog.provider,
+                selectedModelId = dialog.modelId,
+                onSelectProvider = actions.onClassifyProviderSelected,
+                onSelectModel = actions.onClassifyModelSelected,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                DialogModelChip(
-                    label = "Gemini",
-                    selected = dialog.provider == AnalysisProvider.GEMINI,
-                    onClick = { actions.onClassifyProviderSelected(AnalysisProvider.GEMINI) }
-                )
-                DialogModelChip(
-                    label = "Grok",
-                    selected = dialog.provider == AnalysisProvider.GROK,
-                    onClick = { actions.onClassifyProviderSelected(AnalysisProvider.GROK) }
-                )
-                when (dialog.provider) {
-                    AnalysisProvider.GEMINI -> {
-                        DialogModelChip(
-                            label = "3.5 Lite",
-                            selected = dialog.modelId == MODEL_GEMINI_3_5_FLASH_LITE,
-                            onClick = { actions.onClassifyModelSelected(MODEL_GEMINI_3_5_FLASH_LITE) }
-                        )
-                        DialogModelChip(
-                            label = "3.6 Flash",
-                            selected = dialog.modelId == MODEL_GEMINI_3_6_FLASH,
-                            onClick = { actions.onClassifyModelSelected(MODEL_GEMINI_3_6_FLASH) }
-                        )
-                        DialogModelChip(
-                            label = "3.7 Flash",
-                            selected = dialog.modelId == MODEL_GEMINI_3_7_FLASH,
-                            onClick = { actions.onClassifyModelSelected(MODEL_GEMINI_3_7_FLASH) }
-                        )
-                        DialogModelChip(
-                            label = "3.8 Flash",
-                            selected = dialog.modelId == MODEL_GEMINI_3_8_FLASH,
-                            onClick = { actions.onClassifyModelSelected(MODEL_GEMINI_3_8_FLASH) }
-                        )
-                    }
-                    AnalysisProvider.GROK -> {
-                        DialogModelChip(
-                            label = "Grok 4.5",
-                            selected = dialog.modelId == MODEL_GROK_4_5,
-                            onClick = { actions.onClassifyModelSelected(MODEL_GROK_4_5) }
-                        )
-                    }
-                }
-            }
+            )
 
             OutlinedTextField(
                 value = dialog.criteria,
@@ -818,27 +772,3 @@ private fun ClassifyOverwriteContent(
     }
 }
 
-@Composable
-private fun DialogModelChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (selected) AppTheme.colors.primary.copy(alpha = 0.45f) else Color.White,
-        border = BorderStroke(
-            1.dp,
-            if (selected) AppTheme.colors.primary else AppTheme.colors.cardBorder
-        ),
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = AppTheme.colors.textPrimary
-        )
-    }
-}

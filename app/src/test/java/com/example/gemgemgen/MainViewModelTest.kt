@@ -818,7 +818,7 @@ class MainViewModelTest {
     fun closeGeminiApp_updatesResultMessage() {
         val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 2))
         val viewModel = viewModel(
-            closeGeminiApp = CloseGeminiAppUseCase(closer)
+            closeGeminiCloser = closer
         )
 
         viewModel.closeGeminiApp()
@@ -835,7 +835,7 @@ class MainViewModelTest {
     fun terminateGeminiApp_updatesResultMessageWithoutRestartText() {
         val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 2))
         val viewModel = viewModel(
-            terminateGeminiApp = CloseGeminiAppUseCase(closer)
+            terminateGeminiCloser = closer
         )
 
         viewModel.terminateGeminiApp()
@@ -852,7 +852,7 @@ class MainViewModelTest {
     fun cleanDeviceMemory_updatesSuccessResult() {
         val gateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
         val viewModel = viewModel(
-            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(gateway)
+            cleanMemoryGateway = gateway
         )
 
         viewModel.cleanDeviceMemory()
@@ -908,7 +908,7 @@ class MainViewModelTest {
             MemoryCleanupResult.Failure("clean button missing")
         )
         val failureViewModel = viewModel(
-            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(failureGateway)
+            cleanMemoryGateway = failureGateway
         )
 
         failureViewModel.cleanDeviceMemory()
@@ -921,7 +921,7 @@ class MainViewModelTest {
             MemoryCleanupResult.AccessibilityUnavailable
         )
         val unavailableViewModel = viewModel(
-            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(unavailableGateway)
+            cleanMemoryGateway = unavailableGateway
         )
 
         unavailableViewModel.cleanDeviceMemory()
@@ -939,7 +939,7 @@ class MainViewModelTest {
         )
         val viewModel = viewModel(
             automationRunner = automation(service = runner),
-            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(gateway)
+            cleanMemoryGateway = gateway
         )
         viewModel.onPromptTemplateChange("base")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
@@ -954,7 +954,7 @@ class MainViewModelTest {
     fun cleanDeviceMemory_blocksDuplicateCallsUntilFirstCompletes() {
         val gateway = ControlledMemoryCleanupGateway()
         val viewModel = viewModel(
-            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(gateway)
+            cleanMemoryGateway = gateway
         )
 
         viewModel.cleanDeviceMemory()
@@ -973,7 +973,7 @@ class MainViewModelTest {
         val gateway = ControlledMemoryCleanupGateway()
         val scope = CoroutineScope(Dispatchers.Unconfined + Job())
         val viewModel = viewModel(
-            cleanDeviceMemoryUseCase = CleanDeviceMemoryUseCase(gateway),
+            cleanMemoryGateway = gateway,
             coroutineScope = scope
         )
 
@@ -990,7 +990,7 @@ class MainViewModelTest {
     fun terminateSelfApp_updatesResultMessage() {
         val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 1))
         val viewModel = viewModel(
-            terminateSelfApp = CloseGeminiAppUseCase(closer)
+            terminateSelfCloser = closer
         )
 
         viewModel.terminateSelfApp()
@@ -1010,7 +1010,7 @@ class MainViewModelTest {
             environmentStatusReader = FakeEnvironmentStatusReader(
                 readyEnvironment().copy(isAccessibilityServiceEnabled = false)
             ),
-            terminateSelfApp = CloseGeminiAppUseCase(closer)
+            terminateSelfCloser = closer
         )
 
         viewModel.terminateSelfApp()
@@ -1027,7 +1027,7 @@ class MainViewModelTest {
         )
         val viewModel = viewModel(
             automationRunner = automation(service = runner),
-            terminateSelfApp = CloseGeminiAppUseCase(closer)
+            terminateSelfCloser = closer
         )
         viewModel.onPromptTemplateChange("base")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
@@ -1048,7 +1048,7 @@ class MainViewModelTest {
             environmentStatusReader = FakeEnvironmentStatusReader(
                 readyEnvironment().copy(isAccessibilityServiceEnabled = false)
             ),
-            closeGeminiApp = CloseGeminiAppUseCase(closer)
+            closeGeminiCloser = closer
         )
 
         viewModel.closeGeminiApp()
@@ -1367,21 +1367,53 @@ class MainViewModelTest {
         lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
         automationRunner: RunAutomationUseCase? = null,
         appMaintenance: AppMaintenanceUseCase? = null,
-        closeGeminiApp: CloseGeminiAppUseCase? = null,
-        terminateGeminiApp: CloseGeminiAppUseCase? = null,
-        terminateSelfApp: CloseGeminiAppUseCase? = null,
-        cleanDeviceMemoryUseCase: CleanDeviceMemoryUseCase? = null,
+        closeGeminiCloser: GeminiAppCloser? = null,
+        terminateGeminiCloser: GeminiAppCloser? = null,
+        terminateSelfCloser: GeminiAppCloser? = null,
+        cleanMemoryGateway: MemoryCleanupGateway? = null,
         promptHistoryStore: PromptHistoryStore? = null,
         manageRemoteAutomation: ManageRemoteAutomationUseCase? = null,
+        switchGeminiAccount: SwitchGeminiAccountUseCase? = null,
         soundAlertGateway: SoundAlertGateway = NoOpSoundAlertGateway,
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): MainViewModel {
         val resolvedMaintenance = appMaintenance ?: AppMaintenanceUseCase(
-            geminiRestartCloser = closeGeminiApp?.let { FakeGeminiCloserAdapter(it) } ?: FakeGeminiAppCloser(),
-            geminiTerminateCloser = terminateGeminiApp?.let { FakeGeminiCloserAdapter(it) } ?: FakeGeminiAppCloser(),
-            selfAppCloser = terminateSelfApp?.let { FakeGeminiCloserAdapter(it) } ?: FakeGeminiAppCloser(),
-            memoryCleanupGateway = cleanDeviceMemoryUseCase?.let { FakeMemoryGatewayAdapter(it) } ?: FakeMemoryCleanupGateway()
+            geminiRestartCloser = closeGeminiCloser ?: FakeGeminiAppCloser(),
+            geminiTerminateCloser = terminateGeminiCloser ?: FakeGeminiAppCloser(),
+            selfAppCloser = terminateSelfCloser ?: FakeGeminiAppCloser(),
+            memoryCleanupGateway = cleanMemoryGateway ?: FakeMemoryCleanupGateway()
+        )
+        val resolvedRemote = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
+            NoOpRemoteAutomationGateway()
+        )
+        val resolvedAccounts = ManageGeminiAccountsUseCase(
+            object : GeminiAccountRepository {
+                private var list = listOf(
+                    GeminiAccountProfile(
+                        id = "default-1",
+                        alias = "서브1",
+                        identifier = "",
+                        order = 1,
+                        isActive = true
+                    )
+                )
+                override fun loadAccounts() = list
+                override fun saveAccounts(accounts: List<GeminiAccountProfile>) { list = accounts }
+            }
+        )
+        val resolvedSwitchGeminiAccount = switchGeminiAccount ?: SwitchGeminiAccountUseCase(
+            manageGeminiAccounts = resolvedAccounts,
+            manageRemoteAutomation = resolvedRemote,
+            switcherGateway = object : GeminiAccountSwitcherGateway {
+                override val isServiceAvailable: Boolean = true
+                override suspend fun switchAccount(
+                    identifier: String,
+                    alias: String,
+                    onProgress: (phase: String, message: String) -> Unit
+                ): GeminiAccountSwitchResult = GeminiAccountSwitchResult.Success("계정 전환 성공")
+                override fun launchGeminiForManualSwitch(): Boolean = true
+            }
         )
         return MainViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentStatusReader),
@@ -1394,22 +1426,14 @@ class MainViewModelTest {
                 dispatchers = dispatchers
             ),
             appMaintenance = resolvedMaintenance,
-            manageRemoteAutomation = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
-                NoOpRemoteAutomationGateway()
-            ),
+            manageRemoteAutomation = resolvedRemote,
+            manageGeminiAccounts = resolvedAccounts,
+            switchGeminiAccount = resolvedSwitchGeminiAccount,
             soundAlertGateway = soundAlertGateway,
             promptHistoryStore = promptHistoryStore,
             dispatchers = dispatchers,
             coroutineScope = coroutineScope
         )
-    }
-
-    private class FakeGeminiCloserAdapter(private val useCase: CloseGeminiAppUseCase) : GeminiAppCloser {
-        override suspend fun closeGeminiApp(): CloseGeminiAppResult = useCase.close()
-    }
-
-    private class FakeMemoryGatewayAdapter(private val useCase: CleanDeviceMemoryUseCase) : MemoryCleanupGateway {
-        override suspend fun cleanMemory(): MemoryCleanupResult = useCase.clean()
     }
 
     private fun automation(

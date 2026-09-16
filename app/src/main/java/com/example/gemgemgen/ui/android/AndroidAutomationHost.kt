@@ -1,4 +1,4 @@
-// 역할: 접근성 서비스 연결 통로를 제공하고 Staggered Warm-up과 포커스 제어로 자동화 화면을 매끄럽게 호스팅합니다.
+// 역할: 접근성 서비스 연결, 액션 바인딩 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
@@ -104,11 +104,11 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectSafWildcardFolder() {
-        if (wildcardViewModel.requestFolderSelection()) {
-            launchWildcardFolderPicker()
-        } else {
+        if (!wildcardViewModel.requestFolderSelection()) {
             selectedTab = MainTab.WILDCARD
+            return
         }
+        launchWildcardFolderPicker()
     }
 
     fun selectWildcardFolder() {
@@ -119,12 +119,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 selectedTab = MainTab.WILDCARD
                 mainViewModel.refreshStatus()
             }
-            WildcardFolderAction.OpenStorageSettings -> {
-                openWildcardStorageSettings()
-            }
-            WildcardFolderAction.LaunchSafPicker -> {
-                selectSafWildcardFolder()
-            }
+            WildcardFolderAction.OpenStorageSettings -> openWildcardStorageSettings()
+            WildcardFolderAction.LaunchSafPicker -> selectSafWildcardFolder()
         }
     }
 
@@ -172,11 +168,9 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                     }
                 )
             }
-            AutomationStartDecision.RemoteStarted -> Unit
-            AutomationStartDecision.PermissionRequired -> {
-                platformNavigator.openOverlayPermissionSettings()
-            }
+            AutomationStartDecision.RemoteStarted,
             AutomationStartDecision.Rejected -> Unit
+            AutomationStartDecision.PermissionRequired -> platformNavigator.openOverlayPermissionSettings()
         }
     }
 
@@ -248,174 +242,216 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             analysisUiState = analysisUiState,
             analysisPromptState = analysisPromptState,
             wildcardUiState = wildcardUiState,
-            automationActions = AutomationAppActions(
-                onSelectTab = ::selectMainTab,
-                onShowSettings = mainViewModel::showSettings,
-                onSelectThemePalette = mainViewModel::onSelectThemePalette,
-                onSelectThemeMode = mainViewModel::onSelectThemeMode,
-                onClearFocus = clearInputFocus,
-            onHideSettings = mainViewModel::hideSettings,
-            onConfirmAccessibilityPrompt = {
-                mainViewModel.confirmAccessibilityPrompt()
-                platformNavigator.openAccessibilitySettings()
+            automationActions = remember(mainViewModel, platformNavigator, clearInputFocus) {
+                createAutomationActions(
+                    mainViewModel = mainViewModel,
+                    platformNavigator = platformNavigator,
+                    clearInputFocus = clearInputFocus,
+                    selectMainTab = ::selectMainTab,
+                    selectWildcardFolder = ::selectWildcardFolder,
+                    selectSafWildcardFolder = ::selectSafWildcardFolder,
+                    openWildcardStorageSettings = ::openWildcardStorageSettings,
+                    runAutomation = ::runAutomation,
+                    selectAutomationMode = ::selectAutomationMode
+                )
             },
-            onDismissAccessibilityPromptToSettings =
-                mainViewModel::dismissAccessibilityPromptToSettings,
-            onRefreshStatus = mainViewModel::refreshStatus,
-            onSelectWildcardFolder = ::selectWildcardFolder,
-            onSelectSafWildcardFolder = ::selectSafWildcardFolder,
-            onOpenWildcardStorageSettings = ::openWildcardStorageSettings,
-            onOpenAccessibilitySettings = platformNavigator::openAccessibilitySettings,
-            onTargetAppSelected = mainViewModel::onTargetAppSelected,
-            onFlowImageCountSelected = mainViewModel::onFlowImageCountSelected,
-            onPromptTemplateChange = mainViewModel::onPromptTemplateFromEditor,
-            onWildcardTokenSuggestionClick = mainViewModel::applyWildcardTokenSuggestion,
-            onNavigateHistoryBack = mainViewModel::navigatePromptHistoryBack,
-            onNavigateHistoryForward = mainViewModel::navigatePromptHistoryForward,
-            onInsertTopInstruction = mainViewModel::insertTopInstruction,
-            onInsertBottomInstruction = mainViewModel::insertBottomInstruction,
-            onOpenInstructionConfigDialog = mainViewModel::openInstructionConfigDialog,
-            onCloseInstructionConfigDialog = mainViewModel::closeInstructionConfigDialog,
-            onSaveInstructionConfig = mainViewModel::saveInstructionConfig,
-            onParagraphOffsetSelected = mainViewModel::selectPromptParagraphAt,
-            onDeleteSelectedParagraph = mainViewModel::deleteSelectedPromptParagraph,
-            onReplaceSelectedParagraph = mainViewModel::replaceSelectedPromptParagraph,
-            onImportFromClipboard = mainViewModel::importPromptFromClipboard,
-            onCopyPromptToClipboard = mainViewModel::copyPromptToClipboard,
-            onPasteFromClipboard = mainViewModel::pastePromptFromClipboard,
-            onCloseGeminiApp = mainViewModel::closeGeminiApp,
-            onCleanDeviceMemory = mainViewModel::cleanDeviceMemory,
-            onTerminateSelfApp = mainViewModel::terminateSelfApp,
-            onRepeatCountChange = mainViewModel::onRepeatCountChange,
-            onRunAutomation = ::runAutomation,
-            onCancelAutomation = mainViewModel::cancelAutomation,
-            onAutomationModeSelected = ::selectAutomationMode,
-            onPairRemoteDevice = mainViewModel::pairRemoteDevice,
-            onDisconnectRemoteDevice = mainViewModel::disconnectRemoteDevice,
-            onOpenPromptHistory = mainViewModel::openPromptHistory,
-            onClosePromptHistory = mainViewModel::closePromptHistory,
-            onSelectPromptHistoryItem = mainViewModel::selectPromptHistoryItem,
-            onClearPromptHistory = mainViewModel::clearPromptHistory,
-            onOpenGeminiAccountDialog = mainViewModel::openGeminiAccountDialog,
-            onCloseGeminiAccountDialog = mainViewModel::closeGeminiAccountDialog,
-            onSwitchGeminiAccount = mainViewModel::switchGeminiAccount,
-            onCycleNextGeminiAccount = mainViewModel::cycleNextGeminiAccount,
-            onAddGeminiAccount = mainViewModel::addGeminiAccount,
-            onDeleteGeminiAccount = mainViewModel::deleteGeminiAccount,
-            onRetrySwitchGeminiAccount = mainViewModel::retrySwitchGeminiAccount,
-            onOpenGeminiManualSwitch = mainViewModel::openGeminiForManualSwitch,
-            onClearAccountSwitchError = mainViewModel::clearAccountSwitchError,
-            onRunVariation = { selectedText -> mainViewModel.runVariation(selectedText) },
-            onOpenVariationPromptConfigDialog = mainViewModel::openVariationPromptConfigDialog,
-            onCloseVariationPromptConfigDialog = mainViewModel::closeVariationPromptConfigDialog,
-            onSaveVariationPromptConfig = mainViewModel::saveVariationPromptConfig
-        ),
-        analysisActions = AnalysisAppActions(
-            onClearFocus = clearInputFocus,
-            onSourcePromptChange = analysisViewModel::onSourcePromptChange,
-            onImportFromAutomation = {
-                analysisViewModel.importSourcePromptFromAutomation()
+            analysisActions = remember(analysisViewModel, platformNavigator, browserLauncher, clearInputFocus) {
+                createAnalysisActions(
+                    analysisViewModel = analysisViewModel,
+                    platformNavigator = platformNavigator,
+                    browserLauncher = browserLauncher,
+                    clearInputFocus = clearInputFocus,
+                    onCompleteSave = { selectMainTab(MainTab.AUTOMATION) }
+                )
             },
-            onCategorySelected = analysisViewModel::onCategorySelected,
-            onClearTargetSegment = analysisViewModel::clearTargetSegment,
-            onGenerate = analysisViewModel::generate,
-            onGenerateTxt = analysisViewModel::generateTxt,
-            onCancelWork = analysisViewModel::cancelActiveWork,
-            onRequestResetSession = analysisViewModel::requestResetSession,
-            onConfirmResetSession = analysisViewModel::confirmResetSession,
-            onDismissResetSession = analysisViewModel::dismissResetSession,
-            onTxtCountChange = analysisViewModel::onTxtCountChange,
-            onToggleDirection = analysisViewModel::toggleDirection,
-            onCustomHintChange = analysisViewModel::onCustomHintChange,
-            onResultFileNameChange = analysisViewModel::onResultFileNameChange,
-            onApplyCandidate = { index ->
-                analysisViewModel.applyCandidate(index = index)
-            },
-            onCopyCandidate = analysisViewModel::copyCandidate,
-            onRestoreOriginalPrompt = {
-                analysisViewModel.restoreOriginalPrompt()
-            },
-            onCopyResults = analysisViewModel::copyGeneratedResults,
-            onSaveResults = {
-                analysisViewModel.saveGeneratedResults()
-                selectMainTab(MainTab.AUTOMATION)
-            },
-            onConfirmOverwrite = {
-                analysisViewModel.confirmOverwrite()
-                selectMainTab(MainTab.AUTOMATION)
-            },
-            onDismissOverwrite = analysisViewModel::dismissOverwrite,
-            onShowKeyDialog = analysisViewModel::showKeyDialog,
-            onDismissKeyDialog = analysisViewModel::dismissKeyDialog,
-            onKeyLabelChange = analysisViewModel::onKeyLabelChange,
-            onKeyValueChange = analysisViewModel::onKeyValueChange,
-            onRoleProviderSelected = analysisViewModel::onRoleProviderSelected,
-            onRoleModelSelected = analysisViewModel::onRoleModelSelected,
-            onStartGrokLogin = analysisViewModel::startGrokLogin,
-            onCancelGrokLogin = analysisViewModel::cancelGrokLogin,
-            onLogoutGrok = analysisViewModel::logoutGrok,
-            onOpenGrokLoginUrl = { url ->
-                platformNavigator.openUrlPreferFirefox(browserLauncher, url)
-            },
-            onAddApiKey = analysisViewModel::addApiKey,
-            onDeleteApiKey = analysisViewModel::deleteApiKey,
-            onActivateApiKey = analysisViewModel::activateApiKey,
-            onStartEditApiKey = analysisViewModel::startEditingApiKey,
-            onEditKeyLabelChange = analysisViewModel::onEditingKeyLabelChange,
-            onCancelEditApiKey = analysisViewModel::cancelEditingApiKey,
-            onUpdateKeyLabel = analysisViewModel::updateApiKeyLabel
-        ),
-        wildcardActions = WildcardAppActions(
-            onRefresh = { wildcardViewModel.refreshFiles(openFirstFile = true) },
-            onSelectFolder = ::selectWildcardFolder,
-            onFileClick = wildcardViewModel::selectFile,
-            onTextChange = wildcardViewModel::onTextChange,
-            onSave = { wildcardViewModel.saveCurrent() },
-            onRequestNewFile = wildcardViewModel::requestNewFile,
-            onNewFileNameChange = wildcardViewModel::onNewFileNameChange,
-            onCreateNewFile = wildcardViewModel::createNewFile,
-            onDismissNewFile = wildcardViewModel::dismissNewFileDialog,
-            onRequestDelete = wildcardViewModel::requestDeleteSelectedFile,
-            onConfirmDelete = wildcardViewModel::confirmDeleteSelectedFile,
-            onDismissDelete = wildcardViewModel::dismissDeleteConfirm,
-            onRequestRename = wildcardViewModel::requestRenameSelectedFile,
-            onRenameFileNameChange = wildcardViewModel::onRenameFileNameChange,
-            onConfirmRename = wildcardViewModel::renameSelectedFile,
-            onDismissRename = wildcardViewModel::dismissRenameDialog,
-            onPaste = wildcardViewModel::pasteFromClipboard,
-            onPasteBelow = wildcardViewModel::pasteBelowFromClipboard,
-            onCopy = wildcardViewModel::copyToClipboard,
-            onUndo = wildcardViewModel::undoClipboardEdit,
-            onEnterLineSelectionMode = wildcardViewModel::enterLineSelectionMode,
-            onExitLineSelectionMode = wildcardViewModel::exitLineSelectionMode,
-            onToggleLineSelection = wildcardViewModel::toggleLineSelection,
-            onSelectAllLines = wildcardViewModel::selectAllLines,
-            onDeselectAllLines = wildcardViewModel::deselectAllLines,
-            onComposeDynamicPrompt = wildcardViewModel::composeDynamicPromptToClipboard,
-            onRequestClassify = wildcardViewModel::requestClassify,
-            onClassifyCriteriaChange = wildcardViewModel::onClassifyCriteriaChange,
-            onClassifyProviderSelected = wildcardViewModel::onClassifyProviderSelected,
-            onClassifyModelSelected = wildcardViewModel::onClassifyModelSelected,
-            onDismissClassifyCriteria = wildcardViewModel::dismissClassifyCriteriaDialog,
-            onRunClassify = wildcardViewModel::runClassify,
-            onDismissClassifyPreview = wildcardViewModel::dismissClassifyPreview,
-            onClassifyFileNameChange = wildcardViewModel::onClassifyFileNameChange,
-            onToggleClassifyFileNameEdit = wildcardViewModel::onToggleClassifyFileNameEdit,
-            onSaveClassifyResult = { wildcardViewModel.saveClassifyResult(overwrite = false) },
-            onConfirmClassifyOverwrite = wildcardViewModel::confirmClassifyOverwrite,
-            onDismissClassifyOverwrite = wildcardViewModel::dismissClassifyOverwrite,
-            onConfirmPendingSave = {
-                wildcardViewModel.confirmPendingWithSave {
-                    selectWildcardFolder()
-                }
-            },
-            onConfirmPendingDiscard = {
-                if (wildcardViewModel.confirmPendingWithDiscard()) {
-                    selectWildcardFolder()
-                }
-            },
-            onCancelPending = wildcardViewModel::cancelPendingAction
+            wildcardActions = remember(wildcardViewModel) {
+                createWildcardActions(
+                    wildcardViewModel = wildcardViewModel,
+                    selectWildcardFolder = ::selectWildcardFolder
+                )
+            }
         )
-    )
     }
 }
+
+private fun createAutomationActions(
+    mainViewModel: MainViewModel,
+    platformNavigator: AndroidHostPlatformNavigator,
+    clearInputFocus: () -> Unit,
+    selectMainTab: (MainTab) -> Unit,
+    selectWildcardFolder: () -> Unit,
+    selectSafWildcardFolder: () -> Unit,
+    openWildcardStorageSettings: () -> Unit,
+    runAutomation: () -> Unit,
+    selectAutomationMode: (AutomationMode) -> Unit
+): AutomationAppActions = AutomationAppActions(
+    onSelectTab = selectMainTab,
+    onShowSettings = mainViewModel::showSettings,
+    onSelectThemePalette = mainViewModel::onSelectThemePalette,
+    onSelectThemeMode = mainViewModel::onSelectThemeMode,
+    onClearFocus = clearInputFocus,
+    onHideSettings = mainViewModel::hideSettings,
+    onConfirmAccessibilityPrompt = {
+        mainViewModel.confirmAccessibilityPrompt()
+        platformNavigator.openAccessibilitySettings()
+    },
+    onDismissAccessibilityPromptToSettings = mainViewModel::dismissAccessibilityPromptToSettings,
+    onRefreshStatus = mainViewModel::refreshStatus,
+    onSelectWildcardFolder = selectWildcardFolder,
+    onSelectSafWildcardFolder = selectSafWildcardFolder,
+    onOpenWildcardStorageSettings = openWildcardStorageSettings,
+    onOpenAccessibilitySettings = platformNavigator::openAccessibilitySettings,
+    onTargetAppSelected = mainViewModel::onTargetAppSelected,
+    onFlowImageCountSelected = mainViewModel::onFlowImageCountSelected,
+    onPromptTemplateChange = mainViewModel::onPromptTemplateFromEditor,
+    onWildcardTokenSuggestionClick = mainViewModel::applyWildcardTokenSuggestion,
+    onNavigateHistoryBack = mainViewModel::navigatePromptHistoryBack,
+    onNavigateHistoryForward = mainViewModel::navigatePromptHistoryForward,
+    onInsertTopInstruction = mainViewModel::insertTopInstruction,
+    onInsertBottomInstruction = mainViewModel::insertBottomInstruction,
+    onOpenInstructionConfigDialog = mainViewModel::openInstructionConfigDialog,
+    onCloseInstructionConfigDialog = mainViewModel::closeInstructionConfigDialog,
+    onSaveInstructionConfig = mainViewModel::saveInstructionConfig,
+    onToggleParagraphSelectionMode = mainViewModel::toggleParagraphSelectionMode,
+    onParagraphOffsetSelected = mainViewModel::selectPromptParagraphAt,
+    onDeleteSelectedParagraph = mainViewModel::deleteSelectedPromptParagraph,
+    onReplaceSelectedParagraph = mainViewModel::replaceSelectedPromptParagraph,
+    onImportFromClipboard = mainViewModel::importPromptFromClipboard,
+    onCopyPromptToClipboard = mainViewModel::copyPromptToClipboard,
+    onPasteFromClipboard = mainViewModel::pastePromptFromClipboard,
+    onCloseGeminiApp = mainViewModel::closeGeminiApp,
+    onCleanDeviceMemory = mainViewModel::cleanDeviceMemory,
+    onTerminateSelfApp = mainViewModel::terminateSelfApp,
+    onRepeatCountChange = mainViewModel::onRepeatCountChange,
+    onRunAutomation = runAutomation,
+    onCancelAutomation = mainViewModel::cancelAutomation,
+    onAutomationModeSelected = selectAutomationMode,
+    onPairRemoteDevice = mainViewModel::pairRemoteDevice,
+    onDisconnectRemoteDevice = mainViewModel::disconnectRemoteDevice,
+    onOpenPromptHistory = mainViewModel::openPromptHistory,
+    onClosePromptHistory = mainViewModel::closePromptHistory,
+    onSelectPromptHistoryItem = mainViewModel::selectPromptHistoryItem,
+    onClearPromptHistory = mainViewModel::clearPromptHistory,
+    onOpenGeminiAccountDialog = mainViewModel::openGeminiAccountDialog,
+    onCloseGeminiAccountDialog = mainViewModel::closeGeminiAccountDialog,
+    onSwitchGeminiAccount = mainViewModel::switchGeminiAccount,
+    onCycleNextGeminiAccount = mainViewModel::cycleNextGeminiAccount,
+    onAddGeminiAccount = mainViewModel::addGeminiAccount,
+    onDeleteGeminiAccount = mainViewModel::deleteGeminiAccount,
+    onRetrySwitchGeminiAccount = mainViewModel::retrySwitchGeminiAccount,
+    onOpenGeminiManualSwitch = mainViewModel::openGeminiForManualSwitch,
+    onClearAccountSwitchError = mainViewModel::clearAccountSwitchError,
+    onRunVariation = { selectedText -> mainViewModel.runVariation(selectedText) },
+    onOpenVariationPromptConfigDialog = mainViewModel::openVariationPromptConfigDialog,
+    onCloseVariationPromptConfigDialog = mainViewModel::closeVariationPromptConfigDialog,
+    onSaveVariationPromptConfig = mainViewModel::saveVariationPromptConfig
+)
+
+private fun createAnalysisActions(
+    analysisViewModel: AnalysisViewModel,
+    platformNavigator: AndroidHostPlatformNavigator,
+    browserLauncher: AndroidExternalBrowserLauncher,
+    clearInputFocus: () -> Unit,
+    onCompleteSave: () -> Unit
+): AnalysisAppActions = AnalysisAppActions(
+    onClearFocus = clearInputFocus,
+    onSourcePromptChange = analysisViewModel::onSourcePromptChange,
+    onImportFromAutomation = analysisViewModel::importSourcePromptFromAutomation,
+    onCategorySelected = analysisViewModel::onCategorySelected,
+    onClearTargetSegment = analysisViewModel::clearTargetSegment,
+    onGenerate = analysisViewModel::generate,
+    onGenerateTxt = analysisViewModel::generateTxt,
+    onCancelWork = analysisViewModel::cancelActiveWork,
+    onRequestResetSession = analysisViewModel::requestResetSession,
+    onConfirmResetSession = analysisViewModel::confirmResetSession,
+    onDismissResetSession = analysisViewModel::dismissResetSession,
+    onTxtCountChange = analysisViewModel::onTxtCountChange,
+    onToggleDirection = analysisViewModel::toggleDirection,
+    onCustomHintChange = analysisViewModel::onCustomHintChange,
+    onResultFileNameChange = analysisViewModel::onResultFileNameChange,
+    onApplyCandidate = { index -> analysisViewModel.applyCandidate(index = index) },
+    onCopyCandidate = analysisViewModel::copyCandidate,
+    onRestoreOriginalPrompt = analysisViewModel::restoreOriginalPrompt,
+    onCopyResults = analysisViewModel::copyGeneratedResults,
+    onSaveResults = {
+        analysisViewModel.saveGeneratedResults()
+        onCompleteSave()
+    },
+    onConfirmOverwrite = {
+        analysisViewModel.confirmOverwrite()
+        onCompleteSave()
+    },
+    onDismissOverwrite = analysisViewModel::dismissOverwrite,
+    onShowKeyDialog = analysisViewModel::showKeyDialog,
+    onDismissKeyDialog = analysisViewModel::dismissKeyDialog,
+    onKeyLabelChange = analysisViewModel::onKeyLabelChange,
+    onKeyValueChange = analysisViewModel::onKeyValueChange,
+    onRoleProviderSelected = analysisViewModel::onRoleProviderSelected,
+    onRoleModelSelected = analysisViewModel::onRoleModelSelected,
+    onStartGrokLogin = analysisViewModel::startGrokLogin,
+    onCancelGrokLogin = analysisViewModel::cancelGrokLogin,
+    onLogoutGrok = analysisViewModel::logoutGrok,
+    onOpenGrokLoginUrl = { url -> platformNavigator.openUrlPreferFirefox(browserLauncher, url) },
+    onAddApiKey = analysisViewModel::addApiKey,
+    onDeleteApiKey = analysisViewModel::deleteApiKey,
+    onActivateApiKey = analysisViewModel::activateApiKey,
+    onStartEditApiKey = analysisViewModel::startEditingApiKey,
+    onEditKeyLabelChange = analysisViewModel::onEditingKeyLabelChange,
+    onCancelEditApiKey = analysisViewModel::cancelEditingApiKey,
+    onUpdateKeyLabel = analysisViewModel::updateApiKeyLabel
+)
+
+private fun createWildcardActions(
+    wildcardViewModel: WildcardManagerViewModel,
+    selectWildcardFolder: () -> Unit
+): WildcardAppActions = WildcardAppActions(
+    onRefresh = { wildcardViewModel.refreshFiles(openFirstFile = true) },
+    onSelectFolder = selectWildcardFolder,
+    onFileClick = wildcardViewModel::selectFile,
+    onTextChange = wildcardViewModel::onTextChange,
+    onSave = { wildcardViewModel.saveCurrent() },
+    onRequestNewFile = wildcardViewModel::requestNewFile,
+    onNewFileNameChange = wildcardViewModel::onNewFileNameChange,
+    onCreateNewFile = wildcardViewModel::createNewFile,
+    onDismissNewFile = wildcardViewModel::dismissNewFileDialog,
+    onRequestDelete = wildcardViewModel::requestDeleteSelectedFile,
+    onConfirmDelete = wildcardViewModel::confirmDeleteSelectedFile,
+    onDismissDelete = wildcardViewModel::dismissDeleteConfirm,
+    onRequestRename = wildcardViewModel::requestRenameSelectedFile,
+    onRenameFileNameChange = wildcardViewModel::onRenameFileNameChange,
+    onConfirmRename = wildcardViewModel::renameSelectedFile,
+    onDismissRename = wildcardViewModel::dismissRenameDialog,
+    onPaste = wildcardViewModel::pasteFromClipboard,
+    onPasteBelow = wildcardViewModel::pasteBelowFromClipboard,
+    onCopy = wildcardViewModel::copyToClipboard,
+    onUndo = wildcardViewModel::undoClipboardEdit,
+    onEnterLineSelectionMode = wildcardViewModel::enterLineSelectionMode,
+    onExitLineSelectionMode = wildcardViewModel::exitLineSelectionMode,
+    onToggleLineSelection = wildcardViewModel::toggleLineSelection,
+    onSelectAllLines = wildcardViewModel::selectAllLines,
+    onDeselectAllLines = wildcardViewModel::deselectAllLines,
+    onComposeDynamicPrompt = wildcardViewModel::composeDynamicPromptToClipboard,
+    onRequestClassify = wildcardViewModel::requestClassify,
+    onClassifyCriteriaChange = wildcardViewModel::onClassifyCriteriaChange,
+    onClassifyProviderSelected = wildcardViewModel::onClassifyProviderSelected,
+    onClassifyModelSelected = wildcardViewModel::onClassifyModelSelected,
+    onDismissClassifyCriteria = wildcardViewModel::dismissClassifyCriteriaDialog,
+    onRunClassify = wildcardViewModel::runClassify,
+    onDismissClassifyPreview = wildcardViewModel::dismissClassifyPreview,
+    onClassifyFileNameChange = wildcardViewModel::onClassifyFileNameChange,
+    onToggleClassifyFileNameEdit = wildcardViewModel::onToggleClassifyFileNameEdit,
+    onSaveClassifyResult = { wildcardViewModel.saveClassifyResult(overwrite = false) },
+    onConfirmClassifyOverwrite = wildcardViewModel::confirmClassifyOverwrite,
+    onDismissClassifyOverwrite = wildcardViewModel::dismissClassifyOverwrite,
+    onConfirmPendingSave = {
+        wildcardViewModel.confirmPendingWithSave {
+            selectWildcardFolder()
+        }
+    },
+    onConfirmPendingDiscard = {
+        if (wildcardViewModel.confirmPendingWithDiscard()) {
+            selectWildcardFolder()
+        }
+    },
+    onCancelPending = wildcardViewModel::cancelPendingAction
+)

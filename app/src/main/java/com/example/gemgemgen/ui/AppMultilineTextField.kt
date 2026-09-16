@@ -1,4 +1,4 @@
-// 역할: 긴 텍스트 입력과 스크롤, 자리표시자를 지원하는 공용 다중 행 텍스트 입력창 UI를 제공합니다.
+// 역할: 긴 텍스트 입력과 스크롤, 자리표시자 및 텍스트 하이라이트 처리를 지원하는 공용 다중 행 텍스트 입력창 UI를 제공합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -32,7 +32,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlinx.coroutines.FlowPreview
@@ -40,6 +39,11 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.yield
 import kotlin.math.abs
+
+data class TextHighlightRange(
+    val start: Int,
+    val endExclusive: Int
+)
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -58,7 +62,7 @@ fun AppMultilineTextField(
     initialScrollToBottom: Boolean = true,
     scrollState: ScrollState = rememberScrollState(),
     paragraphSelectionEnabled: Boolean = false,
-    selectedParagraphRange: PromptParagraphRange? = null,
+    highlightRange: TextHighlightRange? = null,
     selectedParagraphColor: Color = Color.Transparent,
     supportingText: String = "",
     onParagraphOffsetSelected: (Int) -> Unit = {},
@@ -123,7 +127,7 @@ fun AppMultilineTextField(
 
     val deleteOnlyTransformation = remember(
         paragraphSelectionEnabled,
-        selectedParagraphRange
+        highlightRange
     ) {
         if (!paragraphSelectionEnabled) {
             null
@@ -143,17 +147,17 @@ fun AppMultilineTextField(
                     insertedTextFromChanges(toString(), changes)
                 }
                 revertAllChanges()
-                if (isPureDeletion && selectedParagraphRange != null) {
+                if (isPureDeletion && highlightRange != null) {
                     deleteRequestId += 1
-                } else if (selectedParagraphRange != null && insertedText.isNotEmpty()) {
+                } else if (highlightRange != null && insertedText.isNotEmpty()) {
                     replacementText = insertedText
                     replaceRequestId += 1
                 }
             }
         }
     }
-    val paragraphHighlight = remember(selectedParagraphRange, selectedParagraphColor) {
-        selectedParagraphRange?.let { range ->
+    val paragraphHighlight = remember(highlightRange, selectedParagraphColor) {
+        highlightRange?.let { range ->
             OutputTransformation {
                 if (range.endExclusive <= length) {
                     addStyle(

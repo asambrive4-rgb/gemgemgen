@@ -1,6 +1,29 @@
 // 역할: 앱 실행 전 메모리 확보 및 백그라운드 환경 정리 작업을 조율합니다.
 package com.example.gemgemgen.automation.usecase
 
+sealed interface CloseGeminiAppResult {
+    data class Success(val closedCount: Int) : CloseGeminiAppResult
+    data object AccessibilityUnavailable : CloseGeminiAppResult
+    data object RecentsUnavailable : CloseGeminiAppResult
+    data object NotFound : CloseGeminiAppResult
+    data class Failure(val message: String) : CloseGeminiAppResult
+}
+
+fun interface GeminiAppCloser {
+    suspend fun closeGeminiApp(): CloseGeminiAppResult
+}
+
+sealed interface MemoryCleanupResult {
+    data object Success : MemoryCleanupResult
+    data object AccessibilityUnavailable : MemoryCleanupResult
+    data object InProgress : MemoryCleanupResult
+    data class Failure(val message: String) : MemoryCleanupResult
+}
+
+fun interface MemoryCleanupGateway {
+    suspend fun cleanMemory(): MemoryCleanupResult
+}
+
 sealed interface MaintenanceResult {
     data class Success(val message: String = "") : MaintenanceResult
     data object Unavailable : MaintenanceResult

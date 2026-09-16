@@ -74,11 +74,9 @@ class AnalysisViewModel(
         // 분석 캐시는 항상 무효화. 실제 원문은 TextField + currentSourcePrompt() 가 기준.
         analysisCache = null
 
-        val blanknessChanged = state.sourcePrompt.isBlank() != value.isBlank()
-        val segment = state.targetSegment
-        val segmentStillValid = segment == null ||
-            AnalysisTargetSegmentPolicy.isStillValid(value, segment)
-        val nextSegment = if (segmentStillValid) segment else null
+        val nextSegment = state.targetSegment?.takeIf {
+            AnalysisTargetSegmentPolicy.isStillValid(value, it)
+        }
         val shouldClearCandidates = state.generatedCandidates.isNotEmpty()
         val nextNeedsMasking = computeNeedsMaskingAnalysis(
             source = value,
@@ -87,45 +85,21 @@ class AnalysisViewModel(
             cache = null,
             state = state
         )
-        val needsMaskingChanged = state.needsMaskingAnalysis != nextNeedsMasking
 
         // 핫패스: canGenerate 경계·구간 무효·결과 정리가 없으면 화면 state 방출 생략
-        val needsUiUpdate = blanknessChanged ||
-            needsMaskingChanged ||
-            nextSegment != segment ||
+        val needsUiUpdate = (state.sourcePrompt.isBlank() != value.isBlank()) ||
+            (state.needsMaskingAnalysis != nextNeedsMasking) ||
+            (nextSegment != state.targetSegment) ||
             shouldClearCandidates
         if (!needsUiUpdate) return
 
-        _uiState.update {
-            it.copy(
-                sourcePrompt = value,
-                targetSegment = nextSegment,
-                needsMaskingAnalysis = nextNeedsMasking,
-                generatedCandidates = if (shouldClearCandidates) {
-                    emptyList()
-                } else {
-                    it.generatedCandidates
-                },
-                resultPresentation = if (shouldClearCandidates) {
-                    AnalysisResultPresentation.NONE
-                } else {
-                    it.resultPresentation
-                },
-                selectedCandidateIndex = if (shouldClearCandidates) {
-                    null
-                } else {
-                    it.selectedCandidateIndex
-                },
-                error = "",
-                message = if (nextSegment != segment) "" else it.message,
-                warning = "",
-                status = if (it.status == AnalysisStatus.ERROR) {
-                    AnalysisStatus.IDLE
-                } else {
-                    it.status
-                }
-            )
-        }
+        applyPromptStateUpdate(
+            value = value,
+            segment = state.targetSegment,
+            nextSegment = nextSegment,
+            nextNeedsMasking = nextNeedsMasking,
+            clearCandidates = shouldClearCandidates
+        )
     }
 
     /**
@@ -148,19 +122,16 @@ class AnalysisViewModel(
 
         analysisCache = null
         val state = _uiState.value
-        if (state.sourcePrompt == value &&
+        val hasNoPendingState = state.sourcePrompt == value &&
             state.targetSegment == null &&
             state.generatedCandidates.isEmpty() &&
             state.error.isEmpty() &&
             state.warning.isEmpty()
-        ) {
-            return
-        }
+        if (hasNoPendingState) return
 
-        val segment = state.targetSegment
-        val segmentStillValid = segment == null ||
-            AnalysisTargetSegmentPolicy.isStillValid(value, segment)
-        val nextSegment = if (segmentStillValid) segment else null
+        val nextSegment = state.targetSegment?.takeIf {
+            AnalysisTargetSegmentPolicy.isStillValid(value, it)
+        }
         val clearCandidates = state.generatedCandidates.isNotEmpty()
         val nextNeedsMasking = computeNeedsMaskingAnalysis(
             source = value,
@@ -170,6 +141,22 @@ class AnalysisViewModel(
             state = state
         )
 
+        applyPromptStateUpdate(
+            value = value,
+            segment = state.targetSegment,
+            nextSegment = nextSegment,
+            nextNeedsMasking = nextNeedsMasking,
+            clearCandidates = clearCandidates
+        )
+    }
+
+    private fun applyPromptStateUpdate(
+        value: String,
+        segment: AnalysisTargetSegment?,
+        nextSegment: AnalysisTargetSegment?,
+        nextNeedsMasking: Boolean,
+        clearCandidates: Boolean
+    ) {
         _uiState.update {
             it.copy(
                 sourcePrompt = value,
@@ -418,11 +405,9 @@ class AnalysisViewModel(
         ) -> Int?)? = null
     ) {
         val state = _uiState.value
-        if (state.resultPresentation != AnalysisResultPresentation.CARDS) return
-        if (state.isBusy) return
+        if (state.resultPresentation != AnalysisResultPresentation.CARDS || state.isBusy) return
         val candidate = state.generatedCandidates.getOrNull(index) ?: return
-        val segment = state.targetSegment
-        if (segment == null || !segment.isValid) {
+        val segment = state.targetSegment?.takeIf { it.isValid } ?: run {
             showError("마스킹 구간이 없어 자동화 프롬프트에 반영할 수 없습니다.")
             return
         }
@@ -451,8 +436,7 @@ class AnalysisViewModel(
                     expectedSegment,
                     candidate,
                     preferredStartIndex
-                )
-                if (appliedStartIndex == null) {
+                ) ?: run {
                     showError(
                         "후보는 복사했지만 자동화 프롬프트에서 교체할 구간을 찾지 못했습니다. " +
                             "자동화에서 원문을 다시 가져와 주세요."
@@ -483,8 +467,7 @@ class AnalysisViewModel(
     /** 오른쪽 복사 버튼: 자동화 프롬프트를 바꾸지 않고 선택한 후보만 복사한다. */
     fun copyCandidate(index: Int) {
         val state = _uiState.value
-        if (state.resultPresentation != AnalysisResultPresentation.CARDS) return
-        if (state.isBusy) return
+        if (state.resultPresentation != AnalysisResultPresentation.CARDS || state.isBusy) return
         val candidate = state.generatedCandidates.getOrNull(index) ?: return
 
         scope.launch {
@@ -519,8 +502,7 @@ class AnalysisViewModel(
             session.appliedCandidate,
             session.targetSegment.text,
             session.automationSegmentStartIndex
-        )
-        if (restoredStartIndex == null) {
+        ) ?: run {
             showError(
                 "자동화 프롬프트에서 복원할 구간을 찾지 못했습니다. " +
                     "자동화에서 원문을 다시 가져와 주세요."
@@ -565,15 +547,12 @@ class AnalysisViewModel(
 
     private fun currentDirectionInput(
         state: AnalysisUiState = _uiState.value
-    ): DirectionInput {
-        val selectedHints = state.directions
+    ): DirectionInput = DirectionInput(
+        selectedHints = state.directions
             .filter { it.id in state.selectedDirectionIds }
-            .map { it.hint }
-        return DirectionInput(
-            selectedHints = selectedHints,
-            customHint = state.customHint.trim()
-        )
-    }
+            .map { it.hint },
+        customHint = state.customHint.trim()
+    )
 
     fun cancelActiveWork() {
         runningJob?.cancel()
@@ -651,13 +630,12 @@ class AnalysisViewModel(
     }
 
     fun onCustomHintChange(value: String) {
-        if (value.length <= 100) {
-            _uiState.update { state ->
-                val nextState = state.copy(customHint = value)
-                nextState.copy(
-                    needsMaskingAnalysis = computeNeedsMaskingAnalysis(state = nextState)
-                )
-            }
+        if (value.length > 100) return
+        _uiState.update { state ->
+            val nextState = state.copy(customHint = value)
+            nextState.copy(
+                needsMaskingAnalysis = computeNeedsMaskingAnalysis(state = nextState)
+            )
         }
     }
 
@@ -681,12 +659,10 @@ class AnalysisViewModel(
 
     fun copyGeneratedResults() {
         val state = _uiState.value
-        if (state.resultPresentation != AnalysisResultPresentation.TXT) return
-        val candidates = state.generatedCandidates
-        if (candidates.isEmpty()) return
+        if (state.resultPresentation != AnalysisResultPresentation.TXT || state.generatedCandidates.isEmpty()) return
         scope.launch {
             try {
-                copyResults.copy(candidates)
+                copyResults.copy(state.generatedCandidates)
                 _uiState.update { it.copy(message = "생성 결과를 복사했습니다.", error = "") }
             } catch (error: RuntimeException) {
                 showError(error.message ?: "복사에 실패했습니다.")
@@ -703,9 +679,8 @@ class AnalysisViewModel(
         onSuccess: ((replacedSource: String) -> Unit)? = null
     ) {
         val state = _uiState.value
-        if (state.resultPresentation != AnalysisResultPresentation.TXT) return
+        if (state.resultPresentation != AnalysisResultPresentation.TXT || state.generatedCandidates.isEmpty()) return
         val candidates = state.generatedCandidates
-        if (candidates.isEmpty()) return
         scope.launch {
             try {
                 when (
@@ -1035,9 +1010,7 @@ class AnalysisViewModel(
         role: AnalysisModelRole,
         provider: AnalysisProvider,
         modelId: String
-    ) {
-        keyManager.rememberLastUsed(role, provider, modelId)
-    }
+    ) = keyManager.rememberLastUsed(role, provider, modelId)
 
     private fun refreshGrokStatus() {
         scope.launch {
@@ -1046,11 +1019,7 @@ class AnalysisViewModel(
                 it.copy(
                     isGrokLoggedIn = status.isLoggedIn,
                     grokAccountPreview = status.accountPreview,
-                    grokRemainingPercent = if (status.isLoggedIn) {
-                        it.grokRemainingPercent
-                    } else {
-                        null
-                    }
+                    grokRemainingPercent = if (status.isLoggedIn) it.grokRemainingPercent else null
                 )
             }
             if (status.isLoggedIn) {
@@ -1074,13 +1043,12 @@ class AnalysisViewModel(
         }
     }
 
-    private fun currentSourcePrompt(): String {
-        val text = sourcePromptTextFieldState.text.toString()
-        if (text != _uiState.value.sourcePrompt) {
-            _uiState.update { it.copy(sourcePrompt = text) }
+    private fun currentSourcePrompt(): String =
+        sourcePromptTextFieldState.text.toString().also { text ->
+            if (text != _uiState.value.sourcePrompt) {
+                _uiState.update { it.copy(sourcePrompt = text) }
+            }
         }
-        return text
-    }
 
     private fun showError(message: String) {
         _uiState.update {

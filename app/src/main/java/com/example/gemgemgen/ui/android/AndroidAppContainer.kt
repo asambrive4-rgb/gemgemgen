@@ -23,6 +23,7 @@ import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.ActiveVariationPromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
+import com.example.gemgemgen.automation.android.AndroidGeminiAccountSwitcherGateway
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
@@ -32,6 +33,7 @@ import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRe
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptInstructionRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesVariationPromptRepository
 import com.example.gemgemgen.automation.usecase.ManageGeminiAccountsUseCase
+import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountUseCase
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
@@ -101,6 +103,12 @@ class AndroidAppContainer(context: Context) {
             gateway = AndroidRemoteAutomationGateway(appContext),
             automationStartRecorder = recordAutomationStart,
             wildcardSetRepository = AndroidWildcardSetRepository(appContext)
+        )
+        val switcherGateway = AndroidGeminiAccountSwitcherGateway(appContext)
+        val switchGeminiAccount = SwitchGeminiAccountUseCase(
+            manageGeminiAccounts = manageGeminiAccounts,
+            manageRemoteAutomation = manageRemoteAutomation,
+            switcherGateway = switcherGateway
         )
         val executeAutomation = ExecuteAutomationUseCase(
             checkAutomationStart = checkAutomationStart,

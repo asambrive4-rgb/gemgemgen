@@ -73,6 +73,14 @@ class MainUiStateTest {
                 automationState = AutomationRunState.Running("실행 중")
             ).canRun
         )
+
+        assertFalse(
+            MainUiState(
+                promptTemplate = "base prompt",
+                environmentStatus = readyEnvironment(),
+                variationAutomationState = AutomationRunState.Running("변형 실행 중")
+            ).canRun
+        )
     }
 
     @Test

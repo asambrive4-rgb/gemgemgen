@@ -10,8 +10,6 @@ import com.example.gemgemgen.wildcard.domain.WildcardFileParser
 object WildcardTokenAutocomplete {
     const val MAX_SUGGESTIONS = 3
 
-    private val completeTokenRegex = Regex("^__[^\\s]+__$")
-
     data class Candidate(
         /** 확장자 제외 파일명 (예: 장소) */
         val name: String,
@@ -55,7 +53,7 @@ object WildcardTokenAutocomplete {
         val range = wordRangeAt(text, cursor) ?: return emptyList()
         val word = text.substring(range.first, range.last + 1)
         if (word.isEmpty()) return emptyList()
-        if (completeTokenRegex.matches(word)) return emptyList()
+        if (WildcardFileParser.COMPLETE_TOKEN_REGEX.matches(word)) return emptyList()
 
         return candidates
             .asSequence()

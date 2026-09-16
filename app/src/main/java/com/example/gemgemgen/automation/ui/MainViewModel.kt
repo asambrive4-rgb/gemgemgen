@@ -1,4 +1,4 @@
-// 역할: 메인 화면의 입력, 일반 자동화, 현재 기기 변주 실행 및 환경 상태를 총괄 관리합니다.
+// 역할: 메인 화면의 입력 및 문단 편집 모드, 일반 자동화, 변주 실행 및 환경 상태를 총괄 관리합니다.
 package com.example.gemgemgen.automation.ui
 
 import android.util.Log
@@ -29,8 +29,9 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
-import com.example.gemgemgen.automation.android.GeminiAccessibilityService
-import com.example.gemgemgen.automation.android.GeminiAccountSwitchResult
+import com.example.gemgemgen.automation.android.AndroidGeminiAccountSwitcherGateway
+import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountUseCase
+import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountExecutionResult
 import com.example.gemgemgen.automation.domain.GeminiAccountProfile
 import com.example.gemgemgen.automation.usecase.GeminiAccountRepository
 import com.example.gemgemgen.automation.usecase.ManageGeminiAccountsUseCase
@@ -128,6 +129,11 @@ class MainViewModel(
             override fun loadAccounts() = list
             override fun saveAccounts(accounts: List<GeminiAccountProfile>) { list = accounts }
         }
+    ),
+    private val switchGeminiAccount: SwitchGeminiAccountUseCase = SwitchGeminiAccountUseCase(
+        manageGeminiAccounts = manageGeminiAccounts,
+        manageRemoteAutomation = manageRemoteAutomation,
+        switcherGateway = AndroidGeminiAccountSwitcherGateway()
     ),
     private val promptInstructionRepository: PromptInstructionRepository =
         object : PromptInstructionRepository {
@@ -527,13 +533,11 @@ class MainViewModel(
         promptEditor.replaceSelectedPromptParagraph(replacement)
     }
 
-    fun decideWildcardFolderAction(): WildcardFolderAction {
-        val status = _uiState.value.environmentStatus
-        return WildcardFolderAccessPolicy.decideAction(
-            hasAllFilesAccess = status.hasAllFilesAccess,
-            isWildcardDirectoryAccessible = status.isWildcardDirectoryAccessible
+    fun decideWildcardFolderAction(): WildcardFolderAction =
+        WildcardFolderAccessPolicy.decideAction(
+            hasAllFilesAccess = _uiState.value.environmentStatus.hasAllFilesAccess,
+            isWildcardDirectoryAccessible = _uiState.value.environmentStatus.isWildcardDirectoryAccessible
         )
-    }
 
     fun getInitialWildcardFolderUri(): String? {
         return saveWildcardFolder.getFolderUri()
@@ -571,28 +575,21 @@ class MainViewModel(
 
     fun cleanDeviceMemory() {
         val mode = _uiState.value.automationMode
-        if (mode == AutomationMode.SENDER) {
-            runMaintenanceAction(
-                canExecute = { it.canCleanMemory },
-                unavailableMessage = { AutomationUiText.memoryCleanupUnavailableMessage(it) },
-                startingText = { AutomationUiText.memoryCleanupStartingText(mode) },
-                canceledText = { AutomationUiText.memoryCleanupCanceledText(mode) },
-                action = {
-                    when (val result = manageRemoteAutomation.cleanMemory()) {
-                        RemoteActionResult.Success -> MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
-                        is RemoteActionResult.Failure -> MaintenanceResult.Failure(result.message)
-                    }
-                }
-            )
-            return
-        }
-
         runMaintenanceAction(
             canExecute = { it.canCleanMemory },
             unavailableMessage = { AutomationUiText.memoryCleanupUnavailableMessage(it) },
             startingText = { AutomationUiText.memoryCleanupStartingText(mode) },
             canceledText = { AutomationUiText.memoryCleanupCanceledText(mode) },
-            action = { appMaintenance.cleanMemory() }
+            action = {
+                if (mode == AutomationMode.SENDER) {
+                    when (val result = manageRemoteAutomation.cleanMemory()) {
+                        RemoteActionResult.Success -> MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
+                        is RemoteActionResult.Failure -> MaintenanceResult.Failure(result.message)
+                    }
+                } else {
+                    appMaintenance.cleanMemory()
+                }
+            }
         )
     }
 
@@ -654,14 +651,13 @@ class MainViewModel(
         }
     }
 
-    private fun loadWildcardTokenCandidates(): List<WildcardTokenAutocomplete.Candidate> {
-        return try {
+    private fun loadWildcardTokenCandidates(): List<WildcardTokenAutocomplete.Candidate> =
+        try {
             val fileNames = wildcardFileRepository.listFiles().map { it.fileName }
             WildcardTokenAutocomplete.candidatesFromFileNames(fileNames)
         } catch (_: Exception) {
             emptyList()
         }
-    }
 
     fun showSettings() {
         _uiState.update { state ->
@@ -723,82 +719,64 @@ class MainViewModel(
             isStartInProgress = isStartInProgress,
             mode = state.automationMode
         )
-
-        var updatedHistory: List<PromptHistoryItem>? = null
-        if (decision is AutomationStartDecision.Started || decision is AutomationStartDecision.RemoteStarted) {
-            val history = promptHistoryStore?.record(
-                prompt = state.promptTemplate,
-                targetApp = state.selectedTargetApp
-            ) ?: promptHistoryStore?.load().orEmpty()
-            updatedHistory = history
-            promptEditor.onAutomationStarted(state.promptTemplate, history.map { it.prompt })
+        if (decision !is AutomationStartDecision.Started && decision !is AutomationStartDecision.RemoteStarted) {
+            return decision
         }
 
-        when (decision) {
-            AutomationStartDecision.RemoteStarted -> {
-                cancelParagraphSelection()
-                isRemoteRunActive = true
-                handleAutomationState(
-                    AutomationRunState.Running("S25 FE로 요청 전송 중"),
-                    additionalUpdate = { current ->
-                        if (updatedHistory != null) current.copy(promptHistoryItems = updatedHistory) else current
-                    }
-                )
-                val request = AutomationRunRequest(
-                    promptTemplate = state.promptTemplate,
-                    repeatCountText = state.repeatCountText,
-                    targetApp = state.selectedTargetApp,
-                    flowImageCount = state.flowImageCount
-                )
-                val job = scope.launch {
-                    val result = executeAutomation.executeRemote(request, ::handleAutomationState)
-                    if (result is RemoteActionResult.Failure) {
-                        handleAutomationState(AutomationRunState.Failure(result.message))
-                    }
-                }
-                automationPreparationJob = job
-                job.invokeOnCompletion {
-                    if (automationPreparationJob == job) automationPreparationJob = null
-                }
-                return AutomationStartDecision.RemoteStarted
-            }
-            AutomationStartDecision.Started -> {
-                cancelParagraphSelection()
-                handleAutomationState(
-                    AutomationRunState.Running("자동화 준비 중"),
-                    additionalUpdate = { current ->
-                        if (updatedHistory != null) current.copy(promptHistoryItems = updatedHistory) else current
-                    }
-                )
-                val request = AutomationRunRequest(
-                    promptTemplate = state.promptTemplate,
-                    repeatCountText = state.repeatCountText,
-                    targetApp = state.selectedTargetApp,
-                    flowImageCount = state.flowImageCount
-                )
-                val job = scope.launch {
-                    try {
-                        executeAutomation.executeLocal(request)
-                    } catch (error: CancellationException) {
-                        handleAutomationState(AutomationRunState.Stopped)
-                        throw error
-                    } catch (error: Exception) {
-                        handleAutomationState(
-                            AutomationRunState.Failure(error.message ?: "자동화 준비 중 오류가 발생했습니다.")
-                        )
-                    }
-                }
-                automationPreparationJob = job
-                job.invokeOnCompletion {
-                    if (automationPreparationJob == job) {
-                        automationPreparationJob = null
-                    }
-                }
-                return AutomationStartDecision.Started
-            }
-            AutomationStartDecision.PermissionRequired,
-            AutomationStartDecision.Rejected -> return decision
+        val history = promptHistoryStore?.record(
+            prompt = state.promptTemplate,
+            targetApp = state.selectedTargetApp
+        ) ?: promptHistoryStore?.load().orEmpty()
+        promptEditor.onAutomationStarted(state.promptTemplate, history.map { it.prompt })
+
+        cancelParagraphSelection()
+        val request = AutomationRunRequest(
+            promptTemplate = state.promptTemplate,
+            repeatCountText = state.repeatCountText,
+            targetApp = state.selectedTargetApp,
+            flowImageCount = state.flowImageCount
+        )
+
+        val isRemote = decision is AutomationStartDecision.RemoteStarted
+        if (isRemote) {
+            isRemoteRunActive = true
+            handleAutomationState(
+                AutomationRunState.Running("S25 FE로 요청 전송 중"),
+                additionalUpdate = { it.copy(promptHistoryItems = history) }
+            )
+        } else {
+            handleAutomationState(
+                AutomationRunState.Running("자동화 준비 중"),
+                additionalUpdate = { it.copy(promptHistoryItems = history) }
+            )
         }
+
+        val job = scope.launch {
+            if (isRemote) {
+                val result = executeAutomation.executeRemote(request, ::handleAutomationState)
+                if (result is RemoteActionResult.Failure) {
+                    handleAutomationState(AutomationRunState.Failure(result.message))
+                }
+            } else {
+                try {
+                    executeAutomation.executeLocal(request)
+                } catch (error: CancellationException) {
+                    handleAutomationState(AutomationRunState.Stopped)
+                    throw error
+                } catch (error: Exception) {
+                    handleAutomationState(
+                        AutomationRunState.Failure(error.message ?: "자동화 준비 중 오류가 발생했습니다.")
+                    )
+                }
+            }
+        }
+        automationPreparationJob = job
+        job.invokeOnCompletion {
+            if (automationPreparationJob == job) {
+                automationPreparationJob = null
+            }
+        }
+        return decision
     }
 
     fun openPromptHistory() {
@@ -875,17 +853,12 @@ class MainViewModel(
                 it.copy(isDisconnectingRemote = true, remoteDisconnectMessage = "")
             }
             val result = manageRemoteAutomation.disconnect()
-            _uiState.update { state ->
-                when (result) {
-                    is RemoteActionResult.Success -> state.copy(
-                        isDisconnectingRemote = false,
-                        remoteDisconnectMessage = "원격 연결을 끊었습니다."
-                    )
-                    is RemoteActionResult.Failure -> state.copy(
-                        isDisconnectingRemote = false,
-                        remoteDisconnectMessage = result.message
-                    )
-                }
+            val message = when (result) {
+                is RemoteActionResult.Success -> "원격 연결을 끊었습니다."
+                is RemoteActionResult.Failure -> result.message
+            }
+            _uiState.update {
+                it.copy(isDisconnectingRemote = false, remoteDisconnectMessage = message)
             }
         }
     }
@@ -1015,15 +988,7 @@ class MainViewModel(
                 maintenanceState = MaintenanceState(isBusy = false, message = "Gemini 앱에서 수동으로 계정을 선택해주세요.")
             )
         }
-        val service = GeminiAccessibilityService.activeService
-        if (service != null) {
-            val launchIntent = service.packageManager.getLaunchIntentForPackage(AppDefaults.GEMINI_PACKAGE_NAME)
-                ?: service.packageManager.getLaunchIntentForPackage(AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME)
-            if (launchIntent != null) {
-                launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                service.startActivity(launchIntent)
-            }
-        }
+        switchGeminiAccount.launchManualSwitch()
     }
 
     fun switchGeminiAccount(account: GeminiAccountProfile) {
@@ -1038,108 +1003,59 @@ class MainViewModel(
                 )
             }
             val mode = _uiState.value.automationMode
-            if (mode == AutomationMode.SENDER) {
-                _uiState.update {
-                    it.copy(maintenanceState = MaintenanceState(isBusy = true, message = "수신 기기 계정 교체 중: [${account.alias}]..."))
-                }
-                when (val result = manageRemoteAutomation.switchGeminiAccount(account.id, account.alias, account.identifier)) {
-                    is RemoteActionResult.Success -> {
-                        val updated = manageGeminiAccounts.activateAccount(account.id)
-                        _uiState.update {
-                            it.copy(
-                                geminiAccounts = updated,
-                                isSwitchingGeminiAccount = false,
-                                showGeminiAccountDialog = false,
-                                switchingAccountProgressPhase = "",
-                                switchingAccountProgressMessage = "",
-                                accountSwitchError = null,
-                                lastFailedTargetAccount = null,
-                                maintenanceState = MaintenanceState(isBusy = false, message = "수신 기기 Gemini 계정을 [${account.alias}]로 전환했습니다.")
-                            )
-                        }
-                    }
-                    is RemoteActionResult.Failure -> {
-                        _uiState.update {
-                            it.copy(
-                                isSwitchingGeminiAccount = false,
-                                switchingAccountProgressPhase = "",
-                                switchingAccountProgressMessage = "",
-                                accountSwitchError = result.message,
-                                lastFailedTargetAccount = account,
-                                maintenanceState = MaintenanceState(isBusy = false, message = "계정 전환 실패: ${result.message}")
-                            )
-                        }
-                    }
-                }
+            val startingMessage = if (mode == AutomationMode.SENDER) {
+                "수신 기기 계정 교체 중: [${account.alias}]..."
             } else {
-                val service = GeminiAccessibilityService.activeService
-                if (service != null && account.identifier.isNotBlank()) {
+                "Gemini 계정 교체 중: [${account.alias}]..."
+            }
+            _uiState.update {
+                it.copy(maintenanceState = MaintenanceState(isBusy = true, message = startingMessage))
+            }
+
+            val result = switchGeminiAccount.execute(
+                account = account,
+                mode = mode,
+                onProgress = { phase, msg ->
+                    _uiState.update { current ->
+                        current.copy(
+                            switchingAccountProgressPhase = phase,
+                            switchingAccountProgressMessage = msg,
+                            maintenanceState = MaintenanceState(isBusy = true, message = "[$phase] $msg")
+                        )
+                    }
+                }
+            )
+
+            when (result) {
+                is SwitchGeminiAccountExecutionResult.Success -> {
                     _uiState.update {
-                        it.copy(maintenanceState = MaintenanceState(isBusy = true, message = "Gemini 계정 교체 중: [${account.alias}]..."))
+                        it.copy(
+                            geminiAccounts = result.updatedAccounts,
+                            isSwitchingGeminiAccount = false,
+                            showGeminiAccountDialog = false,
+                            switchingAccountProgressPhase = "",
+                            switchingAccountProgressMessage = "",
+                            accountSwitchError = null,
+                            lastFailedTargetAccount = null,
+                            maintenanceState = MaintenanceState(isBusy = false, message = result.message)
+                        )
                     }
-                    when (val result = service.switchGeminiAccount(
-                        identifier = account.identifier,
-                        alias = account.alias,
-                        onProgress = { phase, msg ->
-                            _uiState.update { current ->
-                                current.copy(
-                                    switchingAccountProgressPhase = phase,
-                                    switchingAccountProgressMessage = msg,
-                                    maintenanceState = MaintenanceState(isBusy = true, message = "[$phase] $msg")
-                                )
-                            }
-                        }
-                    )) {
-                        is GeminiAccountSwitchResult.Success -> {
-                            val updated = manageGeminiAccounts.activateAccount(account.id)
-                            _uiState.update {
-                                it.copy(
-                                    geminiAccounts = updated,
-                                    isSwitchingGeminiAccount = false,
-                                    showGeminiAccountDialog = false,
-                                    switchingAccountProgressPhase = "",
-                                    switchingAccountProgressMessage = "",
-                                    accountSwitchError = null,
-                                    lastFailedTargetAccount = null,
-                                    maintenanceState = MaintenanceState(isBusy = false, message = result.message)
-                                )
-                            }
-                        }
-                        is GeminiAccountSwitchResult.Failure -> {
-                            _uiState.update {
-                                it.copy(
-                                    isSwitchingGeminiAccount = false,
-                                    switchingAccountProgressPhase = "",
-                                    switchingAccountProgressMessage = "",
-                                    accountSwitchError = result.message,
-                                    lastFailedTargetAccount = account,
-                                    maintenanceState = MaintenanceState(isBusy = false, message = "계정 전환 실패: ${result.message}")
-                                )
-                            }
-                        }
-                        GeminiAccountSwitchResult.Unavailable -> {
-                            _uiState.update {
-                                it.copy(
-                                    isSwitchingGeminiAccount = false,
-                                    switchingAccountProgressPhase = "",
-                                    switchingAccountProgressMessage = "",
-                                    accountSwitchError = "접근성 서비스를 사용할 수 없습니다.",
-                                    lastFailedTargetAccount = account,
-                                    maintenanceState = MaintenanceState(isBusy = false, message = "계정 전환 실패: 접근성 서비스 없음")
-                                )
-                            }
-                        }
+                }
+                is SwitchGeminiAccountExecutionResult.Failure -> {
+                    val maintenanceMsg = when (result.message) {
+                        "접근성 서비스를 먼저 활성화해주세요.",
+                        "계정 식별자(구글 이메일)가 비어 있습니다." -> result.message
+                        "접근성 서비스를 사용할 수 없습니다." -> "계정 전환 실패: 접근성 서비스 없음"
+                        else -> "계정 전환 실패: ${result.message}"
                     }
-                } else {
-                    val fallbackMsg = if (service == null) "접근성 서비스를 먼저 활성화해주세요." else "계정 식별자(구글 이메일)가 비어 있습니다."
                     _uiState.update {
                         it.copy(
                             isSwitchingGeminiAccount = false,
                             switchingAccountProgressPhase = "",
                             switchingAccountProgressMessage = "",
-                            accountSwitchError = fallbackMsg,
+                            accountSwitchError = result.message,
                             lastFailedTargetAccount = account,
-                            maintenanceState = MaintenanceState(isBusy = false, message = fallbackMsg)
+                            maintenanceState = MaintenanceState(isBusy = false, message = maintenanceMsg)
                         )
                     }
                 }

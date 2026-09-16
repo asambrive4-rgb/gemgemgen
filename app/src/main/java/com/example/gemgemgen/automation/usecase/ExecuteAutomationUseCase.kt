@@ -13,20 +13,6 @@ class ExecuteAutomationUseCase(
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase,
     private val promptHistoryStore: PromptHistoryStore? = null
 ) {
-    /** StartAutomationUseCase 경유 형태를 호환하기 위한 보조 생성자 */
-    @Suppress("DEPRECATION")
-    constructor(
-        startAutomation: StartAutomationUseCase,
-        manageRemoteAutomation: ManageRemoteAutomationUseCase,
-        promptHistoryStore: PromptHistoryStore? = null
-    ) : this(
-        checkAutomationStart = startAutomation.checkAutomationStart,
-        automationStartRecorder = startAutomation.automationStartRecorder,
-        automation = startAutomation.automation,
-        manageRemoteAutomation = manageRemoteAutomation,
-        promptHistoryStore = promptHistoryStore
-    )
-
     /** OverlayPermissionGateway 직접 주입을 위한 편의 생성자 */
     constructor(
         overlayPermissionGateway: OverlayPermissionGateway,

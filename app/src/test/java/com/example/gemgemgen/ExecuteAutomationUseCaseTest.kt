@@ -21,7 +21,6 @@ import com.example.gemgemgen.automation.usecase.PromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.usecase.PromptHistoryRepository
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
-import com.example.gemgemgen.automation.usecase.StartAutomationUseCase
 import com.example.gemgemgen.automation.usecase.TargetAppLauncher
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
@@ -150,36 +149,6 @@ class ExecuteAutomationUseCaseTest {
         assertEquals(1, context.startRecorder.callCount)
         assertEquals(request, context.startRecorder.recordedRequest)
         assertEquals(AutomationRunState.Success, context.localAutomation.runState.value)
-    }
-
-    @Test
-    @Suppress("DEPRECATION")
-    fun compatibilityConstructor_delegatesProperly() = runBlocking {
-        val checkAutomationStart = CheckAutomationStartUseCase(OverlayPermissionGateway { true })
-        val startRecorder = FakeAutomationStartRecorder()
-        val localAutomation = createLocalAutomation()
-        val startAutomation = StartAutomationUseCase(
-            checkAutomationStart = checkAutomationStart,
-            automationStartRecorder = startRecorder,
-            automation = localAutomation
-        )
-        val remoteGateway = FakeRemoteAutomationGateway()
-        val manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway)
-
-        val useCase = ExecuteAutomationUseCase(
-            startAutomation = startAutomation,
-            manageRemoteAutomation = manageRemoteAutomation
-        )
-
-        val request = AutomationRunRequest(
-            promptTemplate = "compat prompt",
-            repeatCountText = "1",
-            targetApp = AutomationTargetApp.GEMINI
-        )
-
-        useCase.executeLocal(request)
-        assertEquals(1, startRecorder.callCount)
-        assertEquals(AutomationRunState.Success, localAutomation.runState.value)
     }
 
     @Test

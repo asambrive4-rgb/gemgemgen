@@ -2,6 +2,7 @@
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
+import com.example.gemgemgen.automation.domain.AutomationStartPolicy
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
@@ -85,14 +86,15 @@ data class MainUiState(
         get() = environmentStatus.isReadyFor(selectedTargetApp) && hasPromptTemplate
 
     val canRun: Boolean
-        get() = when (automationMode) {
-            AutomationMode.NORMAL -> hasRunRequirements && !isRunning && !isVariationRunning
-            AutomationMode.SENDER -> hasPromptTemplate &&
-                remoteAutomationStatus.canSend &&
-                !isRunning &&
-                !isVariationRunning
-            AutomationMode.RECEIVER -> false
-        }
+        get() = AutomationStartPolicy.canRun(
+            mode = automationMode,
+            environmentStatus = environmentStatus,
+            targetApp = selectedTargetApp,
+            promptTemplate = promptTemplate,
+            isRunning = isRunning,
+            remoteAutomationStatus = remoteAutomationStatus,
+            isVariationRunning = isVariationRunning
+        )
 
     val isVariationRunning: Boolean
         get() = variationAutomationState is AutomationRunState.Running

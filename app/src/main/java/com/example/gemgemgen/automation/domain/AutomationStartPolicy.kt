@@ -1,4 +1,4 @@
-// 역할: 권한, 입력값, 대상 앱 상태를 확인하여 자동화 시작 가능 여부를 판정합니다.
+// 역할: 권한, 입력값, 대상 앱 및 실행 상태(일반/변형)를 확인하여 자동화 시작 가능 여부를 판정합니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
@@ -22,14 +22,18 @@ object AutomationStartPolicy {
         targetApp: AutomationTargetApp,
         promptTemplate: String,
         isRunning: Boolean,
-        remoteAutomationStatus: RemoteAutomationStatus
+        remoteAutomationStatus: RemoteAutomationStatus,
+        isVariationRunning: Boolean = false
     ): Boolean = when (mode) {
         AutomationMode.NORMAL ->
-            hasRunRequirements(environmentStatus, targetApp, promptTemplate) && !isRunning
+            hasRunRequirements(environmentStatus, targetApp, promptTemplate) &&
+                !isRunning &&
+                !isVariationRunning
         AutomationMode.SENDER ->
             hasPromptTemplate(promptTemplate) &&
                 remoteAutomationStatus.canSend &&
-                !isRunning
+                !isRunning &&
+                !isVariationRunning
         AutomationMode.RECEIVER -> false
     }
 }

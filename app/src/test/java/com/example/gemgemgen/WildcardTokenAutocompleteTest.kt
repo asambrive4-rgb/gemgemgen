@@ -34,6 +34,17 @@ class WildcardTokenAutocompleteTest {
     }
 
     @Test
+    fun candidatesFromFileNames_removesWhitespaceInToken() {
+        val result = WildcardTokenAutocomplete.candidatesFromFileNames(
+            listOf("여성 의상.txt")
+        )
+        assertEquals(
+            listOf(Candidate(name = "여성의상", token = "__여성의상__")),
+            result
+        )
+    }
+
+    @Test
     fun suggestions_prefixMatchKoreanAndEnglish() {
         // 짧은 이름 우선 → 장면·장소(2) 후 장소명(3). 동길이면 이름 순(장면 < 장소).
         assertEquals(

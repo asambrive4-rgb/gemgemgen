@@ -1,4 +1,4 @@
-// 역할: 프롬프트 입력, 변주 실행, 대상 앱 선택, 실행 카운터가 포함된 메인 자동화 화면을 구성합니다.
+// 역할: 문단 편집 모드와 프롬프트 입력, 변주 실행, 대상 앱 선택이 포함된 메인 자동화 화면을 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -69,6 +69,7 @@ internal fun AutomationScreen(
     onOpenInstructionConfigDialog: (com.example.gemgemgen.automation.domain.InstructionTab) -> Unit = {},
     onCloseInstructionConfigDialog: () -> Unit = {},
     onSaveInstructionConfig: (com.example.gemgemgen.automation.domain.PromptInstructionConfig) -> Unit = {},
+    onToggleParagraphSelectionMode: () -> Unit = {},
     onParagraphOffsetSelected: (Int) -> Unit,
     onDeleteSelectedParagraph: () -> Unit,
     onReplaceSelectedParagraph: (String) -> Unit,
@@ -133,6 +134,7 @@ internal fun AutomationScreen(
                     selectedTargetApp = uiState.selectedTargetApp,
                     isTargetSelectionEnabled = !uiState.isRunning,
                     isParagraphSelectionMode = uiState.isParagraphSelectionMode,
+                    onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
                     canNavigateHistoryBack = uiState.canNavigateHistoryBack,
                     canNavigateHistoryForward = uiState.canNavigateHistoryForward,
                     isHistoryIndicatorVisible = uiState.isHistoryIndicatorVisible,

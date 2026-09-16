@@ -1,6 +1,7 @@
-// 역할: 와일드카드 규칙과 반복 설정을 갓해 실제 전송할 프롬프트 목록을 생성합니다.
+// 역할: 와일드카드 규칙과 반복 설정을 통해 실제 전송할 프롬프트 목록을 생성합니다.
 package com.example.gemgemgen.automation.domain
 
+import com.example.gemgemgen.wildcard.domain.WildcardFileParser
 import com.example.gemgemgen.wildcard.domain.WildcardSet
 import java.security.SecureRandom
 import java.util.Random
@@ -36,7 +37,7 @@ class PromptGenerator(
     }
 
     fun extractTokens(basePrompt: String): List<String> {
-        return tokenRegex.findAll(basePrompt)
+        return WildcardFileParser.TOKEN_REGEX.findAll(basePrompt)
             .map { it.value }
             .distinct()
             .toList()
@@ -65,7 +66,7 @@ class PromptGenerator(
 
         private fun applyReplacements(replacements: Map<String, String>): String {
             // 1) 와일드카드 토큰 치환 → 2) 다이나믹 <A|B|…> 선택
-            val afterWildcards = tokenRegex.replace(basePrompt) { match ->
+            val afterWildcards = WildcardFileParser.TOKEN_REGEX.replace(basePrompt) { match ->
                 replacements[match.value] ?: match.value
             }
             return expandDynamicPrompts(afterWildcards, random)
@@ -84,8 +85,6 @@ class PromptGenerator(
     }
 
     companion object {
-        private val tokenRegex = Regex("__[^\\s]+?__")
-
         /**
          * 중첩 없는 `<…>` 구간. 안에 `|` 가 있을 때만 후보 중 하나를 고른다.
          * `|` 가 없으면 원문 유지. 옵션은 trim 하며 빈 문자열 후보도 허용한다.

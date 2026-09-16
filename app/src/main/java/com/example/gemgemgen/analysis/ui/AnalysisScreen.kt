@@ -73,11 +73,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
@@ -302,7 +297,6 @@ private fun ApiKeyHeader(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoleModelRow(
     label: String,
@@ -322,54 +316,12 @@ private fun RoleModelRow(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        // 반폭 칸에서도 칩이 잘리지 않도록 FlowRow로 감싼다 (1행 레이아웃은 유지).
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            NeuPillChip(
-                text = "Gemini",
-                selected = provider == AnalysisProvider.GEMINI,
-                onClick = { onProviderSelected(AnalysisProvider.GEMINI) }
-            )
-            NeuPillChip(
-                text = "Grok",
-                selected = provider == AnalysisProvider.GROK,
-                onClick = { onProviderSelected(AnalysisProvider.GROK) }
-            )
-            when (provider) {
-                AnalysisProvider.GEMINI -> {
-                    NeuPillChip(
-                        text = "3.5 Lite",
-                        selected = modelId == MODEL_GEMINI_3_5_FLASH_LITE,
-                        onClick = { onModelSelected(MODEL_GEMINI_3_5_FLASH_LITE) }
-                    )
-                    NeuPillChip(
-                        text = "3.6 Flash",
-                        selected = modelId == MODEL_GEMINI_3_6_FLASH,
-                        onClick = { onModelSelected(MODEL_GEMINI_3_6_FLASH) }
-                    )
-                    NeuPillChip(
-                        text = "3.7 Flash",
-                        selected = modelId == MODEL_GEMINI_3_7_FLASH,
-                        onClick = { onModelSelected(MODEL_GEMINI_3_7_FLASH) }
-                    )
-                    NeuPillChip(
-                        text = "3.8 Flash",
-                        selected = modelId == MODEL_GEMINI_3_8_FLASH,
-                        onClick = { onModelSelected(MODEL_GEMINI_3_8_FLASH) }
-                    )
-                }
-                AnalysisProvider.GROK -> {
-                    NeuPillChip(
-                        text = "Grok 4.5",
-                        selected = modelId == MODEL_GROK_4_5,
-                        onClick = { onModelSelected(MODEL_GROK_4_5) }
-                    )
-                }
-            }
-        }
+        ModelSelectorChips(
+            selectedProvider = provider,
+            selectedModelId = modelId,
+            onSelectProvider = onProviderSelected,
+            onSelectModel = onModelSelected
+        )
     }
 }
 

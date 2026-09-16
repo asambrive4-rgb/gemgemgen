@@ -1,4 +1,4 @@
-// 역할: 상단 탭 전환과 전체 화면 네비게이션 구조를 담는 앱의 최상위 UI 진입점입니다.
+// 역할: 상단 탭 전환과 문단 편집 모드를 비롯한 화면 간 사용자 액션을 조율하는 최상위 UI 진입점입니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -48,6 +48,7 @@ internal data class AutomationAppActions(
     val onOpenInstructionConfigDialog: (com.example.gemgemgen.automation.domain.InstructionTab) -> Unit = {},
     val onCloseInstructionConfigDialog: () -> Unit = {},
     val onSaveInstructionConfig: (com.example.gemgemgen.automation.domain.PromptInstructionConfig) -> Unit = {},
+    val onToggleParagraphSelectionMode: () -> Unit = {},
     val onParagraphOffsetSelected: (Int) -> Unit,
     val onDeleteSelectedParagraph: () -> Unit,
     val onReplaceSelectedParagraph: (String) -> Unit,
@@ -221,6 +222,8 @@ internal fun AutomationApp(
                         automationActions.onCloseInstructionConfigDialog,
                     onSaveInstructionConfig =
                         automationActions.onSaveInstructionConfig,
+                    onToggleParagraphSelectionMode =
+                        automationActions.onToggleParagraphSelectionMode,
                     onParagraphOffsetSelected =
                         automationActions.onParagraphOffsetSelected,
                     onDeleteSelectedParagraph =

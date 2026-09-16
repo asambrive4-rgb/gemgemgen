@@ -1,4 +1,4 @@
-// 역할: 와일드카드 파일 퀐색, 내용 편집, 저장 및 AI 분류 이벤트를 관리합니다.
+// 역할: 와일드카드 파일 탐색, 내용 편집, 저장 및 AI 분류 이벤트를 관리합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel
@@ -56,18 +56,16 @@ class WildcardManagerViewModel(
         classifyCoordinator.cancelJob()
         _uiState.update { state ->
             val trimmed = state.editor.trimForInactiveTab()
-            if (trimmed == state.editor && !state.isLineSelectionMode && !state.classify.isBusy) {
-                state
-            } else {
-                state.copy(
-                    editor = trimmed,
-                    isLineSelectionMode = false,
-                    selectedLineIndices = emptySet(),
-                    classify = WildcardClassifyUiState(),
-                    message = "",
-                    error = ""
-                )
-            }
+            val isAlreadyTrimmed = trimmed == state.editor && !state.isLineSelectionMode && !state.classify.isBusy
+            if (isAlreadyTrimmed) return@update state
+            state.copy(
+                editor = trimmed,
+                isLineSelectionMode = false,
+                selectedLineIndices = emptySet(),
+                classify = WildcardClassifyUiState(),
+                message = "",
+                error = ""
+            )
         }
     }
 
@@ -114,10 +112,14 @@ class WildcardManagerViewModel(
         when (val result = WildcardDynamicPromptComposer.composeFromIndices(state.selectableLines, state.selectedLineIndices)) {
             WildcardDynamicPromptComposer.ComposeResult.NoSelection -> showError("한 줄 이상 선택하세요.")
             is WildcardDynamicPromptComposer.ComposeResult.InvalidCharacters -> showError("| 또는 <> 가 있는 줄은 다이나믹에 넣을 수 없습니다.")
-            is WildcardDynamicPromptComposer.ComposeResult.Success -> scope.launch {
-                if (!wildcardClipboard.copy(result.dynamicPrompt)) return@launch showError("클립보드에 복사하지 못했습니다.")
-                _uiState.update { it.copy(message = "다이나믹 프롬프트를 클립보드에 복사했습니다.", error = "") }
-            }
+            is WildcardDynamicPromptComposer.ComposeResult.Success -> copyPromptToClipboard(result.dynamicPrompt)
+        }
+    }
+
+    private fun copyPromptToClipboard(prompt: String) {
+        scope.launch {
+            if (!wildcardClipboard.copy(prompt)) return@launch showError("클립보드에 복사하지 못했습니다.")
+            _uiState.update { it.copy(message = "다이나믹 프롬프트를 클립보드에 복사했습니다.", error = "") }
         }
     }
 
@@ -151,19 +153,19 @@ class WildcardManagerViewModel(
             )
             val openedFile = workspace.selectedFile
             val openedText = workspace.selectedText
-            _uiState.update {
+            val hasOpenedContent = openedFile != null && openedText != null
+            _uiState.update { state ->
                 val editor = when {
-                    openedFile != null && openedText != null -> it.editor.open(openedFile, openedText)
-                    openedFile != null -> it.editor.rename(openedFile)
-                    else -> it.editor
+                    hasOpenedContent -> state.editor.open(openedFile!!, openedText!!)
+                    openedFile != null -> state.editor.rename(openedFile)
+                    else -> state.editor
                 }
-                val clearedSelection = openedFile != null && openedText != null
-                it.copy(
+                state.copy(
                     files = workspace.files,
                     editor = editor,
-                    isLineSelectionMode = if (clearedSelection) false else it.isLineSelectionMode,
-                    selectedLineIndices = if (clearedSelection) emptySet() else it.selectedLineIndices,
-                    message = if (openedFile != null && openedText != null) "${openedFile.fileName} 열기 완료" else it.message,
+                    isLineSelectionMode = if (hasOpenedContent) false else state.isLineSelectionMode,
+                    selectedLineIndices = if (hasOpenedContent) emptySet() else state.selectedLineIndices,
+                    message = if (hasOpenedContent) "${openedFile!!.fileName} 열기 완료" else state.message,
                     error = ""
                 )
             }
@@ -267,7 +269,7 @@ class WildcardManagerViewModel(
         if (state.isFileOperationInProgress) return
         if (!state.canModifyFiles) return showError("파일 이름을 수정하려면 wildcard 폴더를 다시 선택해주세요.")
         val file = state.selectedFile ?: return showError("수정할 파일을 선택해주세요.")
-        val baseName = if (file.fileName.endsWith(".txt")) file.fileName.dropLast(4) else file.fileName
+        val baseName = file.fileName.removeSuffix(".txt")
         _uiState.update {
             it.copy(showRenameDialog = true, renameFileName = baseName, message = "", error = "")
         }
@@ -330,14 +332,14 @@ class WildcardManagerViewModel(
             }
             if (nextFile == null) {
                 clearSelectedFile("txt 파일이 없습니다.")
-            } else {
-                _uiState.update {
-                    it.copy(
-                        editor = it.editor.open(nextFile, workspace.selectedText.orEmpty()),
-                        isLineSelectionMode = false,
-                        selectedLineIndices = emptySet()
-                    )
-                }
+                return@launchFileOperation
+            }
+            _uiState.update {
+                it.copy(
+                    editor = it.editor.open(nextFile, workspace.selectedText.orEmpty()),
+                    isLineSelectionMode = false,
+                    selectedLineIndices = emptySet()
+                )
             }
         }
     }
@@ -393,8 +395,14 @@ class WildcardManagerViewModel(
     private fun saveCurrent(afterSave: (suspend () -> Unit)?): Boolean {
         val state = uiState.value
         if (state.isFileOperationInProgress) return false
-        if (!state.canModifyFiles) { showError("파일을 편집하려면 wildcard 폴더를 다시 선택해주세요."); return false }
-        val file = state.selectedFile ?: run { showError("저장할 파일을 선택해주세요."); return false }
+        if (!state.canModifyFiles) {
+            showError("파일을 편집하려면 wildcard 폴더를 다시 선택해주세요.")
+            return false
+        }
+        val file = state.selectedFile ?: run {
+            showError("저장할 파일을 선택해주세요.")
+            return false
+        }
         launchFileOperation(errorMessage = "파일을 저장하지 못했습니다.") {
             manageWildcardFiles.saveFile(file, state.editingText)
             _uiState.update { it.copy(editor = it.editor.markSaved(), message = "${file.fileName} 저장 완료", error = "") }
@@ -494,11 +502,7 @@ class WildcardManagerViewModel(
             try {
                 block()
             } catch (error: RuntimeException) {
-                if (onError != null) {
-                    onError(error)
-                } else {
-                    showError(error.message ?: errorMessage)
-                }
+                onError?.invoke(error) ?: showError(error.message ?: errorMessage)
             } finally {
                 endFileOperation()
             }

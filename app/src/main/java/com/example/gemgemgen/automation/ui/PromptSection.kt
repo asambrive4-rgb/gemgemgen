@@ -1,4 +1,4 @@
-// 역할: 프롬프트 입력, 대상 앱 선택, 와일드카드 칩 및 삽입·변주를 포함한 조약돌 액션 바를 표시합니다.
+// 역할: 프롬프트 입력, 대상 앱 선택, 문단 편집 모드 토글, 와일드카드 추천 애니메이션 및 삽입·변주 조약돌 액션 바를 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.foundation.layout.PaddingValues
@@ -61,14 +62,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -82,6 +81,7 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.ui.AppMultilineTextField
+import com.example.gemgemgen.ui.TextHighlightRange
 import com.example.gemgemgen.ui.theme.AppTheme
 
 @Composable
@@ -90,6 +90,7 @@ internal fun PromptSection(
     selectedTargetApp: AutomationTargetApp,
     isTargetSelectionEnabled: Boolean,
     isParagraphSelectionMode: Boolean,
+    onToggleParagraphSelectionMode: () -> Unit = {},
     canNavigateHistoryBack: Boolean = false,
     canNavigateHistoryForward: Boolean = false,
     isHistoryIndicatorVisible: Boolean = false,
@@ -140,6 +141,16 @@ internal fun PromptSection(
         isParagraphSelectionMode = isParagraphSelectionMode,
         isTargetSelectionEnabled = isTargetSelectionEnabled
     )
+    val lastNonEmptySuggestionTokens = remember { mutableListOf<String>() }
+    if (suggestionTokens.isNotEmpty()) {
+        lastNonEmptySuggestionTokens.clear()
+        lastNonEmptySuggestionTokens.addAll(suggestionTokens)
+    }
+    val displayedSuggestionTokens = if (suggestionTokens.isNotEmpty()) {
+        suggestionTokens
+    } else {
+        lastNonEmptySuggestionTokens
+    }
     val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -200,9 +211,13 @@ internal fun PromptSection(
             )
         }
 
-        if (showWildcardSuggestions && suggestionTokens.isNotEmpty()) {
+        AnimatedVisibility(
+            visible = showWildcardSuggestions && suggestionTokens.isNotEmpty(),
+            enter = fadeIn(tween(150)) + expandVertically(tween(150)),
+            exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
+        ) {
             WildcardTokenSuggestionBar(
-                tokens = suggestionTokens,
+                tokens = displayedSuggestionTokens,
                 onTokenClick = onWildcardTokenSuggestionClick
             )
         }
@@ -213,8 +228,8 @@ internal fun PromptSection(
             modifier = Modifier.fillMaxWidth(),
             minLines = 6,
             paragraphSelectionEnabled = isParagraphSelectionMode,
-            selectedParagraphRange = selectedParagraphRange,
-            selectedParagraphColor = MaterialTheme.colorScheme.primaryContainer,
+            highlightRange = selectedParagraphRange?.toHighlightRange(),
+            selectedParagraphColor = AppTheme.colors.primary.copy(alpha = 0.22f),
             supportingText = paragraphSelectionMessage,
             onParagraphOffsetSelected = onParagraphOffsetSelected,
             onDeleteSelectedParagraph = onDeleteSelectedParagraph,
@@ -223,6 +238,8 @@ internal fun PromptSection(
 
         if (showPromptActions) {
             PromptActionRow(
+                isParagraphSelectionMode = isParagraphSelectionMode,
+                onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
                 canCloseGemini = canCloseGemini,
                 canCloseSelfApp = canCloseSelfApp,
                 canCleanMemory = canCleanMemory,
@@ -287,6 +304,8 @@ internal fun PromptSection(
 
 @Composable
 internal fun PromptActionRow(
+    isParagraphSelectionMode: Boolean = false,
+    onToggleParagraphSelectionMode: () -> Unit = {},
     canCloseGemini: Boolean,
     canCloseSelfApp: Boolean,
     canCleanMemory: Boolean,
@@ -391,31 +410,44 @@ internal fun PromptActionRow(
                 }
             }
 
-            // 우측: 계정 관리 뱃지
-            ActionIsland {
-                PebbleButton(
-                    onClick = onOpenGeminiAccountDialog,
-                    enabled = !isMaintenanceBusy,
-                    borderColor = AppTheme.colors.primary,
-                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
-                    modifier = Modifier.semantics { contentDescription = "Gemini 계정 관리" }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+            // 우측: [문단 편집 섬] + [계정 관리 뱃지 섬]
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                ActionIsland {
+                    ParagraphSelectionModeButton(
+                        selected = isParagraphSelectionMode,
+                        enabled = isTargetSelectionEnabled,
+                        onClick = onToggleParagraphSelectionMode
+                    )
+                }
+
+                ActionIsland {
+                    PebbleButton(
+                        onClick = onOpenGeminiAccountDialog,
+                        enabled = !isMaintenanceBusy,
+                        borderColor = AppTheme.colors.primary,
+                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
+                        modifier = Modifier.semantics { contentDescription = "Gemini 계정 관리" }
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp),
-                            tint = AppTheme.colors.primary
-                        )
-                        Text(
-                            text = "ID: ${activeGeminiAccountAlias.ifBlank { "서브1" }}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.colors.primary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = AppTheme.colors.primary
+                            )
+                            Text(
+                                text = "ID: ${activeGeminiAccountAlias.ifBlank { "서브1" }}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.colors.primary
+                            )
+                        }
                     }
                 }
             }
@@ -933,4 +965,99 @@ private fun FlowImageCountChip(
             )
         }
     }
+}
+
+private fun PromptParagraphRange.toHighlightRange(): TextHighlightRange =
+    TextHighlightRange(start = start, endExclusive = endExclusive)
+
+@Composable
+private fun ParagraphSelectionModeButton(
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val containerColor = if (selected) {
+        AppTheme.colors.primary.copy(alpha = 0.16f)
+    } else {
+        AppTheme.colors.card
+    }
+    val contentColor = if (selected) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.textSecondary
+    }
+    val borderColor = if (selected) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.cardBorder
+    }
+    val shape = RoundedCornerShape(10.dp)
+
+    Surface(
+        modifier = Modifier
+            .height(35.dp)
+            .shadow(
+                elevation = if (selected) 2.dp else 0.dp,
+                shape = shape,
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+            )
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.Checkbox,
+                onClick = onClick
+            ),
+        shape = shape,
+        color = containerColor,
+        contentColor = contentColor,
+        border = BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = SegmentIcon,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = contentColor
+            )
+            Text(
+                text = "문단 편집",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor
+            )
+        }
+    }
+}
+
+private val SegmentIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "Segment",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = SolidColor(Color.White)
+    ) {
+        moveTo(9f, 18f)
+        horizontalLineTo(21f)
+        verticalLineTo(16f)
+        horizontalLineTo(9f)
+        close()
+        moveTo(3f, 6f)
+        verticalLineTo(8f)
+        horizontalLineTo(21f)
+        verticalLineTo(6f)
+        close()
+        moveTo(9f, 13f)
+        horizontalLineTo(21f)
+        verticalLineTo(11f)
+        horizontalLineTo(9f)
+        close()
+    }.build()
 }
