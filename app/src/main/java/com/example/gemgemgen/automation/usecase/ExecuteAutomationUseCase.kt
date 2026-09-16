@@ -32,23 +32,10 @@ class ExecuteAutomationUseCase(
         canRun: Boolean,
         isStartInProgress: Boolean,
         mode: AutomationMode
-    ): AutomationStartDecision {
-        return when (mode) {
-            AutomationMode.RECEIVER -> AutomationStartDecision.Rejected
-            AutomationMode.SENDER -> {
-                if (canRun && !isStartInProgress) {
-                    AutomationStartDecision.RemoteStarted
-                } else {
-                    AutomationStartDecision.Rejected
-                }
-            }
-            AutomationMode.NORMAL -> {
-                checkAutomationStart.decide(
-                    canRun = canRun,
-                    isStartInProgress = isStartInProgress
-                )
-            }
-        }
+    ): AutomationStartDecision = when (mode) {
+        AutomationMode.RECEIVER -> AutomationStartDecision.Rejected
+        AutomationMode.SENDER -> if (canRun && !isStartInProgress) AutomationStartDecision.RemoteStarted else AutomationStartDecision.Rejected
+        AutomationMode.NORMAL -> checkAutomationStart.decide(canRun = canRun, isStartInProgress = isStartInProgress)
     }
 
     suspend fun executeRemote(
@@ -70,15 +57,9 @@ class ExecuteAutomationUseCase(
         isPreparationActive: Boolean,
         onStateChange: (AutomationRunState) -> Unit,
         onCancelLocal: () -> Unit
-    ) {
-        if (mode == AutomationMode.SENDER || isRemoteRunActive) {
-            manageRemoteAutomation.forceStop(onStateChange)
-            return
-        }
-        if (isPreparationActive) {
-            onStateChange(AutomationRunState.Stopped)
-            return
-        }
-        onCancelLocal()
+    ) = when {
+        mode == AutomationMode.SENDER || isRemoteRunActive -> manageRemoteAutomation.forceStop(onStateChange)
+        isPreparationActive -> onStateChange(AutomationRunState.Stopped)
+        else -> onCancelLocal()
     }
 }

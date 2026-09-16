@@ -13,12 +13,4 @@ interface WildcardFolderRepository {
 
 class SaveWildcardFolderUseCase(
     private val repository: WildcardFolderRepository
-) {
-    fun save(folderUri: String): FolderSelectionResult {
-        return repository.save(folderUri)
-    }
-
-    fun getFolderUri(): String? {
-        return repository.getFolderUri()
-    }
-}
+) : WildcardFolderRepository by repository

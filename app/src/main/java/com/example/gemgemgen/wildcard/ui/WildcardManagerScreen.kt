@@ -1,4 +1,4 @@
-// 역할: 와일드카드 파일 퀐색기 및 텍스트 편집기 화면을 렌더링합니다.
+// 역할: 와일드카드 파일 탐색기 및 텍스트 편집기 화면을 렌더링합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.compose.foundation.BorderStroke

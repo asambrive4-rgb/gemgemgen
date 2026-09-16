@@ -63,11 +63,7 @@ class SaveAnalysisWildcardFileUseCase(
         }
 
         val targetFile = existingFile ?: repository.createFile(fileName)
-        try {
-            repository.writeFile(targetFile, candidates.joinToString(separator = "\n"))
-        } catch (error: WildcardFileException) {
-            throw error
-        }
+        repository.writeFile(targetFile, candidates.joinToString(separator = "\n"))
         AnalysisWildcardSaveResult.Success(fileName)
     }
 
@@ -82,39 +78,37 @@ class SaveAnalysisWildcardFileUseCase(
         overwrite: Boolean,
         sourcePrompt: String,
         targetSegment: AnalysisTargetSegment?
-    ): AnalysisSaveAndReplaceResult {
-        return when (
-            val saveResult = save(
-                fileNameInput = fileNameInput,
-                candidates = candidates,
-                overwrite = overwrite
+    ): AnalysisSaveAndReplaceResult = when (
+        val saveResult = save(
+            fileNameInput = fileNameInput,
+            candidates = candidates,
+            overwrite = overwrite
+        )
+    ) {
+        AnalysisWildcardSaveResult.InvalidFileName ->
+            AnalysisSaveAndReplaceResult.InvalidFileName
+        is AnalysisWildcardSaveResult.FileExists ->
+            AnalysisSaveAndReplaceResult.FileExists(saveResult.fileName)
+        is AnalysisWildcardSaveResult.Success -> {
+            val replacedSource = AnalysisTargetSegmentPolicy.replaceSegmentWithWildcardToken(
+                source = sourcePrompt,
+                segment = targetSegment,
+                savedFileName = saveResult.fileName
             )
-        ) {
-            AnalysisWildcardSaveResult.InvalidFileName ->
-                AnalysisSaveAndReplaceResult.InvalidFileName
-            is AnalysisWildcardSaveResult.FileExists ->
-                AnalysisSaveAndReplaceResult.FileExists(saveResult.fileName)
-            is AnalysisWildcardSaveResult.Success -> {
-                val replacedSource = AnalysisTargetSegmentPolicy.replaceSegmentWithWildcardToken(
-                    source = sourcePrompt,
-                    segment = targetSegment,
-                    savedFileName = saveResult.fileName
+            try {
+                copyResults.copyText(replacedSource)
+                AnalysisSaveAndReplaceResult.Success(
+                    fileName = saveResult.fileName,
+                    replacedSource = replacedSource,
+                    clipboardCopied = true
                 )
-                try {
-                    copyResults.copyText(replacedSource)
-                    AnalysisSaveAndReplaceResult.Success(
-                        fileName = saveResult.fileName,
-                        replacedSource = replacedSource,
-                        clipboardCopied = true
-                    )
-                } catch (error: RuntimeException) {
-                    AnalysisSaveAndReplaceResult.Success(
-                        fileName = saveResult.fileName,
-                        replacedSource = replacedSource,
-                        clipboardCopied = false,
-                        clipboardError = error.message
-                    )
-                }
+            } catch (error: RuntimeException) {
+                AnalysisSaveAndReplaceResult.Success(
+                    fileName = saveResult.fileName,
+                    replacedSource = replacedSource,
+                    clipboardCopied = false,
+                    clipboardError = error.message
+                )
             }
         }
     }

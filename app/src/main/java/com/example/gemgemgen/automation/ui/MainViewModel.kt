@@ -33,6 +33,7 @@ import com.example.gemgemgen.automation.android.AndroidGeminiAccountSwitcherGate
 import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountUseCase
 import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountExecutionResult
 import com.example.gemgemgen.automation.domain.GeminiAccountProfile
+import com.example.gemgemgen.automation.domain.GeminiAccountSwitchProgressPolicy
 import com.example.gemgemgen.automation.usecase.GeminiAccountRepository
 import com.example.gemgemgen.automation.usecase.ManageGeminiAccountsUseCase
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationUseCase
@@ -256,33 +257,19 @@ class MainViewModel(
         themePaletteStore?.setThemeMode(mode) ?: _uiState.update { it.copy(selectedThemeMode = mode) }
     }
 
-    fun onPromptTemplateChange(value: String) {
-        promptEditor.onPromptTemplateChange(value)
-    }
-
-    fun onPromptTemplateFromEditor(value: String) {
-        promptEditor.onPromptTemplateFromEditor(value)
-    }
-
-    fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean) {
+    fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean = true) =
         promptEditor.onPromptTemplateChange(value, updateTextFieldState)
-    }
 
-    fun toggleParagraphSelectionMode() {
-        promptEditor.toggleParagraphSelectionMode()
-    }
+    fun onPromptTemplateFromEditor(value: String) =
+        promptEditor.onPromptTemplateFromEditor(value)
 
-    fun selectPromptParagraphAt(offset: Int) {
-        promptEditor.selectPromptParagraphAt(offset)
-    }
+    fun toggleParagraphSelectionMode() = promptEditor.toggleParagraphSelectionMode()
 
-    fun deleteSelectedPromptParagraph() {
-        promptEditor.deleteSelectedPromptParagraph()
-    }
+    fun selectPromptParagraphAt(offset: Int) = promptEditor.selectPromptParagraphAt(offset)
 
-    fun cancelParagraphSelection() {
-        promptEditor.cancelParagraphSelection()
-    }
+    fun deleteSelectedPromptParagraph() = promptEditor.deleteSelectedPromptParagraph()
+
+    fun cancelParagraphSelection() = promptEditor.cancelParagraphSelection()
 
     fun onTargetAppSelected(targetApp: AutomationTargetApp) {
         _uiState.update {
@@ -294,49 +281,13 @@ class MainViewModel(
         _uiState.update {
             if (it.isRunning) it else it.copy(flowImageCount = count)
         }
-        persistFlowImageCountAsLastRunDefault(count)
+        persistLastRunSnapshot(flowImageCount = count)
     }
 
-    private fun persistFlowImageCountAsLastRunDefault(count: Int) {
-        val state = _uiState.value
-        scope.launch {
-            withContext(dispatchers.io) {
-                lastRunSnapshotStore.save(
-                    LastRunSnapshot(
-                        promptTemplate = state.promptTemplate,
-                        repeatCountText = state.repeatCountText,
-                        targetApp = state.selectedTargetApp,
-                        flowImageCount = count
-                    )
-                )
-            }
-        }
-    }
-
-    fun onRepeatCountChange(value: String) {
-        val normalized = RepeatCountParser.normalizeInput(value)
-        if (_uiState.value.isRunning) {
-            if (_uiState.value.automationMode == AutomationMode.SENDER) return
-            if (normalized.isEmpty()) {
-                publishRepeatCountText(normalized)
-                return
-            }
-            val requested = RepeatCountParser.parse(normalized)
-            val applied = automation.updateRepeatCount(requested) ?: requested
-            val appliedText = applied.toString()
-            publishRepeatCountText(appliedText)
-            persistRepeatCountAsLastRunDefault(appliedText)
-            return
-        }
-        publishRepeatCountText(normalized)
-    }
-
-    private fun publishRepeatCountText(text: String) {
-        _uiState.update { it.copy(repeatCountText = text) }
-        _automationBarUiState.update { it.copy(repeatCountText = text) }
-    }
-
-    private fun persistRepeatCountAsLastRunDefault(repeatCountText: String) {
+    private fun persistLastRunSnapshot(
+        repeatCountText: String = _uiState.value.repeatCountText,
+        flowImageCount: Int = _uiState.value.flowImageCount
+    ) {
         val state = _uiState.value
         scope.launch {
             withContext(dispatchers.io) {
@@ -345,47 +296,59 @@ class MainViewModel(
                         promptTemplate = state.promptTemplate,
                         repeatCountText = repeatCountText,
                         targetApp = state.selectedTargetApp,
-                        flowImageCount = state.flowImageCount
+                        flowImageCount = flowImageCount
                     )
                 )
             }
         }
     }
 
-    fun importPromptFromClipboard() {
-        promptEditor.importPromptFromClipboard()
+    fun onRepeatCountChange(value: String) {
+        val normalized = RepeatCountParser.normalizeInput(value)
+        val state = _uiState.value
+        if (!state.isRunning) {
+            publishRepeatCountText(normalized)
+            return
+        }
+        if (state.automationMode == AutomationMode.SENDER) return
+        if (normalized.isEmpty()) {
+            publishRepeatCountText(normalized)
+            return
+        }
+        val requested = RepeatCountParser.parse(normalized)
+        val applied = (automation.updateRepeatCount(requested) ?: requested).toString()
+        publishRepeatCountText(applied)
+        persistLastRunSnapshot(repeatCountText = applied)
     }
+
+    private fun publishRepeatCountText(text: String) {
+        _uiState.update { it.copy(repeatCountText = text) }
+        _automationBarUiState.update { it.copy(repeatCountText = text) }
+    }
+
+    fun importPromptFromClipboard() = promptEditor.importPromptFromClipboard()
 
     /** TextField 최신 값을 반영한 현재 원본 프롬프트. 분석 탭 가져오기 등에서 사용. */
-    fun currentPromptTemplateText(): String {
-        return promptEditor.currentPromptTemplateText()
-    }
+    fun currentPromptTemplateText(): String = promptEditor.currentPromptTemplateText()
 
     /** 외부(분석 저장 등)에서 프롬프트 템플릿 전체를 교체한다. Undo 가능. */
-    fun replacePromptTemplateEntirely(replacement: String) {
+    fun replacePromptTemplateEntirely(replacement: String) =
         promptEditor.replacePromptTemplateEntirely(replacement)
-    }
 
     /** 현재 프롬프트의 나머지 내용은 보존하고 일치하는 대상 구간만 교체한다. */
     fun replacePromptTemplateSegment(
         expectedSegment: String,
         replacement: String,
         preferredStartIndex: Int
-    ): Int? {
-        return promptEditor.replacePromptTemplateSegment(
-            expectedSegment = expectedSegment,
-            replacement = replacement,
-            preferredStartIndex = preferredStartIndex
-        )
-    }
+    ): Int? = promptEditor.replacePromptTemplateSegment(
+        expectedSegment = expectedSegment,
+        replacement = replacement,
+        preferredStartIndex = preferredStartIndex
+    )
 
-    fun copyPromptToClipboard() {
-        promptEditor.copyPromptToClipboard(_uiState.value.isRunning)
-    }
+    fun copyPromptToClipboard() = promptEditor.copyPromptToClipboard(_uiState.value.isRunning)
 
-    fun pastePromptFromClipboard() {
-        promptEditor.pastePromptFromClipboard()
-    }
+    fun pastePromptFromClipboard() = promptEditor.pastePromptFromClipboard()
 
     /**
      * 프롬프트 템플릿 맨 앞에 상단 인스트럭션을 붙인다.
@@ -414,22 +377,18 @@ class MainViewModel(
         promptEditor.insertBottomInstruction(bottom, _uiState.value.isRunning)
     }
 
-    fun insertSystemInstruction() {
-        insertTopInstruction()
-    }
+    fun insertSystemInstruction() = insertTopInstruction()
 
-    fun openInstructionConfigDialog(initialTab: InstructionTab = InstructionTab.TOP) {
+    fun openInstructionConfigDialog(initialTab: InstructionTab = InstructionTab.TOP) =
         _uiState.update {
             it.copy(
                 showInstructionConfigDialog = true,
                 instructionConfigDialogInitialTab = initialTab
             )
         }
-    }
 
-    fun closeInstructionConfigDialog() {
+    fun closeInstructionConfigDialog() =
         _uiState.update { it.copy(showInstructionConfigDialog = false) }
-    }
 
     fun saveInstructionConfig(config: PromptInstructionConfig) {
         scope.launch {
@@ -445,13 +404,11 @@ class MainViewModel(
         }
     }
 
-    fun openVariationPromptConfigDialog() {
+    fun openVariationPromptConfigDialog() =
         _uiState.update { it.copy(showVariationPromptConfigDialog = true) }
-    }
 
-    fun closeVariationPromptConfigDialog() {
+    fun closeVariationPromptConfigDialog() =
         _uiState.update { it.copy(showVariationPromptConfigDialog = false) }
-    }
 
     fun saveVariationPromptConfig(config: VariationPromptConfig) {
         scope.launch {
@@ -471,34 +428,29 @@ class MainViewModel(
     fun runVariation(selectedText: String? = null): VariationStartDecision {
         val state = _uiState.value
         if (!state.canRunVariation) {
-            val message = when {
-                state.automationMode == AutomationMode.RECEIVER ->
-                    "수신 모드에서는 변주를 실행할 수 없습니다."
-                state.isRunning -> "자동화 실행 중에는 변주를 실행할 수 없습니다."
-                state.isMaintenanceBusy -> "유지보수 작업이 진행 중입니다."
-                !state.environmentStatus.isGeminiInstalled ->
-                    "Gemini 앱을 먼저 설치해주세요."
-                !state.environmentStatus.isAccessibilityServiceEnabled ->
-                    "접근성 서비스를 먼저 켜주세요."
-                else -> "변주를 지금 실행할 수 없습니다."
-            }
-            val rejected = VariationStartDecision.Rejected(message)
-            handleVariationState(AutomationRunState.Failure(message))
-            return rejected
+            return rejectVariation(variationUnavailableReason(state))
         }
 
-        val prompt = state.variationPromptConfig.buildPrompt(selectedText)
-        val useCase = runVariationPrompt
-        if (useCase == null) {
-            val message = "변주 자동화가 준비되지 않았습니다."
-            handleVariationState(AutomationRunState.Failure(message))
-            return VariationStartDecision.Rejected(message)
-        }
+        val useCase = runVariationPrompt ?: return rejectVariation("변주 자동화가 준비되지 않았습니다.")
 
         return useCase.start(
-            prompt = prompt,
+            prompt = state.variationPromptConfig.buildPrompt(selectedText),
             onStateChange = ::handleVariationState
         )
+    }
+
+    private fun rejectVariation(message: String): VariationStartDecision.Rejected {
+        handleVariationState(AutomationRunState.Failure(message))
+        return VariationStartDecision.Rejected(message)
+    }
+
+    private fun variationUnavailableReason(state: MainUiState): String = when {
+        state.automationMode == AutomationMode.RECEIVER -> "수신 모드에서는 변주를 실행할 수 없습니다."
+        state.isRunning -> "자동화 실행 중에는 변주를 실행할 수 없습니다."
+        state.isMaintenanceBusy -> "유지보수 작업이 진행 중입니다."
+        !state.environmentStatus.isGeminiInstalled -> "Gemini 앱을 먼저 설치해주세요."
+        !state.environmentStatus.isAccessibilityServiceEnabled -> "접근성 서비스를 먼저 켜주세요."
+        else -> "변주를 지금 실행할 수 없습니다."
     }
 
     /**
@@ -529,9 +481,8 @@ class MainViewModel(
         }
     }
 
-    fun replaceSelectedPromptParagraph(replacement: String) {
+    fun replaceSelectedPromptParagraph(replacement: String) =
         promptEditor.replaceSelectedPromptParagraph(replacement)
-    }
 
     fun decideWildcardFolderAction(): WildcardFolderAction =
         WildcardFolderAccessPolicy.decideAction(
@@ -543,61 +494,56 @@ class MainViewModel(
         return saveWildcardFolder.getFolderUri()
     }
 
-    fun closeGeminiApp() {
-        runMaintenanceAction(
-            canExecute = { it.canCloseGemini },
-            unavailableMessage = { AutomationUiText.geminiRestartUnavailableMessage(it) },
-            startingText = { AutomationUiText.geminiRestartStartingText() },
-            canceledText = { AutomationUiText.geminiRestartCanceledText() },
-            action = { appMaintenance.restartGemini() }
-        )
-    }
+    fun closeGeminiApp() = executeMaintenance(
+        canExecute = MainUiState::canCloseGemini,
+        unavailableMessage = AutomationUiText::geminiRestartUnavailableMessage,
+        startingText = AutomationUiText.geminiRestartStartingText(),
+        canceledText = AutomationUiText.geminiRestartCanceledText(),
+        action = appMaintenance::restartGemini
+    )
 
-    fun terminateGeminiApp() {
-        runMaintenanceAction(
-            canExecute = { it.canCloseGemini },
-            unavailableMessage = { AutomationUiText.geminiTerminateUnavailableMessage(it) },
-            startingText = { AutomationUiText.geminiTerminateStartingText() },
-            canceledText = { AutomationUiText.geminiTerminateCanceledText() },
-            action = { appMaintenance.terminateGemini() }
-        )
-    }
+    fun terminateGeminiApp() = executeMaintenance(
+        canExecute = MainUiState::canCloseGemini,
+        unavailableMessage = AutomationUiText::geminiTerminateUnavailableMessage,
+        startingText = AutomationUiText.geminiTerminateStartingText(),
+        canceledText = AutomationUiText.geminiTerminateCanceledText(),
+        action = appMaintenance::terminateGemini
+    )
 
-    fun terminateSelfApp() {
-        runMaintenanceAction(
-            canExecute = { it.canCloseSelfApp },
-            unavailableMessage = { AutomationUiText.selfAppTerminateUnavailableMessage(it) },
-            startingText = { AutomationUiText.selfAppTerminateStartingText() },
-            canceledText = { AutomationUiText.selfAppTerminateCanceledText() },
-            action = { appMaintenance.terminateSelf() }
-        )
-    }
+    fun terminateSelfApp() = executeMaintenance(
+        canExecute = MainUiState::canCloseSelfApp,
+        unavailableMessage = AutomationUiText::selfAppTerminateUnavailableMessage,
+        startingText = AutomationUiText.selfAppTerminateStartingText(),
+        canceledText = AutomationUiText.selfAppTerminateCanceledText(),
+        action = appMaintenance::terminateSelf
+    )
 
     fun cleanDeviceMemory() {
         val mode = _uiState.value.automationMode
-        runMaintenanceAction(
-            canExecute = { it.canCleanMemory },
-            unavailableMessage = { AutomationUiText.memoryCleanupUnavailableMessage(it) },
-            startingText = { AutomationUiText.memoryCleanupStartingText(mode) },
-            canceledText = { AutomationUiText.memoryCleanupCanceledText(mode) },
-            action = {
-                if (mode == AutomationMode.SENDER) {
-                    when (val result = manageRemoteAutomation.cleanMemory()) {
-                        RemoteActionResult.Success -> MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
-                        is RemoteActionResult.Failure -> MaintenanceResult.Failure(result.message)
-                    }
-                } else {
-                    appMaintenance.cleanMemory()
-                }
-            }
+        executeMaintenance(
+            canExecute = MainUiState::canCleanMemory,
+            unavailableMessage = AutomationUiText::memoryCleanupUnavailableMessage,
+            startingText = AutomationUiText.memoryCleanupStartingText(mode),
+            canceledText = AutomationUiText.memoryCleanupCanceledText(mode),
+            action = { performMemoryCleanup(mode) }
         )
     }
 
-    private fun runMaintenanceAction(
+    private suspend fun performMemoryCleanup(mode: AutomationMode): MaintenanceResult =
+        if (mode == AutomationMode.SENDER) {
+            when (val result = manageRemoteAutomation.cleanMemory()) {
+                RemoteActionResult.Success -> MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
+                is RemoteActionResult.Failure -> MaintenanceResult.Failure(result.message)
+            }
+        } else {
+            appMaintenance.cleanMemory()
+        }
+
+    private fun executeMaintenance(
         canExecute: (MainUiState) -> Boolean,
         unavailableMessage: (MainUiState) -> String,
-        startingText: () -> String,
-        canceledText: () -> String,
+        startingText: String,
+        canceledText: String,
         action: suspend () -> MaintenanceResult
     ) {
         val state = _uiState.value
@@ -606,35 +552,28 @@ class MainViewModel(
             return
         }
 
-        _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = true, message = startingText())) }
+        _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = true, message = startingText)) }
         scope.launch {
             val result = try {
                 withContext(dispatchers.io) {
                     action()
                 }
             } catch (error: CancellationException) {
-                _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = canceledText())) }
+                _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = canceledText)) }
                 throw error
             } catch (error: Exception) {
                 MaintenanceResult.Failure(error.message ?: "작업 중 오류가 발생했습니다.")
             }
 
-            val message = when (result) {
-                is MaintenanceResult.Success -> result.message
-                is MaintenanceResult.Failure -> result.message
-                MaintenanceResult.Unavailable -> "접근성 서비스가 켜져 있지 않습니다."
-            }
-            _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = message)) }
+            _uiState.update { it.copy(maintenanceState = MaintenanceState(isBusy = false, message = result.displayMessage)) }
         }
     }
 
-    fun navigatePromptHistoryBack() {
+    fun navigatePromptHistoryBack() =
         promptEditor.navigatePromptHistoryBack(_uiState.value.isRunning)
-    }
 
-    fun navigatePromptHistoryForward() {
+    fun navigatePromptHistoryForward() =
         promptEditor.navigatePromptHistoryForward(_uiState.value.isRunning)
-    }
 
     fun refreshStatus() {
         scope.launch {
@@ -671,22 +610,15 @@ class MainViewModel(
     }
 
     /** 접근성 확인 팝업에서 「이동」: 팝업만 닫고 시스템 설정 이동은 UI에서 처리. */
-    fun confirmAccessibilityPrompt() {
+    fun confirmAccessibilityPrompt() =
         _uiState.update { it.copy(showAccessibilityPrompt = false) }
-    }
 
     /** 접근성 확인 팝업에서 「취소」: 전체 설정 다이얼로그로 진입. */
-    fun dismissAccessibilityPromptToSettings() {
-        _uiState.update {
-            it.copy(showAccessibilityPrompt = false, showSettings = true)
-        }
-    }
+    fun dismissAccessibilityPromptToSettings() =
+        _uiState.update { it.copy(showAccessibilityPrompt = false, showSettings = true) }
 
-    fun hideSettings() {
-        _uiState.update {
-            it.copy(showSettings = false, showAccessibilityPrompt = false)
-        }
-    }
+    fun hideSettings() =
+        _uiState.update { it.copy(showSettings = false, showAccessibilityPrompt = false) }
 
     fun saveWildcardFolder(folderUri: String) {
         scope.launch {
@@ -738,36 +670,18 @@ class MainViewModel(
         )
 
         val isRemote = decision is AutomationStartDecision.RemoteStarted
-        if (isRemote) {
-            isRemoteRunActive = true
-            handleAutomationState(
-                AutomationRunState.Running("S25 FE로 요청 전송 중"),
-                additionalUpdate = { it.copy(promptHistoryItems = history) }
-            )
-        } else {
-            handleAutomationState(
-                AutomationRunState.Running("자동화 준비 중"),
-                additionalUpdate = { it.copy(promptHistoryItems = history) }
-            )
-        }
+        if (isRemote) isRemoteRunActive = true
+        val initialStep = if (isRemote) "S25 FE로 요청 전송 중" else "자동화 준비 중"
+        handleAutomationState(
+            AutomationRunState.Running(initialStep),
+            additionalUpdate = { it.copy(promptHistoryItems = history) }
+        )
 
         val job = scope.launch {
             if (isRemote) {
-                val result = executeAutomation.executeRemote(request, ::handleAutomationState)
-                if (result is RemoteActionResult.Failure) {
-                    handleAutomationState(AutomationRunState.Failure(result.message))
-                }
+                executeRemoteAutomationRequest(request)
             } else {
-                try {
-                    executeAutomation.executeLocal(request)
-                } catch (error: CancellationException) {
-                    handleAutomationState(AutomationRunState.Stopped)
-                    throw error
-                } catch (error: Exception) {
-                    handleAutomationState(
-                        AutomationRunState.Failure(error.message ?: "자동화 준비 중 오류가 발생했습니다.")
-                    )
-                }
+                executeLocalAutomationRequest(request)
             }
         }
         automationPreparationJob = job
@@ -779,14 +693,32 @@ class MainViewModel(
         return decision
     }
 
+    private suspend fun executeRemoteAutomationRequest(request: AutomationRunRequest) {
+        val result = executeAutomation.executeRemote(request, ::handleAutomationState)
+        if (result is RemoteActionResult.Failure) {
+            handleAutomationState(AutomationRunState.Failure(result.message))
+        }
+    }
+
+    private suspend fun executeLocalAutomationRequest(request: AutomationRunRequest) {
+        try {
+            executeAutomation.executeLocal(request)
+        } catch (error: CancellationException) {
+            handleAutomationState(AutomationRunState.Stopped)
+            throw error
+        } catch (error: Exception) {
+            handleAutomationState(
+                AutomationRunState.Failure(error.message ?: "자동화 준비 중 오류가 발생했습니다.")
+            )
+        }
+    }
+
     fun openPromptHistory() {
         val items = promptHistoryStore?.load().orEmpty()
         _uiState.update { it.copy(showPromptHistory = true, promptHistoryItems = items) }
     }
 
-    fun closePromptHistory() {
-        _uiState.update { it.copy(showPromptHistory = false) }
-    }
+    fun closePromptHistory() = _uiState.update { it.copy(showPromptHistory = false) }
 
     fun clearPromptHistory() {
         promptHistoryStore?.clear()
@@ -873,34 +805,23 @@ class MainViewModel(
                     variationPromptRepository?.load() ?: VariationPromptConfig.DEFAULT
                 )
             }
-            val lastRunSnapshot = initialState.lastRunSnapshot
-            val historyItems = initialState.historyItems
-            val instructionConfig = initialState.instructionConfig
-            val variationConfig = initialState.variationConfig
-            val current = _uiState.value
-            val defaultRepeatCountText = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
-            val restoredPrompt = if (current.promptTemplate.isBlank()) {
-                lastRunSnapshot?.promptTemplate.orEmpty()
-            } else {
-                current.promptTemplate
-            }
+            val snapshot = initialState.lastRunSnapshot
+            val history = initialState.historyItems
+            val defaultRepeat = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
+            val restoredPrompt = _uiState.value.promptTemplate.ifBlank { snapshot?.promptTemplate.orEmpty() }
+
             promptEditor.restorePrompt(restoredPrompt)
-            promptEditor.syncHistoryItems(historyItems.map { it.prompt })
+            promptEditor.syncHistoryItems(history.map { it.prompt })
+
             _uiState.update {
                 it.copy(
                     promptTemplate = restoredPrompt,
-                    repeatCountText = if (it.repeatCountText == defaultRepeatCountText) {
-                        lastRunSnapshot?.repeatCountText
-                            ?.ifBlank { defaultRepeatCountText }
-                            ?: defaultRepeatCountText
-                    } else {
-                        it.repeatCountText
-                    },
-                    selectedTargetApp = lastRunSnapshot?.targetApp ?: it.selectedTargetApp,
-                    flowImageCount = lastRunSnapshot?.flowImageCount ?: it.flowImageCount,
-                    promptHistoryItems = historyItems,
-                    promptInstructionConfig = instructionConfig,
-                    variationPromptConfig = variationConfig
+                    repeatCountText = if (it.repeatCountText == defaultRepeat) snapshot?.repeatCountText?.ifBlank { defaultRepeat } ?: defaultRepeat else it.repeatCountText,
+                    selectedTargetApp = snapshot?.targetApp ?: it.selectedTargetApp,
+                    flowImageCount = snapshot?.flowImageCount ?: it.flowImageCount,
+                    promptHistoryItems = history,
+                    promptInstructionConfig = initialState.instructionConfig,
+                    variationPromptConfig = initialState.variationConfig
                 )
             }
             val restoredState = uiState.value
@@ -956,11 +877,10 @@ class MainViewModel(
         }
     }
 
-    fun openGeminiAccountDialog() {
+    fun openGeminiAccountDialog() =
         _uiState.update { it.copy(showGeminiAccountDialog = true, accountSwitchError = null) }
-    }
 
-    fun closeGeminiAccountDialog() {
+    fun closeGeminiAccountDialog() =
         _uiState.update {
             it.copy(
                 showGeminiAccountDialog = false,
@@ -968,16 +888,12 @@ class MainViewModel(
                 lastFailedTargetAccount = null
             )
         }
-    }
 
-    fun retrySwitchGeminiAccount() {
-        val target = _uiState.value.lastFailedTargetAccount ?: return
-        switchGeminiAccount(target)
-    }
+    fun retrySwitchGeminiAccount() =
+        _uiState.value.lastFailedTargetAccount?.let(::switchGeminiAccount) ?: Unit
 
-    fun clearAccountSwitchError() {
+    fun clearAccountSwitchError() =
         _uiState.update { it.copy(accountSwitchError = null, lastFailedTargetAccount = null) }
-    }
 
     fun openGeminiForManualSwitch() {
         _uiState.update {
@@ -993,23 +909,20 @@ class MainViewModel(
 
     fun switchGeminiAccount(account: GeminiAccountProfile) {
         scope.launch {
+            val mode = _uiState.value.automationMode
+            val startingMessage = GeminiAccountSwitchProgressPolicy.startingMaintenanceMessage(
+                alias = account.alias,
+                isSenderMode = mode == AutomationMode.SENDER
+            )
             _uiState.update {
                 it.copy(
                     isSwitchingGeminiAccount = true,
-                    switchingAccountProgressPhase = "1/5",
-                    switchingAccountProgressMessage = "Gemini 앱 실행 확인 중...",
+                    switchingAccountProgressPhase = GeminiAccountSwitchProgressPolicy.INITIAL_PHASE,
+                    switchingAccountProgressMessage = GeminiAccountSwitchProgressPolicy.INITIAL_PROGRESS_MESSAGE,
                     accountSwitchError = null,
-                    lastFailedTargetAccount = null
+                    lastFailedTargetAccount = null,
+                    maintenanceState = MaintenanceState(isBusy = true, message = startingMessage)
                 )
-            }
-            val mode = _uiState.value.automationMode
-            val startingMessage = if (mode == AutomationMode.SENDER) {
-                "수신 기기 계정 교체 중: [${account.alias}]..."
-            } else {
-                "Gemini 계정 교체 중: [${account.alias}]..."
-            }
-            _uiState.update {
-                it.copy(maintenanceState = MaintenanceState(isBusy = true, message = startingMessage))
             }
 
             val result = switchGeminiAccount.execute(
@@ -1027,27 +940,20 @@ class MainViewModel(
             )
 
             when (result) {
-                is SwitchGeminiAccountExecutionResult.Success -> {
-                    _uiState.update {
-                        it.copy(
-                            geminiAccounts = result.updatedAccounts,
-                            isSwitchingGeminiAccount = false,
-                            showGeminiAccountDialog = false,
-                            switchingAccountProgressPhase = "",
-                            switchingAccountProgressMessage = "",
-                            accountSwitchError = null,
-                            lastFailedTargetAccount = null,
-                            maintenanceState = MaintenanceState(isBusy = false, message = result.message)
-                        )
-                    }
+                is SwitchGeminiAccountExecutionResult.Success -> _uiState.update {
+                    it.copy(
+                        geminiAccounts = result.updatedAccounts,
+                        isSwitchingGeminiAccount = false,
+                        showGeminiAccountDialog = false,
+                        switchingAccountProgressPhase = "",
+                        switchingAccountProgressMessage = "",
+                        accountSwitchError = null,
+                        lastFailedTargetAccount = null,
+                        maintenanceState = MaintenanceState(isBusy = false, message = result.message)
+                    )
                 }
                 is SwitchGeminiAccountExecutionResult.Failure -> {
-                    val maintenanceMsg = when (result.message) {
-                        "접근성 서비스를 먼저 활성화해주세요.",
-                        "계정 식별자(구글 이메일)가 비어 있습니다." -> result.message
-                        "접근성 서비스를 사용할 수 없습니다." -> "계정 전환 실패: 접근성 서비스 없음"
-                        else -> "계정 전환 실패: ${result.message}"
-                    }
+                    val maintenanceMsg = GeminiAccountSwitchProgressPolicy.formatMaintenanceErrorMessage(result.message)
                     _uiState.update {
                         it.copy(
                             isSwitchingGeminiAccount = false,
@@ -1063,10 +969,8 @@ class MainViewModel(
         }
     }
 
-    fun cycleNextGeminiAccount() {
-        val next = _uiState.value.nextGeminiAccount ?: return
-        switchGeminiAccount(next)
-    }
+    fun cycleNextGeminiAccount() =
+        _uiState.value.nextGeminiAccount?.let(::switchGeminiAccount) ?: Unit
 
     fun addGeminiAccount(alias: String, identifier: String) {
         val updated = manageGeminiAccounts.addAccount(alias, identifier)

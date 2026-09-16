@@ -105,40 +105,36 @@ class RunAutomationUseCase(
             )
             if (run.repeatCount != applied) {
                 run.repeatCount = applied
-                sessionRepeatCount = applied
                 val step = (_runState.value as? AutomationRunState.Running)?.step
-                    ?.ifBlank { null }
+                    ?.takeUnless { it.isBlank() }
                     ?: "실행 중"
                 updateRunState(run, step, onStateChange = null)
-            } else {
-                sessionRepeatCount = applied
             }
-            return applied
+            return applied.also { sessionRepeatCount = it }
         }
 
-        if (sessionRepeatCount == null) return null
-        val applied = requestedCount.coerceIn(1, 999)
-        sessionRepeatCount = applied
-        return applied
+        sessionRepeatCount ?: return null
+        return requestedCount.coerceIn(1, 999).also { sessionRepeatCount = it }
     }
 
     fun cancel(onStateChange: ((AutomationRunState) -> Unit)? = null) {
-        val run = currentRun ?: return
-        run.promptGateway.cancelCurrentRun()
-        finishRun(
-            run = run,
-            state = AutomationRunState.Stopped,
-            onStateChange = onStateChange
-        )
+        terminateActiveRun(AutomationRunState.Stopped, onStateChange)
     }
 
     fun onAccessibilityLost() {
+        terminateActiveRun(AutomationRunState.Failure("접근성 서비스가 중단되었습니다."))
+    }
+
+    private fun terminateActiveRun(
+        state: AutomationRunState,
+        onStateChange: ((AutomationRunState) -> Unit)? = null
+    ) {
         val run = currentRun ?: return
         run.promptGateway.cancelCurrentRun()
         finishRun(
             run = run,
-            state = AutomationRunState.Failure("접근성 서비스가 중단되었습니다."),
-            onStateChange = null
+            state = state,
+            onStateChange = onStateChange
         )
     }
 
@@ -148,59 +144,50 @@ class RunAutomationUseCase(
     ) {
         val request = preparedRun.request
         val promptGateway = promptGatewayProvider.current(request.targetApp)
-        if (promptGateway == null) {
-            finishWithoutRun(
+            ?: return finishWithoutRun(
                 state = AutomationRunState.Failure("접근성 서비스가 켜져 있지 않습니다."),
                 onStateChange = onStateChange
             )
-            return
-        }
 
         if (request.promptTemplate.isBlank()) {
-            finishWithoutRun(
+            return finishWithoutRun(
                 state = AutomationRunState.Failure("원본 프롬프트를 입력하거나 클립보드에서 가져오세요."),
                 onStateChange = onStateChange
             )
-            return
         }
 
         emitState(AutomationRunState.Running("Null Keyboard로 전환 중"), onStateChange)
-        val imeSwitchResult = imeManager.switchToNullKeyboard()
-        if (imeSwitchResult is ImeSwitchResult.Failure) {
-            finishWithoutRun(
+        val imeSession = when (val imeSwitchResult = imeManager.switchToNullKeyboard()) {
+            is ImeSwitchResult.Failure -> return finishWithoutRun(
                 state = AutomationRunState.Failure(
                     "${imeSwitchResult.message} WRITE_SECURE_SETTINGS 권한과 Null Keyboard 설치 상태를 확인해주세요."
                 ),
                 onStateChange = onStateChange
             )
-            return
+            is ImeSwitchResult.Success -> imeSwitchResult.session
         }
-
-        val animationSession = animationScaleManager?.disableAnimations()
 
         val run = CurrentRun(
             targetApp = request.targetApp,
-            imeSession = (imeSwitchResult as ImeSwitchResult.Success).session,
-            animationSession = animationSession,
+            imeSession = imeSession,
+            animationSession = animationScaleManager?.disableAnimations(),
             promptGateway = promptGateway,
             promptTemplate = request.promptTemplate,
             repeatCount = sessionRepeatCount ?: preparedRun.repeatCount,
             wildcards = preparedRun.wildcards,
             promptPlan = preparedRun.promptPlan,
             flowImageCount = request.flowImageCount
-        )
-        currentRun = run
+        ).also { currentRun = it }
 
         updateRunState(run, "${request.targetApp.displayName} 앱 실행 중", onStateChange)
         if (!targetAppLauncher.launch(request.targetApp)) {
-            finishRun(
+            return finishRun(
                 run = run,
                 state = AutomationRunState.Failure(
                     "${request.targetApp.displayName} 앱을 찾지 못했습니다."
                 ),
                 onStateChange = onStateChange
             )
-            return
         }
 
         if (request.targetApp == AutomationTargetApp.FLOW) {
@@ -245,9 +232,11 @@ class RunAutomationUseCase(
         if (isFirstPromptWithoutMarker) {
             (run.promptGateway as? FlowConfigurableGateway)?.setFlowImageCount(run.flowImageCount)
         }
+        val chatMode = if (isFirstPromptWithoutMarker) NewChatMode.Initial else NewChatMode.Subsequent
+
         run.promptGateway.sendPrompt(
             prompt = finalPrompt,
-            newChatMode = if (isFirstPromptWithoutMarker) NewChatMode.Initial else NewChatMode.Subsequent,
+            newChatMode = chatMode,
             onStateChange = childStateCallback(run, onStateChange),
             onDone = {
                 run.successCount += 1

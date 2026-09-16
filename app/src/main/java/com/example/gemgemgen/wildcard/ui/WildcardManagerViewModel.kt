@@ -29,7 +29,7 @@ class WildcardManagerViewModel(
     analysisKeyManager: ManageGeminiApiKeysUseCase? = null,
     classifyCoordinator: WildcardClassifyCoordinator? = null,
     coroutineScope: CoroutineScope? = null
-) : ViewModel() {
+) : ViewModel(), WildcardClassifyActions {
     private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardManagerUiState())
     val uiState: StateFlow<WildcardManagerUiState> = _uiState.asStateFlow()
@@ -42,6 +42,8 @@ class WildcardManagerViewModel(
             scope = scope,
             host = ClassifyHost()
         )
+
+    val classifyActions: WildcardClassifyActions get() = classifyCoordinator
 
     init {
         refreshFiles(openFirstFile = true)
@@ -72,7 +74,7 @@ class WildcardManagerViewModel(
     fun enterLineSelectionMode() {
         val state = uiState.value
         if (state.isFileOperationInProgress || state.isLineSelectionMode) return
-        if (state.selectedFile == null) return showError("먼저 txt 파일을 선택하거나 새로 만들어주세요.")
+        state.selectedFile ?: return showError("먼저 txt 파일을 선택하거나 새로 만들어주세요.")
         _uiState.update {
             it.copy(isLineSelectionMode = true, selectedLineIndices = emptySet(), message = "", error = "")
         }
@@ -123,19 +125,19 @@ class WildcardManagerViewModel(
         }
     }
 
-    // AI 줄 분류 관련 액션 위임 (WildcardClassifyCoordinator)
-    fun requestClassify() = classifyCoordinator.requestClassify()
-    fun onClassifyCriteriaChange(value: String) = classifyCoordinator.onClassifyCriteriaChange(value)
-    fun onClassifyProviderSelected(provider: AnalysisProvider) = classifyCoordinator.onClassifyProviderSelected(provider)
-    fun onClassifyModelSelected(modelId: String) = classifyCoordinator.onClassifyModelSelected(modelId)
-    fun dismissClassifyCriteriaDialog() = classifyCoordinator.dismissClassifyCriteriaDialog()
-    fun runClassify() = classifyCoordinator.runClassify()
-    fun dismissClassifyPreview() = classifyCoordinator.dismissClassifyPreview()
-    fun onClassifyFileNameChange(index: Int, value: String) = classifyCoordinator.onClassifyFileNameChange(index, value)
-    fun onToggleClassifyFileNameEdit(index: Int) = classifyCoordinator.onToggleClassifyFileNameEdit(index)
-    fun saveClassifyResult(overwrite: Boolean = false) = classifyCoordinator.saveClassifyResult(overwrite)
-    fun confirmClassifyOverwrite() = classifyCoordinator.confirmClassifyOverwrite()
-    fun dismissClassifyOverwrite() = classifyCoordinator.dismissClassifyOverwrite()
+    // WildcardClassifyActions 위임 구현
+    override fun requestClassify() = classifyCoordinator.requestClassify()
+    override fun onClassifyCriteriaChange(value: String) = classifyCoordinator.onClassifyCriteriaChange(value)
+    override fun onClassifyProviderSelected(provider: AnalysisProvider) = classifyCoordinator.onClassifyProviderSelected(provider)
+    override fun onClassifyModelSelected(modelId: String) = classifyCoordinator.onClassifyModelSelected(modelId)
+    override fun dismissClassifyCriteriaDialog() = classifyCoordinator.dismissClassifyCriteriaDialog()
+    override fun runClassify() = classifyCoordinator.runClassify()
+    override fun dismissClassifyPreview() = classifyCoordinator.dismissClassifyPreview()
+    override fun onClassifyFileNameChange(index: Int, value: String) = classifyCoordinator.onClassifyFileNameChange(index, value)
+    override fun onToggleClassifyFileNameEdit(index: Int) = classifyCoordinator.onToggleClassifyFileNameEdit(index)
+    override fun saveClassifyResult(overwrite: Boolean) = classifyCoordinator.saveClassifyResult(overwrite)
+    override fun confirmClassifyOverwrite() = classifyCoordinator.confirmClassifyOverwrite()
+    override fun dismissClassifyOverwrite() = classifyCoordinator.dismissClassifyOverwrite()
 
     fun onTabEntered() {
         val state = uiState.value
@@ -146,31 +148,36 @@ class WildcardManagerViewModel(
     }
 
     fun refreshFiles(openFirstFile: Boolean = false) {
-        launchFileOperation(errorMessage = "파일 목록을 불러오지 못했습니다.", onError = { showFileListError(it) }) {
+        launchFileOperation(errorMessage = "파일 목록을 불러오지 못했습니다.", onError = ::showFileListError) {
             val workspace = manageWildcardFiles.refreshWorkspace(
                 selectedFile = uiState.value.selectedFile,
                 openFirstFile = openFirstFile
             )
             val openedFile = workspace.selectedFile
             val openedText = workspace.selectedText
-            val hasOpenedContent = openedFile != null && openedText != null
+
             _uiState.update { state ->
-                val editor = when {
-                    hasOpenedContent -> state.editor.open(openedFile!!, openedText!!)
-                    openedFile != null -> state.editor.rename(openedFile)
-                    else -> state.editor
+                if (openedFile != null && openedText != null) {
+                    state.copy(
+                        files = workspace.files,
+                        editor = state.editor.open(openedFile, openedText),
+                        isLineSelectionMode = false,
+                        selectedLineIndices = emptySet(),
+                        message = "${openedFile.fileName} 열기 완료",
+                        error = ""
+                    )
+                } else {
+                    state.copy(
+                        files = workspace.files,
+                        editor = openedFile?.let(state.editor::rename) ?: state.editor,
+                        error = ""
+                    )
                 }
-                state.copy(
-                    files = workspace.files,
-                    editor = editor,
-                    isLineSelectionMode = if (hasOpenedContent) false else state.isLineSelectionMode,
-                    selectedLineIndices = if (hasOpenedContent) emptySet() else state.selectedLineIndices,
-                    message = if (hasOpenedContent) "${openedFile!!.fileName} 열기 완료" else state.message,
-                    error = ""
-                )
             }
+
             if (workspace.previousSelectionMissing && workspace.selectedFile == null) {
-                clearSelectedFile(if (workspace.files.isEmpty()) "txt 파일이 없습니다." else "선택했던 파일을 찾지 못했습니다.")
+                val emptyMessage = if (workspace.files.isEmpty()) "txt 파일이 없습니다." else "선택했던 파일을 찾지 못했습니다."
+                clearSelectedFile(emptyMessage)
             }
         }
     }
@@ -360,8 +367,7 @@ class WildcardManagerViewModel(
 
     fun copyToClipboard() {
         if (uiState.value.isFileOperationInProgress) return
-        val text = uiState.value.editingText
-        if (text.isEmpty()) return showError("복사할 내용이 없습니다.")
+        val text = uiState.value.editingText.takeIf { it.isNotEmpty() } ?: return showError("복사할 내용이 없습니다.")
         scope.launch {
             if (!wildcardClipboard.copy(text)) return@launch showError("복사할 내용이 없습니다.")
             _uiState.update { it.copy(message = "클립보드에 복사했습니다.", error = "") }
@@ -470,17 +476,15 @@ class WildcardManagerViewModel(
         }
     }
 
-    private fun ensureFileSelected(): Boolean {
-        if (uiState.value.selectedFile != null) return true
-        showError("먼저 txt 파일을 선택하거나 새로 만들어주세요.")
-        return false
-    }
+    private fun ensureFileSelected(): Boolean =
+        (uiState.value.selectedFile != null).also { selected ->
+            if (!selected) showError("먼저 txt 파일을 선택하거나 새로 만들어주세요.")
+        }
 
-    private fun ensureCanModifyFiles(): Boolean {
-        if (uiState.value.canModifyFiles) return true
-        showError("파일을 편집하려면 wildcard 폴더를 다시 선택해주세요.")
-        return false
-    }
+    private fun ensureCanModifyFiles(): Boolean =
+        uiState.value.canModifyFiles.also { canModify ->
+            if (!canModify) showError("파일을 편집하려면 wildcard 폴더를 다시 선택해주세요.")
+        }
 
     private fun beginFileOperation(): Boolean {
         if (uiState.value.isFileOperationInProgress) return false

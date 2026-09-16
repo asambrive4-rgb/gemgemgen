@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import com.example.gemgemgen.automation.domain.GeminiAccountSwitchProgressPolicy
 import com.example.gemgemgen.core.AppDefaults
 
 sealed interface GeminiAccountSwitchResult {
@@ -58,7 +59,10 @@ internal class GeminiAccountSwitcherAutomation(
         sidebarOpened = false
         lastProfileClickMillis = 0L
         lastExpandClickMillis = 0L
-        reportProgress("1/5", "Gemini 앱 실행 확인 중...")
+        reportProgress(
+            GeminiAccountSwitchProgressPolicy.PHASE_1,
+            GeminiAccountSwitchProgressPolicy.step1CheckForeground()
+        )
         handler.post(::step)
     }
 
@@ -89,7 +93,10 @@ internal class GeminiAccountSwitcherAutomation(
             activePkg == AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME
 
         if (isGeminiInForeground) {
-            reportProgress("2/5", "Google 계정 및 프로필 창 여는 중...")
+            reportProgress(
+                GeminiAccountSwitchProgressPolicy.PHASE_2,
+                GeminiAccountSwitchProgressPolicy.step2OpenProfile()
+            )
             phase = Phase.OPEN_PROFILE
             phaseStartedAtMillis = SystemClock.uptimeMillis()
             handler.postDelayed(::step, 300L)
@@ -101,7 +108,10 @@ internal class GeminiAccountSwitcherAutomation(
             return
         }
 
-        reportProgress("1/5", "Gemini 앱을 전면으로 실행하는 중...")
+        reportProgress(
+            GeminiAccountSwitchProgressPolicy.PHASE_1,
+            GeminiAccountSwitchProgressPolicy.step1LaunchGemini()
+        )
         launchGemini()
         handler.postDelayed(::step, 600L)
     }
@@ -158,7 +168,10 @@ internal class GeminiAccountSwitcherAutomation(
         // 0. 이미 계정 목록이 펼쳐져 있다면 바로 계정 탐색 단계로 이동
         if (areAccountsExpanded(nodes)) {
             Log.i(TAG, "handleOpenProfile: Accounts list already expanded, moving to FIND_ACCOUNT_AND_SCROLL")
-            reportProgress("4/5", "대상 계정 [${targetAlias.ifBlank { targetIdentifier }}] 찾는 중...")
+            reportProgress(
+                GeminiAccountSwitchProgressPolicy.PHASE_4,
+                GeminiAccountSwitchProgressPolicy.step4FindAccount(targetAlias.ifBlank { targetIdentifier })
+            )
             phase = Phase.FIND_ACCOUNT_AND_SCROLL
             phaseStartedAtMillis = SystemClock.uptimeMillis()
             handler.postDelayed(::step, 200L)
@@ -168,7 +181,10 @@ internal class GeminiAccountSwitcherAutomation(
         // 1. 이미 구글 계정 Bento 다이얼로그가 열려 있는 경우 바로 계정 목록 확장 단계로 이동
         if (isAccountBentoDialogVisible(nodes)) {
             Log.i(TAG, "handleOpenProfile: Bento dialog visible, moving to EXPAND_ACCOUNTS")
-            reportProgress("3/5", "계정 목록 펼치는 중...")
+            reportProgress(
+                GeminiAccountSwitchProgressPolicy.PHASE_3,
+                GeminiAccountSwitchProgressPolicy.step3ExpandAccounts()
+            )
             phase = Phase.EXPAND_ACCOUNTS
             phaseStartedAtMillis = SystemClock.uptimeMillis()
             handler.postDelayed(::step, 200L)
@@ -242,7 +258,10 @@ internal class GeminiAccountSwitcherAutomation(
         // 계정 목록 RecyclerView 가 이미 펼쳐져 있는지 확인
         if (areAccountsExpanded(nodes)) {
             Log.i(TAG, "Accounts list is already expanded, proceeding to find account")
-            reportProgress("4/5", "대상 계정 [${targetAlias.ifBlank { targetIdentifier }}] 찾는 중...")
+            reportProgress(
+                GeminiAccountSwitchProgressPolicy.PHASE_4,
+                GeminiAccountSwitchProgressPolicy.step4FindAccount(targetAlias.ifBlank { targetIdentifier })
+            )
             phase = Phase.FIND_ACCOUNT_AND_SCROLL
             phaseStartedAtMillis = SystemClock.uptimeMillis()
             handler.postDelayed(::step, 200L)
@@ -294,7 +313,10 @@ internal class GeminiAccountSwitcherAutomation(
         val accountNode = findMatchingAccountNode(nodes)
         if (accountNode != null) {
             Log.i(TAG, "handleFindAccountAndScroll: Target account found! Clicking: ${accountNode.viewIdResourceName}")
-            reportProgress("5/5", "계정 전환 중: [${targetAlias.ifBlank { targetIdentifier }}]...")
+            reportProgress(
+                GeminiAccountSwitchProgressPolicy.PHASE_5,
+                GeminiAccountSwitchProgressPolicy.step5SwitchingAccount(targetAlias.ifBlank { targetIdentifier })
+            )
             val clicked = clickNodeOrParent(accountNode)
             if (clicked) {
                 phase = Phase.WAIT_FOR_DISMISS_AND_NEW_CHAT
@@ -308,7 +330,10 @@ internal class GeminiAccountSwitcherAutomation(
         if (scrollAttempts < MAX_SCROLL_ATTEMPTS) {
             scrollAttempts++
             Log.i(TAG, "handleFindAccountAndScroll: Account not in view, scrolling list (attempt $scrollAttempts/$MAX_SCROLL_ATTEMPTS)")
-            reportProgress("4/5", "계정 목록 스크롤 중 ($scrollAttempts/$MAX_SCROLL_ATTEMPTS)...")
+            reportProgress(
+                GeminiAccountSwitchProgressPolicy.PHASE_4,
+                GeminiAccountSwitchProgressPolicy.step4ScrollAccounts(scrollAttempts, MAX_SCROLL_ATTEMPTS)
+            )
             val scrolled = scrollAccountsList(nodes)
             if (scrolled) {
                 handler.postDelayed(::step, 700L)

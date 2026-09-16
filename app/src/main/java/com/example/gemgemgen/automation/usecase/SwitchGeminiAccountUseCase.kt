@@ -1,8 +1,9 @@
-﻿// 역할: Gemini 계정 자동 전환, 원격 수신 기기 전환 요청 및 계정 활성화 상태 갱신을 총괄하는 유스케이스입니다.
+// 역할: Gemini 계정 자동 전환, 원격 수신 기기 전환 요청 및 계정 활성화 상태 갱신을 총괄하는 유스케이스입니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.android.GeminiAccountSwitchResult
 import com.example.gemgemgen.automation.domain.GeminiAccountProfile
+import com.example.gemgemgen.automation.domain.GeminiAccountSwitchProgressPolicy
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
@@ -33,10 +34,10 @@ class SwitchGeminiAccountUseCase(
         }
 
         if (!switcherGateway.isServiceAvailable) {
-            return SwitchGeminiAccountExecutionResult.Failure("접근성 서비스를 먼저 활성화해주세요.")
+            return SwitchGeminiAccountExecutionResult.Failure(GeminiAccountSwitchProgressPolicy.ERROR_ACCESSIBILITY_REQUIRED)
         }
         if (account.identifier.isBlank()) {
-            return SwitchGeminiAccountExecutionResult.Failure("계정 식별자(구글 이메일)가 비어 있습니다.")
+            return SwitchGeminiAccountExecutionResult.Failure(GeminiAccountSwitchProgressPolicy.ERROR_IDENTIFIER_BLANK)
         }
 
         return when (val result = switcherGateway.switchAccount(account.identifier, account.alias, onProgress)) {
@@ -45,7 +46,7 @@ class SwitchGeminiAccountUseCase(
                 SwitchGeminiAccountExecutionResult.Success(updated, result.message)
             }
             is GeminiAccountSwitchResult.Failure -> SwitchGeminiAccountExecutionResult.Failure(result.message)
-            GeminiAccountSwitchResult.Unavailable -> SwitchGeminiAccountExecutionResult.Failure("접근성 서비스를 사용할 수 없습니다.")
+            GeminiAccountSwitchResult.Unavailable -> SwitchGeminiAccountExecutionResult.Failure(GeminiAccountSwitchProgressPolicy.ERROR_SERVICE_UNAVAILABLE)
         }
     }
 

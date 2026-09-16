@@ -1,4 +1,4 @@
-// 역할: AI 분석 요청을 관리하고 화면에 필요한 데이터 상태와 이벤트를 중계합니다.
+// 역할: AI 프롬프트 분석 요청을 관리하고 화면 상태와 이벤트를 중계합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -115,8 +115,7 @@ class AnalysisViewModel(
     }
 
     private fun replaceSourcePrompt(value: String) {
-        val currentText = sourcePromptTextFieldState.text.toString()
-        if (currentText != value) {
+        if (sourcePromptTextFieldState.text.toString() != value) {
             sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(value)
         }
 
@@ -157,26 +156,18 @@ class AnalysisViewModel(
         nextNeedsMasking: Boolean,
         clearCandidates: Boolean
     ) {
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            state.copy(
                 sourcePrompt = value,
                 targetSegment = nextSegment,
                 needsMaskingAnalysis = nextNeedsMasking,
-                generatedCandidates = if (clearCandidates) emptyList() else it.generatedCandidates,
-                resultPresentation = if (clearCandidates) {
-                    AnalysisResultPresentation.NONE
-                } else {
-                    it.resultPresentation
-                },
-                selectedCandidateIndex = if (clearCandidates) null else it.selectedCandidateIndex,
+                generatedCandidates = if (clearCandidates) emptyList() else state.generatedCandidates,
+                resultPresentation = if (clearCandidates) AnalysisResultPresentation.NONE else state.resultPresentation,
+                selectedCandidateIndex = state.selectedCandidateIndex.takeUnless { clearCandidates },
                 error = "",
-                message = if (nextSegment != segment) "" else it.message,
+                message = if (nextSegment != segment) "" else state.message,
                 warning = "",
-                status = if (it.status == AnalysisStatus.ERROR) {
-                    AnalysisStatus.IDLE
-                } else {
-                    it.status
-                }
+                status = if (state.status == AnalysisStatus.ERROR) AnalysisStatus.IDLE else state.status
             )
         }
     }
@@ -286,11 +277,7 @@ class AnalysisViewModel(
                 it.copy(
                     status = AnalysisStatus.GENERATING,
                     error = "",
-                    message = if (needsMaskingAnalysis) {
-                        "자동 마스킹 중..."
-                    } else {
-                        generatingMessage
-                    },
+                    message = if (needsMaskingAnalysis) "자동 마스킹 중..." else generatingMessage,
                     warning = ""
                 )
             }
@@ -333,13 +320,13 @@ class AnalysisViewModel(
                 )
                 coroutineContext.ensureActive()
                 if (ensured.didAnalyze) {
-                    rememberLastUsed(
+                    keyManager.rememberLastUsed(
                         role = AnalysisModelRole.MASKING,
                         provider = snapshot.maskingProvider,
                         modelId = snapshot.maskingModel
                     )
                 }
-                rememberLastUsed(
+                keyManager.rememberLastUsed(
                     role = AnalysisModelRole.GENERATION,
                     provider = snapshot.generationProvider,
                     modelId = snapshot.generationModel
@@ -358,7 +345,7 @@ class AnalysisViewModel(
                         selectedCandidateIndex = candidateAutomationSession
                             ?.appliedCandidate
                             ?.let(result.candidates::indexOf)
-                            ?.takeIf { it >= 0 },
+                            ?.takeIf { idx -> idx >= 0 },
                         // TXT 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
                         resultFileName = if (updateResultFileName) {
                             category.defaultWildcardSaveFileName()
@@ -371,11 +358,9 @@ class AnalysisViewModel(
                         error = ""
                     )
                 }
-                val usedGrok =
-                    snapshot.generationProvider == AnalysisProvider.GROK ||
-                        (ensured.didAnalyze &&
-                            snapshot.maskingProvider == AnalysisProvider.GROK) ||
-                        _uiState.value.usesGrok
+                val usedGrok = snapshot.generationProvider == AnalysisProvider.GROK ||
+                    (ensured.didAnalyze && snapshot.maskingProvider == AnalysisProvider.GROK) ||
+                    _uiState.value.usesGrok
                 if (usedGrok) {
                     refreshGrokQuotaIfLoggedIn()
                 }
@@ -529,6 +514,7 @@ class AnalysisViewModel(
         cache: AnalysisReportCache? = analysisCache,
         state: AnalysisUiState = _uiState.value
     ): Boolean {
+        if (category == null) return false
         val directionInput = currentDirectionInput(state)
         return AnalysisMaskingPolicy.shouldAnalyzeMasking(
             source = source,
@@ -679,21 +665,28 @@ class AnalysisViewModel(
         onSuccess: ((replacedSource: String) -> Unit)? = null
     ) {
         val state = _uiState.value
-        if (state.resultPresentation != AnalysisResultPresentation.TXT || state.generatedCandidates.isEmpty()) return
+        if (state.resultPresentation != AnalysisResultPresentation.TXT) return
+        if (state.generatedCandidates.isEmpty()) return
+
         val candidates = state.generatedCandidates
+        val fileNameInput = state.resultFileName
+        val sourcePrompt = sourcePromptTextFieldState.text.toString()
+        val targetSegment = state.targetSegment
+
         scope.launch {
             try {
                 when (
                     val result = saveWildcardFile.saveAndPrepareReplacedSource(
-                        fileNameInput = state.resultFileName,
+                        fileNameInput = fileNameInput,
                         candidates = candidates,
                         overwrite = overwrite,
-                        sourcePrompt = sourcePromptTextFieldState.text.toString(),
-                        targetSegment = state.targetSegment
+                        sourcePrompt = sourcePrompt,
+                        targetSegment = targetSegment
                     )
                 ) {
                     AnalysisSaveAndReplaceResult.InvalidFileName ->
                         showError("저장할 파일명을 입력해주세요.")
+
                     is AnalysisSaveAndReplaceResult.FileExists ->
                         _uiState.update {
                             it.copy(
@@ -702,6 +695,7 @@ class AnalysisViewModel(
                                 message = "같은 이름의 파일이 있습니다."
                             )
                         }
+
                     is AnalysisSaveAndReplaceResult.Success -> {
                         val message = if (result.clipboardCopied) {
                             "${result.fileName} 파일로 저장하고, 치환된 원문을 클립보드에 복사한 뒤 자동화 프롬프트에 반영했습니다."
@@ -727,6 +721,7 @@ class AnalysisViewModel(
     }
 
     fun confirmOverwrite(onSuccess: ((replacedSource: String) -> Unit)? = null) {
+        if (_uiState.value.pendingOverwriteFileName.isNullOrBlank()) return
         saveGeneratedResults(overwrite = true, onSuccess = onSuccess)
     }
 
@@ -988,15 +983,15 @@ class AnalysisViewModel(
         provider: AnalysisProvider,
         modelId: String
     ) {
-        _uiState.update {
+        _uiState.update { state ->
             when (role) {
-                AnalysisModelRole.MASKING -> it.copy(
+                AnalysisModelRole.MASKING -> state.copy(
                     maskingProvider = provider,
                     maskingModel = modelId,
                     error = "",
                     message = ""
                 )
-                AnalysisModelRole.GENERATION -> it.copy(
+                AnalysisModelRole.GENERATION -> state.copy(
                     generationProvider = provider,
                     generationModel = modelId,
                     error = "",
@@ -1005,12 +1000,6 @@ class AnalysisViewModel(
             }
         }
     }
-
-    private suspend fun rememberLastUsed(
-        role: AnalysisModelRole,
-        provider: AnalysisProvider,
-        modelId: String
-    ) = keyManager.rememberLastUsed(role, provider, modelId)
 
     private fun refreshGrokStatus() {
         scope.launch {

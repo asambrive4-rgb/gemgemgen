@@ -18,13 +18,9 @@ class CheckAutomationStartUseCase(
     fun decide(
         canRun: Boolean,
         isStartInProgress: Boolean
-    ): AutomationStartDecision {
-        if (!overlayPermissionGateway.isGranted()) {
-            return AutomationStartDecision.PermissionRequired
-        }
-        if (!canRun || isStartInProgress) {
-            return AutomationStartDecision.Rejected
-        }
-        return AutomationStartDecision.Started
+    ): AutomationStartDecision = when {
+        !overlayPermissionGateway.isGranted() -> AutomationStartDecision.PermissionRequired
+        canRun && !isStartInProgress -> AutomationStartDecision.Started
+        else -> AutomationStartDecision.Rejected
     }
 }
