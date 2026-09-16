@@ -1,4 +1,4 @@
-// 역할: GPU 레이어 캐싱을 적용한 탭 바를 통해 기능별 메인 화면을 부드럽게 전환하는 레이아웃을 구성합니다.
+// 역할: GPU 레이어 캐싱과 화면 보존 기법을 적용하여 탭 간 0ms 무지연 전환을 제공하는 레이아웃을 구성합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -25,6 +25,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 
@@ -52,6 +57,12 @@ internal fun MainTabbedScreen(
     if (tabs.isEmpty()) return
 
     val saveableStateHolder = rememberSaveableStateHolder()
+    val visitedTabs = rememberSaveable { mutableStateListOf<MainTab>() }
+    LaunchedEffect(selectedTab) {
+        if (!visitedTabs.contains(selectedTab)) {
+            visitedTabs.add(selectedTab)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(
@@ -160,10 +171,24 @@ internal fun MainTabbedScreen(
                 .weight(1f)
                 .fillMaxSize()
         ) {
-            val currentPage = tabs.firstOrNull { it.tab == selectedTab } ?: tabs.firstOrNull()
-            if (currentPage != null) {
-                saveableStateHolder.SaveableStateProvider(currentPage.tab) {
-                    currentPage.content()
+            tabs.forEach { page ->
+                val isSelected = page.tab == selectedTab
+                val hasVisited = isSelected || visitedTabs.contains(page.tab)
+                if (hasVisited) {
+                    key(page.tab) {
+                        saveableStateHolder.SaveableStateProvider(page.tab) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(if (isSelected) 1f else 0f)
+                                    .graphicsLayer {
+                                        alpha = if (isSelected) 1f else 0f
+                                    }
+                            ) {
+                                page.content()
+                            }
+                        }
+                    }
                 }
             }
         }

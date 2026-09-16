@@ -1,4 +1,4 @@
-// 역할: 프롬프트 입력, 대상 앱 선택, 문단 편집 모드 토글, 와일드카드 추천 애니메이션 및 삽입·변주 조약돌 액션 바를 표시합니다.
+// 역할: GPU 레이어 캐싱 기반의 프롬프트 입력, 대상 앱 선택, 문단 편집 모드 토글, 와일드카드 추천 및 변주 액션 바를 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -32,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.foundation.layout.PaddingValues
@@ -153,7 +154,12 @@ internal fun PromptSection(
     }
     val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -672,6 +678,7 @@ internal fun WildcardTokenSuggestionBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer()
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -712,11 +719,15 @@ private fun ActionIsland(
     horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(3.dp),
     content: @Composable RowScope.() -> Unit
 ) {
+    val islandShape = RoundedCornerShape(12.dp)
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = islandShape,
         border = BorderStroke(1.2.dp, AppTheme.colors.insetBorder),
         color = AppTheme.colors.insetBed,
-        modifier = modifier
+        modifier = modifier.graphicsLayer {
+            clip = true
+            shape = islandShape
+        }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),

@@ -3,6 +3,7 @@ package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
@@ -182,11 +183,18 @@ internal fun AutomationApp(
     analysisActions: AnalysisAppActions,
     wildcardActions: WildcardAppActions
 ) {
-    MainTabbedScreen(
-        selectedTab = selectedTab,
-        onSelectTab = automationActions.onSelectTab,
-        onShowSettings = automationActions.onShowSettings,
-        tabs = listOf(
+    val tabs = remember(
+        mainUiState,
+        automationBarUiState,
+        promptTemplateState,
+        analysisUiState,
+        analysisPromptState,
+        wildcardUiState,
+        automationActions,
+        analysisActions,
+        wildcardActions
+    ) {
+        listOf(
             MainTabPage(MainTab.AUTOMATION) {
                 AutomationScreen(
                     uiState = mainUiState,
@@ -358,6 +366,13 @@ internal fun AutomationApp(
                 )
             }
         )
+    }
+
+    MainTabbedScreen(
+        selectedTab = selectedTab,
+        onSelectTab = automationActions.onSelectTab,
+        onShowSettings = automationActions.onShowSettings,
+        tabs = tabs
     )
 
     SettingsDialogHost(

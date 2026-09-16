@@ -1,4 +1,4 @@
-// 역할: 긴 텍스트 입력과 스크롤, 자리표시자 및 텍스트 하이라이트 처리를 지원하는 공용 다중 행 텍스트 입력창 UI를 제공합니다.
+// 역할: GPU 레이어 캐싱과 스크롤, 자리표시자 및 텍스트 하이라이트 처리를 지원하는 공용 다중 행 텍스트 입력창 UI를 제공합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -26,6 +26,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.SpanStyle
@@ -183,6 +184,7 @@ fun AppMultilineTextField(
         state = state,
         // 메인 탭 좌우 스와이프와 분리 — 입력칸 위 제스처는 탭 전환에 쓰지 않는다.
         modifier = modifier
+            .graphicsLayer()
             .shadow(
                 elevation = 2.dp,
                 shape = fieldShape,
