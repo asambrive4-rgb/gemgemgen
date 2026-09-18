@@ -16,7 +16,7 @@ import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.analysis.ui.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
-import com.example.gemgemgen.analysis.usecase.AnalysisCredentialResolver
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.AnalysisWildcardSaveResult
 import com.example.gemgemgen.analysis.usecase.AnalyzePromptForCategoryUseCase
@@ -232,7 +232,7 @@ class AnalysisFeatureTest {
         val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
         val result = GenerateAnalysisTxtUseCase(
             aiGateway = aiGateway,
-            credentialResolver = AnalysisCredentialResolver(
+            credentialResolver = ResolveAnalysisCredentialUseCase(
                 apiKeyRepository = keyRepository,
                 grokAuth = ManageGrokAuthUseCase(
                     gateway = FakeGrokAuthGateway(),
@@ -282,7 +282,7 @@ class AnalysisFeatureTest {
         val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
         val result = GenerateAnalysisTxtUseCase(
             aiGateway = aiGateway,
-            credentialResolver = AnalysisCredentialResolver(
+            credentialResolver = ResolveAnalysisCredentialUseCase(
                 apiKeyRepository = keyRepository,
                 grokAuth = ManageGrokAuthUseCase(
                     gateway = FakeGrokAuthGateway(),
@@ -384,7 +384,7 @@ class AnalysisFeatureTest {
         val resolve = ResolveAnalysisTargetUseCase(
             AnalyzePromptForCategoryUseCase(
                 aiGateway = aiGateway,
-                credentialResolver = AnalysisCredentialResolver(
+                credentialResolver = ResolveAnalysisCredentialUseCase(
                     apiKeyRepository = keyRepository,
                     grokAuth = ManageGrokAuthUseCase(
                         gateway = FakeGrokAuthGateway(),
@@ -454,7 +454,7 @@ class AnalysisFeatureTest {
             setRoleModel("generation", generationModel)
         }
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
-        val credentialResolver = AnalysisCredentialResolver(
+        val credentialResolver = ResolveAnalysisCredentialUseCase(
             apiKeyRepository = keyRepository,
             grokAuth = ManageGrokAuthUseCase(
                 gateway = FakeGrokAuthGateway(),
@@ -1416,7 +1416,7 @@ class AnalysisFeatureTest {
             repository = grokAuthRepository,
             dispatchers = dispatchers
         )
-        val credentialResolver = AnalysisCredentialResolver(
+        val credentialResolver = ResolveAnalysisCredentialUseCase(
             apiKeyRepository = keyRepository,
             grokAuth = grokAuth,
             dispatchers = dispatchers

@@ -1,4 +1,4 @@
-// 역할: 화면 노드 조작, 제스처 탭/스와이프, Gemini 계정 자동 전환, 클립보드 동기화 및 앱 제어 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
+// 역할: 화면 노드 조작, 제스처 탭/스와이프, Gemini 계정 목록 열기, 클립보드 동기화 및 앱 제어 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -180,9 +180,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
     }
 
-    internal suspend fun switchGeminiAccount(
-        identifier: String,
-        alias: String,
+    internal suspend fun openGeminiAccountPicker(
         onProgress: ((phase: String, message: String) -> Unit)? = null
     ): GeminiAccountSwitchResult {
         if (
@@ -241,18 +239,8 @@ class GeminiAccessibilityService : AccessibilityService() {
                             false
                         }
                     },
-                    targetIdentifier = identifier,
-                    targetAlias = alias,
                     tapAtCoordinates = { x, y -> tapCoordinates(x, y, null) },
                     onProgress = onProgress,
-                    bringAppToForeground = {
-                        val bringIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                        }
-                        if (bringIntent != null) {
-                            startActivity(bringIntent)
-                        }
-                    },
                     onFinished = { result ->
                         clearPackageRestriction()
                         if (accountSwitchAutomation === automation) {
@@ -338,12 +326,11 @@ class GeminiAccessibilityService : AccessibilityService() {
 
     private fun applyAccessibilitySubscription(packageNames: Array<String>?) {
         val info = serviceInfo ?: return
-        info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         info.packageNames = packageNames
-        info.flags = info.flags or
-            AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-            AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+        info.notificationTimeout = 200
+        info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         setServiceInfo(info)
     }
 

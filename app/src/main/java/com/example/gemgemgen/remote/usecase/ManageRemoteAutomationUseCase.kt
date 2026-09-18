@@ -4,9 +4,9 @@ package com.example.gemgemgen.remote.usecase
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptGenerator
+import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
-import com.example.gemgemgen.automation.usecase.AutomationStartRecorder
-import com.example.gemgemgen.automation.usecase.NoOpAutomationStartRecorder
+import com.example.gemgemgen.automation.usecase.NoOpAutomationHistoryRecorder
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 class ManageRemoteAutomationUseCase(
     private val gateway: RemoteAutomationGateway,
-    private val automationStartRecorder: AutomationStartRecorder = NoOpAutomationStartRecorder,
+    private val automationHistoryRecorder: AutomationHistoryRecorder = NoOpAutomationHistoryRecorder,
     private val wildcardSetRepository: WildcardSetRepository = NoOpWildcardSetRepository,
     private val promptGenerator: PromptGenerator = PromptGenerator(),
     private val requestIdProvider: () -> String = { UUID.randomUUID().toString() }
@@ -68,7 +68,7 @@ class ManageRemoteAutomationUseCase(
             return RemoteActionResult.Failure("원본 프롬프트를 입력해주세요.")
         }
         try {
-            automationStartRecorder.record(request)
+            automationHistoryRecorder.record(request)
         } catch (error: Exception) {
             return RemoteActionResult.Failure(
                 "송신 기기에서 시작 정보를 저장하지 못했습니다. ${

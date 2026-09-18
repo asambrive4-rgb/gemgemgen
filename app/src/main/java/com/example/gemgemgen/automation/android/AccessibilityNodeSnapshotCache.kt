@@ -15,6 +15,16 @@ internal class AccessibilityNodeSnapshotCache(
     private var cachedNodes: List<AccessibilityNodeInfo> = emptyList()
     private var cachedAtMillis: Long = 0L
 
+    var cacheHitCount = 0L
+        private set
+    var cacheMissCount = 0L
+        private set
+
+    fun resetStats() {
+        cacheHitCount = 0L
+        cacheMissCount = 0L
+    }
+
     fun getOrLoad(
         root: AccessibilityNodeInfo?,
         nowMillis: Long = SystemClock.uptimeMillis(),
@@ -24,13 +34,32 @@ internal class AccessibilityNodeSnapshotCache(
             clear()
             return emptyList()
         }
-        if (root === cachedRoot && nowMillis - cachedAtMillis <= cacheTtlMs) {
+        if (cachedNodes.isNotEmpty() && (root == cachedRoot || root === cachedRoot) && nowMillis - cachedAtMillis <= cacheTtlMs) {
+            cacheHitCount++
             return cachedNodes
         }
 
         clear()
+        cacheMissCount++
         val nodes = load(root)
         cachedRoot = root
+        cachedNodes = nodes
+        cachedAtMillis = nowMillis
+        return nodes
+    }
+
+    fun getOrLoad(
+        nowMillis: Long = SystemClock.uptimeMillis(),
+        load: () -> List<AccessibilityNodeInfo>
+    ): List<AccessibilityNodeInfo> {
+        if (cachedNodes.isNotEmpty() && nowMillis - cachedAtMillis <= cacheTtlMs) {
+            cacheHitCount++
+            return cachedNodes
+        }
+
+        clear()
+        cacheMissCount++
+        val nodes = load()
         cachedNodes = nodes
         cachedAtMillis = nowMillis
         return nodes
@@ -43,7 +72,7 @@ internal class AccessibilityNodeSnapshotCache(
     }
 
     private companion object {
-        // Covers multi-find within one step; retry delays (250ms+) usually rebuild.
-        const val DEFAULT_CACHE_TTL_MS = 200L
+        // Covers multi-find within one step and retry intervals (250ms).
+        const val DEFAULT_CACHE_TTL_MS = 400L
     }
 }

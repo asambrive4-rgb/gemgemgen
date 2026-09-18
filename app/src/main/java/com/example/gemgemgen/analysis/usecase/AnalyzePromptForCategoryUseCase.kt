@@ -14,7 +14,7 @@ class AnalysisException(message: String) : RuntimeException(message)
 
 class AnalyzePromptForCategoryUseCase(
     private val aiGateway: AnalysisAiGateway,
-    private val credentialResolver: AnalysisCredentialResolver,
+    private val credentialResolver: ResolveAnalysisCredentialUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     suspend fun analyze(

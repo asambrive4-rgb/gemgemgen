@@ -7,7 +7,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.usecase.AnalysisCredentialResolver
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthGateway
@@ -267,7 +267,7 @@ class WildcardClassifyCoordinatorTest {
             repository = fakeGrokRepo,
             dispatchers = dispatchers
         )
-        val resolver = AnalysisCredentialResolver(
+        val resolver = ResolveAnalysisCredentialUseCase(
             apiKeyRepository = keyRepository,
             grokAuth = grokAuth,
             dispatchers = dispatchers

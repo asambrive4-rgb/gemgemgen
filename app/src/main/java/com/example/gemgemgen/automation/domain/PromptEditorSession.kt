@@ -7,7 +7,6 @@ package com.example.gemgemgen.automation.domain
  */
 enum class PromptParagraphMessageKey {
     None,
-    Guide,
     Selected,
     EmptyParagraph,
     SelectFirst,
@@ -51,7 +50,7 @@ data class PromptEditorSession(
             copy(
                 isParagraphSelectionMode = true,
                 selectedParagraphRange = null,
-                messageKey = PromptParagraphMessageKey.Guide
+                messageKey = PromptParagraphMessageKey.None
             )
         }
     }

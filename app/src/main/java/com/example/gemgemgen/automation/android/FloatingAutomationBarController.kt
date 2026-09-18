@@ -14,7 +14,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.gemgemgen.automation.ui.AutomationBarUiState
-import com.example.gemgemgen.automation.ui.FloatingAutomationBarOverlay
+import com.example.gemgemgen.automation.ui.FloatingOverlayBar
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.max
 import kotlin.math.min
@@ -79,7 +79,7 @@ internal class FloatingAutomationBarController(
         }
 
         view.setContent {
-            FloatingAutomationBarOverlay(
+            FloatingOverlayBar(
                 uiStateFlow = uiStateFlow,
                 onCancelAutomation = onCancelAutomation,
                 onRepeatCountChange = onRepeatCountChange,
@@ -138,7 +138,9 @@ internal class FloatingAutomationBarController(
             positionStore.barWidthPx(),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START

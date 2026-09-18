@@ -42,7 +42,6 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
-import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 
@@ -55,130 +54,124 @@ fun AutomationModePanel(
     onRequestPair: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    NeuCard(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = 2.dp
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Column(
+        NeuInsetBed(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .height(38.dp),
+            shape = RoundedCornerShape(14.dp),
+            backgroundColor = AppTheme.colors.insetBed,
+            borderColor = AppTheme.colors.insetBorder
         ) {
-            NeuInsetBed(
+            Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(30.dp),
-                shape = RoundedCornerShape(10.dp),
-                backgroundColor = AppTheme.colors.insetBed,
-                borderColor = AppTheme.colors.insetBorder
+                    .fillMaxSize()
+                    .padding(3.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(2.5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AutomationMode.entries.forEach { mode ->
-                        val isSelected = selectedMode == mode
-                        val label = when (mode) {
-                            AutomationMode.NORMAL -> "일반"
-                            AutomationMode.SENDER -> "송신"
-                            AutomationMode.RECEIVER -> "수신"
-                        }
-                        val pillShape = RoundedCornerShape(9.dp)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .then(
-                                    if (isSelected) {
-                                        Modifier.shadow(
-                                            elevation = 2.dp,
-                                            shape = pillShape,
-                                            ambientColor = AppTheme.colors.primary.copy(alpha = 0.35f),
-                                            spotColor = AppTheme.colors.primary.copy(alpha = 0.25f)
-                                        )
-                                    } else {
-                                        Modifier
-                                    }
-                                )
-                                .clip(pillShape)
-                                .background(
-                                    if (isSelected) AppTheme.colors.primary else Color.Transparent
-                                )
-                                .clickable(enabled = enabled) {
-                                    if (selectedMode != mode) {
-                                        onModeSelected(mode)
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = label,
-                                color = if (isSelected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                AutomationMode.entries.forEach { mode ->
+                    val isSelected = selectedMode == mode
+                    val label = when (mode) {
+                        AutomationMode.NORMAL -> "일반"
+                        AutomationMode.SENDER -> "송신"
+                        AutomationMode.RECEIVER -> "수신"
+                    }
+                    val pillShape = RoundedCornerShape(11.dp)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .then(
+                                if (isSelected) {
+                                    Modifier.shadow(
+                                        elevation = 2.dp,
+                                        shape = pillShape,
+                                        ambientColor = AppTheme.colors.primary.copy(alpha = 0.35f),
+                                        spotColor = AppTheme.colors.primary.copy(alpha = 0.25f)
+                                    )
+                                } else {
+                                    Modifier
+                                }
                             )
-                        }
+                            .clip(pillShape)
+                            .background(
+                                if (isSelected) AppTheme.colors.primary else Color.Transparent
+                            )
+                            .clickable(enabled = enabled) {
+                                if (selectedMode != mode) {
+                                    onModeSelected(mode)
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
                     }
                 }
             }
+        }
 
-            if (selectedMode != AutomationMode.NORMAL &&
-                !(selectedMode == AutomationMode.SENDER &&
-                    status.automationState is AutomationRunState.Running)
-            ) {
-                val connectionText = when (selectedMode) {
-                    AutomationMode.SENDER -> status.connectionMessage
-                    AutomationMode.RECEIVER -> status.message
-                    AutomationMode.NORMAL -> ""
-                }.ifBlank {
-                    if (selectedMode == AutomationMode.SENDER) {
-                        "S25 FE를 찾는 중입니다."
-                    } else {
-                        "수신 대기를 시작하는 중입니다."
-                    }
-                }
-
-                Text(
-                    text = connectionText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTheme.colors.textSecondary
-                )
-            }
-
-            if (selectedMode == AutomationMode.SENDER &&
-                status.discoveredDeviceName.isNotBlank() &&
-                !status.isPaired
-            ) {
-                NeuButton(
-                    onClick = onRequestPair,
-                    shape = RoundedCornerShape(10.dp),
-                    isPrimary = true,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "${status.discoveredDeviceName} 연결",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+        if (selectedMode != AutomationMode.NORMAL &&
+            !(selectedMode == AutomationMode.SENDER &&
+                status.automationState is AutomationRunState.Running)
+        ) {
+            val connectionText = when (selectedMode) {
+                AutomationMode.SENDER -> status.connectionMessage
+                AutomationMode.RECEIVER -> status.message
+                AutomationMode.NORMAL -> ""
+            }.ifBlank {
+                if (selectedMode == AutomationMode.SENDER) {
+                    "S25 FE를 찾는 중입니다."
+                } else {
+                    "수신 대기를 시작하는 중입니다."
                 }
             }
 
-            if (selectedMode == AutomationMode.RECEIVER &&
-                status.isReceiverRunning &&
-                !status.isPaired &&
-                status.receiverPairingCode.isNotBlank()
+            Text(
+                text = connectionText,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.colors.textSecondary,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
+        }
+
+        if (selectedMode == AutomationMode.SENDER &&
+            status.discoveredDeviceName.isNotBlank() &&
+            !status.isPaired
+        ) {
+            NeuButton(
+                onClick = onRequestPair,
+                shape = RoundedCornerShape(10.dp),
+                isPrimary = true,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "연결 번호  ${status.receiverPairingCode}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.primary
+                    text = "${status.discoveredDeviceName} 연결",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
+        }
+
+        if (selectedMode == AutomationMode.RECEIVER &&
+            status.isReceiverRunning &&
+            !status.isPaired &&
+            status.receiverPairingCode.isNotBlank()
+        ) {
+            Text(
+                text = "연결 번호  ${status.receiverPairingCode}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.colors.primary,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+            )
         }
     }
 }

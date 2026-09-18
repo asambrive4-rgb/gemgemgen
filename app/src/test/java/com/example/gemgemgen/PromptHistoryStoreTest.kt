@@ -95,6 +95,22 @@ class PromptHistoryStoreTest {
     }
 
     @Test
+    fun record_defaultMaxCount_capsAtSix() {
+        val repo = FakePromptHistoryRepository()
+        val store = PromptHistoryStore(repo)
+
+        repeat(7) { index ->
+            store.record("Prompt $index", AutomationTargetApp.CHATGPT)
+        }
+
+        val result = store.load()
+        assertEquals(PromptHistoryStore.DEFAULT_MAX_HISTORY_COUNT, result.size)
+        assertEquals(6, result.size)
+        assertEquals("Prompt 6", result[0].prompt)
+        assertEquals("Prompt 1", result[5].prompt)
+    }
+
+    @Test
     fun clear_removesAllItems() {
         val repo = FakePromptHistoryRepository()
         val store = PromptHistoryStore(repo)

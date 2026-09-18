@@ -24,7 +24,7 @@ interface RemoteAutomationGateway {
     suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult
 }
 
-class NoOpRemoteAutomationGateway : RemoteAutomationGateway {
+open class NoOpRemoteAutomationGateway : RemoteAutomationGateway {
     private val currentStatus = MutableStateFlow(RemoteAutomationStatus())
     override val status: StateFlow<RemoteAutomationStatus> = currentStatus
 

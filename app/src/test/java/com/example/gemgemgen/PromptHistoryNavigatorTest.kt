@@ -133,12 +133,12 @@ class PromptHistoryNavigatorTest {
     }
 
     @Test
-    fun maxDotsCappedAtFour_whenHistoryHasManyItems() {
-        // 5개 이상의 히스토리가 전달되어도 최대 4개 히스토리만 유지되어 총 점은 4개로 한정되어야 함
-        val history = listOf("H1", "H2", "H3", "H4", "H5", "H6")
+    fun maxDotsCappedAtSix_whenHistoryHasManyItems() {
+        // 7개 이상의 히스토리가 전달되어도 최대 6개 히스토리만 유지되어 총 점은 6개로 한정되어야 함
+        val history = listOf("H1", "H2", "H3", "H4", "H5", "H6", "H7")
         val navigator = PromptHistoryNavigator(initialHistory = history, initialDraft = "Draft")
 
-        assertEquals(4, navigator.dotCount) // 최대 4개 과거 점
-        assertEquals(3, navigator.activeDotIndex)
+        assertEquals(6, navigator.dotCount) // 최대 6개 과거 점
+        assertEquals(5, navigator.activeDotIndex)
     }
 }

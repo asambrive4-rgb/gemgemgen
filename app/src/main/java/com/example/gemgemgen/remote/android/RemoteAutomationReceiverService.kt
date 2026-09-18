@@ -479,18 +479,15 @@ class RemoteAutomationReceiverService : Service() {
         }
 
         RemoteAutomationStateHub.update {
-            it.copy(message = "원격 요청으로 Gemini 계정 교체 중: [${message.accountAlias}]")
+            it.copy(message = "원격 요청으로 Gemini 계정 목록 여는 중...")
         }
 
-        val result = service.switchGeminiAccount(
-            identifier = message.accountIdentifier,
-            alias = message.accountAlias
-        )
+        val result = service.openGeminiAccountPicker()
 
         when (result) {
             is com.example.gemgemgen.automation.android.GeminiAccountSwitchResult.Success -> {
                 RemoteAutomationStateHub.update {
-                    it.copy(message = "Gemini 계정을 [${message.accountAlias}]로 교체했습니다.")
+                    it.copy(message = "Gemini 계정 목록을 열었습니다.")
                 }
                 writer.println(
                     RemoteAutomationProtocol.encode(
@@ -504,7 +501,7 @@ class RemoteAutomationReceiverService : Service() {
             }
             is com.example.gemgemgen.automation.android.GeminiAccountSwitchResult.Failure -> {
                 RemoteAutomationStateHub.update {
-                    it.copy(message = "Gemini 계정 교체 실패: ${result.message}")
+                    it.copy(message = "Gemini 계정 목록 열기 실패: ${result.message}")
                 }
                 writer.println(
                     RemoteAutomationProtocol.encode(

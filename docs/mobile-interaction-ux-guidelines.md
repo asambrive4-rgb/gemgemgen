@@ -127,40 +127,28 @@ Surface(
 
 #### ✅ 권장 패턴 (Recommended: Contextual Chip Bar)
 에디터의 텍스트와 커서 위치(`selection.max`)를 관찰하여 후보군을 계산하고, 에디터 상단 트랙에 가로 스크롤 조약돌 칩으로 자연스럽게 제안.
-- 적용 파일: [`PromptSection.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/automation/ui/PromptSection.kt), [`WildcardTokenAutocomplete.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/automation/domain/WildcardTokenAutocomplete.kt)
+- 적용 파일: [`AutomationScreen.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/automation/ui/AutomationScreen.kt), [`PromptSection.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/automation/ui/PromptSection.kt), [`ResolveWildcardAutocompleteUseCase.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/automation/usecase/ResolveWildcardAutocompleteUseCase.kt)
 ```kotlin
-// GOOD: 커서 위치를 실시간 추적하여 자동완성 토큰 목록 계산
-@Composable
-internal fun rememberWildcardSuggestionTokens(
-    promptTemplateState: TextFieldState,
-    wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate>,
-    isParagraphSelectionMode: Boolean,
-    isTargetSelectionEnabled: Boolean
-): List<String> {
-    val fieldText = promptTemplateState.text.toString()
-    val selection = promptTemplateState.selection
-    return remember(
-        fieldText,
-        selection,
-        wildcardTokenCandidates,
-        isParagraphSelectionMode,
-        isTargetSelectionEnabled
-    ) {
-        if (isParagraphSelectionMode || !isTargetSelectionEnabled) {
-            emptyList()
-        } else if (selection.min != selection.max) {
-            emptyList() // 드래그 선택 중에는 제안 숨김
-        } else {
-            // 커서 위치 기준으로 와일드카드 토큰 후보 추출 (순수 도메인 규칙)
-            WildcardTokenAutocomplete.suggestions(
-                text = fieldText,
-                cursor = selection.max,
-                candidates = wildcardTokenCandidates
-            )
-        }
-    }
+// GOOD: 커서 위치와 선택 상태를 실시간 추적하여 자동완성 토큰 목록 도출 (유스케이스 분리)
+val resolveWildcardAutocompleteUseCase = remember { ResolveWildcardAutocompleteUseCase() }
+val suggestionTokens = remember(
+    promptTemplateState.text.toString(),
+    promptTemplateState.selection,
+    uiState.wildcardTokenCandidates,
+    uiState.isParagraphSelectionMode,
+    uiState.isRunning,
+    resolveWildcardAutocompleteUseCase
+) {
+    resolveWildcardAutocompleteUseCase(
+        text = promptTemplateState.text.toString(),
+        selectionStart = promptTemplateState.selection.min,
+        selectionEnd = promptTemplateState.selection.max,
+        candidates = uiState.wildcardTokenCandidates,
+        isParagraphSelectionMode = uiState.isParagraphSelectionMode,
+        isEnabled = !uiState.isRunning
+    )
 }
-
+```
 // 제안 바 UI (가로 스크롤 조약돌 칩)
 if (showWildcardSuggestions && suggestionTokens.isNotEmpty()) {
     WildcardTokenSuggestionBar(

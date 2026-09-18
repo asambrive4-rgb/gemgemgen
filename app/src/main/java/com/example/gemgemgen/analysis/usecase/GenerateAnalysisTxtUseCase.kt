@@ -20,7 +20,7 @@ data class AnalysisTxtGenerationResult(
 
 class GenerateAnalysisTxtUseCase(
     private val aiGateway: AnalysisAiGateway,
-    private val credentialResolver: AnalysisCredentialResolver,
+    private val credentialResolver: ResolveAnalysisCredentialUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     /**

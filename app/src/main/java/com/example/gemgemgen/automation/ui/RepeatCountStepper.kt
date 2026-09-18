@@ -51,7 +51,7 @@ internal fun RepeatCountStepper(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clickable(enabled = currentVal > 1) {
                             onRepeatCountChange((currentVal - 1).toString())
                         },
@@ -59,7 +59,7 @@ internal fun RepeatCountStepper(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
+                            .size(30.dp)
                             .then(
                                 if (currentVal > 1) {
                                     Modifier.shadow(
@@ -97,7 +97,7 @@ internal fun RepeatCountStepper(
                                 AppTheme.colors.textSecondary.copy(alpha = 0.4f)
                             },
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -116,7 +116,7 @@ internal fun RepeatCountStepper(
 
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clickable(enabled = currentVal < 999) {
                             onRepeatCountChange((currentVal + 1).toString())
                         },
@@ -124,7 +124,7 @@ internal fun RepeatCountStepper(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
+                            .size(30.dp)
                             .then(
                                 if (currentVal < 999) {
                                     Modifier.shadow(
@@ -134,8 +134,8 @@ internal fun RepeatCountStepper(
                                          spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
                                      )
                                  } else {
-                                    Modifier
-                                }
+                                     Modifier
+                                 }
                             )
                             .clip(buttonShape)
                             .background(
@@ -162,7 +162,7 @@ internal fun RepeatCountStepper(
                                 AppTheme.colors.textSecondary.copy(alpha = 0.4f)
                             },
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             textAlign = TextAlign.Center
                         )
                     }

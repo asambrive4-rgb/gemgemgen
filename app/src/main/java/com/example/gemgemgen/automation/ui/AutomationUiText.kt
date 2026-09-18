@@ -20,8 +20,6 @@ object AutomationUiText {
     fun paragraphMessage(key: PromptParagraphMessageKey): String {
         return when (key) {
             PromptParagraphMessageKey.None -> ""
-            PromptParagraphMessageKey.Guide ->
-                "바꿀 문단을 터치하세요. 직접 입력은 제한되며 삭제키는 사용할 수 있습니다."
             PromptParagraphMessageKey.Selected ->
                 "문단이 선택되었습니다. 가져오기 또는 삭제키를 사용하세요."
             PromptParagraphMessageKey.EmptyParagraph ->
@@ -71,7 +69,7 @@ object AutomationUiText {
         return error.message ?: "메모리 정리 중 알 수 없는 오류가 발생했습니다."
     }
 
-    fun memoryCleanupUnavailableMessage(state: MainUiState): String {
+    fun memoryCleanupUnavailableMessage(state: AutomationUiState): String {
         return when {
             state.isRunning -> "자동화 실행 중에는 메모리를 정리할 수 없습니다."
             state.isMaintenanceBusy -> "유지보수 작업이 이미 진행 중입니다."
@@ -95,15 +93,15 @@ object AutomationUiText {
         }
     }
 
-    fun geminiRestartUnavailableMessage(state: MainUiState): String {
+    fun geminiRestartUnavailableMessage(state: AutomationUiState): String {
         return geminiRestartUnavailableMessage(blockReasonFor(state))
     }
 
-    fun geminiTerminateUnavailableMessage(state: MainUiState): String {
+    fun geminiTerminateUnavailableMessage(state: AutomationUiState): String {
         return geminiTerminateUnavailableMessage(blockReasonFor(state))
     }
 
-    fun selfAppTerminateUnavailableMessage(state: MainUiState): String {
+    fun selfAppTerminateUnavailableMessage(state: AutomationUiState): String {
         return selfAppTerminateUnavailableMessage(selfBlockReasonFor(state))
     }
 
@@ -147,7 +145,7 @@ object AutomationUiText {
         }
     }
 
-    private fun blockReasonFor(state: MainUiState): GeminiAppControlBlockReason? {
+    private fun blockReasonFor(state: AutomationUiState): GeminiAppControlBlockReason? {
         return GeminiAppControlPolicy.blockReason(
             isGeminiInstalled = state.environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
@@ -156,7 +154,7 @@ object AutomationUiText {
         )
     }
 
-    private fun selfBlockReasonFor(state: MainUiState): SelfAppControlBlockReason? {
+    private fun selfBlockReasonFor(state: AutomationUiState): SelfAppControlBlockReason? {
         return SelfAppControlPolicy.blockReason(
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = state.isRunning,

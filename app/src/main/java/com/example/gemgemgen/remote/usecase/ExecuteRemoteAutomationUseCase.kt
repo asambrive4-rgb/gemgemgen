@@ -4,14 +4,14 @@ package com.example.gemgemgen.remote.usecase
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
-import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
+import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteExecutionConditions
 import com.example.gemgemgen.remote.domain.RemoteExecutionDecision
 
 class ExecuteRemoteAutomationUseCase(
     private val checkExecution: CheckRemoteExecutionUseCase,
-    private val automation: RunAutomationUseCase,
+    private val automation: ExecuteAutomationLoopUseCase,
     private val promptGenerator: PromptGenerator = PromptGenerator()
 ) {
     suspend fun execute(

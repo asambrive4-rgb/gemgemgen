@@ -3,6 +3,7 @@ package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
+import com.example.gemgemgen.automation.domain.PromptHistoryNavigator
 import java.util.UUID
 
 interface PromptHistoryRepository {
@@ -51,6 +52,6 @@ class PromptHistoryStore(
     }
 
     companion object {
-        const val DEFAULT_MAX_HISTORY_COUNT = 4
+        const val DEFAULT_MAX_HISTORY_COUNT = PromptHistoryNavigator.MAX_HISTORY_COUNT
     }
 }

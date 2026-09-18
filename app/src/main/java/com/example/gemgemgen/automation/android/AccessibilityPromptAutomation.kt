@@ -1,4 +1,4 @@
-// 역할: 입력창 탭 활성화, SET_TEXT·붙여넣기 2중 주입 및 전송 보강으로 프롬프트를 자동 입력하거나 붙여넣기만 합니다.
+// 역할: UI 스레드 부하 및 GC 발생을 최소화하며 입력창 탭 활성화, SET_TEXT·붙여넣기 2중 주입 및 전송을 자동화합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -37,9 +37,13 @@ internal abstract class AccessibilityPromptAutomation(
     ) {
         cancelCurrentRun()
 
+        var lastReportedState: AutomationRunState? = null
         val notifyState: suspend (AutomationRunState) -> Unit = { state ->
-            withContext(mainDispatcher) {
-                onStateChange(state)
+            if (lastReportedState != state) {
+                lastReportedState = state
+                withContext(mainDispatcher) {
+                    onStateChange(state)
+                }
             }
         }
 
@@ -70,9 +74,13 @@ internal abstract class AccessibilityPromptAutomation(
     ) {
         cancelCurrentRun()
 
+        var lastReportedState: AutomationRunState? = null
         val notifyState: suspend (AutomationRunState) -> Unit = { state ->
-            withContext(mainDispatcher) {
-                onStateChange(state)
+            if (lastReportedState != state) {
+                lastReportedState = state
+                withContext(mainDispatcher) {
+                    onStateChange(state)
+                }
             }
         }
 
@@ -151,7 +159,12 @@ internal abstract class AccessibilityPromptAutomation(
         }
         targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
 
-        if (!isPromptTextApplied(prompt)) {
+        val textAppliedDirectly = runCatching {
+            targetNode.refresh()
+            isNodeTextApplied(targetNode, prompt)
+        }.getOrDefault(false)
+
+        if (!textAppliedDirectly && !isPromptTextApplied(prompt)) {
             copyToClipboard?.invoke(prompt)
             targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
             delay(INPUT_PASTE_SETTLE_MS)
@@ -173,7 +186,8 @@ internal abstract class AccessibilityPromptAutomation(
         while (coroutineContext.isActive) {
             val now = SystemClock.uptimeMillis()
             if (attempt == 1 || now - lastNotifiedMillis >= STATE_NOTIFY_THROTTLE_MS) {
-                notifyState(AutomationRunState.Running("$actionName (#$attempt)"))
+                val stateText = if (attempt > 1) "$actionName (#$attempt)" else actionName
+                notifyState(AutomationRunState.Running(stateText))
                 lastNotifiedMillis = now
             }
             val result = action(attempt)
@@ -246,11 +260,9 @@ internal abstract class AccessibilityPromptAutomation(
             return false
         }
 
-        notifyState(AutomationRunState.Running("프롬프트 입력 반영 확인 중"))
         delay(INPUT_CONFIRM_WAIT_MS)
 
         if (isPromptTextApplied(prompt)) {
-            notifyState(AutomationRunState.Running("프롬프트 입력 완료"))
             return true
         }
 
@@ -285,7 +297,6 @@ internal abstract class AccessibilityPromptAutomation(
             }
         } ?: return false
 
-        notifyState(AutomationRunState.Running("보내기 클릭 후 전송 확인 중"))
         delay(SEND_CONFIRM_WAIT_MS)
 
         if (isSendConfirmed(prompt)) {
@@ -311,30 +322,34 @@ internal abstract class AccessibilityPromptAutomation(
 
     private fun checkPromptInputAfterSend(prompt: String): PromptInputAfterSend {
         val inputNode = findInputNode() ?: return PromptInputAfterSend.Unknown
-        val inputText = inputNode.text?.toString() ?: return PromptInputAfterSend.Unknown
-        val hint = inputNode.hintText?.toString()
+        val text = inputNode.text ?: return PromptInputAfterSend.Unknown
+        val hint = inputNode.hintText
 
-        if (inputText.isBlank() || (hint != null && inputText == hint)) {
+        if (text.isBlank() || (hint != null && text.contentEquals(hint))) {
             return PromptInputAfterSend.Empty
         }
 
         val sample = if (prompt.length > 50) prompt.take(50) else prompt
-        return if (inputText.contains(prompt) || inputText.contains(sample)) {
+        return if (text.contains(sample)) {
             PromptInputAfterSend.StillPresent
         } else {
             PromptInputAfterSend.Empty
         }
     }
 
-    private fun isPromptTextApplied(prompt: String): Boolean {
-        val inputNode = findInputNode() ?: return false
-        val text = inputNode.text?.toString() ?: return false
-        val hint = inputNode.hintText?.toString()
-        if (hint != null && text == hint) {
+    private fun isNodeTextApplied(node: AccessibilityNodeInfo, prompt: String): Boolean {
+        val text = node.text ?: return false
+        val hint = node.hintText
+        if (hint != null && text.contentEquals(hint)) {
             return false
         }
         val sample = if (prompt.length > 50) prompt.take(50) else prompt
-        return text.contains(prompt) || text.contains(sample)
+        return text.contains(sample)
+    }
+
+    private fun isPromptTextApplied(prompt: String): Boolean {
+        val inputNode = findInputNode() ?: return false
+        return isNodeTextApplied(inputNode, prompt)
     }
 
     private fun findClickableNodeOrParent(
@@ -360,7 +375,7 @@ internal abstract class AccessibilityPromptAutomation(
 
     private companion object {
         const val LAUNCH_SETTLE_WAIT_MS = 300L
-        const val STATE_NOTIFY_THROTTLE_MS = 800L
+        const val STATE_NOTIFY_THROTTLE_MS = 1200L
         const val INPUT_CLICK_SETTLE_MS = 150L
         const val INPUT_PASTE_SETTLE_MS = 100L
         const val INPUT_CONFIRM_WAIT_MS = 500L

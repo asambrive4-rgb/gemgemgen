@@ -3,18 +3,18 @@ package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
-import com.example.gemgemgen.automation.usecase.AutomationStartRecorder
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.remote.usecase.RemoteAutomationGateway
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -43,11 +43,11 @@ class ManageRemoteAutomationUseCaseTest {
                 isPaired = true
             )
         )
-        val recorder = RecordingAutomationStartRecorder()
+        val recorder = RecordingAutomationHistoryRecorder()
         val useCase = ManageRemoteAutomationUseCase(
             gateway = gateway,
             requestIdProvider = { "request-1" },
-            automationStartRecorder = recorder
+            automationHistoryRecorder = recorder
         )
 
         assertEquals(
@@ -215,7 +215,7 @@ class ManageRemoteAutomationUseCaseTest {
         override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult = RemoteActionResult.Success
     }
 
-    private class RecordingAutomationStartRecorder : AutomationStartRecorder {
+    private class RecordingAutomationHistoryRecorder : AutomationHistoryRecorder {
         val recordedRequests = mutableListOf<AutomationRunRequest>()
 
         override suspend fun record(request: AutomationRunRequest) {

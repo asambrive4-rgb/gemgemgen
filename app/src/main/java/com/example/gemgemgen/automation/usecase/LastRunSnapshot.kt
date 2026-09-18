@@ -1,4 +1,4 @@
-// 역할: 앱 복원 시 사용할 마지막 자동화 실행 설정 스냅샷 모델을 정의합니다.
+// 역할: 앱 복원 시 사용할 마지막 자동화 실행 설정 스냅샷 데이터 모델과 저장소를 정의합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
@@ -36,9 +36,4 @@ class LastRunSnapshotStore(
             )
         )
     }
-}
-
-interface LastRunSnapshotRepository {
-    fun load(): LastRunSnapshot?
-    fun save(snapshot: LastRunSnapshot)
 }

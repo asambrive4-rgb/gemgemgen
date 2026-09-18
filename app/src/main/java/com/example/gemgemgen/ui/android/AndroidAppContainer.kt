@@ -12,7 +12,7 @@ import com.example.gemgemgen.analysis.android.AndroidGrokBillingGateway
 import com.example.gemgemgen.analysis.android.AndroidGrokOAuthGateway
 import com.example.gemgemgen.analysis.android.RoutingAnalysisAiGateway
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
-import com.example.gemgemgen.analysis.usecase.AnalysisCredentialResolver
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalyzePromptForCategoryUseCase
 import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
@@ -27,21 +27,20 @@ import com.example.gemgemgen.automation.android.AndroidGeminiAccountSwitcherGate
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
-import com.example.gemgemgen.automation.android.SharedPreferencesGeminiAccountRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptInstructionRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesVariationPromptRepository
-import com.example.gemgemgen.automation.usecase.ManageGeminiAccountsUseCase
-import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountUseCase
+import com.example.gemgemgen.automation.usecase.OpenGeminiAccountPickerUseCase
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
-import com.example.gemgemgen.automation.usecase.RecordAutomationStartUseCase
-import com.example.gemgemgen.automation.usecase.ExecuteAutomationUseCase
+import com.example.gemgemgen.automation.usecase.RecordAutomationHistoryUseCase
+import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
+import com.example.gemgemgen.automation.usecase.ResolveVariationPromptUseCase
 import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
-import com.example.gemgemgen.automation.ui.MainViewModel
+import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.core.android.AndroidSoundAlertGateway
 import com.example.gemgemgen.core.PromptWorkspace
@@ -55,7 +54,7 @@ import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
-import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
+import com.example.gemgemgen.wildcard.ui.WildcardViewModel
 import com.example.gemgemgen.remote.android.AndroidRemoteAutomationGateway
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 
@@ -68,7 +67,7 @@ class AndroidAppContainer(context: Context) {
         SharedPreferencesPromptHistoryRepository(appContext)
     )
     private val clipboardGateway = AndroidClipboardGateway(appContext)
-    private val recordAutomationStart = RecordAutomationStartUseCase(
+    private val recordAutomationStart = RecordAutomationHistoryUseCase(
         lastRunSnapshotStore = lastRunSnapshotStore,
         clipboardGateway = clipboardGateway,
         promptHistoryStore = promptHistoryStore
@@ -83,41 +82,38 @@ class AndroidAppContainer(context: Context) {
         repository = AndroidEncryptedGrokAuthRepository(appContext),
         billingGateway = AndroidGrokBillingGateway()
     )
-    private val analysisCredentialResolver = AnalysisCredentialResolver(
+    private val analysisCredentialResolver = ResolveAnalysisCredentialUseCase(
         apiKeyRepository = geminiApiKeyRepository,
         grokAuth = grokAuthManager
     )
 
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
     val promptWorkspace = PromptWorkspace()
-    val geminiAccountRepository = SharedPreferencesGeminiAccountRepository(appContext)
-    val manageGeminiAccounts = ManageGeminiAccountsUseCase(geminiAccountRepository)
     val promptInstructionRepository = SharedPreferencesPromptInstructionRepository(appContext)
     val variationPromptRepository = SharedPreferencesVariationPromptRepository(appContext)
 
-    val mainViewModelFactory: ViewModelProvider.Factory = factory<MainViewModel> {
+    val automationViewModelFactory: ViewModelProvider.Factory = factory<AutomationViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
         val environmentGateway = AndroidEnvironmentGateway(appContext)
         val checkAutomationStart = CheckAutomationStartUseCase(environmentGateway)
         val manageRemoteAutomation = ManageRemoteAutomationUseCase(
             gateway = AndroidRemoteAutomationGateway(appContext),
-            automationStartRecorder = recordAutomationStart,
+            automationHistoryRecorder = recordAutomationStart,
             wildcardSetRepository = AndroidWildcardSetRepository(appContext)
         )
         val switcherGateway = AndroidGeminiAccountSwitcherGateway(appContext)
-        val switchGeminiAccount = SwitchGeminiAccountUseCase(
-            manageGeminiAccounts = manageGeminiAccounts,
+        val openGeminiAccountPicker = OpenGeminiAccountPickerUseCase(
             manageRemoteAutomation = manageRemoteAutomation,
             switcherGateway = switcherGateway
         )
-        val executeAutomation = ExecuteAutomationUseCase(
+        val executeAutomation = CoordinateAutomationExecutionUseCase(
             checkAutomationStart = checkAutomationStart,
-            automationStartRecorder = recordAutomationStart,
+            automationHistoryRecorder = recordAutomationStart,
             automation = automation,
             manageRemoteAutomation = manageRemoteAutomation,
             promptHistoryStore = promptHistoryStore
         )
-        MainViewModel(
+        AutomationViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentGateway),
             clipboardGateway = clipboardGateway,
             saveWildcardFolder = SaveWildcardFolderUseCase(
@@ -139,20 +135,21 @@ class AndroidAppContainer(context: Context) {
             promptHistoryStore = promptHistoryStore,
             themePaletteStore = themePaletteStore,
             promptWorkspace = promptWorkspace,
-            manageGeminiAccounts = manageGeminiAccounts,
+            openGeminiAccountPicker = openGeminiAccountPicker,
             promptInstructionRepository = promptInstructionRepository,
             variationPromptRepository = variationPromptRepository,
             runVariationPrompt = RunVariationPromptUseCase(
                 gatewayProvider = ActiveVariationPromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
-            )
+            ),
+            resolveVariationPrompt = ResolveVariationPromptUseCase()
         )
     }
 
-    val wildcardViewModelFactory: ViewModelProvider.Factory = factory<WildcardManagerViewModel> {
+    val wildcardViewModelFactory: ViewModelProvider.Factory = factory<WildcardViewModel> {
         val wildcardFileRepository = AndroidWildcardFileRepository(appContext)
         val analysisKeyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository)
-        WildcardManagerViewModel(
+        WildcardViewModel(
             manageWildcardFiles = ManageWildcardFilesUseCase(wildcardFileRepository),
             wildcardClipboard = WildcardClipboardUseCase(clipboardGateway),
             classifyWildcardLines = ClassifyWildcardLinesUseCase(

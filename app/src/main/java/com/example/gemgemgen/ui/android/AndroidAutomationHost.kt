@@ -30,7 +30,7 @@ import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
-import com.example.gemgemgen.automation.ui.MainViewModel
+import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.core.android.AndroidExternalBrowserLauncher
 import com.example.gemgemgen.ui.AnalysisAppActions
 import com.example.gemgemgen.ui.AutomationApp
@@ -39,7 +39,7 @@ import com.example.gemgemgen.ui.MainTab
 import com.example.gemgemgen.ui.WildcardAppActions
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
-import com.example.gemgemgen.wildcard.ui.WildcardManagerViewModel
+import com.example.gemgemgen.wildcard.ui.WildcardViewModel
 import com.example.gemgemgen.remote.domain.AutomationMode
 
 @Composable
@@ -54,9 +54,9 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val clearInputFocus = remember(focusManager) {
         { focusManager.clearFocus(force = true) }
     }
-    val mainViewModel: MainViewModel = viewModel(factory = container.mainViewModelFactory)
-    val mainUiState by mainViewModel.uiState.collectAsStateWithLifecycle()
-    val automationBarUiState by mainViewModel.automationBarUiState.collectAsStateWithLifecycle()
+    val automationViewModel: AutomationViewModel = viewModel(factory = container.automationViewModelFactory)
+    val mainUiState by automationViewModel.uiState.collectAsStateWithLifecycle()
+    val automationBarUiState by automationViewModel.automationBarUiState.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.AUTOMATION) }
     val wildcardStoreOwner = remember { TabViewModelStoreOwner() }
     val analysisStoreOwner = remember { TabViewModelStoreOwner() }
@@ -66,7 +66,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     )
     val analysisUiState by analysisViewModel.uiState.collectAsStateWithLifecycle()
     val analysisPromptState = analysisViewModel.sourcePromptTextFieldState
-    val wildcardViewModel: WildcardManagerViewModel = viewModel(
+    val wildcardViewModel: WildcardViewModel = viewModel(
         viewModelStoreOwner = wildcardStoreOwner,
         factory = container.wildcardViewModelFactory
     )
@@ -89,13 +89,13 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
-            mainViewModel.saveWildcardFolder(uri.toString())
+            automationViewModel.saveWildcardFolder(uri.toString())
             wildcardViewModel.onFolderChanged()
         }
     }
 
     fun launchWildcardFolderPicker() {
-        val initialUri = mainViewModel.getInitialWildcardFolderUri()?.let { android.net.Uri.parse(it) }
+        val initialUri = automationViewModel.getInitialWildcardFolderUri()?.let { android.net.Uri.parse(it) }
         wildcardFolderLauncher.launch(initialUri)
     }
 
@@ -112,12 +112,12 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectWildcardFolder() {
-        when (mainViewModel.decideWildcardFolderAction()) {
+        when (automationViewModel.decideWildcardFolderAction()) {
             WildcardFolderAction.OpenDirectFolder -> {
                 if (!wildcardViewModel.requestFolderSelection()) return
                 wildcardViewModel.onFolderChanged()
                 selectedTab = MainTab.WILDCARD
-                mainViewModel.refreshStatus()
+                automationViewModel.refreshStatus()
             }
             WildcardFolderAction.OpenStorageSettings -> openWildcardStorageSettings()
             WildcardFolderAction.LaunchSafPicker -> selectSafWildcardFolder()
@@ -137,14 +137,14 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
 
     fun selectMainTab(tab: MainTab) {
         if (tab != MainTab.AUTOMATION) {
-            mainViewModel.cancelParagraphSelection()
+            automationViewModel.cancelParagraphSelection()
         }
         if (selectedTab != tab) {
             trimInactiveTabs(exceptTab = tab)
         }
         // 와일드카드 탭에서 파일 추가/이름변경 후 돌아와도 추천 목록이 갱신되게 한다.
         if (tab == MainTab.AUTOMATION) {
-            mainViewModel.refreshWildcardTokenCandidates()
+            automationViewModel.refreshWildcardTokenCandidates()
         }
         selectedTab = tab
     }
@@ -155,13 +155,13 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
 
     fun runAutomation() {
         trimInactiveTabs()
-        when (mainViewModel.runAutomation()) {
+        when (automationViewModel.runAutomation()) {
             AutomationStartDecision.Started -> {
-                if (!mainViewModel.uiState.value.isRunning) return
+                if (!automationViewModel.uiState.value.isRunning) return
                 floatingBarController?.showOrUpdate(
-                    uiStateFlow = mainViewModel.automationBarUiState,
-                    onCancelAutomation = mainViewModel::cancelAutomation,
-                    onRepeatCountChange = mainViewModel::onRepeatCountChange,
+                    uiStateFlow = automationViewModel.automationBarUiState,
+                    onCancelAutomation = automationViewModel::cancelAutomation,
+                    onRepeatCountChange = automationViewModel::onRepeatCountChange,
                     onAutomationFinished = {
                         floatingBarController?.hide()
                         bringMainActivityToFront()
@@ -178,13 +178,13 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         if (mode == AutomationMode.RECEIVER && !mainUiState.environmentStatus.hasNotificationPermission) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        mainViewModel.onAutomationModeSelected(mode)
+        automationViewModel.onAutomationModeSelected(mode)
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                mainViewModel.refreshStatus()
+                automationViewModel.refreshStatus()
                 // 멀티윈도우에서는 RESUME만으로 포커스가 안 풀릴 수 있어 force clear.
                 clearInputFocus()
             }
@@ -238,13 +238,13 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
             selectedTab = selectedTab,
             mainUiState = mainUiState,
             automationBarUiState = automationBarUiState,
-            promptTemplateState = mainViewModel.promptTemplateTextFieldState,
+            promptTemplateState = automationViewModel.promptTemplateTextFieldState,
             analysisUiState = analysisUiState,
             analysisPromptState = analysisPromptState,
             wildcardUiState = wildcardUiState,
-            automationActions = remember(mainViewModel, platformNavigator, clearInputFocus) {
+            automationActions = remember(automationViewModel, platformNavigator, clearInputFocus) {
                 createAutomationActions(
-                    mainViewModel = mainViewModel,
+                    automationViewModel = automationViewModel,
                     platformNavigator = platformNavigator,
                     clearInputFocus = clearInputFocus,
                     selectMainTab = ::selectMainTab,
@@ -275,7 +275,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
 }
 
 private fun createAutomationActions(
-    mainViewModel: MainViewModel,
+    automationViewModel: AutomationViewModel,
     platformNavigator: AndroidHostPlatformNavigator,
     clearInputFocus: () -> Unit,
     selectMainTab: (MainTab) -> Unit,
@@ -286,65 +286,57 @@ private fun createAutomationActions(
     selectAutomationMode: (AutomationMode) -> Unit
 ): AutomationAppActions = AutomationAppActions(
     onSelectTab = selectMainTab,
-    onShowSettings = mainViewModel::showSettings,
-    onSelectThemePalette = mainViewModel::onSelectThemePalette,
-    onSelectThemeMode = mainViewModel::onSelectThemeMode,
+    onShowSettings = automationViewModel::showSettings,
+    onSelectThemePalette = automationViewModel::onSelectThemePalette,
+    onSelectThemeMode = automationViewModel::onSelectThemeMode,
     onClearFocus = clearInputFocus,
-    onHideSettings = mainViewModel::hideSettings,
+    onHideSettings = automationViewModel::hideSettings,
     onConfirmAccessibilityPrompt = {
-        mainViewModel.confirmAccessibilityPrompt()
+        automationViewModel.confirmAccessibilityPrompt()
         platformNavigator.openAccessibilitySettings()
     },
-    onDismissAccessibilityPromptToSettings = mainViewModel::dismissAccessibilityPromptToSettings,
-    onRefreshStatus = mainViewModel::refreshStatus,
+    onDismissAccessibilityPromptToSettings = automationViewModel::dismissAccessibilityPromptToSettings,
+    onRefreshStatus = automationViewModel::refreshStatus,
     onSelectWildcardFolder = selectWildcardFolder,
     onSelectSafWildcardFolder = selectSafWildcardFolder,
     onOpenWildcardStorageSettings = openWildcardStorageSettings,
     onOpenAccessibilitySettings = platformNavigator::openAccessibilitySettings,
-    onTargetAppSelected = mainViewModel::onTargetAppSelected,
-    onFlowImageCountSelected = mainViewModel::onFlowImageCountSelected,
-    onPromptTemplateChange = mainViewModel::onPromptTemplateFromEditor,
-    onWildcardTokenSuggestionClick = mainViewModel::applyWildcardTokenSuggestion,
-    onNavigateHistoryBack = mainViewModel::navigatePromptHistoryBack,
-    onNavigateHistoryForward = mainViewModel::navigatePromptHistoryForward,
-    onInsertTopInstruction = mainViewModel::insertTopInstruction,
-    onInsertBottomInstruction = mainViewModel::insertBottomInstruction,
-    onOpenInstructionConfigDialog = mainViewModel::openInstructionConfigDialog,
-    onCloseInstructionConfigDialog = mainViewModel::closeInstructionConfigDialog,
-    onSaveInstructionConfig = mainViewModel::saveInstructionConfig,
-    onToggleParagraphSelectionMode = mainViewModel::toggleParagraphSelectionMode,
-    onParagraphOffsetSelected = mainViewModel::selectPromptParagraphAt,
-    onDeleteSelectedParagraph = mainViewModel::deleteSelectedPromptParagraph,
-    onReplaceSelectedParagraph = mainViewModel::replaceSelectedPromptParagraph,
-    onImportFromClipboard = mainViewModel::importPromptFromClipboard,
-    onCopyPromptToClipboard = mainViewModel::copyPromptToClipboard,
-    onPasteFromClipboard = mainViewModel::pastePromptFromClipboard,
-    onCloseGeminiApp = mainViewModel::closeGeminiApp,
-    onCleanDeviceMemory = mainViewModel::cleanDeviceMemory,
-    onTerminateSelfApp = mainViewModel::terminateSelfApp,
-    onRepeatCountChange = mainViewModel::onRepeatCountChange,
+    onTargetAppSelected = automationViewModel::onTargetAppSelected,
+    onFlowImageCountSelected = automationViewModel::onFlowImageCountSelected,
+    onPromptTemplateChange = automationViewModel::onPromptTemplateFromEditor,
+    onWildcardTokenSuggestionClick = automationViewModel::applyWildcardTokenSuggestion,
+    onNavigateHistoryBack = automationViewModel::navigatePromptHistoryBack,
+    onNavigateHistoryForward = automationViewModel::navigatePromptHistoryForward,
+    onInsertTopInstruction = automationViewModel::insertTopInstruction,
+    onInsertBottomInstruction = automationViewModel::insertBottomInstruction,
+    onOpenInstructionConfigDialog = automationViewModel::openInstructionConfigDialog,
+    onCloseInstructionConfigDialog = automationViewModel::closeInstructionConfigDialog,
+    onSaveInstructionConfig = automationViewModel::saveInstructionConfig,
+    onToggleParagraphSelectionMode = automationViewModel::toggleParagraphSelectionMode,
+    onParagraphOffsetSelected = automationViewModel::selectPromptParagraphAt,
+    onDeleteSelectedParagraph = automationViewModel::deleteSelectedPromptParagraph,
+    onReplaceSelectedParagraph = automationViewModel::replaceSelectedPromptParagraph,
+    onImportFromClipboard = automationViewModel::importPromptFromClipboard,
+    onCopyPromptToClipboard = automationViewModel::copyPromptToClipboard,
+    onPasteFromClipboard = automationViewModel::pastePromptFromClipboard,
+    onCloseGeminiApp = automationViewModel::closeGeminiApp,
+    onCleanDeviceMemory = automationViewModel::cleanDeviceMemory,
+    onTerminateSelfApp = automationViewModel::terminateSelfApp,
+    onRepeatCountChange = automationViewModel::onRepeatCountChange,
     onRunAutomation = runAutomation,
-    onCancelAutomation = mainViewModel::cancelAutomation,
+    onCancelAutomation = automationViewModel::cancelAutomation,
     onAutomationModeSelected = selectAutomationMode,
-    onPairRemoteDevice = mainViewModel::pairRemoteDevice,
-    onDisconnectRemoteDevice = mainViewModel::disconnectRemoteDevice,
-    onOpenPromptHistory = mainViewModel::openPromptHistory,
-    onClosePromptHistory = mainViewModel::closePromptHistory,
-    onSelectPromptHistoryItem = mainViewModel::selectPromptHistoryItem,
-    onClearPromptHistory = mainViewModel::clearPromptHistory,
-    onOpenGeminiAccountDialog = mainViewModel::openGeminiAccountDialog,
-    onCloseGeminiAccountDialog = mainViewModel::closeGeminiAccountDialog,
-    onSwitchGeminiAccount = mainViewModel::switchGeminiAccount,
-    onCycleNextGeminiAccount = mainViewModel::cycleNextGeminiAccount,
-    onAddGeminiAccount = mainViewModel::addGeminiAccount,
-    onDeleteGeminiAccount = mainViewModel::deleteGeminiAccount,
-    onRetrySwitchGeminiAccount = mainViewModel::retrySwitchGeminiAccount,
-    onOpenGeminiManualSwitch = mainViewModel::openGeminiForManualSwitch,
-    onClearAccountSwitchError = mainViewModel::clearAccountSwitchError,
-    onRunVariation = { selectedText -> mainViewModel.runVariation(selectedText) },
-    onOpenVariationPromptConfigDialog = mainViewModel::openVariationPromptConfigDialog,
-    onCloseVariationPromptConfigDialog = mainViewModel::closeVariationPromptConfigDialog,
-    onSaveVariationPromptConfig = mainViewModel::saveVariationPromptConfig
+    onPairRemoteDevice = automationViewModel::pairRemoteDevice,
+    onDisconnectRemoteDevice = automationViewModel::disconnectRemoteDevice,
+    onOpenPromptHistory = automationViewModel::openPromptHistory,
+    onClosePromptHistory = automationViewModel::closePromptHistory,
+    onSelectPromptHistoryItem = automationViewModel::selectPromptHistoryItem,
+    onClearPromptHistory = automationViewModel::clearPromptHistory,
+    onOpenGeminiAccountPicker = automationViewModel::openGeminiAccountPicker,
+    onRunVariation = { selectedText -> automationViewModel.runVariation(selectedText) },
+    onOpenVariationPromptConfigDialog = automationViewModel::openVariationPromptConfigDialog,
+    onCloseVariationPromptConfigDialog = automationViewModel::closeVariationPromptConfigDialog,
+    onSaveVariationPromptConfig = automationViewModel::saveVariationPromptConfig
 )
 
 private fun createAnalysisActions(
@@ -402,7 +394,7 @@ private fun createAnalysisActions(
 )
 
 private fun createWildcardActions(
-    wildcardViewModel: WildcardManagerViewModel,
+    wildcardViewModel: WildcardViewModel,
     selectWildcardFolder: () -> Unit
 ): WildcardAppActions = WildcardAppActions(
     onRefresh = { wildcardViewModel.refreshFiles(openFirstFile = true) },

@@ -11,8 +11,8 @@ import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.PromptSegmentEditPolicy
 import com.example.gemgemgen.automation.domain.PromptTextMutation
 import com.example.gemgemgen.automation.domain.PromptTypingChange
-import com.example.gemgemgen.automation.domain.SystemInstructionPrompt
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
+import com.example.gemgemgen.automation.usecase.ApplyWildcardTokenUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +43,8 @@ class PromptEditorCoordinator(
     private val clipboardGateway: ClipboardGateway,
     private val scope: CoroutineScope,
     private val dispatchers: AppDispatchers = AppDispatchers(),
-    initialPrompt: String = ""
+    initialPrompt: String = "",
+    private val applyWildcardTokenUseCase: ApplyWildcardTokenUseCase = ApplyWildcardTokenUseCase()
 ) {
     val textFieldState = TextFieldState()
     private val promptHistoryNavigator = PromptHistoryNavigator(initialDraft = initialPrompt)
@@ -298,37 +299,35 @@ class PromptEditorCoordinator(
 
  fun applyWildcardTokenSuggestion(
  token: String,
- isBlocked: Boolean = false,
- candidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
+ isBlocked: Boolean,
+ candidates: List<WildcardTokenAutocomplete.Candidate>
  ) {
  val state = _editorUiState.value
- if (isBlocked || state.isParagraphSelectionMode) return
- if (token.isBlank()) return
- if (candidates.none { it.token == token }) return
-
- val currentText = textFieldState.text.toString()
  val selection = textFieldState.selection
- if (selection.min != selection.max) return
+ val currentText = textFieldState.text.toString()
 
- val replacement = WildcardTokenAutocomplete.replaceWordAtCursor(
+ val result = applyWildcardTokenUseCase(
  text = currentText,
- cursor = selection.max,
- token = token
+ selectionStart = selection.min,
+ selectionEnd = selection.max,
+ token = token,
+ candidates = candidates,
+ isParagraphSelectionMode = state.isParagraphSelectionMode,
+ isBlocked = isBlocked
  ) ?: return
- if (replacement.newText == currentText) return
 
- ignoredPromptChangeText = replacement.newText
- val cursorAfter = replacement.cursorAfter.coerceIn(0, replacement.newText.length)
+ ignoredPromptChangeText = result.newText
+ val cursorAfter = result.cursorAfter.coerceIn(0, result.newText.length)
  textFieldState.edit {
- replace(0, length, replacement.newText)
+ replace(0, length, result.newText)
  this.selection = TextRange(cursorAfter)
  }
- promptTemplateValue = replacement.newText
- promptHistoryNavigator.onUserTyping(replacement.newText)
- promptEditorSession = promptEditorSession.withText(replacement.newText)
+ promptTemplateValue = result.newText
+ promptHistoryNavigator.onUserTyping(result.newText)
+ promptEditorSession = promptEditorSession.withText(result.newText)
  _editorUiState.update {
  it.copy(
- promptTemplate = replacement.newText,
+ promptTemplate = result.newText,
  canNavigateHistoryBack = promptHistoryNavigator.canNavigateBack,
  canNavigateHistoryForward = promptHistoryNavigator.canNavigateForward,
  isHistoryIndicatorVisible = promptHistoryNavigator.isIndicatorVisible,

@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 요청을 관리하고 화면 상태와 이벤트를 중계합니다.
+// 역할: AI 프롬프트 분석 화면 상태를 관리하고 하위 UseCase를 통해 생성 및 세션을 조율합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -16,15 +16,21 @@ import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
-import com.example.gemgemgen.analysis.domain.CandidateAutomationSession
+import com.example.gemgemgen.analysis.usecase.AnalysisGenerationStep
 import com.example.gemgemgen.analysis.usecase.AnalysisReportCache
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
+import com.example.gemgemgen.analysis.usecase.ApplyCandidateResult
 import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
+import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationRequest
+import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationResult
+import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
+import com.example.gemgemgen.analysis.usecase.ManageCandidateHandoffUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
+import com.example.gemgemgen.analysis.usecase.RestorePromptResult
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.core.AppDispatchers
@@ -48,14 +54,24 @@ class AnalysisViewModel(
     private val saveWildcardFile: SaveAnalysisWildcardFileUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val promptWorkspace: PromptWorkspace? = null,
-    coroutineScope: CoroutineScope? = null
+    coroutineScope: CoroutineScope? = null,
+    private val executeGeneration: ExecuteAnalysisGenerationUseCase = ExecuteAnalysisGenerationUseCase(
+        resolveTarget = resolveTarget,
+        generateTxtUseCase = generateTxtUseCase,
+        keyManager = keyManager,
+        dispatchers = dispatchers
+    ),
+    private val candidateHandoff: ManageCandidateHandoffUseCase = ManageCandidateHandoffUseCase(
+        copyResults = copyResults,
+        promptWorkspace = promptWorkspace,
+        dispatchers = dispatchers
+    )
 ) : ViewModel() {
     private val scope = coroutineScope ?: viewModelScope
     private var runningJob: Job? = null
     private var grokLoginJob: Job? = null
     private var pendingGrokChallenge: GrokDeviceLoginChallenge? = null
     private var analysisCache: AnalysisReportCache? = null
-    private var candidateAutomationSession: CandidateAutomationSession? = null
 
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
@@ -247,122 +263,97 @@ class AnalysisViewModel(
         val snapshot = _uiState.value
         val source = currentSourcePrompt()
         val directionInput = currentDirectionInput(snapshot)
-        val needsMaskingAnalysis = AnalysisMaskingPolicy.shouldAnalyzeMasking(
-            source = source,
+
+        val request = ExecuteAnalysisGenerationRequest(
+            sourcePrompt = source,
             category = snapshot.selectedCategory,
             targetSegment = snapshot.targetSegment,
             cache = analysisCache,
+            count = count,
             selectedHints = directionInput.selectedHints,
-            customHint = directionInput.customHint
-        )
-        val blockedReason = AnalysisStartPolicy.evaluatePreconditions(
-            source = source,
-            category = snapshot.selectedCategory,
-            needsMaskingAnalysis = needsMaskingAnalysis,
+            customHint = directionInput.customHint,
             maskingProvider = snapshot.maskingProvider,
             hasMaskingCredential = snapshot.hasMaskingCredential,
+            maskingModel = snapshot.maskingModel,
             generationProvider = snapshot.generationProvider,
-            hasGenerationCredential = snapshot.hasGenerationCredential
+            hasGenerationCredential = snapshot.hasGenerationCredential,
+            generationModel = snapshot.generationModel,
+            failureFallback = failureFallback
         )
-        if (blockedReason != null) {
-            showError(AnalysisUiText.startBlockedMessage(blockedReason))
-            return
-        }
-        val category = checkNotNull(snapshot.selectedCategory)
 
         runningJob?.cancel()
         runningJob = scope.launch {
             runningJob = coroutineContext[Job]
-            _uiState.update {
-                it.copy(
-                    status = AnalysisStatus.GENERATING,
-                    error = "",
-                    message = if (needsMaskingAnalysis) "자동 마스킹 중..." else generatingMessage,
-                    warning = ""
-                )
-            }
             try {
-                val ensured = resolveTarget.ensureForGeneration(
-                    source = source,
-                    category = category,
-                    existingTarget = _uiState.value.targetSegment,
-                    cache = analysisCache,
-                    selectedHints = directionInput.selectedHints,
-                    customHint = directionInput.customHint
-                )
-                coroutineContext.ensureActive()
-                analysisCache = ensured.cache
-                if (ensured.targetChanged) {
-                    _uiState.update {
-                        it.copy(
-                            targetSegment = ensured.target,
-                            generatedCandidates = emptyList(),
-                            resultPresentation = AnalysisResultPresentation.NONE,
-                            selectedCandidateIndex = null,
-                            warning = ensured.warning
-                        )
+                val result = executeGeneration.execute(
+                    request = request,
+                    onStep = { step ->
+                        _uiState.update {
+                            it.copy(
+                                status = AnalysisStatus.GENERATING,
+                                error = "",
+                                message = if (step == AnalysisGenerationStep.MASKING) "자동 마스킹 중..." else generatingMessage,
+                                warning = ""
+                            )
+                        }
+                    },
+                    onTargetChanged = { newTarget, warning ->
+                        _uiState.update {
+                            it.copy(
+                                targetSegment = newTarget,
+                                generatedCandidates = emptyList(),
+                                resultPresentation = AnalysisResultPresentation.NONE,
+                                selectedCandidateIndex = null,
+                                warning = warning
+                            )
+                        }
                     }
-                }
-                // 마스킹 단계가 끝났으면 생성 단계 문구로 전환
-                if (needsMaskingAnalysis) {
-                    _uiState.update {
-                        it.copy(message = generatingMessage)
+                )
+                when (result) {
+                    is ExecuteAnalysisGenerationResult.Blocked -> {
+                        showError(AnalysisUiText.startBlockedMessage(result.reason))
                     }
-                }
-                val result = generateTxtUseCase.generate(
-                    sourcePrompt = source,
-                    category = category,
-                    targetSegment = ensured.target,
-                    analysisReport = ensured.report,
-                    count = count,
-                    selectedHints = directionInput.selectedHints,
-                    customHint = directionInput.customHint
-                )
-                coroutineContext.ensureActive()
-                if (ensured.didAnalyze) {
-                    keyManager.rememberLastUsed(
-                        role = AnalysisModelRole.MASKING,
-                        provider = snapshot.maskingProvider,
-                        modelId = snapshot.maskingModel
-                    )
-                }
-                keyManager.rememberLastUsed(
-                    role = AnalysisModelRole.GENERATION,
-                    provider = snapshot.generationProvider,
-                    modelId = snapshot.generationModel
-                )
-                _uiState.update {
-                    it.copy(
-                        sourcePrompt = source,
-                        targetSegment = ensured.target,
-                        needsMaskingAnalysis = false,
-                        generatedCandidates = result.candidates,
-                        resultPresentation = if (result.candidates.isEmpty()) {
-                            AnalysisResultPresentation.NONE
-                        } else {
-                            presentation
-                        },
-                        selectedCandidateIndex = candidateAutomationSession
-                            ?.appliedCandidate
-                            ?.let(result.candidates::indexOf)
-                            ?.takeIf { idx -> idx >= 0 },
-                        // TXT 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
-                        resultFileName = if (updateResultFileName) {
-                            category.defaultWildcardSaveFileName()
-                        } else {
-                            it.resultFileName
-                        },
-                        status = AnalysisStatus.SUCCESS,
-                        message = "${result.candidates.size}개 후보를 생성했습니다.",
-                        warning = result.warning,
-                        error = ""
-                    )
-                }
-                val usedGrok = snapshot.generationProvider == AnalysisProvider.GROK ||
-                    (ensured.didAnalyze && snapshot.maskingProvider == AnalysisProvider.GROK) ||
-                    _uiState.value.usesGrok
-                if (usedGrok) {
-                    refreshGrokQuotaIfLoggedIn()
+                    is ExecuteAnalysisGenerationResult.Failure -> {
+                        analysisCache = null
+                        showError(result.message)
+                    }
+                    is ExecuteAnalysisGenerationResult.Success -> {
+                        analysisCache = result.cache
+                        val category = checkNotNull(snapshot.selectedCategory)
+                        _uiState.update {
+                            it.copy(
+                                sourcePrompt = source,
+                                targetSegment = result.targetSegment,
+                                needsMaskingAnalysis = false,
+                                generatedCandidates = result.candidates,
+                                resultPresentation = if (result.candidates.isEmpty()) {
+                                    AnalysisResultPresentation.NONE
+                                } else {
+                                    presentation
+                                },
+                                selectedCandidateIndex = candidateHandoff.currentSession
+                                    ?.appliedCandidate
+                                    ?.let(result.candidates::indexOf)
+                                    ?.takeIf { idx -> idx >= 0 },
+                                // TXT 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
+                                resultFileName = if (updateResultFileName) {
+                                    category.defaultWildcardSaveFileName()
+                                } else {
+                                    it.resultFileName
+                                },
+                                status = AnalysisStatus.SUCCESS,
+                                message = "${result.candidates.size}개 후보를 생성했습니다.",
+                                warning = result.warning,
+                                error = ""
+                            )
+                        }
+                        val usedGrok = snapshot.generationProvider == AnalysisProvider.GROK ||
+                            (result.didAnalyze && snapshot.maskingProvider == AnalysisProvider.GROK) ||
+                            _uiState.value.usesGrok
+                        if (usedGrok) {
+                            refreshGrokQuotaIfLoggedIn()
+                        }
+                    }
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -392,59 +383,31 @@ class AnalysisViewModel(
         val state = _uiState.value
         if (state.resultPresentation != AnalysisResultPresentation.CARDS || state.isBusy) return
         val candidate = state.generatedCandidates.getOrNull(index) ?: return
-        val segment = state.targetSegment?.takeIf { it.isValid } ?: run {
-            showError("마스킹 구간이 없어 자동화 프롬프트에 반영할 수 없습니다.")
-            return
-        }
         val source = sourcePromptTextFieldState.text.toString()
-        if (!AnalysisTargetSegmentPolicy.isStillValid(source, segment)) {
-            showError("마스킹 구간이 원문과 맞지 않아 교체할 수 없습니다.")
-            return
-        }
-
-        val currentSession = candidateAutomationSession
-        if (currentSession != null && !currentSession.matches(source, segment)) {
-            showError("분석 원문이 변경되었습니다. 자동화 프롬프트를 원본으로 되돌린 뒤 다시 적용해 주세요.")
-            return
-        }
-
-        val expectedSegment = currentSession?.appliedCandidate ?: segment.text
-        val preferredStartIndex = currentSession?.automationSegmentStartIndex ?: segment.startIndex
 
         scope.launch {
-            try {
-                copyResults.copyText(candidate)
-                val replacer = applyToAutomation ?: { exp, rep, start ->
-                    promptWorkspace?.replaceSegment(exp, rep, start)
+            when (val result = candidateHandoff.applyCandidate(
+                candidate = candidate,
+                sourcePrompt = source,
+                targetSegment = state.targetSegment,
+                applyToAutomation = applyToAutomation
+            )) {
+                is ApplyCandidateResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            selectedCandidateIndex = index,
+                            hasAppliedCandidateToAutomation = true,
+                            message = "후보를 복사하고 자동화 프롬프트에 반영했습니다.",
+                            error = "",
+                            warning = ""
+                        )
+                    }
                 }
-                val appliedStartIndex = replacer(
-                    expectedSegment,
-                    candidate,
-                    preferredStartIndex
-                ) ?: run {
-                    showError(
-                        "후보는 복사했지만 자동화 프롬프트에서 교체할 구간을 찾지 못했습니다. " +
-                            "자동화에서 원문을 다시 가져와 주세요."
-                    )
-                    return@launch
-                }
-                candidateAutomationSession = CandidateAutomationSession(
-                    originalSource = currentSession?.originalSource ?: source,
-                    targetSegment = currentSession?.targetSegment ?: segment,
-                    appliedCandidate = candidate,
-                    automationSegmentStartIndex = appliedStartIndex
-                )
-                _uiState.update {
-                    it.copy(
-                        selectedCandidateIndex = index,
-                        hasAppliedCandidateToAutomation = true,
-                        message = "후보를 복사하고 자동화 프롬프트에 반영했습니다.",
-                        error = "",
-                        warning = ""
-                    )
-                }
-            } catch (error: RuntimeException) {
-                showError(error.message ?: "후보 적용에 실패했습니다.")
+                is ApplyCandidateResult.SegmentMissing -> showError(result.message)
+                is ApplyCandidateResult.SegmentInvalid -> showError(result.message)
+                is ApplyCandidateResult.SourceMismatch -> showError(result.message)
+                is ApplyCandidateResult.ReplacementFailed -> showError(result.message)
+                is ApplyCandidateResult.Failure -> showError(result.message)
             }
         }
     }
@@ -479,31 +442,21 @@ class AnalysisViewModel(
         ) -> Int?)? = null
     ) {
         if (_uiState.value.isBusy) return
-        val session = candidateAutomationSession ?: return
-        val replacer = restoreInAutomation ?: { exp, rep, start ->
-            promptWorkspace?.replaceSegment(exp, rep, start)
-        }
-        val restoredStartIndex = replacer(
-            session.appliedCandidate,
-            session.targetSegment.text,
-            session.automationSegmentStartIndex
-        ) ?: run {
-            showError(
-                "자동화 프롬프트에서 복원할 구간을 찾지 못했습니다. " +
-                    "자동화에서 원문을 다시 가져와 주세요."
-            )
-            return
-        }
-
-        candidateAutomationSession = null
-        _uiState.update {
-            it.copy(
-                selectedCandidateIndex = null,
-                hasAppliedCandidateToAutomation = false,
-                message = "자동화 프롬프트를 원본으로 되돌렸습니다.",
-                error = "",
-                warning = ""
-            )
+        when (val result = candidateHandoff.restoreOriginalPrompt(restoreInAutomation)) {
+            is RestorePromptResult.Success -> {
+                _uiState.update {
+                    it.copy(
+                        selectedCandidateIndex = null,
+                        hasAppliedCandidateToAutomation = false,
+                        message = "자동화 프롬프트를 원본으로 되돌렸습니다.",
+                        error = "",
+                        warning = ""
+                    )
+                }
+            }
+            is RestorePromptResult.NoSession -> Unit
+            is RestorePromptResult.ReplacementFailed -> showError(result.message)
+            is RestorePromptResult.Failure -> showError(result.message)
         }
     }
 
@@ -565,7 +518,7 @@ class AnalysisViewModel(
         runningJob?.cancel()
         runningJob = null
         analysisCache = null
-        candidateAutomationSession = null
+        candidateHandoff.clearSession()
         sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("")
 
         _uiState.update {

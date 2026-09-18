@@ -1,4 +1,4 @@
-// 역할: 자동화 실행 시작 전 필수 조건 및 실행 상태(일반/변형) 검사 정책을 검증합니다.
+// 역할: 자동화 실행 시작 전 필수 조건, 유지보수 상태 및 실행 상태(일반/변형) 검사 정책을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationStartPolicy
@@ -108,6 +108,19 @@ class AutomationStartPolicyTest {
             )
         )
 
+        // Ready but maintenance is busy -> false
+        assertFalse(
+            AutomationStartPolicy.canRun(
+                mode = AutomationMode.NORMAL,
+                environmentStatus = readyEnvironment,
+                targetApp = AutomationTargetApp.GEMINI,
+                promptTemplate = "prompt",
+                isRunning = false,
+                remoteAutomationStatus = RemoteAutomationStatus(),
+                isMaintenanceBusy = true
+            )
+        )
+
         // Unready environment and not running -> false
         assertFalse(
             AutomationStartPolicy.canRun(
@@ -193,6 +206,45 @@ class AutomationStartPolicyTest {
                 isRunning = false,
                 remoteAutomationStatus = readyRemoteSenderStatus,
                 isVariationRunning = true
+            )
+        )
+
+        // Maintenance is busy -> false
+        assertFalse(
+            AutomationStartPolicy.canRun(
+                mode = AutomationMode.SENDER,
+                environmentStatus = readyEnvironment,
+                targetApp = AutomationTargetApp.GEMINI,
+                promptTemplate = "remote prompt",
+                isRunning = false,
+                remoteAutomationStatus = readyRemoteSenderStatus,
+                isMaintenanceBusy = true
+            )
+        )
+    }
+
+    @Test
+    fun canRun_whenMaintenanceBusy_isFalseInNormalAndSenderModes() {
+        assertFalse(
+            AutomationStartPolicy.canRun(
+                mode = AutomationMode.NORMAL,
+                environmentStatus = readyEnvironment,
+                targetApp = AutomationTargetApp.GEMINI,
+                promptTemplate = "prompt",
+                isRunning = false,
+                remoteAutomationStatus = RemoteAutomationStatus(),
+                isMaintenanceBusy = true
+            )
+        )
+        assertFalse(
+            AutomationStartPolicy.canRun(
+                mode = AutomationMode.SENDER,
+                environmentStatus = readyEnvironment,
+                targetApp = AutomationTargetApp.GEMINI,
+                promptTemplate = "remote prompt",
+                isRunning = false,
+                remoteAutomationStatus = readyRemoteSenderStatus,
+                isMaintenanceBusy = true
             )
         )
     }

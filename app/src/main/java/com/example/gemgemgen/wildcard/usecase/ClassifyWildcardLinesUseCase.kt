@@ -3,7 +3,7 @@ package com.example.gemgemgen.wildcard.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.usecase.AnalysisCredentialResolver
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisException
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyPromptBuilder
@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 
 class ClassifyWildcardLinesUseCase(
     private val aiGateway: AnalysisAiGateway,
-    private val credentialResolver: AnalysisCredentialResolver,
+    private val credentialResolver: ResolveAnalysisCredentialUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     suspend fun classify(

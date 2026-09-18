@@ -1,4 +1,4 @@
-// 역할: Gemini 앱에서 접근성 노드를 탐색하고 조작하여 프로필 열기 -> 계정 목록 열기 -> 대상 계정 탐색(필요시 스크롤) -> 터치 전환 및 우리 앱 복귀를 자동 수행합니다.
+// 역할: Gemini 앱에서 접근성 노드를 탐색하고 조작하여 프로필 열기 -> 계정 목록(ID 목록) 펼치기까지만 자동 수행합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler
@@ -20,26 +20,20 @@ internal class GeminiAccountSwitcherAutomation(
     private val allRootsProvider: () -> List<AccessibilityNodeInfo> = { listOfNotNull(rootProvider()) },
     private val activePackageProvider: () -> String?,
     private val launchGemini: () -> Boolean,
-    private val targetIdentifier: String,
-    private val targetAlias: String,
     private val tapAtCoordinates: ((Float, Float) -> Boolean)? = null,
     private val onProgress: ((phase: String, message: String) -> Unit)? = null,
-    private val bringAppToForeground: (() -> Unit)? = null,
     private val onFinished: (GeminiAccountSwitchResult) -> Unit
 ) {
     private enum class Phase {
         ENSURE_GEMINI_FOREGROUND,
         OPEN_PROFILE,
         EXPAND_ACCOUNTS,
-        FIND_ACCOUNT_AND_SCROLL,
-        WAIT_FOR_DISMISS_AND_NEW_CHAT,
         FINISHED
     }
 
     private var active = false
     private var phase = Phase.ENSURE_GEMINI_FOREGROUND
     private var phaseStartedAtMillis = 0L
-    private var scrollAttempts = 0
     private var sidebarOpened = false
     private var lastProfileClickMillis = 0L
     private var lastExpandClickMillis = 0L
@@ -52,10 +46,9 @@ internal class GeminiAccountSwitcherAutomation(
     fun start() {
         if (active) return
         active = true
-        Log.i(TAG, "Gemini account switch started: targetId=$targetIdentifier, targetAlias=$targetAlias")
+        Log.i(TAG, "Gemini account picker automation started")
         phase = Phase.ENSURE_GEMINI_FOREGROUND
         phaseStartedAtMillis = SystemClock.uptimeMillis()
-        scrollAttempts = 0
         sidebarOpened = false
         lastProfileClickMillis = 0L
         lastExpandClickMillis = 0L
@@ -68,7 +61,7 @@ internal class GeminiAccountSwitcherAutomation(
 
     fun cancel() {
         if (!active) return
-        Log.i(TAG, "Gemini account switch cancelled")
+        Log.i(TAG, "Gemini account picker automation cancelled")
         active = false
         phase = Phase.FINISHED
         handler.removeCallbacks(::step)
@@ -81,8 +74,6 @@ internal class GeminiAccountSwitcherAutomation(
             Phase.ENSURE_GEMINI_FOREGROUND -> handleEnsureGeminiForeground()
             Phase.OPEN_PROFILE -> handleOpenProfile()
             Phase.EXPAND_ACCOUNTS -> handleExpandAccounts()
-            Phase.FIND_ACCOUNT_AND_SCROLL -> handleFindAccountAndScroll()
-            Phase.WAIT_FOR_DISMISS_AND_NEW_CHAT -> handleWaitForDismissAndNewChat()
             Phase.FINISHED -> Unit
         }
     }
@@ -124,7 +115,6 @@ internal class GeminiAccountSwitcherAutomation(
                 runCatching { r.refresh() }
             }
             val flat = flattenNodes(r)
-            Log.d(TAG, "root[$idx]: pkg=${r.packageName}, windowId=${r.windowId}, flatCount=${flat.size}")
             allNodes += flat
 
             val directQueryIds = listOf(
@@ -145,36 +135,20 @@ internal class GeminiAccountSwitcherAutomation(
                 }
             }
         }
-        val distinctNodes = allNodes.distinct()
-        for (n in distinctNodes) {
-            Log.d(TAG, "  node: [${n.packageName}] id=${n.viewIdResourceName}, text=${n.text}, desc=${n.contentDescription}")
-        }
-        val bentoVis = isAccountBentoDialogVisible(distinctNodes)
-        val sbOpen = isSidebarOpen(distinctNodes)
-        Log.i(TAG, "getAllNodes: rootsCount=${roots.size}, allNodesCount=${distinctNodes.size}, bento=$bentoVis, sbOpen=$sbOpen")
-        return distinctNodes
+        return allNodes.distinct()
     }
 
     private fun handleOpenProfile() {
         val nodes = getAllNodes()
-        val bentoVis = isAccountBentoDialogVisible(nodes)
-        val sbOpen = isSidebarOpen(nodes)
-        Log.i(TAG, "handleOpenProfile: nodes=${nodes.size}, bentoVisible=$bentoVis, sidebarOpen=$sbOpen")
         if (nodes.isEmpty()) {
             retryOrFail(TIMEOUT_OPEN_PROFILE_MS, "화면 노드를 읽을 수 없습니다.")
             return
         }
 
-        // 0. 이미 계정 목록이 펼쳐져 있다면 바로 계정 탐색 단계로 이동
+        // 0. 이미 계정 목록이 펼쳐져 있다면 바로 성공 종료
         if (areAccountsExpanded(nodes)) {
-            Log.i(TAG, "handleOpenProfile: Accounts list already expanded, moving to FIND_ACCOUNT_AND_SCROLL")
-            reportProgress(
-                GeminiAccountSwitchProgressPolicy.PHASE_4,
-                GeminiAccountSwitchProgressPolicy.step4FindAccount(targetAlias.ifBlank { targetIdentifier })
-            )
-            phase = Phase.FIND_ACCOUNT_AND_SCROLL
-            phaseStartedAtMillis = SystemClock.uptimeMillis()
-            handler.postDelayed(::step, 200L)
+            Log.i(TAG, "handleOpenProfile: Accounts list already expanded")
+            finishWith(GeminiAccountSwitchResult.Success("Gemini 계정 목록을 열었습니다."))
             return
         }
 
@@ -243,28 +217,10 @@ internal class GeminiAccountSwitcherAutomation(
             return
         }
 
-        // 현재 활성 계정이 이미 목표 계정과 같은지 확인
-        if (isTargetAccountAlreadyActive(nodes)) {
-            Log.i(TAG, "Target account is already active: $targetIdentifier")
-            bringAppToForeground?.invoke()
-            finishWith(
-                GeminiAccountSwitchResult.Success(
-                    "이미 [${targetAlias.ifBlank { targetIdentifier }}] 계정으로 로그인되어 있습니다."
-                )
-            )
-            return
-        }
-
-        // 계정 목록 RecyclerView 가 이미 펼쳐져 있는지 확인
+        // 계정 목록 RecyclerView 가 이미 펼쳐져 있는지 확인 -> 성공 종료!
         if (areAccountsExpanded(nodes)) {
-            Log.i(TAG, "Accounts list is already expanded, proceeding to find account")
-            reportProgress(
-                GeminiAccountSwitchProgressPolicy.PHASE_4,
-                GeminiAccountSwitchProgressPolicy.step4FindAccount(targetAlias.ifBlank { targetIdentifier })
-            )
-            phase = Phase.FIND_ACCOUNT_AND_SCROLL
-            phaseStartedAtMillis = SystemClock.uptimeMillis()
-            handler.postDelayed(::step, 200L)
+            Log.i(TAG, "handleExpandAccounts: Accounts list is expanded, success!")
+            finishWith(GeminiAccountSwitchResult.Success("Gemini 계정 목록을 열었습니다."))
             return
         }
 
@@ -302,76 +258,7 @@ internal class GeminiAccountSwitcherAutomation(
         retryOrFail(TIMEOUT_EXPAND_ACCOUNTS_MS, "계정 목록 펼치기 버튼을 찾을 수 없습니다.")
     }
 
-    private fun handleFindAccountAndScroll() {
-        val nodes = getAllNodes()
-        if (nodes.size <= 1) {
-            retryOrFail(TIMEOUT_FIND_ACCOUNT_MS, "화면 노드를 읽을 수 없습니다.")
-            return
-        }
-
-        // 1. 대상 계정 노드 탐색 (이메일 1순위, 별칭 2순위)
-        val accountNode = findMatchingAccountNode(nodes)
-        if (accountNode != null) {
-            Log.i(TAG, "handleFindAccountAndScroll: Target account found! Clicking: ${accountNode.viewIdResourceName}")
-            reportProgress(
-                GeminiAccountSwitchProgressPolicy.PHASE_5,
-                GeminiAccountSwitchProgressPolicy.step5SwitchingAccount(targetAlias.ifBlank { targetIdentifier })
-            )
-            val clicked = clickNodeOrParent(accountNode)
-            if (clicked) {
-                phase = Phase.WAIT_FOR_DISMISS_AND_NEW_CHAT
-                phaseStartedAtMillis = SystemClock.uptimeMillis()
-                handler.postDelayed(::step, 800L)
-                return
-            }
-        }
-
-        // 2. 현재 보이는 화면에 없으면 계정 목록 스크롤 시도 (최대 4회)
-        if (scrollAttempts < MAX_SCROLL_ATTEMPTS) {
-            scrollAttempts++
-            Log.i(TAG, "handleFindAccountAndScroll: Account not in view, scrolling list (attempt $scrollAttempts/$MAX_SCROLL_ATTEMPTS)")
-            reportProgress(
-                GeminiAccountSwitchProgressPolicy.PHASE_4,
-                GeminiAccountSwitchProgressPolicy.step4ScrollAccounts(scrollAttempts, MAX_SCROLL_ATTEMPTS)
-            )
-            val scrolled = scrollAccountsList(nodes)
-            if (scrolled) {
-                handler.postDelayed(::step, 700L)
-                return
-            }
-        }
-
-        retryOrFail(
-            TIMEOUT_FIND_ACCOUNT_MS,
-            "기기에서 [${targetAlias.ifBlank { targetIdentifier }}] 계정을 찾을 수 없습니다."
-        )
-    }
-
-    private fun handleWaitForDismissAndNewChat() {
-        val nodes = getAllNodes()
-
-        // 1. Bento 다이얼로그가 아직 떠 있는지 확인 (닫히는 중)
-        val bentoStillVisible = isAccountBentoDialogVisible(nodes)
-        if (bentoStillVisible) {
-            val elapsed = SystemClock.uptimeMillis() - phaseStartedAtMillis
-            if (elapsed < TIMEOUT_DISMISS_MS) {
-                Log.d(TAG, "handleWaitForDismissAndNewChat: Bento dialog still visible, waiting...")
-                handler.postDelayed(::step, POLL_INTERVAL_MS)
-                return
-            }
-        }
-
-        // 2. 다이얼로그가 닫혔거나 타임아웃 경과 -> 계정 전환 성공 완료 처리!
-        Log.i(TAG, "handleWaitForDismissAndNewChat: Account switched successfully. Returning to gemgemgen app.")
-        bringAppToForeground?.invoke()
-        finishWith(
-            GeminiAccountSwitchResult.Success(
-                "Gemini 계정을 [${targetAlias.ifBlank { targetIdentifier }}]로 전환했습니다."
-            )
-        )
-    }
-
-    // --- 노드 탐색 헬퍼 함수들 (100% 접근성 노드 시맨틱 탐색, 좌표 0%) ---
+    // --- 노드 탐색 헬퍼 함수들 ---
 
     private fun isAccountBentoDialogVisible(nodes: List<AccessibilityNodeInfo>): Boolean {
         return nodes.any { node ->
@@ -395,30 +282,7 @@ internal class GeminiAccountSwitcherAutomation(
         }
     }
 
-    private fun isTargetAccountAlreadyActive(nodes: List<AccessibilityNodeInfo>): Boolean {
-        val targetId = targetIdentifier.trim().lowercase()
-        val targetAl = targetAlias.trim().lowercase()
-
-        val headerNodes = nodes.filter { node ->
-            node.viewIdResourceName?.contains("og_compact_header") == true
-        }
-
-        for (node in headerNodes) {
-            val text = node.text?.toString()?.lowercase() ?: ""
-            val desc = node.contentDescription?.toString()?.lowercase() ?: ""
-
-            if (targetId.isNotBlank() && (text.contains(targetId) || desc.contains(targetId))) {
-                return true
-            }
-            if (targetAl.isNotBlank() && !targetAl.startsWith("서브") && (text.contains(targetAl) || desc.contains(targetAl))) {
-                return true
-            }
-        }
-        return false
-    }
-
     private fun findToolbarProfileNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        // 상단 툴바 내 아바타 / 프로필 아이콘 노드
         return nodes.firstOrNull { node ->
             val id = node.viewIdResourceName ?: ""
             val desc = node.contentDescription?.toString() ?: ""
@@ -437,7 +301,6 @@ internal class GeminiAccountSwitcherAutomation(
     }
 
     private fun findSidebarProfileNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        // 사이드바 하단 프로필 노드 (RadioButton 또는 사용자 이름/PRO 텍스트가 포함된 클릭 가능 View)
         val profileCandidate = nodes.firstOrNull { node ->
             val desc = node.contentDescription?.toString() ?: ""
             node.className?.toString()?.contains("RadioButton") == true ||
@@ -453,7 +316,6 @@ internal class GeminiAccountSwitcherAutomation(
             return findClickableAncestor(profileCandidate) ?: profileCandidate
         }
 
-        // 사이드바가 열려있을 때 하단에 위치한 클릭 가능 컨테이너 탐색
         return nodes.filter { it.isClickable }.lastOrNull { node ->
             val id = node.viewIdResourceName ?: ""
             !id.contains("thread_item") && !id.contains("close") && !id.contains("사이드바")
@@ -482,77 +344,6 @@ internal class GeminiAccountSwitcherAutomation(
         }
     }
 
-    private fun findMatchingAccountNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        val targetId = targetIdentifier.trim().lowercase()
-        val targetAl = targetAlias.trim().lowercase()
-
-        // 1순위: 이메일(식별자) 일치 검사
-        if (targetId.isNotBlank()) {
-            val emailNode = nodes.firstOrNull { node ->
-                val id = node.viewIdResourceName ?: ""
-                val text = node.text?.toString()?.trim()?.lowercase() ?: ""
-                (id.contains("og_secondary_account_information") || id.contains("account")) &&
-                    text.contains(targetId)
-            } ?: nodes.firstOrNull { node ->
-                val text = node.text?.toString()?.trim()?.lowercase() ?: ""
-                val desc = node.contentDescription?.toString()?.trim()?.lowercase() ?: ""
-                text.contains(targetId) || desc.contains(targetId)
-            }
-
-            if (emailNode != null) {
-                val clickableRoot = findClickableAccountRoot(emailNode)
-                Log.i(TAG, "Found target account by email: $targetId, node=${clickableRoot.viewIdResourceName}")
-                return clickableRoot
-            }
-        }
-
-        // 2순위: 별칭(DisplayName) 일치 검사 (기본 별칭 '서브' 제외)
-        if (targetAl.isNotBlank() && !targetAl.startsWith("서브")) {
-            val aliasNode = nodes.firstOrNull { node ->
-                val text = node.text?.toString()?.trim()?.lowercase() ?: ""
-                val desc = node.contentDescription?.toString()?.trim()?.lowercase() ?: ""
-                text.contains(targetAl) || desc.contains(targetAl)
-            }
-            if (aliasNode != null) {
-                val clickableRoot = findClickableAccountRoot(aliasNode)
-                Log.i(TAG, "Found target account by alias: $targetAl, node=${clickableRoot.viewIdResourceName}")
-                return clickableRoot
-            }
-        }
-
-        return null
-    }
-
-    private fun scrollAccountsList(nodes: List<AccessibilityNodeInfo>): Boolean {
-        // 순수 접근성 ACTION_SCROLL_FORWARD 수행 (좌표 고정 드래그 없음)
-        val accountsView = nodes.firstOrNull { node ->
-            node.viewIdResourceName?.endsWith(":id/accounts") == true ||
-                node.viewIdResourceName?.contains("og_bento_scroll_container") == true
-        }
-
-        if (accountsView != null && accountsView.isScrollable) {
-            val actionResult = accountsView.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-            Log.i(TAG, "scrollAccountsList: ACTION_SCROLL_FORWARD result=$actionResult")
-            if (actionResult) return true
-        }
-
-        // 스크롤 가능한 조상 뷰 탐색 Fallback
-        val scrollableNode = nodes.firstOrNull { it.isScrollable }
-        return scrollableNode?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) == true
-    }
-
-    private fun findClickableAccountRoot(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
-        var current: AccessibilityNodeInfo? = node
-        while (current != null) {
-            val id = current.viewIdResourceName ?: ""
-            if (id.contains("og_bento_available_account_root") || current.isClickable) {
-                return current
-            }
-            current = current.parent
-        }
-        return node
-    }
-
     private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
         val clickable = findClickableAncestor(node) ?: node
         if (clickable.isClickable) {
@@ -561,7 +352,6 @@ internal class GeminiAccountSwitcherAutomation(
             if (clicked) return true
         }
 
-        // ComposeView 등 ACTION_CLICK이 소비되지 않는 경우 노드의 실제 화면 중심 좌표 탭 Fallback (동적 계산)
         val rect = android.graphics.Rect()
         node.getBoundsInScreen(rect)
         if (!rect.isEmpty && rect.width() > 0 && rect.height() > 0) {
@@ -611,13 +401,9 @@ internal class GeminiAccountSwitcherAutomation(
                 }
             }
             val count = node.childCount
-            if (node.packageName?.toString()?.contains("googlequicksearchbox") == true) {
-                Log.d(TAG, "  quicksearchNode[d=$depth]: id=${node.viewIdResourceName}, count=$count, text=${node.text}, desc=${node.contentDescription}")
-            }
             for (index in 0 until count) {
                 val child = runCatching { node.getChild(index) }.getOrNull()
                 if (child == null) {
-                    Log.w(TAG, "  getChild($index) is null for ${node.viewIdResourceName} (count=$count)")
                     continue
                 }
                 visit(child, depth + 1)
@@ -633,8 +419,5 @@ internal class GeminiAccountSwitcherAutomation(
         const val TIMEOUT_LAUNCH_GEMINI_MS = 4000L
         const val TIMEOUT_OPEN_PROFILE_MS = 5000L
         const val TIMEOUT_EXPAND_ACCOUNTS_MS = 5000L
-        const val TIMEOUT_FIND_ACCOUNT_MS = 5000L
-        const val TIMEOUT_DISMISS_MS = 2500L
-        const val MAX_SCROLL_ATTEMPTS = 4
     }
 }

@@ -7,6 +7,7 @@ import com.example.gemgemgen.automation.usecase.NewChatMode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 
 internal class GeminiPromptAutomation(
     coroutineScope: CoroutineScope,
@@ -27,7 +28,9 @@ internal class GeminiPromptAutomation(
     )
 
     override fun onRunFinished() {
+        android.util.Log.i("GeminiPerf", "[Gemini Run Stats] " + nodeFinder.getPerformanceStats())
         nodeFinder.invalidateCache()
+        nodeFinder.resetPerformanceStats()
     }
 
     override suspend fun openNewChat(
@@ -53,6 +56,7 @@ internal class GeminiPromptAutomation(
 
     override fun findSendNode(): AccessibilityNodeInfo? {
         return nodeFinder.findNodeByTextOrDescription("보내기")
+            ?: nodeFinder.findNodeByTextOrDescription("전송")
     }
 
     private suspend fun clickSidebar(
@@ -76,21 +80,16 @@ internal class GeminiPromptAutomation(
     private suspend fun clickDirectNewChat(
         notifyState: suspend (AutomationRunState) -> Unit
     ): Boolean {
-        notifyState(AutomationRunState.Running("새 채팅 찾는 중 (#1)"))
-
-        if (!nodeFinder.hasMoreOptions()) {
-            notifyState(AutomationRunState.Running("이미 새 대화 상태임 (새 채팅 클릭 생략)"))
-            return true
-        }
-
         return retryUntilFound(
             actionName = "새 채팅 찾는 중",
             failureMessage = "Gemini 새 채팅 못 찾음",
             notifyState = notifyState
         ) {
-            val node = nodeFinder.findNewChatWithMoreOptions()
+            val node = nodeFinder.findNodeByTextOrDescription("새 채팅")
             if (node != null && clickNodeOrParent(node)) {
                 notifyState(AutomationRunState.Running("새 채팅 클릭 완료"))
+                nodeFinder.invalidateCache()
+                delay(NEW_CHAT_SETTLE_MS)
                 true
             } else {
                 null
@@ -133,5 +132,6 @@ internal class GeminiPromptAutomation(
     private companion object {
         const val INPUT_RESOURCE_ID =
             "com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_half_sheet"
+        const val NEW_CHAT_SETTLE_MS = 350L
     }
 }

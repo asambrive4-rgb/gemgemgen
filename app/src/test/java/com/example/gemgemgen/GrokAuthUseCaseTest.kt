@@ -3,7 +3,7 @@ package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.usecase.AnalysisCredentialResolver
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisException
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
@@ -96,7 +96,7 @@ class GrokAuthUseCaseTest {
             ),
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         )
-        val resolver = AnalysisCredentialResolver(
+        val resolver = ResolveAnalysisCredentialUseCase(
             apiKeyRepository = keyRepo,
             grokAuth = grokAuth,
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
@@ -115,7 +115,7 @@ class GrokAuthUseCaseTest {
             repository = MemoryGrokAuthRepository(),
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         )
-        AnalysisCredentialResolver(
+        ResolveAnalysisCredentialUseCase(
             apiKeyRepository = keyRepo,
             grokAuth = grokAuth,
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)

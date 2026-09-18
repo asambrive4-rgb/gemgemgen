@@ -12,7 +12,7 @@ import com.example.gemgemgen.automation.ui.SettingsDialogStage
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.ui.WildcardDialogStage
 import com.example.gemgemgen.wildcard.ui.WildcardDialogType
-import com.example.gemgemgen.wildcard.ui.WildcardManagerUiState
+import com.example.gemgemgen.wildcard.ui.WildcardUiState
 import com.example.gemgemgen.wildcard.ui.deriveActiveWildcardDialog
 import com.example.gemgemgen.wildcard.ui.deriveWildcardDialogStage
 import org.junit.Assert.assertEquals
@@ -84,7 +84,7 @@ class DialogHostStageDerivationTest {
 
     @Test
     fun deriveActiveWildcardDialog_prioritizesCorrectly() {
-        val baseState = WildcardManagerUiState()
+        val baseState = WildcardUiState()
         assertEquals(WildcardDialogType.None, deriveActiveWildcardDialog(baseState))
 
         val overwriteState = baseState.copy(classify = baseState.classify.copy(classifyOverwriteConflicts = listOf("a.txt")))

@@ -2,19 +2,19 @@
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
-import com.example.gemgemgen.automation.usecase.AnimationScaleManager
-import com.example.gemgemgen.automation.usecase.ImeManager
+import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
-import com.example.gemgemgen.automation.usecase.RunAutomationUseCase
+import com.example.gemgemgen.automation.usecase.ManageAnimationScaleUseCase
+import com.example.gemgemgen.automation.usecase.ManageImeUseCase
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.wildcard.android.AndroidWildcardSetRepository
 
 object AndroidAutomationRuntimeProvider {
-    fun get(context: Context): RunAutomationUseCase {
+    fun get(context: Context): ExecuteAutomationLoopUseCase {
         val appContext = context.applicationContext
         return ProcessAutomationHolder.getOrCreate {
-            RunAutomationUseCase(
-                imeManager = ImeManager(AndroidImeSettings(appContext)),
+            ExecuteAutomationLoopUseCase(
+                manageImeUseCase = ManageImeUseCase(AndroidImeSettings(appContext)),
                 lastRunSnapshotStore = LastRunSnapshotStore(
                     SharedPreferencesLastRunSnapshotRepository(appContext)
                 ),
@@ -22,7 +22,7 @@ object AndroidAutomationRuntimeProvider {
                 wildcardSetRepository = AndroidWildcardSetRepository(appContext),
                 promptGatewayProvider = ActivePromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext),
-                animationScaleManager = AnimationScaleManager(
+                manageAnimationScaleUseCase = ManageAnimationScaleUseCase(
                     settings = AndroidAnimationScaleSettings(appContext),
                     backupStore = SharedPreferencesAnimationScaleBackupStore(appContext)
                 ),

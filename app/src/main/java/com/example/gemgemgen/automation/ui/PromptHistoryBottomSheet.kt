@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
+import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.ui.theme.AppTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -91,7 +92,7 @@ fun PromptHistoryBottomSheet(
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        text = "프롬프트 실행 기록 (최근 ${items.size}/10개)",
+                        text = "프롬프트 실행 기록 (최근 ${items.size}/${PromptHistoryStore.DEFAULT_MAX_HISTORY_COUNT}개)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -129,7 +130,7 @@ fun PromptHistoryBottomSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "자동화를 실행하면 최근 10개까지 자동으로 보관됩니다.",
+                        text = "자동화를 실행하면 최근 ${PromptHistoryStore.DEFAULT_MAX_HISTORY_COUNT}개까지 자동으로 보관됩니다.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )

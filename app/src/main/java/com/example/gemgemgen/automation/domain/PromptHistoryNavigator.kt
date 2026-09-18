@@ -88,6 +88,6 @@ class PromptHistoryNavigator(
     }
 
     companion object {
-        const val MAX_HISTORY_COUNT = 4
+        const val MAX_HISTORY_COUNT = 6
     }
 }

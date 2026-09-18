@@ -84,7 +84,7 @@ sealed interface WildcardDialogType {
     data class ClassifyOverwrite(val fileNames: List<String>) : WildcardDialogType
 }
 
-fun deriveActiveWildcardDialog(uiState: WildcardManagerUiState): WildcardDialogType {
+fun deriveActiveWildcardDialog(uiState: WildcardUiState): WildcardDialogType {
     val classifyPreview = uiState.classifyPreview
     return when {
         uiState.classifyOverwriteConflicts.isNotEmpty() ->

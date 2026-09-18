@@ -1,4 +1,4 @@
-﻿// 역할: GeminiAccessibilityService 인스턴스를 통해 계정 전환 매크로를 실행하고 Gemini 앱을 실행하는 안드로이드 게이트웨이입니다.
+// 역할: GeminiAccessibilityService 인스턴스를 통해 계정 목록 열기 매크로를 실행하고 Gemini 앱을 실행하는 안드로이드 게이트웨이입니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -12,13 +12,11 @@ class AndroidGeminiAccountSwitcherGateway(
     override val isServiceAvailable: Boolean
         get() = GeminiAccessibilityService.activeService != null
 
-    override suspend fun switchAccount(
-        identifier: String,
-        alias: String,
+    override suspend fun openAccountPicker(
         onProgress: (phase: String, message: String) -> Unit
     ): GeminiAccountSwitchResult {
         val service = GeminiAccessibilityService.activeService ?: return GeminiAccountSwitchResult.Unavailable
-        return service.switchGeminiAccount(identifier, alias, onProgress)
+        return service.openGeminiAccountPicker(onProgress)
     }
 
     override fun launchGeminiForManualSwitch(): Boolean {

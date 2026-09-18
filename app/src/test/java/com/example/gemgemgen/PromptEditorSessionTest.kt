@@ -13,11 +13,11 @@ import org.junit.Test
 
 class PromptEditorSessionTest {
     @Test
-    fun toggleSelectionMode_enablesGuideAndClears() {
+    fun toggleSelectionMode_enablesAndClears() {
         val enabled = PromptEditorSession(text = "인물\n장소").toggleSelectionMode()
 
         assertTrue(enabled.isParagraphSelectionMode)
-        assertEquals(PromptParagraphMessageKey.Guide, enabled.messageKey)
+        assertEquals(PromptParagraphMessageKey.None, enabled.messageKey)
         assertEquals(null, enabled.selectedParagraphRange)
 
         val cleared = enabled.toggleSelectionMode()

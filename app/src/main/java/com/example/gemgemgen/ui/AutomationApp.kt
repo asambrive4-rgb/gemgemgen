@@ -15,13 +15,13 @@ import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.automation.ui.AutomationScreen
-import com.example.gemgemgen.automation.ui.MainUiState
+import com.example.gemgemgen.automation.ui.AutomationUiState
 import com.example.gemgemgen.automation.ui.SettingsDialogHost
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
-import com.example.gemgemgen.wildcard.ui.WildcardManagerScreen
-import com.example.gemgemgen.wildcard.ui.WildcardManagerUiState
+import com.example.gemgemgen.wildcard.ui.WildcardScreen
+import com.example.gemgemgen.wildcard.ui.WildcardUiState
 import com.example.gemgemgen.remote.domain.AutomationMode
 
 internal data class AutomationAppActions(
@@ -69,15 +69,7 @@ internal data class AutomationAppActions(
     val onClosePromptHistory: () -> Unit = {},
     val onSelectPromptHistoryItem: (PromptHistoryItem) -> Unit = {},
     val onClearPromptHistory: () -> Unit = {},
-    val onOpenGeminiAccountDialog: () -> Unit = {},
-    val onCloseGeminiAccountDialog: () -> Unit = {},
-    val onSwitchGeminiAccount: (com.example.gemgemgen.automation.domain.GeminiAccountProfile) -> Unit = {},
-    val onCycleNextGeminiAccount: () -> Unit = {},
-    val onAddGeminiAccount: (alias: String, identifier: String) -> Unit = { _, _ -> },
-    val onDeleteGeminiAccount: (id: String) -> Unit = {},
-    val onRetrySwitchGeminiAccount: () -> Unit = {},
-    val onOpenGeminiManualSwitch: () -> Unit = {},
-    val onClearAccountSwitchError: () -> Unit = {},
+    val onOpenGeminiAccountPicker: () -> Unit = {},
     val onRunVariation: (String?) -> Unit = {},
     val onOpenVariationPromptConfigDialog: () -> Unit = {},
     val onCloseVariationPromptConfigDialog: () -> Unit = {},
@@ -173,12 +165,12 @@ internal data class AnalysisAppActions(
 @Composable
 internal fun AutomationApp(
     selectedTab: MainTab,
-    mainUiState: MainUiState,
+    mainUiState: AutomationUiState,
     automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
     analysisUiState: AnalysisUiState,
     analysisPromptState: TextFieldState,
-    wildcardUiState: WildcardManagerUiState,
+    wildcardUiState: WildcardUiState,
     automationActions: AutomationAppActions,
     analysisActions: AnalysisAppActions,
     wildcardActions: WildcardAppActions
@@ -256,15 +248,7 @@ internal fun AutomationApp(
                     onClearPromptHistory = automationActions.onClearPromptHistory,
                     onSelectThemePalette = automationActions.onSelectThemePalette,
                     onSelectThemeMode = automationActions.onSelectThemeMode,
-                    onOpenGeminiAccountDialog = automationActions.onOpenGeminiAccountDialog,
-                    onCloseGeminiAccountDialog = automationActions.onCloseGeminiAccountDialog,
-                    onSwitchGeminiAccount = automationActions.onSwitchGeminiAccount,
-                    onCycleNextGeminiAccount = automationActions.onCycleNextGeminiAccount,
-                    onAddGeminiAccount = automationActions.onAddGeminiAccount,
-                    onDeleteGeminiAccount = automationActions.onDeleteGeminiAccount,
-                    onRetrySwitchGeminiAccount = automationActions.onRetrySwitchGeminiAccount,
-                    onOpenGeminiManualSwitch = automationActions.onOpenGeminiManualSwitch,
-                    onClearAccountSwitchError = automationActions.onClearAccountSwitchError,
+                    onOpenGeminiAccountPicker = automationActions.onOpenGeminiAccountPicker,
                     onRunVariation = automationActions.onRunVariation,
                     onOpenVariationPromptConfigDialog = automationActions.onOpenVariationPromptConfigDialog,
                     onCloseVariationPromptConfigDialog = automationActions.onCloseVariationPromptConfigDialog,
@@ -317,7 +301,7 @@ internal fun AutomationApp(
                 )
             },
             MainTabPage(MainTab.WILDCARD) {
-                WildcardManagerScreen(
+                WildcardScreen(
                     uiState = wildcardUiState,
                     environmentStatus = mainUiState.environmentStatus,
                     environmentSetupInfo = mainUiState.environmentSetupInfo,
