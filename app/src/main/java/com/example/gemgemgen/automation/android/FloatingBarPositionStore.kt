@@ -1,4 +1,4 @@
-// 역할: 사용자가 드래그하여 이동한 플로팅 바의 화면 위치 좌표를 저장하고 복원합니다.
+// 역할: 메모리 캐시 및 비동기 저장으로 메인 스레드 부하 없이 플로팅 바의 화면 위치 좌표를 관리합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -16,18 +16,23 @@ internal class FloatingBarPositionStore(
 ) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private var memoryCache: FloatingBarPosition? = null
 
     fun load(): FloatingBarPosition? {
+        memoryCache?.let { return it }
         if (!preferences.contains(KEY_X) || !preferences.contains(KEY_Y)) {
             return null
         }
-        return FloatingBarPosition(
+        val pos = FloatingBarPosition(
             x = preferences.getInt(KEY_X, 0),
             y = preferences.getInt(KEY_Y, 0)
         )
+        memoryCache = pos
+        return pos
     }
 
     fun save(position: FloatingBarPosition) {
+        memoryCache = position
         preferences.edit()
             .putInt(KEY_X, position.x)
             .putInt(KEY_Y, position.y)

@@ -1,4 +1,4 @@
-// 역할: 대상 AI 앱에 프롬프트를 전송하는 자동화 반복 루프를 실행하고 진행 상태와 환경 복구를 관리합니다.
+// 역할: 시스템 설정(IME/애니메이션) 비동기 전환 및 메인 스레드 안전 상태 전파로 대상 AI 앱 자동화 반복 루프를 관리합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -11,9 +11,13 @@ import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.WildcardSet
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class AutomationRunRequest(
     val promptTemplate: String,
@@ -31,7 +35,7 @@ class ExecuteAutomationLoopUseCase(
     private val promptGatewayProvider: PromptAutomationGatewayProvider,
     private val targetAppLauncher: TargetAppLauncher,
     private val manageAnimationScaleUseCase: ManageAnimationScaleUseCase? = null,
-    dispatchers: AppDispatchers = AppDispatchers(),
+    private val dispatchers: AppDispatchers = AppDispatchers(),
     promptGenerator: PromptGenerator = PromptGenerator(),
     private val generateFinalPrompt: ((String, List<WildcardSet>, Int) -> String)? = null,
     promptHistoryStore: PromptHistoryStore? = null,
@@ -47,6 +51,7 @@ class ExecuteAutomationLoopUseCase(
         promptGenerator = promptGenerator
     )
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + dispatchers.io)
     private var currentRun: CurrentRun? = null
     private var isPreparingRun = false
     /** 준비 중이거나 실행 중일 때 목표 회차. 종료 시 null. */
@@ -138,7 +143,7 @@ class ExecuteAutomationLoopUseCase(
         )
     }
 
-    private fun startPreparedRun(
+    private suspend fun startPreparedRun(
         preparedRun: PreparedAutomationRun,
         onStateChange: ((AutomationRunState) -> Unit)?
     ) {
@@ -157,7 +162,7 @@ class ExecuteAutomationLoopUseCase(
         }
 
         emitState(AutomationRunState.Running("Null Keyboard로 전환 중"), onStateChange)
-        val imeSession = when (val imeSwitchResult = manageImeUseCase.switchToNullKeyboard()) {
+        val imeSession = when (val imeSwitchResult = withContext(dispatchers.io) { manageImeUseCase.switchToNullKeyboard() }) {
             is ImeSwitchResult.Failure -> return finishWithoutRun(
                 state = AutomationRunState.Failure(
                     "${imeSwitchResult.message} WRITE_SECURE_SETTINGS 권한과 Null Keyboard 설치 상태를 확인해주세요."
@@ -167,10 +172,14 @@ class ExecuteAutomationLoopUseCase(
             is ImeSwitchResult.Success -> imeSwitchResult.session
         }
 
+        val animationSession = withContext(dispatchers.io) {
+            manageAnimationScaleUseCase?.disableAnimations()
+        }
+
         val run = CurrentRun(
             targetApp = request.targetApp,
             imeSession = imeSession,
-            animationSession = manageAnimationScaleUseCase?.disableAnimations(),
+            animationSession = animationSession,
             promptGateway = promptGateway,
             promptTemplate = request.promptTemplate,
             repeatCount = sessionRepeatCount ?: preparedRun.repeatCount,
@@ -285,22 +294,26 @@ class ExecuteAutomationLoopUseCase(
         run.finished = true
         emitState(AutomationRunState.Running("원래 입력기로 복구 중"), onStateChange)
 
-        run.animationSession?.let { session ->
-            manageAnimationScaleUseCase?.restore(session)
-        }
+        scope.launch {
+            run.animationSession?.let { session ->
+                manageAnimationScaleUseCase?.restore(session)
+            }
 
-        val finalState = when (val restoreResult = manageImeUseCase.restore(run.imeSession)) {
-            ImeRestoreResult.Success -> state
-            is ImeRestoreResult.Failure -> AutomationRunState.Failure(
-                "입력기 복구 실패. 원래 입력기 " +
-                    "${restoreResult.originalImeId}, 현재 입력기 " +
-                    "${restoreResult.currentImeId ?: "확인 불가"}"
-            )
-        }
+            val finalState = when (val restoreResult = manageImeUseCase.restore(run.imeSession)) {
+                ImeRestoreResult.Success -> state
+                is ImeRestoreResult.Failure -> AutomationRunState.Failure(
+                    "입력기 복구 실패. 원래 입력기 " +
+                        "${restoreResult.originalImeId}, 현재 입력기 " +
+                        "${restoreResult.currentImeId ?: "확인 불가"}"
+                )
+            }
 
-        currentRun = null
-        clearSessionRepeatCount()
-        emitState(finalState, onStateChange)
+            currentRun = null
+            clearSessionRepeatCount()
+            withContext(dispatchers.main) {
+                emitState(finalState, onStateChange)
+            }
+        }
     }
 
     private fun finishWithoutRun(

@@ -1,4 +1,4 @@
-// 역할: UI 스레드 부하 및 GC 발생을 최소화하며 입력창 탭 활성화, SET_TEXT·붙여넣기 2중 주입 및 전송을 자동화합니다.
+// 역할: 무한 리셋 방지 임계값 가드, 전송 확인 루프 중복 탐색 차단 및 2중 텍스트 주입으로 프롬프트를 안전하게 전송하는 베이스 자동화 클래스
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -149,7 +149,8 @@ internal abstract class AccessibilityPromptAutomation(
         clickNodeOrParent(inputNode)
         delay(INPUT_CLICK_SETTLE_MS)
 
-        val targetNode = findInputNode() ?: inputNode
+        val isInputStillValid = runCatching { inputNode.refresh() }.getOrDefault(false)
+        val targetNode = if (isInputStillValid) inputNode else (findInputNode() ?: inputNode)
         targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val arguments = Bundle().apply {
             putCharSequence(
@@ -242,13 +243,15 @@ internal abstract class AccessibilityPromptAutomation(
         prompt: String,
         notifyState: suspend (AutomationRunState) -> Unit
     ): Boolean {
+        var lastRecoverAttempt = 0
         val inputNode = retryUntilFound(
             actionName = "입력창 찾는 중",
             failureMessage = "$targetAppName 입력창 못 찾음",
             notifyState = notifyState
-        ) {
+        ) { attempt ->
             val node = findInputNode()
-            if (node == null) {
+            if (node == null && attempt >= MIN_RECOVER_ATTEMPTS && (attempt - lastRecoverAttempt >= MIN_RECOVER_ATTEMPTS)) {
+                lastRecoverAttempt = attempt
                 recoverFromInputFailure(notifyState)
             }
             node
@@ -314,8 +317,10 @@ internal abstract class AccessibilityPromptAutomation(
             val node = findSendNode()
             if (node != null) {
                 performSendClick(node)
+                delay(SEND_CONFIRM_WAIT_MS)
+                if (isSendConfirmed(prompt)) return@retryUntilFound true
             }
-            if (isSendConfirmed(prompt)) true else null
+            null
         }
         return confirmed == true
     }
@@ -353,15 +358,16 @@ internal abstract class AccessibilityPromptAutomation(
     }
 
     private fun findClickableNodeOrParent(
-        node: AccessibilityNodeInfo
+        node: AccessibilityNodeInfo,
+        maxDepth: Int = MAX_CLICKABLE_PARENT_DEPTH
     ): AccessibilityNodeInfo? {
         var current: AccessibilityNodeInfo? = node
-
-        while (current != null) {
-            if (current.isClickable) {
+        repeat(maxDepth) {
+            if (current == null) return null
+            if (current?.isClickable == true) {
                 return current
             }
-            current = current.parent
+            current = current?.parent
         }
 
         return null
@@ -374,6 +380,8 @@ internal abstract class AccessibilityPromptAutomation(
     }
 
     private companion object {
+        const val MIN_RECOVER_ATTEMPTS = 3
+        const val MAX_CLICKABLE_PARENT_DEPTH = 8
         const val LAUNCH_SETTLE_WAIT_MS = 300L
         const val STATE_NOTIFY_THROTTLE_MS = 1200L
         const val INPUT_CLICK_SETTLE_MS = 150L

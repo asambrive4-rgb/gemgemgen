@@ -495,7 +495,7 @@ class ExecuteAutomationLoopUseCaseTest {
             },
             targetAppLauncher = TargetAppLauncher(onLaunch),
             manageAnimationScaleUseCase = manageAnimationScaleUseCase,
-            dispatchers = AppDispatchers(io = Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
             generateFinalPrompt = generateFinalPrompt
         )
     }

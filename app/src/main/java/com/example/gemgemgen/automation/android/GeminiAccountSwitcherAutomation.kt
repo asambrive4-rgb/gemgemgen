@@ -110,10 +110,7 @@ internal class GeminiAccountSwitcherAutomation(
     private fun getAllNodes(): List<AccessibilityNodeInfo> {
         val roots = (allRootsProvider() + listOfNotNull(rootProvider())).distinct()
         val allNodes = mutableListOf<AccessibilityNodeInfo>()
-        for ((idx, r) in roots.withIndex()) {
-            if (r.childCount == 0) {
-                runCatching { r.refresh() }
-            }
+        for (r in roots) {
             val flat = flattenNodes(r)
             allNodes += flat
 
@@ -363,11 +360,15 @@ internal class GeminiAccountSwitcherAutomation(
         return false
     }
 
-    private fun findClickableAncestor(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+    private fun findClickableAncestor(
+        node: AccessibilityNodeInfo,
+        maxDepth: Int = MAX_CLICKABLE_PARENT_DEPTH
+    ): AccessibilityNodeInfo? {
         var current: AccessibilityNodeInfo? = node
-        while (current != null) {
-            if (current.isClickable) return current
-            current = current.parent
+        repeat(maxDepth) {
+            if (current == null) return null
+            if (current?.isClickable == true) return current
+            current = current?.parent
         }
         return null
     }
@@ -415,6 +416,7 @@ internal class GeminiAccountSwitcherAutomation(
 
     private companion object {
         const val TAG = "GeminiAccountSwitcher"
+        const val MAX_CLICKABLE_PARENT_DEPTH = 8
         const val POLL_INTERVAL_MS = 150L
         const val TIMEOUT_LAUNCH_GEMINI_MS = 4000L
         const val TIMEOUT_OPEN_PROFILE_MS = 5000L

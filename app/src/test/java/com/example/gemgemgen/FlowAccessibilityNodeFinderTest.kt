@@ -1,4 +1,4 @@
-// 역할: Flow 앱 화면의 접근성 노드 탐색 및 좌표 매칭 로직을 검증합니다.
+// 역할: Flow 앱 화면의 접근성 노드 탐색 상수, 키워드 매칭 세트 및 기본 설정을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.FlowAccessibilityNodeFinder
@@ -16,6 +16,16 @@ class FlowAccessibilityNodeFinderTest {
         assertTrue(candidates.contains("Generate"))
         assertTrue(candidates.contains("만들기"))
         assertTrue(candidates.contains("Create"))
+    }
+
+    @Test
+    fun sendDescriptionsSet_containsAllLowercaseCandidates() {
+        val set = FlowAccessibilityNodeFinder.SEND_DESCRIPTIONS_SET
+        assertTrue(set.contains("생성"))
+        assertTrue(set.contains("generate"))
+        assertTrue(set.contains("만들기"))
+        assertTrue(set.contains("create"))
+        assertEquals(FlowAccessibilityNodeFinder.SEND_DESCRIPTIONS.size, set.size)
     }
 
     @Test

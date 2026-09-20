@@ -1,4 +1,4 @@
-// 역할: 마지막으로 실행했던 자동화 설정과 프롬프트 스냅샷을 로컬에 적절히 영구 저장합니다.
+// 역할: 마지막으로 실행했던 자동화 설정과 프롬프트 스냅샷을 인메모리 캐시 및 로컬에 영구 저장합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -14,12 +14,23 @@ class SharedPreferencesLastRunSnapshotRepository(
     private val preferences: SharedPreferences =
         context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
+    @Volatile
+    private var cachedSnapshot: LastRunSnapshot? = null
+    @Volatile
+    private var isLoaded: Boolean = false
+
     override fun load(): LastRunSnapshot? {
+        if (isLoaded) return cachedSnapshot
+
         val promptTemplate = preferences.getString(KEY_PROMPT_TEMPLATE, "").orEmpty()
         val repeatCountText = preferences.getString(KEY_REPEAT_COUNT_TEXT, "").orEmpty()
-        if (promptTemplate.isBlank() && repeatCountText.isBlank()) return null
+        if (promptTemplate.isBlank() && repeatCountText.isBlank()) {
+            isLoaded = true
+            cachedSnapshot = null
+            return null
+        }
 
-        return LastRunSnapshot(
+        val snapshot = LastRunSnapshot(
             promptTemplate = promptTemplate,
             repeatCountText = repeatCountText,
             targetApp = AutomationTargetApp.fromStorageValue(
@@ -27,9 +38,14 @@ class SharedPreferencesLastRunSnapshotRepository(
             ),
             flowImageCount = preferences.getInt(KEY_FLOW_IMAGE_COUNT, AppDefaults.DEFAULT_FLOW_IMAGE_COUNT)
         )
+        cachedSnapshot = snapshot
+        isLoaded = true
+        return snapshot
     }
 
     override fun save(snapshot: LastRunSnapshot) {
+        cachedSnapshot = snapshot
+        isLoaded = true
         preferences.edit()
             .putString(KEY_PROMPT_TEMPLATE, snapshot.promptTemplate)
             .putString(KEY_REPEAT_COUNT_TEXT, snapshot.repeatCountText)

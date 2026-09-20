@@ -1,4 +1,4 @@
-// 역할: 화면 노드 조작, 제스처 탭/스와이프, Gemini 계정 목록 열기, 클립보드 동기화 및 앱 제어 등 접근성 자동화의 핵심 인프라를 제공하는 서비스
+// 역할: 메인 UI 스레드 블로킹 없는 백그라운드 최근 앱 종료 및 네이티브 인덱스 지연 순회, 제스처 탭/스와이프, 앱 제어 핵심 인프라를 제공하는 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -30,7 +30,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 class GeminiAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
@@ -209,20 +212,9 @@ class GeminiAccessibilityService : AccessibilityService() {
                     handler = handler,
                     rootProvider = { rootInActiveWindow },
                     allRootsProvider = {
-                        val winList = runCatching { windows }.getOrNull().orEmpty()
-                        for (w in winList) {
-                            val r = runCatching { w.root }.getOrNull()
-                            if (r != null && r.childCount == 0) {
-                                runCatching { r.refresh() }
-                            }
-                            Log.d("A11yWin", "win id=${w.id}, type=${w.type}, title=${w.title}, layer=${w.layer}, isFocused=${w.isFocused}, isActive=${w.isActive}, rootPkg=${r?.packageName}, childCount=${r?.childCount}")
-                        }
+                        val winRoots = runCatching { windows }.getOrNull().orEmpty()
+                            .mapNotNull { runCatching { it.root }.getOrNull() }
                         val active = runCatching { rootInActiveWindow }.getOrNull()
-                        if (active != null && active.childCount == 0) {
-                            runCatching { active.refresh() }
-                        }
-                        Log.d("A11yWin", "activeRoot: winId=${active?.windowId}, pkg=${active?.packageName}, childCount=${active?.childCount}")
-                        val winRoots = winList.mapNotNull { runCatching { it.root }.getOrNull() }
                         (winRoots + listOfNotNull(active)).distinct()
                     },
                     activePackageProvider = {
@@ -471,64 +463,76 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     private fun closeNextTaskCard(closedCount: Int, clickCount: Int) {
-        if (clickCount >= MAX_TASK_CLOSE_CLICKS) {
-            val result = if (closedCount > 0) {
-                CloseGeminiAppResult.Success(closedCount)
-            } else {
-                CloseGeminiAppResult.Failure("${closeTaskTitle} 닫기 버튼을 누르지 못했습니다.")
-            }
-            finishCloseAppAfterDismissingRecents(result)
-            return
-        }
-
-        val closeNode = findTaskCloseNode()
-        if (closeNode == null) {
-            finishCloseAppAfterDismissingRecents(
-                if (closedCount > 0) {
+        serviceScope.launch(Dispatchers.Default) {
+            if (clickCount >= MAX_TASK_CLOSE_CLICKS) {
+                val result = if (closedCount > 0) {
                     CloseGeminiAppResult.Success(closedCount)
                 } else {
-                    CloseGeminiAppResult.NotFound
+                    CloseGeminiAppResult.Failure("${closeTaskTitle} 닫기 버튼을 누르지 못했습니다.")
                 }
-            )
-            return
-        }
+                finishCloseAppAfterDismissingRecents(result)
+                return@launch
+            }
 
-        if (!clickNodeOrParent(closeNode)) {
-            finishCloseAppAfterDismissingRecents(
-                CloseGeminiAppResult.Failure("${closeTaskTitle} 닫기 버튼을 누르지 못했습니다.")
-            )
-            return
-        }
-
-        handler.postDelayed(
-            {
-                closeNextTaskCard(
-                    closedCount = closedCount + 1,
-                    clickCount = clickCount + 1
+            val closeNode = findTaskCloseNode()
+            if (closeNode == null) {
+                finishCloseAppAfterDismissingRecents(
+                    if (closedCount > 0) {
+                        CloseGeminiAppResult.Success(closedCount)
+                    } else {
+                        CloseGeminiAppResult.NotFound
+                    }
                 )
-            },
-            CARD_CLOSE_WAIT_MS
-        )
+                return@launch
+            }
+
+            val clicked = withContext(Dispatchers.Main.immediate) {
+                clickNodeOrParent(closeNode)
+            }
+            if (!clicked) {
+                finishCloseAppAfterDismissingRecents(
+                    CloseGeminiAppResult.Failure("${closeTaskTitle} 닫기 버튼을 누르지 못했습니다.")
+                )
+                return@launch
+            }
+
+            delay(CARD_CLOSE_WAIT_MS)
+            closeNextTaskCard(
+                closedCount = closedCount + 1,
+                clickCount = clickCount + 1
+            )
+        }
     }
 
     private fun finishCloseAppAfterDismissingRecents(result: CloseGeminiAppResult) {
-        performGlobalAction(GLOBAL_ACTION_BACK)
-        handler.postDelayed(
-            { finishCloseApp(result) },
-            RECENTS_DISMISS_WAIT_MS
-        )
+        handler.post {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            handler.postDelayed(
+                { finishCloseApp(result) },
+                RECENTS_DISMISS_WAIT_MS
+            )
+        }
     }
 
     private fun findTaskCloseNode(): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: return null
-        val nodes = flattenNodes(root)
-        nodes.firstOrNull { node ->
+
+        // 1) 네이티브 텍스트 인덱스로 닫기 버튼 1순위 탐색 (IPC 극소화)
+        val nativeClose = runCatching {
+            root.findAccessibilityNodeInfosByText(closeTaskDescription)
+        }.getOrNull().orEmpty()
+        nativeClose.firstOrNull { it.isClickable }?.let { return it }
+
+        // 2) 지연 평가 조기 종료로 닫기 설명 노드 탐색
+        AccessibilityNodeTraversal.lazyTraverse(root).firstOrNull { node ->
             node.contentDescription?.toString() == closeTaskDescription && node.isClickable
         }?.let { return it }
 
-        val titleNodes = nodes.filter { node ->
-            node.text?.toString() == closeTaskTitle
-        }
+        // 3) 태스크 타이틀 기반 상위 탐색
+        val titleNodes = runCatching {
+            root.findAccessibilityNodeInfosByText(closeTaskTitle)
+        }.getOrNull()?.filter { it.text?.toString() == closeTaskTitle }
+            ?: AccessibilityNodeTraversal.lazyTraverse(root).filter { it.text?.toString() == closeTaskTitle }.toList()
 
         for (titleNode in titleNodes) {
             var current = titleNode.parent
@@ -561,31 +565,20 @@ class GeminiAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
+    private fun clickNodeOrParent(
+        node: AccessibilityNodeInfo,
+        maxDepth: Int = MAX_CLICKABLE_PARENT_DEPTH
+    ): Boolean {
         var current: AccessibilityNodeInfo? = node
-
-        while (current != null) {
-            if (current.isClickable) {
-                return current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        repeat(maxDepth) {
+            if (current == null) return false
+            if (current?.isClickable == true) {
+                return current?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
             }
-            current = current.parent
+            current = current?.parent
         }
 
         return false
-    }
-
-    private fun flattenNodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-
-        fun visit(node: AccessibilityNodeInfo) {
-            nodes += node
-            for (index in 0 until node.childCount) {
-                node.getChild(index)?.let(::visit)
-            }
-        }
-
-        visit(root)
-        return nodes
     }
 
     private fun finishCloseApp(result: CloseGeminiAppResult) {
@@ -632,6 +625,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         private const val NAVIGATION_BAR_HEIGHT_RATIO = 0.06125f
         private const val CARD_CLOSE_WAIT_MS = 450L
         private const val MAX_TASK_CLOSE_CLICKS = 10
+        private const val MAX_CLICKABLE_PARENT_DEPTH = 8
         private const val TITLE_ANCESTOR_SEARCH_DEPTH = 4
         private const val TAP_GESTURE_DURATION_MS = 60L
     }

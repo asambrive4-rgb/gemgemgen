@@ -1,4 +1,4 @@
-// 역할: 시스템 네이티브 인덱스 텍스트/ID 검색 우선 및 단기 스냅샷 캐시를 통해 Binder IPC와 메모리 부하를 최소화하며 Gemini 화면 노드를 탐색합니다.
+// 역할: 단일 루트 재사용, 안정적 네이티브 ViewId 인덱스 우선 조회, 지연 시퀀스 및 단기 캐시로 Binder IPC를 최소화하며 Gemini 노드를 탐색합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.Rect
@@ -10,6 +10,12 @@ internal class GeminiAccessibilityNodeFinder(
     private val inputResourceId: String
 ) {
     private val snapshotCache = AccessibilityNodeSnapshotCache()
+    private val inputViewIds = listOf(
+        inputResourceId,
+        "com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_half_sheet",
+        "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_text",
+        "com.google.android.googlequicksearchbox:id/chat_input_text"
+    ).distinct()
 
     fun invalidateCache() {
         snapshotCache.clear()
@@ -25,24 +31,76 @@ internal class GeminiAccessibilityNodeFinder(
     }
 
     fun findInputNode(): AccessibilityNodeInfo? {
-        findNodeByViewId(inputResourceId)?.let { return it }
+        val root = rootProvider() ?: return null
+        return snapshotCache.getOrFind("input", root) {
+            for (viewId in inputViewIds) {
+                findNodeByViewId(root, viewId)?.let { return@getOrFind it }
+            }
 
-        findNodesByText("프롬프트").firstOrNull { it.isInputLike() }?.let { return it }
+            for (keyword in INPUT_KEYWORDS) {
+                findNodesByText(root, keyword).firstOrNull { it.isInputLike() }?.let { return@getOrFind it }
+            }
 
-        return cachedNodes().firstOrNull { node -> node.isInputLike() }
+            AccessibilityNodeTraversal.lazyTraverse(root) { pkg ->
+                pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
+            }.firstOrNull { node -> node.isInputLike() }
+        }
+    }
+
+    fun findToolbarNewChatNode(): AccessibilityNodeInfo? {
+        val root = rootProvider() ?: return null
+        return snapshotCache.getOrFind("toolbar_new_chat", root) {
+            val nativeNodes = findNodesByText(root, NEW_CHAT_DESCRIPTION)
+            nativeNodes.firstOrNull { node ->
+                node.matchesTextOrDescription(NEW_CHAT_DESCRIPTION)
+            }?.let { return@getOrFind it }
+
+            AccessibilityNodeTraversal.lazyTraverse(root) { pkg ->
+                pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
+            }.firstOrNull { node ->
+                node.matchesTextOrDescription(NEW_CHAT_DESCRIPTION)
+            }
+        }
+    }
+
+    fun findSendNode(): AccessibilityNodeInfo? {
+        val root = rootProvider() ?: return null
+        return snapshotCache.getOrFind("send", root) {
+            for (viewId in SEND_VIEW_IDS) {
+                findNodeByViewId(root, viewId)?.let { return@getOrFind it }
+            }
+
+            for (keyword in SEND_KEYWORDS) {
+                findNodesByText(root, keyword).firstOrNull { node ->
+                    node.matchesTextOrDescription(keyword)
+                }?.let { return@getOrFind it }
+            }
+
+            val keywordSet = SEND_KEYWORDS.map { it.lowercase() }.toSet()
+            AccessibilityNodeTraversal.lazyTraverse(root) { pkg ->
+                pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
+            }.firstOrNull { node ->
+                val text = node.text?.toString()?.trim()?.lowercase()
+                val desc = node.contentDescription?.toString()?.trim()?.lowercase()
+                (text != null && text in keywordSet) || (desc != null && desc in keywordSet)
+            }
+        }
     }
 
     fun findNodeByTextOrDescription(value: String): AccessibilityNodeInfo? {
-        findNodesByText(value).firstOrNull { it.matchesTextOrDescription(value) }?.let { return it }
-
         val root = rootProvider() ?: return null
-        return AccessibilityNodeTraversal.lazyTraverse(root) { pkg ->
-            pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
-        }.firstOrNull { node -> node.matchesTextOrDescription(value) }
+        return snapshotCache.getOrFind("text_$value", root) {
+            findNodesByText(root, value).firstOrNull { it.matchesTextOrDescription(value) }?.let { return@getOrFind it }
+
+            AccessibilityNodeTraversal.lazyTraverse(root) { pkg ->
+                pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
+            }.firstOrNull { node -> node.matchesTextOrDescription(value) }
+        }
     }
 
     fun hasMoreOptions(): Boolean {
-        return findNodesByText(MORE_OPTIONS_DESCRIPTION).any { it.matchesTextOrDescription(MORE_OPTIONS_DESCRIPTION) }
+        val root = rootProvider() ?: return false
+        return findNodesByText(root, MORE_OPTIONS_DESCRIPTION).any { it.matchesTextOrDescription(MORE_OPTIONS_DESCRIPTION) }
     }
 
     fun findNewChatWithMoreOptions(): AccessibilityNodeInfo? {
@@ -51,62 +109,62 @@ internal class GeminiAccessibilityNodeFinder(
     }
 
     fun findNewChatNearestToSearch(): AccessibilityNodeInfo? {
+        val root = rootProvider() ?: return null
         val searchNode = findNodeByTextOrDescription("채팅 검색") ?: return null
         val searchBounds = searchNode.nodeBounds() ?: return null
 
-        val nativeCandidates = findNodesByText("새 채팅")
-        val candidateSource = if (nativeCandidates.isNotEmpty()) nativeCandidates else cachedNodes()
-        val candidates = candidateSource
-            .filter { node -> node.matchesTextOrDescription("새 채팅") }
-            .mapNotNull { node ->
-                val bounds = node.nodeBounds() ?: return@mapNotNull null
-                node to bounds
-            }
+        val nativeCandidates = findNodesByText(root, "새 채팅")
+        val candidateBoundsSequence = if (nativeCandidates.isNotEmpty()) {
+            nativeCandidates.asSequence()
+                .filter { it.matchesTextOrDescription("새 채팅") }
+                .mapNotNull { node -> node.nodeBounds()?.let { node to it } }
+        } else {
+            AccessibilityNodeTraversal.lazyTraverse(root) { pkg ->
+                pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
+            }.filter { it.matchesTextOrDescription("새 채팅") }
+                .mapNotNull { node -> node.nodeBounds()?.let { node to it } }
+        }
 
         return NearestNodeSelector.nearestTo(
             anchor = searchBounds,
-            candidates = candidates
+            candidates = candidateBoundsSequence
         ) { it.second }?.first
     }
 
     fun findSidebarScrollableNode(): AccessibilityNodeInfo? {
         val root = rootProvider() ?: return null
         val rootBounds = root.nodeBounds()
-        val allNodes = cachedNodes()
-        val hasSidebarSignal = allNodes.any { node ->
-            node.matchesTextOrDescription("사이드바 닫기") ||
-                (node.matchesTextOrDescription("Gemini") &&
-                    node.nodeBounds()?.isLikelySidebarHeader(rootBounds) == true)
-        }
+
+        // 1) 사이드바 신호를 네이티브 텍스트 인덱스로 먼저 고속 확인 (.toList() 전수 순회 완전 차단)
+        val closeSidebarNodes = findNodesByText(root, "사이드바 닫기")
+        val geminiTitleNodes = findNodesByText(root, "Gemini")
+        val hasSidebarSignal = closeSidebarNodes.any { it.matchesTextOrDescription("사이드바 닫기") } ||
+            geminiTitleNodes.any { it.matchesTextOrDescription("Gemini") && it.nodeBounds()?.isLikelySidebarHeader(rootBounds) == true }
+
         if (!hasSidebarSignal) return null
 
-        return allNodes
-            .filter { node -> node.isScrollable }
-            .mapNotNull { node ->
-                val bounds = node.nodeBounds() ?: return@mapNotNull null
-                node to bounds
-            }
-            .filter { (_, bounds) ->
-                bounds.isLikelySidebarScrollable(rootBounds = rootBounds)
-            }
+        // 2) 사이드바 신호가 확인되었을 때만 지연 순회로 적합한 스크롤 영역 선택
+        return AccessibilityNodeTraversal.lazyTraverse(root) { pkg ->
+            pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
+        }.filter { it.isScrollable }
+            .mapNotNull { node -> node.nodeBounds()?.let { node to it } }
+            .filter { (_, bounds) -> bounds.isLikelySidebarScrollable(rootBounds = rootBounds) }
             .maxByOrNull { (_, bounds) -> bounds.area }
             ?.first
     }
 
-    private fun findNodeByViewId(viewId: String): AccessibilityNodeInfo? {
+    private fun findNodeByViewId(root: AccessibilityNodeInfo, viewId: String): AccessibilityNodeInfo? {
         return try {
-            rootProvider()
-                ?.findAccessibilityNodeInfosByViewId(viewId)
+            root.findAccessibilityNodeInfosByViewId(viewId)
                 ?.firstOrNull { node -> node.isGeminiPackage() }
         } catch (_: RuntimeException) {
             null
         }
     }
 
-    private fun findNodesByText(value: String): List<AccessibilityNodeInfo> {
+    private fun findNodesByText(root: AccessibilityNodeInfo, value: String): List<AccessibilityNodeInfo> {
         return try {
-            rootProvider()
-                ?.findAccessibilityNodeInfosByText(value)
+            root.findAccessibilityNodeInfosByText(value)
                 ?.filter { it.isGeminiPackage() }
                 .orEmpty()
         } catch (_: RuntimeException) {
@@ -116,15 +174,6 @@ internal class GeminiAccessibilityNodeFinder(
 
     private fun AccessibilityNodeInfo.isInputLike(): Boolean {
         return isEditable || className?.contains("EditText", ignoreCase = true) == true
-    }
-
-    private fun cachedNodes(): List<AccessibilityNodeInfo> {
-        return snapshotCache.getOrLoad {
-            val root = rootProvider() ?: return@getOrLoad emptyList()
-            AccessibilityNodeTraversal.lazyTraverse(root) { pkg ->
-                pkg?.toString() in GEMINI_ACCESSIBILITY_PACKAGES
-            }.toList()
-        }
     }
 
     private fun AccessibilityNodeInfo.matchesTextOrDescription(value: String): Boolean {
@@ -182,6 +231,14 @@ internal class GeminiAccessibilityNodeFinder(
     internal companion object {
         const val NEW_CHAT_DESCRIPTION = "새 채팅"
         const val MORE_OPTIONS_DESCRIPTION = "옵션 더보기"
+        val INPUT_KEYWORDS = listOf("프롬프트", "메시지", "Message", "Ask Gemini", "질문하기", "여기에 메시지 입력")
+        val SEND_KEYWORDS = listOf("보내기", "전송", "Send", "메시지 보내기", "프롬프트 보내기")
+        val SEND_VIEW_IDS = listOf(
+            "com.google.android.googlequicksearchbox:id/assistant_robin_input_send_button",
+            "com.google.android.googlequicksearchbox:id/gemini_chat_input_send_button",
+            "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_send_button",
+            "com.google.android.googlequicksearchbox:id/chat_input_send_button"
+        )
 
         val GEMINI_ACCESSIBILITY_PACKAGES = setOf(
             AppDefaults.GEMINI_PACKAGE_NAME,
