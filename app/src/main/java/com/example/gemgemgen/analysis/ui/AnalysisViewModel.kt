@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisDirectionInput
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
@@ -466,31 +467,22 @@ class AnalysisViewModel(
         targetSegment: AnalysisTargetSegment? = _uiState.value.targetSegment,
         cache: AnalysisReportCache? = analysisCache,
         state: AnalysisUiState = _uiState.value
-    ): Boolean {
-        if (category == null) return false
-        val directionInput = currentDirectionInput(state)
-        return AnalysisMaskingPolicy.shouldAnalyzeMasking(
-            source = source,
-            category = category,
-            targetSegment = targetSegment,
-            cache = cache,
-            selectedHints = directionInput.selectedHints,
-            customHint = directionInput.customHint
-        )
-    }
-
-    private data class DirectionInput(
-        val selectedHints: List<String>,
-        val customHint: String
+    ): Boolean = AnalysisMaskingPolicy.shouldAnalyzeMaskingFromHints(
+        source = source,
+        category = category,
+        targetSegment = targetSegment,
+        cache = cache,
+        directions = state.directions,
+        selectedDirectionIds = state.selectedDirectionIds,
+        customHint = state.customHint
     )
 
     private fun currentDirectionInput(
         state: AnalysisUiState = _uiState.value
-    ): DirectionInput = DirectionInput(
-        selectedHints = state.directions
-            .filter { it.id in state.selectedDirectionIds }
-            .map { it.hint },
-        customHint = state.customHint.trim()
+    ): AnalysisDirectionInput = AnalysisMaskingPolicy.extractDirectionInput(
+        directions = state.directions,
+        selectedDirectionIds = state.selectedDirectionIds,
+        customHint = state.customHint
     )
 
     fun cancelActiveWork() {

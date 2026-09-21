@@ -579,64 +579,6 @@ class AutomationViewModelTest {
         assertEquals(AutomationTargetApp.GEMINI, viewModel.uiState.value.selectedTargetApp)
     }
 
-    @Test
-    fun saveWildcardFolder_updatesSettingsMessageAndRefreshesStatus() {
-        val environment = FakeEnvironmentStatusReader(readyEnvironment())
-        val folderSaver = FakeWildcardFolderSaver(
-            FolderSelectionResult.Success
-        )
-        val viewModel = viewModel(
-            environmentStatusReader = environment,
-            wildcardFolderSaver = folderSaver
-        )
-
-        viewModel.saveWildcardFolder("content://wildcard")
-
-        assertEquals("content://wildcard", folderSaver.savedFolderUri)
-        assertEquals("wildcard 폴더를 선택했습니다.", viewModel.uiState.value.settingsMessage)
-        assertEquals("", viewModel.uiState.value.settingsError)
-        assertEquals(2, environment.checkCount)
-    }
-
-    @Test
-    fun saveWildcardFolder_updatesSettingsErrorWhenSaveFails() {
-        val folderSaver = FakeWildcardFolderSaver(
-            FolderSelectionResult.Failure("저장 권한 없음")
-        )
-        val viewModel = viewModel(wildcardFolderSaver = folderSaver)
-
-        viewModel.saveWildcardFolder("content://wildcard")
-
-        assertEquals("", viewModel.uiState.value.settingsMessage)
-        assertEquals(
-            "폴더 권한 저장 실패: 저장 권한 없음",
-            viewModel.uiState.value.settingsError
-        )
-    }
-
-    @Test
-    fun decideWildcardFolderAction_delegatesToPolicyBasedOnEnvironmentStatus() {
-        val allFilesEnv = readyEnvironment().copy(hasAllFilesAccess = true, isWildcardDirectoryAccessible = true)
-        val viewModelAllFiles = viewModel(environmentStatusReader = FakeEnvironmentStatusReader(allFilesEnv))
-        assertEquals(WildcardFolderAction.OpenDirectFolder, viewModelAllFiles.decideWildcardFolderAction())
-
-        val inaccessibleEnv = readyEnvironment().copy(hasAllFilesAccess = false, isWildcardDirectoryAccessible = false)
-        val viewModelInaccessible = viewModel(environmentStatusReader = FakeEnvironmentStatusReader(inaccessibleEnv))
-        assertEquals(WildcardFolderAction.OpenStorageSettings, viewModelInaccessible.decideWildcardFolderAction())
-
-        val safEnv = readyEnvironment().copy(hasAllFilesAccess = false, isWildcardDirectoryAccessible = true)
-        val viewModelSaf = viewModel(environmentStatusReader = FakeEnvironmentStatusReader(safEnv))
-        assertEquals(WildcardFolderAction.LaunchSafPicker, viewModelSaf.decideWildcardFolderAction())
-    }
-
-    @Test
-    fun getInitialWildcardFolderUri_returnsStoredFolderUri() {
-        val folderSaver = FakeWildcardFolderSaver()
-        folderSaver.savedFolderUri = "content://stored/uri"
-        val viewModel = viewModel(wildcardFolderSaver = folderSaver)
-
-        assertEquals("content://stored/uri", viewModel.getInitialWildcardFolderUri())
-    }
 
     @Test
     fun runAutomation_savesLastRunSnapshotWhenRunStarts() {
@@ -787,6 +729,7 @@ class AutomationViewModelTest {
 
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
+        waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
         assertEquals(AutomationRunState.Success, viewModel.uiState.value.automationState)
         assertEquals(
             AutomationRunState.Success,
@@ -912,7 +855,59 @@ class AutomationViewModelTest {
     }
 
     @Test
-    fun cleanDeviceMemory_isBlockedWhileAutomationRuns() {
+    fun cleanDeviceMemory_schedulesAndTogglesWhileAutomationRuns() {
+        val gateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
+        val runner = HoldingPromptAutomationGateway(
+            AutomationRunState.Running("running")
+        )
+        val viewModel = viewModel(
+            automationRunner = automation(service = runner),
+            cleanMemoryGateway = gateway
+        )
+        viewModel.onPromptTemplateChange("base")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+
+        // 1회 클릭: 예약 등록
+        viewModel.cleanDeviceMemory()
+        assertEquals(0, gateway.cleanCount)
+        assertTrue(viewModel.uiState.value.isMemoryCleanupScheduled)
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("예약"))
+
+        // 2회 클릭: 예약 취소 토글
+        viewModel.cleanDeviceMemory()
+        assertEquals(0, gateway.cleanCount)
+        assertFalse(viewModel.uiState.value.isMemoryCleanupScheduled)
+        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("취소"))
+    }
+
+    @Test
+    fun cleanDeviceMemory_scheduled_executesOnAutomationSuccess() {
+        val gateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
+        val runner = HoldingPromptAutomationGateway(
+            AutomationRunState.Running("running")
+        )
+        val viewModel = viewModel(
+            automationRunner = automation(service = runner),
+            cleanMemoryGateway = gateway
+        )
+        viewModel.onPromptTemplateChange("base")
+        viewModel.onRepeatCountChange("1")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+
+        viewModel.cleanDeviceMemory()
+        assertTrue(viewModel.uiState.value.isMemoryCleanupScheduled)
+
+        // 마커 완료 후 본문 프롬프트 완료 -> 자동화 성공 전이
+        runner.doneCallback?.invoke()
+        runner.doneCallback?.invoke()
+
+        // 300ms 지연 후 실행 완료 검증
+        waitUntil(timeoutMillis = 2000) { gateway.cleanCount == 1 }
+        assertFalse(viewModel.uiState.value.isMemoryCleanupScheduled)
+    }
+
+    @Test
+    fun cleanDeviceMemory_scheduled_executesOnAutomationFailure() {
         val gateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
         val runner = HoldingPromptAutomationGateway(
             AutomationRunState.Running("running")
@@ -925,9 +920,38 @@ class AutomationViewModelTest {
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
         viewModel.cleanDeviceMemory()
+        assertTrue(viewModel.uiState.value.isMemoryCleanupScheduled)
 
+        // 자동화 실패로 전이
+        runner.stateCallback?.invoke(AutomationRunState.Failure("오류 발생"))
+
+        // 300ms 지연 후 실행 완료 검증
+        waitUntil(timeoutMillis = 2000) { gateway.cleanCount == 1 }
+        assertFalse(viewModel.uiState.value.isMemoryCleanupScheduled)
+    }
+
+    @Test
+    fun cleanDeviceMemory_scheduled_canceledOnAutomationStopped() {
+        val gateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
+        val runner = HoldingPromptAutomationGateway(
+            AutomationRunState.Running("running")
+        )
+        val viewModel = viewModel(
+            automationRunner = automation(service = runner),
+            cleanMemoryGateway = gateway
+        )
+        viewModel.onPromptTemplateChange("base")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+
+        viewModel.cleanDeviceMemory()
+        assertTrue(viewModel.uiState.value.isMemoryCleanupScheduled)
+
+        // 수동 취소 실행 -> 예약 해제
+        viewModel.cancelAutomation()
+
+        assertFalse(viewModel.uiState.value.isMemoryCleanupScheduled)
+        Thread.sleep(400)
         assertEquals(0, gateway.cleanCount)
-        assertTrue(viewModel.uiState.value.maintenanceMessage.contains("자동화"))
     }
 
     @Test
@@ -1423,17 +1447,18 @@ class AutomationViewModelTest {
         openGeminiAccountPicker: OpenGeminiAccountPickerUseCase? = null,
         soundAlertGateway: SoundAlertGateway = NoOpSoundAlertGateway,
         runVariationPrompt: RunVariationPromptUseCase? = null,
-        dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined),
+        dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): AutomationViewModel {
+        val resolvedRemote = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
+            NoOpRemoteAutomationGateway()
+        )
         val resolvedMaintenance = appMaintenance ?: AppMaintenanceUseCase(
             geminiRestartCloser = closeGeminiCloser ?: FakeGeminiAppCloser(),
             geminiTerminateCloser = terminateGeminiCloser ?: FakeGeminiAppCloser(),
             selfAppCloser = terminateSelfCloser ?: FakeGeminiAppCloser(),
-            memoryCleanupGateway = cleanMemoryGateway ?: FakeMemoryCleanupGateway()
-        )
-        val resolvedRemote = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
-            NoOpRemoteAutomationGateway()
+            memoryCleanupGateway = cleanMemoryGateway ?: FakeMemoryCleanupGateway(),
+            manageRemoteAutomation = resolvedRemote
         )
         val resolvedOpenGeminiAccountPicker = openGeminiAccountPicker ?: OpenGeminiAccountPickerUseCase(
             manageRemoteAutomation = resolvedRemote,
@@ -1448,7 +1473,6 @@ class AutomationViewModelTest {
         return AutomationViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentStatusReader),
             clipboardGateway = clipboardGateway,
-            saveWildcardFolder = SaveWildcardFolderUseCase(wildcardFolderSaver),
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automationRunner ?: automation(
                 lastRunSnapshotStore = lastRunSnapshotStore,
@@ -1471,7 +1495,7 @@ class AutomationViewModelTest {
         clipboardGateway: ClipboardGateway = FakeClipboardGateway(),
         service: PromptAutomationGateway = FakePromptAutomationGateway(),
         loadWildcards: () -> List<WildcardSet> = { emptyList() },
-        dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined)
     ): ExecuteAutomationLoopUseCase {
         var defaultImeId = ORIGINAL_IME_ID
         return ExecuteAutomationLoopUseCase(
@@ -1596,6 +1620,8 @@ class AutomationViewModelTest {
         private val progressState: AutomationRunState
     ) : PromptAutomationGateway {
         val sentPrompts = mutableListOf<String>()
+        var stateCallback: ((AutomationRunState) -> Unit)? = null
+        var doneCallback: (() -> Unit)? = null
 
         override fun sendPrompt(
             prompt: String,
@@ -1604,6 +1630,8 @@ class AutomationViewModelTest {
             onDone: () -> Unit
         ) {
             sentPrompts += prompt
+            stateCallback = onStateChange
+            doneCallback = onDone
             onStateChange(progressState)
         }
 

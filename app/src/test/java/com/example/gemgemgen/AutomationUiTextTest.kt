@@ -60,6 +60,16 @@ class AutomationUiTextTest {
     }
 
     @Test
+    fun memoryCleanupScheduled_messagesIncludeScheduleKeywords() {
+        assertTrue(
+            AutomationUiText.memoryCleanupScheduledText().contains("예약")
+        )
+        assertTrue(
+            AutomationUiText.memoryCleanupScheduleCanceledText().contains("취소")
+        )
+    }
+
+    @Test
     fun memoryCleanupResultMessages_includeOutcome() {
         assertTrue(
             AutomationUiText.memoryCleanupResultMessage(MemoryCleanupResult.Success)

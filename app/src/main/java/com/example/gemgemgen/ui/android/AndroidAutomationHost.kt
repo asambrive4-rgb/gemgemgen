@@ -89,13 +89,13 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
-            automationViewModel.saveWildcardFolder(uri.toString())
-            wildcardViewModel.onFolderChanged()
+            wildcardViewModel.saveWildcardFolder(uri.toString())
+            automationViewModel.refreshStatus()
         }
     }
 
     fun launchWildcardFolderPicker() {
-        val initialUri = automationViewModel.getInitialWildcardFolderUri()?.let { android.net.Uri.parse(it) }
+        val initialUri = wildcardViewModel.getInitialWildcardFolderUri()?.let { android.net.Uri.parse(it) }
         wildcardFolderLauncher.launch(initialUri)
     }
 
@@ -112,7 +112,10 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectWildcardFolder() {
-        when (automationViewModel.decideWildcardFolderAction()) {
+        when (wildcardViewModel.decideWildcardFolderAction(
+            hasAllFilesAccess = mainUiState.environmentStatus.hasAllFilesAccess,
+            isWildcardDirectoryAccessible = mainUiState.environmentStatus.isWildcardDirectoryAccessible
+        )) {
             WildcardFolderAction.OpenDirectFolder -> {
                 if (!wildcardViewModel.requestFolderSelection()) return
                 wildcardViewModel.onFolderChanged()
@@ -305,6 +308,11 @@ private fun createAutomationActions(
     onFlowImageCountSelected = automationViewModel::onFlowImageCountSelected,
     onPromptTemplateChange = automationViewModel::onPromptTemplateFromEditor,
     onWildcardTokenSuggestionClick = automationViewModel::applyWildcardTokenSuggestion,
+    onSuggestionClick = automationViewModel::applySuggestion,
+    onOpenPromptSnippetDialog = automationViewModel::showPromptSnippetDialog,
+    onClosePromptSnippetDialog = automationViewModel::dismissPromptSnippetDialog,
+    onAddPromptSnippet = automationViewModel::addPromptSnippet,
+    onDeletePromptSnippet = automationViewModel::deletePromptSnippet,
     onNavigateHistoryBack = automationViewModel::navigatePromptHistoryBack,
     onNavigateHistoryForward = automationViewModel::navigatePromptHistoryForward,
     onInsertTopInstruction = automationViewModel::insertTopInstruction,

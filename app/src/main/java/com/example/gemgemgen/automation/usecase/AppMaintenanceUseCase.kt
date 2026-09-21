@@ -1,5 +1,9 @@
-// 역할: 앱 실행 전 메모리 확보 및 백그라운드 환경 정리 작업을 조율합니다.
+// 역할: 앱 유지보수(앱 재시작/종료) 및 모드별 로컬·원격 메모리 정리 오케스트레이션을 수행하는 유스케이스입니다.
 package com.example.gemgemgen.automation.usecase
+
+import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 
 sealed interface CloseGeminiAppResult {
     data class Success(val closedCount: Int) : CloseGeminiAppResult
@@ -41,16 +45,19 @@ class AppMaintenanceUseCase(
     private val geminiRestartCloser: GeminiAppCloser,
     private val geminiTerminateCloser: GeminiAppCloser = geminiRestartCloser,
     private val selfAppCloser: GeminiAppCloser = geminiRestartCloser,
-    private val memoryCleanupGateway: MemoryCleanupGateway
+    private val memoryCleanupGateway: MemoryCleanupGateway,
+    private val manageRemoteAutomation: ManageRemoteAutomationUseCase? = null
 ) {
     constructor(
         geminiAppCloser: GeminiAppCloser,
-        memoryCleanupGateway: MemoryCleanupGateway
+        memoryCleanupGateway: MemoryCleanupGateway,
+        manageRemoteAutomation: ManageRemoteAutomationUseCase? = null
     ) : this(
         geminiRestartCloser = geminiAppCloser,
         geminiTerminateCloser = geminiAppCloser,
         selfAppCloser = geminiAppCloser,
-        memoryCleanupGateway = memoryCleanupGateway
+        memoryCleanupGateway = memoryCleanupGateway,
+        manageRemoteAutomation = manageRemoteAutomation
     )
 
     suspend fun restartGemini(): MaintenanceResult =
@@ -78,10 +85,34 @@ class AppMaintenanceUseCase(
         is CloseGeminiAppResult.Failure -> MaintenanceResult.Failure(failureTemplate.format(result.message))
     }
 
-    suspend fun cleanMemory(): MaintenanceResult = when (val result = memoryCleanupGateway.cleanMemory()) {
-        MemoryCleanupResult.Success -> MaintenanceResult.Success("메모리 정리를 완료했습니다.")
-        MemoryCleanupResult.AccessibilityUnavailable -> MaintenanceResult.Unavailable
-        MemoryCleanupResult.InProgress -> MaintenanceResult.Failure("메모리 정리가 이미 진행 중입니다.")
-        is MemoryCleanupResult.Failure -> MaintenanceResult.Failure("메모리 정리 실패: ${result.message}")
+    suspend fun cleanMemory(
+        mode: AutomationMode = AutomationMode.NORMAL,
+        remoteCleaner: (suspend () -> MaintenanceResult)? = null
+    ): MaintenanceResult = when (mode) {
+        AutomationMode.SENDER -> cleanRemoteMemory(remoteCleaner)
+        AutomationMode.NORMAL,
+        AutomationMode.RECEIVER -> cleanLocalMemory()
     }
+
+    suspend fun cleanLocalMemory(): MaintenanceResult =
+        when (val result = memoryCleanupGateway.cleanMemory()) {
+            MemoryCleanupResult.Success -> MaintenanceResult.Success("메모리 정리를 완료했습니다.")
+            MemoryCleanupResult.AccessibilityUnavailable -> MaintenanceResult.Unavailable
+            MemoryCleanupResult.InProgress -> MaintenanceResult.Failure("메모리 정리가 이미 진행 중입니다.")
+            is MemoryCleanupResult.Failure -> MaintenanceResult.Failure("메모리 정리 실패: ${result.message}")
+        }
+
+    suspend fun cleanRemoteMemory(
+        remoteCleaner: (suspend () -> MaintenanceResult)? = null
+    ): MaintenanceResult =
+        if (remoteCleaner != null) {
+            remoteCleaner.invoke()
+        } else if (manageRemoteAutomation != null) {
+            when (val result = manageRemoteAutomation.cleanMemory()) {
+                RemoteActionResult.Success -> MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
+                is RemoteActionResult.Failure -> MaintenanceResult.Failure(result.message)
+            }
+        } else {
+            MaintenanceResult.Failure("원격 메모리 정리를 수행할 수 없습니다.")
+        }
 }

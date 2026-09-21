@@ -1,4 +1,4 @@
-// 역할: 프롬프트 입력창의 텍스트 편집, 세그먼트 치환, 실행 기록(History) 앞/뒤 네비게이션을 조율합니다.
+// 역할: 프롬프트 입력창의 텍스트 편집, 세그먼트 치환, 와일드카드/상용구 자동완성 추천 계산 및 실행 기록(History) 네비게이션을 조율합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -32,7 +32,8 @@ data class PromptEditorUiState(
     val canNavigateHistoryForward: Boolean = false,
     val isHistoryIndicatorVisible: Boolean = false,
     val historyDotCount: Int = 0,
-    val activeHistoryDotIndex: Int = 0
+    val activeHistoryDotIndex: Int = 0,
+    val activeSuggestionCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
 )
 
 /**
@@ -97,17 +98,21 @@ class PromptEditorCoordinator(
  }
  }
 
- private fun publishPromptTemplateToUiState(value: String, force: Boolean) {
- _editorUiState.update { state ->
- if (state.promptTemplate == value) {
- state
- } else if (!force && state.promptTemplate.isBlank() == value.isBlank()) {
- state
- } else {
- state.copy(promptTemplate = value)
- }
- }
- }
+    private fun publishPromptTemplateToUiState(value: String, force: Boolean) {
+        val nextCandidates = computeActiveSuggestions(
+            text = value,
+            isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode
+        )
+        _editorUiState.update { state ->
+            if (state.promptTemplate == value && state.activeSuggestionCandidates == nextCandidates) {
+                state
+            } else if (!force && state.promptTemplate.isBlank() == value.isBlank() && state.activeSuggestionCandidates == nextCandidates) {
+                state
+            } else {
+                state.copy(promptTemplate = value, activeSuggestionCandidates = nextCandidates)
+            }
+        }
+    }
 
  fun syncHistoryItems(items: List<String>) {
  syncPromptTemplateFromTextField()
@@ -297,11 +302,57 @@ class PromptEditorCoordinator(
  publishEditorSession(promptEditorSession.afterWholeReplace(newText))
  }
 
+ fun applySuggestion(
+ candidate: WildcardTokenAutocomplete.Candidate,
+ isBlocked: Boolean,
+ candidates: List<WildcardTokenAutocomplete.Candidate>
+ ) {
+ val state = _editorUiState.value
+ val selection = textFieldState.selection
+ val currentText = textFieldState.text.toString()
+
+ val result = applyWildcardTokenUseCase(
+ text = currentText,
+ selectionStart = selection.min,
+ selectionEnd = selection.max,
+ candidate = candidate,
+ candidates = candidates,
+ isParagraphSelectionMode = state.isParagraphSelectionMode,
+ isBlocked = isBlocked
+ ) ?: return
+
+ ignoredPromptChangeText = result.newText
+ val cursorAfter = result.cursorAfter.coerceIn(0, result.newText.length)
+ textFieldState.edit {
+ replace(0, length, result.newText)
+ this.selection = TextRange(cursorAfter)
+ }
+ promptTemplateValue = result.newText
+ promptHistoryNavigator.onUserTyping(result.newText)
+ promptEditorSession = promptEditorSession.withText(result.newText)
+ _editorUiState.update {
+ it.copy(
+ promptTemplate = result.newText,
+ canNavigateHistoryBack = promptHistoryNavigator.canNavigateBack,
+ canNavigateHistoryForward = promptHistoryNavigator.canNavigateForward,
+ isHistoryIndicatorVisible = promptHistoryNavigator.isIndicatorVisible,
+ historyDotCount = promptHistoryNavigator.dotCount,
+ activeHistoryDotIndex = promptHistoryNavigator.activeDotIndex
+ )
+ }
+ }
+
  fun applyWildcardTokenSuggestion(
  token: String,
  isBlocked: Boolean,
  candidates: List<WildcardTokenAutocomplete.Candidate>
  ) {
+ val targetCandidate = candidates.firstOrNull { it.token == token }
+ if (targetCandidate != null) {
+ applySuggestion(targetCandidate, isBlocked, candidates)
+ return
+ }
+
  val state = _editorUiState.value
  val selection = textFieldState.selection
  val currentText = textFieldState.text.toString()
@@ -411,34 +462,104 @@ class PromptEditorCoordinator(
  promptEditorSession = promptEditorSession.withText(text)
  }
 
- private fun publishEditorSession(session: PromptEditorSession) {
- promptEditorSession = session
- promptTemplateValue = session.text
- val message = AutomationUiText.paragraphMessage(session.messageKey)
- _editorUiState.update { state ->
- state.copy(
- promptTemplate = session.text,
- isParagraphSelectionMode = session.isParagraphSelectionMode,
- selectedParagraphRange = session.selectedParagraphRange,
- paragraphSelectionMessage = message,
- canNavigateHistoryBack = promptHistoryNavigator.canNavigateBack,
- canNavigateHistoryForward = promptHistoryNavigator.canNavigateForward,
- isHistoryIndicatorVisible = promptHistoryNavigator.isIndicatorVisible,
- historyDotCount = promptHistoryNavigator.dotCount,
- activeHistoryDotIndex = promptHistoryNavigator.activeDotIndex
- )
- }
- }
+    private fun publishEditorSession(session: PromptEditorSession) {
+        promptEditorSession = session
+        promptTemplateValue = session.text
+        val message = AutomationUiText.paragraphMessage(session.messageKey)
+        val suggestions = computeActiveSuggestions(
+            text = session.text,
+            isParagraphSelectionMode = session.isParagraphSelectionMode
+        )
+        _editorUiState.update { state ->
+            state.copy(
+                promptTemplate = session.text,
+                isParagraphSelectionMode = session.isParagraphSelectionMode,
+                selectedParagraphRange = session.selectedParagraphRange,
+                paragraphSelectionMessage = message,
+                canNavigateHistoryBack = promptHistoryNavigator.canNavigateBack,
+                canNavigateHistoryForward = promptHistoryNavigator.canNavigateForward,
+                isHistoryIndicatorVisible = promptHistoryNavigator.isIndicatorVisible,
+                historyDotCount = promptHistoryNavigator.dotCount,
+                activeHistoryDotIndex = promptHistoryNavigator.activeDotIndex,
+                activeSuggestionCandidates = suggestions
+            )
+        }
+    }
 
- private fun updateNavigationAvailability() {
- _editorUiState.update { state ->
- state.copy(
- canNavigateHistoryBack = promptHistoryNavigator.canNavigateBack,
- canNavigateHistoryForward = promptHistoryNavigator.canNavigateForward,
- isHistoryIndicatorVisible = promptHistoryNavigator.isIndicatorVisible,
- historyDotCount = promptHistoryNavigator.dotCount,
- activeHistoryDotIndex = promptHistoryNavigator.activeDotIndex
- )
- }
- }
+    private fun updateNavigationAvailability() {
+        _editorUiState.update { state ->
+            state.copy(
+                canNavigateHistoryBack = promptHistoryNavigator.canNavigateBack,
+                canNavigateHistoryForward = promptHistoryNavigator.canNavigateForward,
+                isHistoryIndicatorVisible = promptHistoryNavigator.isIndicatorVisible,
+                historyDotCount = promptHistoryNavigator.dotCount,
+                activeHistoryDotIndex = promptHistoryNavigator.activeDotIndex
+            )
+        }
+    }
+
+    private var currentAutocompleteCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
+
+    fun updateAutocompleteCandidates(
+        candidates: List<WildcardTokenAutocomplete.Candidate>,
+        isRunning: Boolean = false
+    ) {
+        currentAutocompleteCandidates = candidates
+        refreshActiveSuggestions(isRunning = isRunning)
+    }
+
+    fun computeActiveSuggestions(
+        text: String = textFieldState.text.toString(),
+        cursor: Int = textFieldState.selection.max,
+        selectionStart: Int = textFieldState.selection.min,
+        selectionEnd: Int = textFieldState.selection.max,
+        candidates: List<WildcardTokenAutocomplete.Candidate> = currentAutocompleteCandidates,
+        isParagraphSelectionMode: Boolean = _editorUiState.value.isParagraphSelectionMode,
+        isRunning: Boolean = false
+    ): List<WildcardTokenAutocomplete.Candidate> {
+        return Companion.computeActiveSuggestions(
+            text = text,
+            cursor = cursor,
+            selectionMin = selectionStart,
+            selectionMax = selectionEnd,
+            candidates = candidates,
+            isParagraphSelectionMode = isParagraphSelectionMode,
+            isRunning = isRunning
+        )
+    }
+
+    fun refreshActiveSuggestions(isRunning: Boolean = false) {
+        val selection = textFieldState.selection
+        val suggestions = computeActiveSuggestions(
+            text = textFieldState.text.toString(),
+            cursor = selection.max,
+            selectionStart = selection.min,
+            selectionEnd = selection.max,
+            candidates = currentAutocompleteCandidates,
+            isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode,
+            isRunning = isRunning
+        )
+        _editorUiState.update { it.copy(activeSuggestionCandidates = suggestions) }
+    }
+
+    companion object {
+        fun computeActiveSuggestions(
+            text: String,
+            cursor: Int,
+            selectionMin: Int,
+            selectionMax: Int,
+            candidates: List<WildcardTokenAutocomplete.Candidate>,
+            isParagraphSelectionMode: Boolean = false,
+            isRunning: Boolean = false
+        ): List<WildcardTokenAutocomplete.Candidate> {
+            if (isParagraphSelectionMode || isRunning || selectionMin != selectionMax) {
+                return emptyList()
+            }
+            return WildcardTokenAutocomplete.suggestCandidates(
+                text = text,
+                cursor = cursor,
+                candidates = candidates
+            )
+        }
+    }
 }

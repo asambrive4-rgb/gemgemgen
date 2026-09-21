@@ -1,4 +1,4 @@
-// 역할: 와일드카드 뷰모델의 파일 탐색 및 편집 이벤트 흐름을 검증합니다.
+// 역할: 와일드카드 뷰모델의 파일 탐색, 편집 및 폴더 관리 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*
@@ -321,11 +321,84 @@ class WildcardViewModelTest {
         assertEquals(listOf("old", "new line"), viewModel.uiState.value.selectableLines)
     }
 
+    @Test
+    fun saveWildcardFolder_success_updatesUiStateAndRefreshesFiles() {
+        val folderRepo = FakeWildcardFolderRepository()
+        val fileManager = FakeWildcardFileManager("old.txt" to "content")
+        val viewModel = viewModel(
+            fileManager = fileManager,
+            folderRepository = folderRepo
+        )
+
+        val result = viewModel.saveWildcardFolder("content://valid/folder")
+
+        assertEquals(FolderSelectionResult.Success, result)
+        assertEquals("content://valid/folder", folderRepo.lastSavedUri)
+        assertEquals("wildcard 폴더를 선택했습니다.", viewModel.uiState.value.message)
+        assertEquals("", viewModel.uiState.value.error)
+        assertEquals("old.txt", viewModel.uiState.value.selectedFile?.fileName)
+    }
+
+    @Test
+    fun saveWildcardFolder_failure_updatesErrorUiState() {
+        val folderRepo = FakeWildcardFolderRepository(
+            saveResult = FolderSelectionResult.Failure("권한 거부")
+        )
+        val viewModel = viewModel(folderRepository = folderRepo)
+
+        val result = viewModel.saveWildcardFolder("content://invalid/folder")
+
+        assertTrue(result is FolderSelectionResult.Failure)
+        assertEquals("폴더 권한 저장 실패: 권한 거부", viewModel.uiState.value.error)
+        assertEquals("", viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun getInitialWildcardFolderUri_returnsSavedUri() {
+        val folderRepo = FakeWildcardFolderRepository(initialFolderUri = "content://initial/folder")
+        val viewModel = viewModel(folderRepository = folderRepo)
+
+        assertEquals("content://initial/folder", viewModel.getInitialWildcardFolderUri())
+    }
+
+    @Test
+    fun decideWildcardFolderAction_delegatesBasedOnEnvironmentStatus() {
+        val directEnv = EnvironmentReport(status = EnvironmentStatus(hasAllFilesAccess = true, isWildcardDirectoryAccessible = true))
+        val directVm = viewModel(environmentGateway = FakeEnvironmentGateway(directEnv))
+        assertEquals(WildcardFolderAction.OpenDirectFolder, directVm.decideWildcardFolderAction())
+
+        val settingsEnv = EnvironmentReport(status = EnvironmentStatus(hasAllFilesAccess = false, isWildcardDirectoryAccessible = false))
+        val settingsVm = viewModel(environmentGateway = FakeEnvironmentGateway(settingsEnv))
+        assertEquals(WildcardFolderAction.OpenStorageSettings, settingsVm.decideWildcardFolderAction())
+
+        val safEnv = EnvironmentReport(status = EnvironmentStatus(hasAllFilesAccess = false, isWildcardDirectoryAccessible = true))
+        val safVm = viewModel(environmentGateway = FakeEnvironmentGateway(safEnv))
+        assertEquals(WildcardFolderAction.LaunchSafPicker, safVm.decideWildcardFolderAction())
+    }
+
+    @Test
+    fun saveWildcardFolderUseCase_validatesBlankFolder() {
+        val repo = FakeWildcardFolderRepository()
+        val useCase = SaveWildcardFolderUseCase(repo)
+
+        val blankResult = useCase.save("   ")
+        assertTrue(blankResult is FolderSelectionResult.Failure)
+        assertEquals("폴더 경로가 비어 있습니다.", (blankResult as FolderSelectionResult.Failure).reason)
+        assertEquals(0, repo.saveCallCount)
+
+        val validResult = useCase.save("content://test")
+        assertEquals(FolderSelectionResult.Success, validResult)
+        assertEquals("content://test", repo.lastSavedUri)
+        assertEquals(1, repo.saveCallCount)
+    }
+
     private fun viewModel(
         fileManager: FakeWildcardFileManager = FakeWildcardFileManager(),
         clipboardText: String = "",
         clipboardGateway: FakeClipboardGateway = FakeClipboardGateway(clipboardText),
-        canModifyFiles: Boolean = true
+        canModifyFiles: Boolean = true,
+        folderRepository: WildcardFolderRepository? = null,
+        environmentGateway: EnvironmentGateway? = null
     ): WildcardViewModel {
         return WildcardViewModel(
             manageWildcardFiles = ManageWildcardFilesUseCase(
@@ -336,7 +409,9 @@ class WildcardViewModelTest {
                 clipboardGateway,
                 dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
             ),
-            coroutineScope = CoroutineScope(Dispatchers.Unconfined)
+            coroutineScope = CoroutineScope(Dispatchers.Unconfined),
+            wildcardFolderRepository = folderRepository,
+            checkEnvironmentStatus = environmentGateway?.let { CheckEnvironmentStatusUseCase(it) }
         ).also {
             it.onFolderAccessChanged(canModifyFiles)
         }
@@ -417,5 +492,31 @@ class WildcardViewModelTest {
         override fun writeText(text: String) {
             writtenText = text
         }
+    }
+
+    private class FakeWildcardFolderRepository(
+        private var saveResult: FolderSelectionResult = FolderSelectionResult.Success,
+        initialFolderUri: String? = null
+    ) : WildcardFolderRepository {
+        var storedFolderUri: String? = initialFolderUri
+        var lastSavedUri: String? = null
+        var saveCallCount: Int = 0
+
+        override fun save(folderUri: String): FolderSelectionResult {
+            saveCallCount++
+            lastSavedUri = folderUri
+            if (saveResult is FolderSelectionResult.Success) {
+                this.storedFolderUri = folderUri
+            }
+            return saveResult
+        }
+
+        override fun getFolderUri(): String? = storedFolderUri
+    }
+
+    private class FakeEnvironmentGateway(
+        var report: EnvironmentReport = EnvironmentReport()
+    ) : EnvironmentGateway {
+        override fun check(): EnvironmentReport = report
     }
 }

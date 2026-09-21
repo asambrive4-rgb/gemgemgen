@@ -1,4 +1,4 @@
-// 역할: 가상 키보드 반응형 모바일 에디터 집중 모드와 프롬프트 입력 및 자동화 제어 화면을 구성합니다.
+// 역할: 가상 키보드 반응형 모바일 에디터, 추천 후보 바, 자동화 제어 바 및 통합 상태 화면을 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,18 +27,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
+import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
-import com.example.gemgemgen.automation.usecase.ResolveWildcardAutocompleteUseCase
 import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.ui.AutomationModePairDialog
 import com.example.gemgemgen.remote.ui.AutomationModePanel
+import com.example.gemgemgen.remote.ui.resolveConnectionText
 
 /** 스크롤 본문·키보드 하단 고정 패널이 같은 가로 폭을 쓰도록 공통 패딩 */
 private val AutomationScreenContentPadding = 8.dp
@@ -50,6 +55,8 @@ internal fun AutomationScreen(
     uiState: AutomationUiState,
     automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
+    suggestionTokens: List<String> = emptyList(),
+    suggestionCandidates: List<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate> = uiState.activeSuggestionCandidates,
     onClearFocus: () -> Unit,
     onHideSettings: () -> Unit = {},
     onConfirmAccessibilityPrompt: () -> Unit = {},
@@ -63,6 +70,7 @@ internal fun AutomationScreen(
     onFlowImageCountSelected: (Int) -> Unit = {},
     onPromptTemplateChange: (String) -> Unit,
     onWildcardTokenSuggestionClick: (String) -> Unit = {},
+    onSuggestionClick: (com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate) -> Unit = {},
     onNavigateHistoryBack: () -> Unit,
     onNavigateHistoryForward: () -> Unit,
     onInsertTopInstruction: () -> Unit = {},
@@ -89,6 +97,10 @@ internal fun AutomationScreen(
     onClosePromptHistory: () -> Unit = {},
     onSelectPromptHistoryItem: (PromptHistoryItem) -> Unit = {},
     onClearPromptHistory: () -> Unit = {},
+    onOpenPromptSnippetDialog: () -> Unit = {},
+    onClosePromptSnippetDialog: () -> Unit = {},
+    onAddPromptSnippet: (shortcut: String, content: String) -> Unit = { _, _ -> },
+    onDeletePromptSnippet: (id: String) -> Unit = {},
     onSelectThemePalette: (AppThemePalette) -> Unit = {},
     onSelectThemeMode: (com.example.gemgemgen.ui.theme.AppThemeMode) -> Unit = {},
     onOpenGeminiAccountPicker: () -> Unit = {},
@@ -98,26 +110,9 @@ internal fun AutomationScreen(
     onSaveVariationPromptConfig: (VariationPromptConfig) -> Unit = {}
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    val resolveWildcardAutocompleteUseCase = remember { ResolveWildcardAutocompleteUseCase() }
-    val suggestionTokens = remember(
-        promptTemplateState.text.toString(),
-        promptTemplateState.selection,
-        uiState.wildcardTokenCandidates,
-        uiState.isParagraphSelectionMode,
-        uiState.isRunning,
-        resolveWildcardAutocompleteUseCase
-    ) {
-        resolveWildcardAutocompleteUseCase(
-            text = promptTemplateState.text.toString(),
-            selectionStart = promptTemplateState.selection.min,
-            selectionEnd = promptTemplateState.selection.max,
-            candidates = uiState.wildcardTokenCandidates,
-            isParagraphSelectionMode = uiState.isParagraphSelectionMode,
-            isEnabled = !uiState.isRunning
-        )
-    }
     var showPairDialog by remember { mutableStateOf(false) }
     val keyboardVariationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
+    val activeSuggestionCandidates = suggestionCandidates
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Box(
@@ -150,11 +145,13 @@ internal fun AutomationScreen(
                     canCloseGemini = uiState.canCloseGemini,
                     canCloseSelfApp = uiState.canCloseSelfApp,
                     canCleanMemory = uiState.canCleanMemory,
+                    isMemoryCleanupScheduled = uiState.isMemoryCleanupScheduled,
                     isMaintenanceBusy = uiState.isMaintenanceBusy,
                     maintenanceMessage = uiState.maintenanceMessage,
                     selectedParagraphRange = uiState.selectedParagraphRange,
                     paragraphSelectionMessage = uiState.paragraphSelectionMessage,
                     suggestionTokens = suggestionTokens,
+                    suggestionCandidates = activeSuggestionCandidates,
                     showPromptActions = !isKeyboardVisible,
                     showWildcardSuggestions = !isKeyboardVisible,
                     onTargetAppSelected = onTargetAppSelected,
@@ -162,6 +159,7 @@ internal fun AutomationScreen(
                     onFlowImageCountSelected = onFlowImageCountSelected,
                     onPromptTemplateChange = onPromptTemplateChange,
                     onWildcardTokenSuggestionClick = onWildcardTokenSuggestionClick,
+                    onSuggestionCandidateClick = onSuggestionClick,
                     onCloseGeminiApp = onCloseGeminiApp,
                     onCleanDeviceMemory = onCleanDeviceMemory,
                     onTerminateSelfApp = onTerminateSelfApp,
@@ -177,6 +175,7 @@ internal fun AutomationScreen(
                     onCopyPromptToClipboard = onCopyPromptToClipboard,
                     onPasteFromClipboard = onPasteFromClipboard,
                     onOpenPromptHistory = onOpenPromptHistory,
+                    onOpenPromptSnippetDialog = onOpenPromptSnippetDialog,
                     onOpenGeminiAccountPicker = onOpenGeminiAccountPicker,
                     showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                     isVariationButtonEnabled = uiState.canInteractWithVariation,
@@ -200,7 +199,8 @@ internal fun AutomationScreen(
                         isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
                     )
                 } else if (isKeyboardVisible) {
-                    val bottomSpacerHeight = if (suggestionTokens.isNotEmpty()) 105.dp else 56.dp
+                    val hasSuggestions = activeSuggestionCandidates.isNotEmpty() || suggestionTokens.isNotEmpty()
+                    val bottomSpacerHeight = if (hasSuggestions) 105.dp else 56.dp
                     Spacer(modifier = Modifier.height(bottomSpacerHeight))
                 }
 
@@ -211,6 +211,13 @@ internal fun AutomationScreen(
                         enabled = !uiState.isRunning,
                         onModeSelected = onAutomationModeSelected,
                         onRequestPair = { showPairDialog = true }
+                    )
+
+                    AutomationFooterStatus(
+                        maintenanceMessage = uiState.maintenanceMessage,
+                        variationAutomationState = uiState.variationAutomationState,
+                        automationMode = uiState.automationMode,
+                        remoteStatus = uiState.remoteAutomationStatus
                     )
                 }
             }
@@ -230,10 +237,24 @@ internal fun AutomationScreen(
                             .padding(AutomationScreenContentPadding),
                         verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
                     ) {
-                        if (suggestionTokens.isNotEmpty()) {
-                            WildcardTokenSuggestionBar(
-                                tokens = suggestionTokens,
-                                onTokenClick = onWildcardTokenSuggestionClick
+                        val keyboardCandidates = if (activeSuggestionCandidates.isNotEmpty()) {
+                            activeSuggestionCandidates
+                        } else {
+                            suggestionTokens.map {
+                                com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate(
+                                    name = it,
+                                    token = it,
+                                    displayText = it
+                                )
+                            }
+                        }
+                        if (keyboardCandidates.isNotEmpty()) {
+                            PromptSuggestionBar(
+                                suggestions = keyboardCandidates,
+                                onSuggestionClick = { candidate ->
+                                    onSuggestionClick(candidate)
+                                    onWildcardTokenSuggestionClick(candidate.token)
+                                }
                             )
                         }
 
@@ -320,6 +341,17 @@ internal fun AutomationScreen(
                     onDismiss = onCloseVariationPromptConfigDialog
                 )
             }
+
+            if (uiState.showPromptSnippetDialog) {
+                PromptSnippetDialog(
+                    showDialog = true,
+                    snippets = uiState.promptSnippets,
+                    currentPromptText = promptTemplateState.text.toString(),
+                    onAddSnippet = onAddPromptSnippet,
+                    onDeleteSnippet = onDeletePromptSnippet,
+                    onDismiss = onClosePromptSnippetDialog
+                )
+            }
         }
     }
 }
@@ -365,3 +397,66 @@ private fun AutomationAppPreview() {
         )
     }
 }
+
+internal data class FooterStatusInfo(
+    val text: String,
+    val isError: Boolean = false
+)
+
+internal fun resolveFooterStatus(
+    maintenanceMessage: String,
+    variationAutomationState: AutomationRunState,
+    automationMode: AutomationMode,
+    remoteStatus: RemoteAutomationStatus
+): FooterStatusInfo? {
+    if (maintenanceMessage.isNotBlank()) {
+        return FooterStatusInfo(text = maintenanceMessage, isError = false)
+    }
+
+    if (variationAutomationState != AutomationRunState.Idle) {
+        val variationText = resolveVariationStatusText(variationAutomationState)
+        if (variationText.isNotBlank()) {
+            return FooterStatusInfo(
+                text = variationText,
+                isError = variationAutomationState is AutomationRunState.Failure
+            )
+        }
+    }
+
+    val connectionText = resolveConnectionText(automationMode, remoteStatus)
+    if (connectionText.isNotBlank()) {
+        return FooterStatusInfo(text = connectionText, isError = false)
+    }
+
+    return null
+}
+
+@Composable
+internal fun AutomationFooterStatus(
+    maintenanceMessage: String,
+    variationAutomationState: AutomationRunState,
+    automationMode: AutomationMode,
+    remoteStatus: RemoteAutomationStatus,
+    modifier: Modifier = Modifier
+) {
+    val statusInfo = resolveFooterStatus(
+        maintenanceMessage = maintenanceMessage,
+        variationAutomationState = variationAutomationState,
+        automationMode = automationMode,
+        remoteStatus = remoteStatus
+    ) ?: return
+
+    Text(
+        text = statusInfo.text,
+        style = MaterialTheme.typography.bodySmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = if (statusInfo.isError) {
+            MaterialTheme.colorScheme.error
+        } else {
+            AppTheme.colors.textSecondary
+        },
+        modifier = modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+    )
+}
+

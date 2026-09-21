@@ -118,29 +118,6 @@ fun AutomationModePanel(
             }
         }
 
-        if (selectedMode != AutomationMode.NORMAL &&
-            !(selectedMode == AutomationMode.SENDER &&
-                status.automationState is AutomationRunState.Running)
-        ) {
-            val connectionText = when (selectedMode) {
-                AutomationMode.SENDER -> status.connectionMessage
-                AutomationMode.RECEIVER -> status.message
-                AutomationMode.NORMAL -> ""
-            }.ifBlank {
-                if (selectedMode == AutomationMode.SENDER) {
-                    "S25 FE를 찾는 중입니다."
-                } else {
-                    "수신 대기를 시작하는 중입니다."
-                }
-            }
-
-            Text(
-                text = connectionText,
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTheme.colors.textSecondary,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-            )
-        }
 
         if (selectedMode == AutomationMode.SENDER &&
             status.discoveredDeviceName.isNotBlank() &&
@@ -230,4 +207,24 @@ fun AutomationModePairDialog(
             }
         }
     )
+}
+
+internal fun resolveConnectionText(
+    selectedMode: AutomationMode,
+    status: RemoteAutomationStatus
+): String {
+    if (selectedMode == AutomationMode.NORMAL) return ""
+    if (selectedMode == AutomationMode.SENDER && status.automationState is AutomationRunState.Running) return ""
+
+    return when (selectedMode) {
+        AutomationMode.SENDER -> status.connectionMessage
+        AutomationMode.RECEIVER -> status.message
+        AutomationMode.NORMAL -> ""
+    }.ifBlank {
+        if (selectedMode == AutomationMode.SENDER) {
+            "S25 FE를 찾는 중입니다."
+        } else {
+            "수신 대기를 시작하는 중입니다."
+        }
+    }
 }

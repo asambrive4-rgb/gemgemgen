@@ -1,4 +1,4 @@
-// 역할: 앱 시작 전 유지보수 및 메모리 확보 유스케이스 동작을 검증합니다.
+// 역할: 앱 시작 전 유지보수 및 모드별 메모리 확보(로컬/원격) 유스케이스 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
@@ -7,6 +7,13 @@ import com.example.gemgemgen.automation.usecase.GeminiAppCloser
 import com.example.gemgemgen.automation.usecase.MaintenanceResult
 import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
+import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
+import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
+import com.example.gemgemgen.remote.usecase.NoOpRemoteAutomationGateway
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -179,6 +186,63 @@ class AppMaintenanceUseCaseTest {
     }
 
     @Test
+    fun cleanMemory_senderMode_success_invokesRemoteCleaner() = runBlocking {
+        val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+
+        val result = useCase.cleanMemory(AutomationMode.SENDER) {
+            MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
+        }
+
+        assertTrue(result is MaintenanceResult.Success)
+        assertEquals("수신 기기 메모리를 정리했습니다.", (result as MaintenanceResult.Success).message)
+        assertEquals(0, gateway.callCount)
+    }
+
+    @Test
+    fun cleanMemory_senderMode_failure_returnsFailure() = runBlocking {
+        val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+
+        val result = useCase.cleanMemory(AutomationMode.SENDER) {
+            MaintenanceResult.Failure("연결 시간 초과")
+        }
+
+        assertTrue(result is MaintenanceResult.Failure)
+        assertEquals("연결 시간 초과", (result as MaintenanceResult.Failure).message)
+        assertEquals(0, gateway.callCount)
+    }
+
+    @Test
+    fun cleanMemory_senderMode_withoutRemoteCleaner_returnsFailure() = runBlocking {
+        val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+
+        val result = useCase.cleanMemory(AutomationMode.SENDER)
+
+        assertTrue(result is MaintenanceResult.Failure)
+        assertEquals("원격 메모리 정리를 수행할 수 없습니다.", (result as MaintenanceResult.Failure).message)
+        assertEquals(0, gateway.callCount)
+    }
+
+    @Test
+    fun cleanMemory_receiverMode_cleansLocalMemory() = runBlocking {
+        val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+        var remoteCleanerCalled = false
+
+        val result = useCase.cleanMemory(AutomationMode.RECEIVER) {
+            remoteCleanerCalled = true
+            MaintenanceResult.Success("원격")
+        }
+
+        assertTrue(result is MaintenanceResult.Success)
+        assertEquals("메모리 정리를 완료했습니다.", (result as MaintenanceResult.Success).message)
+        assertEquals(1, gateway.callCount)
+        assertEquals(false, remoteCleanerCalled)
+    }
+
+    @Test
     fun customClosers_delegateToRespectiveCloser() = runBlocking {
         val restartCloser = FakeGeminiCloser(CloseGeminiAppResult.Success(1))
         val terminateCloser = FakeGeminiCloser(CloseGeminiAppResult.Success(2))
@@ -208,6 +272,93 @@ class AppMaintenanceUseCaseTest {
         assertEquals(1, selfCloser.callCount)
     }
 
+    @Test
+    fun cleanMemory_senderMode_withManageRemoteAutomation_success() = runBlocking {
+        val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
+        val memoryGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val remoteGateway = FakeRemoteGateway(cleanMemoryResult = RemoteActionResult.Success, canSend = true)
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = memoryGateway,
+            manageRemoteAutomation = manageRemote
+        )
+
+        val result = useCase.cleanMemory(AutomationMode.SENDER)
+
+        assertTrue(result is MaintenanceResult.Success)
+        assertEquals("수신 기기 메모리를 정리했습니다.", (result as MaintenanceResult.Success).message)
+        assertEquals(0, memoryGateway.callCount)
+        assertEquals(1, remoteGateway.cleanCount)
+    }
+
+    @Test
+    fun cleanMemory_senderMode_withManageRemoteAutomation_failure() = runBlocking {
+        val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
+        val memoryGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val remoteGateway = FakeRemoteGateway(
+            cleanMemoryResult = RemoteActionResult.Failure("연결 시간 초과"),
+            canSend = true
+        )
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = memoryGateway,
+            manageRemoteAutomation = manageRemote
+        )
+
+        val result = useCase.cleanMemory(AutomationMode.SENDER)
+
+        assertTrue(result is MaintenanceResult.Failure)
+        assertEquals("연결 시간 초과", (result as MaintenanceResult.Failure).message)
+        assertEquals(0, memoryGateway.callCount)
+        assertEquals(1, remoteGateway.cleanCount)
+    }
+
+    @Test
+    fun cleanLocalMemory_invokesGatewayDirectly() = runBlocking {
+        val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
+        val memoryGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val useCase = AppMaintenanceUseCase(closer, memoryGateway)
+
+        val result = useCase.cleanLocalMemory()
+
+        assertTrue(result is MaintenanceResult.Success)
+        assertEquals("메모리 정리를 완료했습니다.", (result as MaintenanceResult.Success).message)
+        assertEquals(1, memoryGateway.callCount)
+    }
+
+    @Test
+    fun cleanRemoteMemory_withManageRemoteAutomation_invokesRemoteDirectly() = runBlocking {
+        val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
+        val memoryGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val remoteGateway = FakeRemoteGateway(cleanMemoryResult = RemoteActionResult.Success, canSend = true)
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = memoryGateway,
+            manageRemoteAutomation = manageRemote
+        )
+
+        val result = useCase.cleanRemoteMemory()
+
+        assertTrue(result is MaintenanceResult.Success)
+        assertEquals("수신 기기 메모리를 정리했습니다.", (result as MaintenanceResult.Success).message)
+        assertEquals(1, remoteGateway.cleanCount)
+    }
+
+    @Test
+    fun cleanRemoteMemory_withoutRemoteCleanerOrManager_returnsFailure() = runBlocking {
+        val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
+        val memoryGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        val useCase = AppMaintenanceUseCase(closer, memoryGateway)
+
+        val result = useCase.cleanRemoteMemory()
+
+        assertTrue(result is MaintenanceResult.Failure)
+        assertEquals("원격 메모리 정리를 수행할 수 없습니다.", (result as MaintenanceResult.Failure).message)
+    }
+
     private class FakeGeminiCloser(val result: CloseGeminiAppResult) : GeminiAppCloser {
         var callCount = 0
         override suspend fun closeGeminiApp(): CloseGeminiAppResult {
@@ -221,6 +372,26 @@ class AppMaintenanceUseCaseTest {
         override suspend fun cleanMemory(): MemoryCleanupResult {
             callCount++
             return result
+        }
+    }
+
+    private class FakeRemoteGateway(
+        var cleanMemoryResult: RemoteActionResult = RemoteActionResult.Success,
+        canSend: Boolean = true
+    ) : NoOpRemoteAutomationGateway() {
+        var cleanCount = 0
+        private val _status = MutableStateFlow(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = if (canSend) "Test Device" else "",
+                isPaired = canSend
+            )
+        )
+        override val status: StateFlow<RemoteAutomationStatus> = _status
+
+        override suspend fun cleanMemory(): RemoteActionResult {
+            cleanCount++
+            return cleanMemoryResult
         }
     }
 }

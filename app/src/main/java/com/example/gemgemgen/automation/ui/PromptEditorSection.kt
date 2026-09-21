@@ -1,4 +1,4 @@
-﻿// 역할: 프롬프트 원본 입력, 문단 단위 선택/편집 및 와일드카드 자동완성 칩을 제공하는 에디터 섹션 UI입니다.
+// 역할: 프롬프트 원본 입력, 문단 단위 편집 및 와일드카드/상용구 자동완성 칩을 제공하는 에디터 섹션 UI입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -54,6 +54,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PowerSettingsNew
@@ -101,11 +102,13 @@ internal fun PromptEditorSection(
     canCloseGemini: Boolean,
     canCloseSelfApp: Boolean,
     canCleanMemory: Boolean,
+    isMemoryCleanupScheduled: Boolean = false,
     isMaintenanceBusy: Boolean = false,
     maintenanceMessage: String = "",
     selectedParagraphRange: PromptParagraphRange?,
     paragraphSelectionMessage: String,
     suggestionTokens: List<String> = emptyList(),
+    suggestionCandidates: List<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate> = emptyList(),
     showPromptActions: Boolean = true,
     showWildcardSuggestions: Boolean = true,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
@@ -113,6 +116,7 @@ internal fun PromptEditorSection(
     onFlowImageCountSelected: (Int) -> Unit = {},
     onPromptTemplateChange: (String) -> Unit,
     onWildcardTokenSuggestionClick: (String) -> Unit = {},
+    onSuggestionCandidateClick: (com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate) -> Unit = {},
     onCloseGeminiApp: () -> Unit,
     onCleanDeviceMemory: () -> Unit,
     onTerminateSelfApp: () -> Unit,
@@ -128,6 +132,7 @@ internal fun PromptEditorSection(
     onCopyPromptToClipboard: () -> Unit,
     onPasteFromClipboard: () -> Unit,
     onOpenPromptHistory: () -> Unit = {},
+    onOpenPromptSnippetDialog: () -> Unit = {},
     onOpenGeminiAccountPicker: () -> Unit = {},
     showVariationButton: Boolean = true,
     isVariationButtonEnabled: Boolean = true,
@@ -135,15 +140,28 @@ internal fun PromptEditorSection(
     onRunVariation: (String?) -> Unit = {},
     onOpenVariationPromptConfigDialog: () -> Unit = {}
 ) {
-    val lastNonEmptySuggestionTokens = remember { mutableListOf<String>() }
-    if (suggestionTokens.isNotEmpty()) {
-        lastNonEmptySuggestionTokens.clear()
-        lastNonEmptySuggestionTokens.addAll(suggestionTokens)
+    val effectiveCandidates = remember(suggestionCandidates, suggestionTokens) {
+        if (suggestionCandidates.isNotEmpty()) {
+            suggestionCandidates
+        } else {
+            suggestionTokens.map {
+                com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate(
+                    name = it,
+                    token = it,
+                    displayText = it
+                )
+            }
+        }
     }
-    val displayedSuggestionTokens = if (suggestionTokens.isNotEmpty()) {
-        suggestionTokens
+    val lastNonEmptyCandidates = remember { mutableListOf<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>() }
+    if (effectiveCandidates.isNotEmpty()) {
+        lastNonEmptyCandidates.clear()
+        lastNonEmptyCandidates.addAll(effectiveCandidates)
+    }
+    val displayedCandidates = if (effectiveCandidates.isNotEmpty()) {
+        effectiveCandidates
     } else {
-        lastNonEmptySuggestionTokens
+        lastNonEmptyCandidates
     }
     val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
 
@@ -183,18 +201,37 @@ internal fun PromptEditorSection(
                 }
             }
 
-            IconButton(
-                onClick = onOpenPromptHistory,
-                modifier = Modifier
-                    .size(36.dp)
-                    .semantics { contentDescription = "프롬프트 기록" }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.History,
-                    contentDescription = null,
-                    tint = AppTheme.colors.textSecondary,
-                    modifier = Modifier.size(18.dp)
-                )
+                IconButton(
+                    onClick = onOpenPromptSnippetDialog,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .semantics { contentDescription = "상용구(텍스트 대치) 관리" }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bookmarks,
+                        contentDescription = null,
+                        tint = AppTheme.colors.accent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = onOpenPromptHistory,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .semantics { contentDescription = "프롬프트 기록" }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = null,
+                        tint = AppTheme.colors.textSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
 
@@ -211,13 +248,16 @@ internal fun PromptEditorSection(
         }
 
         AnimatedVisibility(
-            visible = showWildcardSuggestions && suggestionTokens.isNotEmpty(),
+            visible = showWildcardSuggestions && displayedCandidates.isNotEmpty(),
             enter = fadeIn(tween(150)) + expandVertically(tween(150)),
             exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
         ) {
-            WildcardTokenSuggestionBar(
-                tokens = displayedSuggestionTokens,
-                onTokenClick = onWildcardTokenSuggestionClick
+            PromptSuggestionBar(
+                suggestions = displayedCandidates,
+                onSuggestionClick = { candidate ->
+                    onSuggestionCandidateClick(candidate)
+                    onWildcardTokenSuggestionClick(candidate.token)
+                }
             )
         }
 
@@ -242,6 +282,7 @@ internal fun PromptEditorSection(
                 canCloseGemini = canCloseGemini,
                 canCloseSelfApp = canCloseSelfApp,
                 canCleanMemory = canCleanMemory,
+                isMemoryCleanupScheduled = isMemoryCleanupScheduled,
                 isMaintenanceBusy = isMaintenanceBusy,
                 canNavigateHistoryBack = canNavigateHistoryBack,
                 canNavigateHistoryForward = canNavigateHistoryForward,
@@ -277,26 +318,6 @@ internal fun PromptEditorSection(
                 onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
             )
         }
-
-        if (maintenanceMessage.isNotBlank()) {
-            Text(
-                text = maintenanceMessage,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        if (showVariationButton && variationAutomationState != AutomationRunState.Idle) {
-            Text(
-                text = variationStatusText(variationAutomationState),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (variationAutomationState is AutomationRunState.Failure) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    AppTheme.colors.textSecondary
-                }
-            )
-        }
     }
 }
 
@@ -307,6 +328,7 @@ internal fun PromptActionRow(
     canCloseGemini: Boolean,
     canCloseSelfApp: Boolean,
     canCleanMemory: Boolean,
+    isMemoryCleanupScheduled: Boolean = false,
     isMaintenanceBusy: Boolean = false,
     canNavigateHistoryBack: Boolean,
     canNavigateHistoryForward: Boolean,
@@ -396,13 +418,17 @@ internal fun PromptActionRow(
                 PebbleButton(
                     onClick = onCleanDeviceMemory,
                     enabled = canCleanMemory && !isMaintenanceBusy,
+                    isHighlighted = isMemoryCleanupScheduled,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.semantics { contentDescription = "메모리 정리" }
+                    modifier = Modifier.semantics {
+                        contentDescription = if (isMemoryCleanupScheduled) "메모리 정리 예약됨" else "메모리 정리"
+                    }
                 ) {
                     Text(
-                        text = "메모리 정리",
+                        text = if (isMemoryCleanupScheduled) "정리 예약됨" else "메모리 정리",
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = if (isMemoryCleanupScheduled) AppTheme.colors.primary else AppTheme.colors.textPrimary
                     )
                 }
             }
@@ -658,7 +684,7 @@ internal fun selectedPromptText(
     return text.substring(rangeStart, rangeEnd).takeIf { rangeStart != rangeEnd }
 }
 
-private fun variationStatusText(state: AutomationRunState): String {
+internal fun resolveVariationStatusText(state: AutomationRunState): String {
     return when (state) {
         AutomationRunState.Idle -> ""
         is AutomationRunState.Running -> state.step
@@ -670,9 +696,9 @@ private fun variationStatusText(state: AutomationRunState): String {
 
 
 @Composable
-internal fun WildcardTokenSuggestionBar(
-    tokens: List<String>,
-    onTokenClick: (String) -> Unit,
+internal fun PromptSuggestionBar(
+    suggestions: List<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>,
+    onSuggestionClick: (com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -683,27 +709,49 @@ internal fun WildcardTokenSuggestionBar(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        tokens.forEach { token ->
+        suggestions.forEach { candidate ->
+            val isSnippet = candidate.type == com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate.Type.SNIPPET
             val shape = RoundedCornerShape(10.dp)
+            val borderColor = if (isSnippet) {
+                AppTheme.colors.accent.copy(alpha = 0.55f)
+            } else {
+                AppTheme.colors.primary.copy(alpha = 0.4f)
+            }
+            val textColor = if (isSnippet) {
+                AppTheme.colors.accent
+            } else {
+                AppTheme.colors.primary
+            }
+            val shadowColor = if (isSnippet) {
+                AppTheme.colors.accent.copy(alpha = 0.25f)
+            } else {
+                AppTheme.colors.primary.copy(alpha = 0.2f)
+            }
+            val description = if (isSnippet) {
+                "상용구 ${candidate.name} 치환"
+            } else {
+                "와일드카드 ${candidate.displayText} 삽입"
+            }
+
             Surface(
-                onClick = { onTokenClick(token) },
+                onClick = { onSuggestionClick(candidate) },
                 shape = shape,
                 color = AppTheme.colors.card,
-                border = BorderStroke(1.5.dp, AppTheme.colors.primary.copy(alpha = 0.4f)),
+                border = BorderStroke(1.5.dp, borderColor),
                 modifier = Modifier
                     .shadow(
                         elevation = 2.dp,
                         shape = shape,
-                        ambientColor = AppTheme.colors.primary.copy(alpha = 0.2f),
-                        spotColor = AppTheme.colors.primary.copy(alpha = 0.15f)
+                        ambientColor = shadowColor,
+                        spotColor = shadowColor.copy(alpha = 0.15f)
                     )
                     .semantics {
-                        contentDescription = "와일드카드 $token 삽입"
+                        contentDescription = description
                     }
             ) {
                 Text(
-                    text = token,
-                    color = AppTheme.colors.primary,
+                    text = candidate.displayText,
+                    color = textColor,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -711,6 +759,28 @@ internal fun WildcardTokenSuggestionBar(
             }
         }
     }
+}
+
+@Composable
+internal fun WildcardTokenSuggestionBar(
+    tokens: List<String>,
+    onTokenClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val candidates = remember(tokens) {
+        tokens.map {
+            com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate(
+                name = it,
+                token = it,
+                displayText = it
+            )
+        }
+    }
+    PromptSuggestionBar(
+        suggestions = candidates,
+        onSuggestionClick = { onTokenClick(it.token) },
+        modifier = modifier
+    )
 }
 
 @Composable

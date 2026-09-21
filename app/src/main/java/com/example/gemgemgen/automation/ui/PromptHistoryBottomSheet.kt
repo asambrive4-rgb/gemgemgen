@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,7 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
-import com.example.gemgemgen.automation.usecase.PromptHistoryStore
+import com.example.gemgemgen.automation.domain.PromptHistoryNavigator
 import com.example.gemgemgen.ui.theme.AppTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -92,7 +91,7 @@ fun PromptHistoryBottomSheet(
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        text = "프롬프트 실행 기록 (최근 ${items.size}/${PromptHistoryStore.DEFAULT_MAX_HISTORY_COUNT}개)",
+                        text = "프롬프트 실행 기록 (최근 ${items.size}/${PromptHistoryNavigator.MAX_HISTORY_COUNT}개)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -130,7 +129,7 @@ fun PromptHistoryBottomSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "자동화를 실행하면 최근 ${PromptHistoryStore.DEFAULT_MAX_HISTORY_COUNT}개까지 자동으로 보관됩니다.",
+                        text = "자동화를 실행하면 최근 ${PromptHistoryNavigator.MAX_HISTORY_COUNT}개까지 자동으로 보관됩니다.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )

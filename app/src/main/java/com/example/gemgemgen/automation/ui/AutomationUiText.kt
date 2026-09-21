@@ -65,6 +65,10 @@ object AutomationUiText {
         return if (mode == AutomationMode.SENDER) "수신 기기 메모리 정리를 취소했습니다." else "메모리 정리를 취소했습니다."
     }
 
+    fun memoryCleanupScheduledText(): String = "자동화 종료 후 메모리 정리가 예약되었습니다."
+
+    fun memoryCleanupScheduleCanceledText(): String = "메모리 정리 예약이 취소되었습니다."
+
     fun unknownMemoryCleanupErrorMessage(error: Throwable): String {
         return error.message ?: "메모리 정리 중 알 수 없는 오류가 발생했습니다."
     }

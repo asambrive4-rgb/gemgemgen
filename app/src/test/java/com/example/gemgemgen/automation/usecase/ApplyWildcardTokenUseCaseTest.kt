@@ -122,4 +122,26 @@ class ApplyWildcardTokenUseCaseTest {
         )
         assertNull(result)
     }
+
+    @Test
+    fun invoke_replacesSnippetCandidateSuccessfully() {
+        val snippetCandidate = Candidate(
+            name = "고화질",
+            token = "8k masterpiece, extremely detailed",
+            displayText = "📋 고화질",
+            type = Candidate.Type.SNIPPET
+        )
+        val text = "프롬프트 시작 고화"
+        val result = useCase(
+            text = text,
+            selectionStart = text.length,
+            selectionEnd = text.length,
+            candidate = snippetCandidate,
+            candidates = candidates + snippetCandidate
+        )
+
+        assertNotNull(result)
+        assertEquals("프롬프트 시작 8k masterpiece, extremely detailed", result?.newText)
+        assertEquals("프롬프트 시작 8k masterpiece, extremely detailed".length, result?.cursorAfter)
+    }
 }

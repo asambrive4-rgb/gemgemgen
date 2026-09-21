@@ -1,4 +1,4 @@
-// 역할: 메인 화면의 입력 및 문단 편집 모드, 일반 자동화, 변주 실행, 메모리 정리 및 환경 상태를 총괄 관리하는 뷰모델입니다.
+// 역할: 메인 화면의 프롬프트 편집, 상용구 관리, 와일드카드 자동완성, 일반/변주 자동화, 유지보수 및 환경 상태를 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import android.util.Log
@@ -10,15 +10,19 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
+import com.example.gemgemgen.automation.domain.PromptSnippet
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
+import com.example.gemgemgen.automation.domain.VariationStartPolicy
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
+import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
-import com.example.gemgemgen.automation.usecase.CleanDeviceMemoryUseCase
+import com.example.gemgemgen.automation.usecase.GetPromptSnippetCandidatesUseCase
 import com.example.gemgemgen.automation.usecase.GetWildcardTokenCandidatesUseCase
 import com.example.gemgemgen.automation.usecase.ManagePromptInstructionUseCase
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.PromptInstructionRepository
+import com.example.gemgemgen.automation.usecase.PromptSnippetRepository
 import com.example.gemgemgen.automation.usecase.VariationPromptRepository
 import com.example.gemgemgen.automation.usecase.ResolveVariationPromptUseCase
 import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
@@ -43,8 +47,6 @@ import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
-import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
-import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
@@ -57,6 +59,7 @@ import com.example.gemgemgen.core.PromptHandoffEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,8 +67,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
-import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.MaintenanceResult
 
@@ -79,7 +80,6 @@ private data class AutomationInitialState(
 class AutomationViewModel(
     private val checkEnvironmentStatus: CheckEnvironmentStatusUseCase,
     private val clipboardGateway: ClipboardGateway,
-    private val saveWildcardFolder: SaveWildcardFolderUseCase,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: ExecuteAutomationLoopUseCase,
     private val appMaintenance: AppMaintenanceUseCase = AppMaintenanceUseCase(
@@ -130,12 +130,10 @@ class AutomationViewModel(
         },
     private val managePromptInstruction: ManagePromptInstructionUseCase =
         ManagePromptInstructionUseCase(promptInstructionRepository),
-    private val cleanDeviceMemoryUseCase: CleanDeviceMemoryUseCase =
-        CleanDeviceMemoryUseCase(
-            appMaintenance = appMaintenance,
-            manageRemoteAutomation = manageRemoteAutomation
-        ),
     private val variationPromptRepository: VariationPromptRepository? = null,
+    private val promptSnippetRepository: PromptSnippetRepository? = null,
+    private val getPromptSnippetCandidates: GetPromptSnippetCandidatesUseCase =
+        GetPromptSnippetCandidatesUseCase(promptSnippetRepository),
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
     private val resolveVariationPrompt: ResolveVariationPromptUseCase = ResolveVariationPromptUseCase(),
     coroutineScope: CoroutineScope? = null
@@ -190,7 +188,8 @@ class AutomationViewModel(
                         canNavigateHistoryForward = editorState.canNavigateHistoryForward,
                         isHistoryIndicatorVisible = editorState.isHistoryIndicatorVisible,
                         historyDotCount = editorState.historyDotCount,
-                        activeHistoryDotIndex = editorState.activeHistoryDotIndex
+                        activeHistoryDotIndex = editorState.activeHistoryDotIndex,
+                        activeSuggestionCandidates = editorState.activeSuggestionCandidates
                     )
                 }
             }
@@ -418,7 +417,8 @@ class AutomationViewModel(
     fun runVariation(selectedText: String? = null): VariationStartDecision {
         val state = _uiState.value
         if (!state.canRunVariation) {
-            return rejectVariation(variationUnavailableReason(state))
+            val reason = state.variationUnavailableReason ?: "변주를 지금 실행할 수 없습니다."
+            return rejectVariation(reason)
         }
 
         val useCase = runVariationPrompt ?: return rejectVariation("변주 자동화가 준비되지 않았습니다.")
@@ -442,55 +442,94 @@ class AutomationViewModel(
         return VariationStartDecision.Rejected(message)
     }
 
-    private fun variationUnavailableReason(state: AutomationUiState): String = when {
-        state.automationMode == AutomationMode.RECEIVER -> "수신 모드에서는 변주를 실행할 수 없습니다."
-        state.isRunning -> "자동화 실행 중에는 변주를 실행할 수 없습니다."
-        state.isMaintenanceBusy -> "유지보수 작업이 진행 중입니다."
-        !state.environmentStatus.isGeminiInstalled -> "Gemini 앱을 먼저 설치해주세요."
-        !state.environmentStatus.isAccessibilityServiceEnabled -> "접근성 서비스를 먼저 켜주세요."
-        else -> "변주를 지금 실행할 수 없습니다."
-    }
-
     /**
      * 추천 칩 탭: 커서 기준 현재 단어를 와일드카드 토큰으로 교체.
      * Undo 가능. 실행 중·문단 선택 모드에서는 무시.
      */
     fun applyWildcardTokenSuggestion(token: String) {
+        val candidates = _uiState.value.allAutocompleteCandidates.ifEmpty { _uiState.value.wildcardTokenCandidates }
         promptEditor.applyWildcardTokenSuggestion(
             token = token,
             isBlocked = _uiState.value.isRunning,
-            candidates = _uiState.value.wildcardTokenCandidates
+            candidates = candidates
         )
     }
 
-    /** 와일드카드 폴더의 txt 파일명으로 추천 후보를 다시 읽는다. */
+    /**
+     * 추천 칩 탭 (Candidate 직접 전달): 커서 기준 현재 단어를 치환.
+     */
+    fun applySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {
+        val candidates = _uiState.value.allAutocompleteCandidates.ifEmpty { _uiState.value.wildcardTokenCandidates }
+        promptEditor.applySuggestion(
+            candidate = candidate,
+            isBlocked = _uiState.value.isRunning,
+            candidates = candidates
+        )
+    }
+
+    /** 와일드카드 폴더 및 상용구 목록으로 추천 후보를 다시 읽는다. */
     fun refreshWildcardTokenCandidates() {
         scope.launch {
-            val candidates = withContext(dispatchers.io) {
-                loadWildcardTokenCandidates()
+            val (wildcardCandidates, snippetCandidates, snippets) = withContext(dispatchers.io) {
+                Triple(
+                    loadWildcardTokenCandidates(),
+                    loadSnippetCandidates(),
+                    promptSnippetRepository?.load().orEmpty()
+                )
             }
+            val combined = (wildcardCandidates + snippetCandidates).sortedWith(
+                compareBy<WildcardTokenAutocomplete.Candidate> { it.name.length }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+            )
+            promptEditor.updateAutocompleteCandidates(combined)
             _uiState.update { state ->
-                if (state.wildcardTokenCandidates == candidates) {
-                    state
-                } else {
-                    state.copy(wildcardTokenCandidates = candidates)
-                }
+                state.copy(
+                    wildcardTokenCandidates = wildcardCandidates,
+                    promptSnippets = snippets,
+                    allAutocompleteCandidates = combined
+                )
             }
+        }
+    }
+
+    fun showPromptSnippetDialog() {
+        _uiState.update { it.copy(showPromptSnippetDialog = true) }
+    }
+
+    fun dismissPromptSnippetDialog() {
+        _uiState.update { it.copy(showPromptSnippetDialog = false) }
+    }
+
+    fun addPromptSnippet(shortcut: String, content: String) {
+        scope.launch {
+            withContext(dispatchers.io) {
+                val current = promptSnippetRepository?.load().orEmpty().toMutableList()
+                current.removeAll { it.shortcut.equals(shortcut.trim(), ignoreCase = true) }
+                current.add(
+                    PromptSnippet(
+                        shortcut = shortcut.trim(),
+                        content = content.trim()
+                    )
+                )
+                promptSnippetRepository?.save(current)
+            }
+            refreshWildcardTokenCandidates()
+        }
+    }
+
+    fun deletePromptSnippet(id: String) {
+        scope.launch {
+            withContext(dispatchers.io) {
+                val current = promptSnippetRepository?.load().orEmpty().toMutableList()
+                current.removeAll { it.id == id }
+                promptSnippetRepository?.save(current)
+            }
+            refreshWildcardTokenCandidates()
         }
     }
 
     fun replaceSelectedPromptParagraph(replacement: String) =
         promptEditor.replaceSelectedPromptParagraph(replacement)
-
-    fun decideWildcardFolderAction(): WildcardFolderAction =
-        WildcardFolderAccessPolicy.decideAction(
-            hasAllFilesAccess = _uiState.value.environmentStatus.hasAllFilesAccess,
-            isWildcardDirectoryAccessible = _uiState.value.environmentStatus.isWildcardDirectoryAccessible
-        )
-
-    fun getInitialWildcardFolderUri(): String? {
-        return saveWildcardFolder.getFolderUri()
-    }
 
     fun closeGeminiApp() = executeMaintenance(
         canExecute = AutomationUiState::canCloseGemini,
@@ -517,6 +556,36 @@ class AutomationViewModel(
     )
 
     fun cleanDeviceMemory() {
+        val state = _uiState.value
+        if (!state.canCleanMemory) {
+            _uiState.update {
+                it.copy(maintenanceState = MaintenanceState(isBusy = false, message = AutomationUiText.memoryCleanupUnavailableMessage(it)))
+            }
+            return
+        }
+
+        if (state.isRunning || state.isVariationRunning) {
+            val nextScheduled = !state.isMemoryCleanupScheduled
+            _uiState.update {
+                it.copy(
+                    isMemoryCleanupScheduled = nextScheduled,
+                    maintenanceState = MaintenanceState(
+                        isBusy = false,
+                        message = if (nextScheduled) {
+                            AutomationUiText.memoryCleanupScheduledText()
+                        } else {
+                            AutomationUiText.memoryCleanupScheduleCanceledText()
+                        }
+                    )
+                )
+            }
+            return
+        }
+
+        executeCleanDeviceMemory()
+    }
+
+    private fun executeCleanDeviceMemory() {
         val mode = _uiState.value.automationMode
         executeMaintenance(
             canExecute = AutomationUiState::canCleanMemory,
@@ -528,7 +597,7 @@ class AutomationViewModel(
     }
 
     private suspend fun performMemoryCleanup(mode: AutomationMode): MaintenanceResult =
-        cleanDeviceMemoryUseCase(mode)
+        appMaintenance.cleanMemory(mode)
 
     private fun executeMaintenance(
         canExecute: (AutomationUiState) -> Boolean,
@@ -568,14 +637,25 @@ class AutomationViewModel(
 
     fun refreshStatus() {
         scope.launch {
-            val (report, candidates) = withContext(dispatchers.io) {
-                checkEnvironmentStatus.check() to loadWildcardTokenCandidates()
+            val (report, wildcardCandidates, snippetCandidates, snippets) = withContext(dispatchers.io) {
+                val rep = checkEnvironmentStatus.check()
+                val wildcards = loadWildcardTokenCandidates()
+                val snippetCands = loadSnippetCandidates()
+                val snips = promptSnippetRepository?.load().orEmpty()
+                StatusCandidatesBundle(rep, wildcards, snippetCands, snips)
             }
+            val combined = (wildcardCandidates + snippetCandidates).sortedWith(
+                compareBy<WildcardTokenAutocomplete.Candidate> { it.name.length }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+            )
+            promptEditor.updateAutocompleteCandidates(combined)
             _uiState.update {
                 it.copy(
                     environmentStatus = report.status,
                     environmentSetupInfo = report.setupInfo,
-                    wildcardTokenCandidates = candidates
+                    wildcardTokenCandidates = wildcardCandidates,
+                    promptSnippets = snippets,
+                    allAutocompleteCandidates = combined
                 )
             }
         }
@@ -583,6 +663,9 @@ class AutomationViewModel(
 
     private fun loadWildcardTokenCandidates(): List<WildcardTokenAutocomplete.Candidate> =
         getWildcardTokenCandidates()
+
+    private fun loadSnippetCandidates(): List<WildcardTokenAutocomplete.Candidate> =
+        getPromptSnippetCandidates()
 
     fun showSettings() {
         _uiState.update { state ->
@@ -605,28 +688,6 @@ class AutomationViewModel(
 
     fun hideSettings() =
         _uiState.update { it.copy(showSettings = false, showAccessibilityPrompt = false) }
-
-    fun saveWildcardFolder(folderUri: String) {
-        scope.launch {
-            val result = withContext(dispatchers.io) {
-                saveWildcardFolder.save(folderUri)
-            }
-            _uiState.update {
-                when (result) {
-                    FolderSelectionResult.Success -> it.copy(
-                        settingsMessage = "wildcard 폴더를 선택했습니다.",
-                        settingsError = ""
-                    )
-                    is FolderSelectionResult.Failure -> it.copy(
-                        settingsMessage = "",
-                        settingsError =
-                            "폴더 권한 저장 실패: ${result.reason ?: "다시 선택해주세요."}"
-                    )
-                }
-            }
-            refreshStatus()
-        }
-    }
 
     fun runAutomation(): AutomationStartDecision {
         promptEditor.syncPromptTemplateFromTextField()
@@ -657,7 +718,7 @@ class AutomationViewModel(
         val initialStep = if (isRemote) "S25 FE로 요청 전송 중" else "자동화 준비 중"
         handleAutomationState(
             AutomationRunState.Running(initialStep),
-            additionalUpdate = { it.copy(promptHistoryItems = history) }
+            additionalUpdate = { it.copy(promptHistoryItems = history, isMemoryCleanupScheduled = false) }
         )
 
         val job = scope.launch {
@@ -716,6 +777,7 @@ class AutomationViewModel(
     }
 
     fun cancelAutomation() {
+        _uiState.update { it.copy(isMemoryCleanupScheduled = false) }
         val wasRemoteRunActive = isRemoteRunActive
         isRemoteRunActive = false
         val preparationJob = automationPreparationJob
@@ -844,6 +906,27 @@ class AutomationViewModel(
         _automationBarUiState.update {
             if (it.automationState == state) it else it.copy(automationState = state)
         }
+
+        var shouldExecuteScheduledCleanup = false
+        if (state.isTerminal()) {
+            _uiState.update { current ->
+                if (current.isMemoryCleanupScheduled) {
+                    if (state == AutomationRunState.Success || state is AutomationRunState.Failure) {
+                        shouldExecuteScheduledCleanup = true
+                    }
+                    current.copy(isMemoryCleanupScheduled = false)
+                } else {
+                    current
+                }
+            }
+        }
+
+        if (shouldExecuteScheduledCleanup) {
+            scope.launch {
+                delay(300L)
+                executeCleanDeviceMemory()
+            }
+        }
     }
 
     private fun handleVariationState(state: AutomationRunState) {
@@ -903,3 +986,10 @@ class AutomationViewModel(
     }
 
 }
+
+private data class StatusCandidatesBundle(
+    val report: com.example.gemgemgen.environment.domain.EnvironmentReport,
+    val wildcardCandidates: List<WildcardTokenAutocomplete.Candidate>,
+    val snippetCandidates: List<WildcardTokenAutocomplete.Candidate>,
+    val snippets: List<PromptSnippet>
+)

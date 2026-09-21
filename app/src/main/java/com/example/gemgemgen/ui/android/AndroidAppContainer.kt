@@ -30,6 +30,7 @@ import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
 import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptInstructionRepository
+import com.example.gemgemgen.automation.android.SharedPreferencesPromptSnippetRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesVariationPromptRepository
 import com.example.gemgemgen.automation.usecase.OpenGeminiAccountPickerUseCase
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
@@ -91,6 +92,7 @@ class AndroidAppContainer(context: Context) {
     val promptWorkspace = PromptWorkspace()
     val promptInstructionRepository = SharedPreferencesPromptInstructionRepository(appContext)
     val variationPromptRepository = SharedPreferencesVariationPromptRepository(appContext)
+    val promptSnippetRepository = SharedPreferencesPromptSnippetRepository(appContext)
 
     val automationViewModelFactory: ViewModelProvider.Factory = factory<AutomationViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
@@ -116,16 +118,14 @@ class AndroidAppContainer(context: Context) {
         AutomationViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentGateway),
             clipboardGateway = clipboardGateway,
-            saveWildcardFolder = SaveWildcardFolderUseCase(
-                AndroidWildcardFolderRepository(appContext)
-            ),
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automation,
             appMaintenance = AppMaintenanceUseCase(
                 geminiRestartCloser = AndroidGeminiAppCloser(appContext),
                 geminiTerminateCloser = AndroidGeminiAppCloser(appContext, relaunchAfterClose = false),
                 selfAppCloser = AndroidSelfAppCloser(appContext),
-                memoryCleanupGateway = AndroidMemoryCleanupGateway(appContext)
+                memoryCleanupGateway = AndroidMemoryCleanupGateway(appContext),
+                manageRemoteAutomation = manageRemoteAutomation
             ),
             checkAutomationStart = checkAutomationStart,
             executeAutomation = executeAutomation,
@@ -138,6 +138,7 @@ class AndroidAppContainer(context: Context) {
             openGeminiAccountPicker = openGeminiAccountPicker,
             promptInstructionRepository = promptInstructionRepository,
             variationPromptRepository = variationPromptRepository,
+            promptSnippetRepository = promptSnippetRepository,
             runVariationPrompt = RunVariationPromptUseCase(
                 gatewayProvider = ActiveVariationPromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
@@ -148,6 +149,8 @@ class AndroidAppContainer(context: Context) {
 
     val wildcardViewModelFactory: ViewModelProvider.Factory = factory<WildcardViewModel> {
         val wildcardFileRepository = AndroidWildcardFileRepository(appContext)
+        val wildcardFolderRepository = AndroidWildcardFolderRepository(appContext)
+        val environmentGateway = AndroidEnvironmentGateway(appContext)
         val analysisKeyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository)
         WildcardViewModel(
             manageWildcardFiles = ManageWildcardFilesUseCase(wildcardFileRepository),
@@ -159,7 +162,9 @@ class AndroidAppContainer(context: Context) {
             saveWildcardClassifyResult = SaveWildcardClassifyResultUseCase(
                 repository = wildcardFileRepository
             ),
-            analysisKeyManager = analysisKeyManager
+            analysisKeyManager = analysisKeyManager,
+            saveWildcardFolder = SaveWildcardFolderUseCase(wildcardFolderRepository),
+            checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentGateway)
         )
     }
 

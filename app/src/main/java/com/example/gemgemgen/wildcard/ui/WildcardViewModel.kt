@@ -1,19 +1,25 @@
-// 역할: 와일드카드 세트 및 단어의 추가·수정·삭제 상태와 AI 분류 다이얼로그 상태를 관리하는 뷰모델입니다.
+// 역할: 와일드카드 세트·단어 편집, 폴더 관리, AI 분류 다이얼로그 상태를 총괄하는 뷰모델입니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
 import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer
 import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
+import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
+import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
 import com.example.gemgemgen.wildcard.domain.WildcardTextEditResult
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
+import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
+import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardPasteResult
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
+import com.example.gemgemgen.wildcard.usecase.WildcardFolderRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,11 +34,19 @@ class WildcardViewModel(
     saveWildcardClassifyResult: SaveWildcardClassifyResultUseCase? = null,
     analysisKeyManager: ManageGeminiApiKeysUseCase? = null,
     classifyCoordinator: WildcardClassifyCoordinator? = null,
-    coroutineScope: CoroutineScope? = null
+    coroutineScope: CoroutineScope? = null,
+    saveWildcardFolder: SaveWildcardFolderUseCase? = null,
+    wildcardFolderRepository: WildcardFolderRepository? = null,
+    checkEnvironmentStatus: CheckEnvironmentStatusUseCase? = null
 ) : ViewModel(), WildcardClassifyActions {
     private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardUiState())
     val uiState: StateFlow<WildcardUiState> = _uiState.asStateFlow()
+
+    private val wildcardFolderSaver: WildcardFolderRepository? =
+        saveWildcardFolder ?: wildcardFolderRepository
+    private val environmentStatusChecker: CheckEnvironmentStatusUseCase? =
+        checkEnvironmentStatus
 
     private val classifyCoordinator: WildcardClassifyCoordinator =
         classifyCoordinator ?: WildcardClassifyCoordinator(
@@ -147,7 +161,7 @@ class WildcardViewModel(
         openFile(file, keepMessage = true)
     }
 
-    fun refreshFiles(openFirstFile: Boolean = false) {
+    fun refreshFiles(openFirstFile: Boolean = false, keepMessage: Boolean = false) {
         launchFileOperation(errorMessage = "파일 목록을 불러오지 못했습니다.", onError = ::showFileListError) {
             val workspace = manageWildcardFiles.refreshWorkspace(
                 selectedFile = uiState.value.selectedFile,
@@ -163,7 +177,7 @@ class WildcardViewModel(
                         editor = state.editor.open(openedFile, openedText),
                         isLineSelectionMode = false,
                         selectedLineIndices = emptySet(),
-                        message = "${openedFile.fileName} 열기 완료",
+                        message = if (keepMessage) state.message else "${openedFile.fileName} 열기 완료",
                         error = ""
                     )
                 } else {
@@ -182,6 +196,35 @@ class WildcardViewModel(
         }
     }
 
+    fun getInitialWildcardFolderUri(): String? =
+        wildcardFolderSaver?.getFolderUri()
+
+    fun decideWildcardFolderAction(
+        hasAllFilesAccess: Boolean = environmentStatusChecker?.check()?.status?.hasAllFilesAccess ?: false,
+        isWildcardDirectoryAccessible: Boolean = environmentStatusChecker?.check()?.status?.isWildcardDirectoryAccessible ?: false
+    ): WildcardFolderAction = WildcardFolderAccessPolicy.decideAction(
+        hasAllFilesAccess = hasAllFilesAccess,
+        isWildcardDirectoryAccessible = isWildcardDirectoryAccessible
+    )
+
+    fun saveWildcardFolder(folderUri: String): FolderSelectionResult {
+        val result = wildcardFolderSaver?.save(folderUri) ?: FolderSelectionResult.Success
+        when (result) {
+            FolderSelectionResult.Success -> {
+                onFolderChanged()
+            }
+            is FolderSelectionResult.Failure -> {
+                _uiState.update {
+                    it.copy(
+                        message = "",
+                        error = "폴더 권한 저장 실패: ${result.reason ?: "다시 선택해주세요."}"
+                    )
+                }
+            }
+        }
+        return result
+    }
+
     fun onFolderChanged() {
         classifyCoordinator.reset()
         _uiState.update {
@@ -197,7 +240,7 @@ class WildcardViewModel(
                 error = ""
             )
         }
-        refreshFiles(openFirstFile = true)
+        refreshFiles(openFirstFile = true, keepMessage = true)
     }
 
     fun requestFolderSelection(): Boolean {
