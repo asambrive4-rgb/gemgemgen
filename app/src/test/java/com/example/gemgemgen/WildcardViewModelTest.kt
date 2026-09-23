@@ -1,4 +1,4 @@
-// 역할: 와일드카드 뷰모델의 파일 탐색, 편집 및 폴더 관리 이벤트 흐름을 검증합니다.
+// 역할: 와일드카드 뷰모델의 파일 탐색, 편집, 화면 액션 인터페이스 및 폴더 관리 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*
@@ -390,6 +390,66 @@ class WildcardViewModelTest {
         assertEquals(FolderSelectionResult.Success, validResult)
         assertEquals("content://test", repo.lastSavedUri)
         assertEquals(1, repo.saveCallCount)
+    }
+
+    @Test
+    fun actions_fileSelect_opensSelectedFile() {
+        val fileManager = FakeWildcardFileManager(
+            "hair.txt" to "black hair",
+            "color.txt" to "blue"
+        )
+        val viewModel = viewModel(fileManager = fileManager)
+        val actions: WildcardScreenActions = viewModel
+        val hairFile = viewModel.uiState.value.files.first { it.fileName == "hair.txt" }
+
+        actions.onFileClick(hairFile)
+
+        assertEquals("hair.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals("black hair", viewModel.uiState.value.editingText)
+    }
+
+    @Test
+    fun actions_editorChangeTextAndSave_persistsContent() {
+        val fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
+        val viewModel = viewModel(fileManager = fileManager)
+        val actions: WildcardScreenActions = viewModel
+
+        actions.onTextChanged("blonde hair")
+        assertTrue(viewModel.uiState.value.hasUnsavedChanges)
+
+        actions.onSaveFile()
+        assertFalse(viewModel.uiState.value.hasUnsavedChanges)
+        assertEquals("blonde hair", fileManager.contentOf("hair.txt"))
+    }
+
+    @Test
+    fun actions_lineSelectionActions_enterAndToggle() {
+        val fileManager = FakeWildcardFileManager("hair.txt" to "black hair\nblonde hair")
+        val viewModel = viewModel(fileManager = fileManager)
+        val actions: WildcardScreenActions = viewModel
+
+        actions.onEnterLineSelectionMode()
+        assertTrue(viewModel.uiState.value.isLineSelectionMode)
+
+        actions.onToggleLineSelection(0)
+        assertEquals(setOf(0), viewModel.uiState.value.selectedLineIndices)
+
+        actions.onSelectAllLines()
+        assertEquals(setOf(0, 1), viewModel.uiState.value.selectedLineIndices)
+
+        actions.onExitLineSelectionMode()
+        assertFalse(viewModel.uiState.value.isLineSelectionMode)
+    }
+
+    @Test
+    fun wildcardScreenActions_classifyRequest_opensCriteriaDialog() {
+        val fileManager = FakeWildcardFileManager("hair.txt" to "black hair\nblonde hair")
+        val viewModel = viewModel(fileManager = fileManager)
+        val actions: WildcardScreenActions = viewModel
+
+        actions.requestClassify()
+        // classifyWildcardLines가 null이면 에러를 띄움
+        assertEquals("분류 기능을 사용할 수 없습니다.", viewModel.uiState.value.error)
     }
 
     private fun viewModel(

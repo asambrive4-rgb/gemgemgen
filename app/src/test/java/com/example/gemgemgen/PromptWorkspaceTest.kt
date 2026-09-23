@@ -21,6 +21,16 @@ class PromptWorkspaceTest {
     }
 
     @Test
+    fun updateCurrentPrompt_consecutiveTypingUpdatesStateFlowImmediately() {
+        val workspace = PromptWorkspace()
+        workspace.updateCurrentPrompt("draft")
+        assertEquals("draft", workspace.currentPrompt.value)
+
+        workspace.updateCurrentPrompt("drafting more text")
+        assertEquals("drafting more text", workspace.currentPrompt.value)
+    }
+
+    @Test
     fun replaceSegment_delegatesToReplacer() {
         val workspace = PromptWorkspace()
         assertNull(workspace.replaceSegment("exp", "rep", 0))

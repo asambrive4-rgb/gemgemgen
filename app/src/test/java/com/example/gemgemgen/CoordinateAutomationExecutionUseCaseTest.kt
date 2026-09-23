@@ -1,4 +1,4 @@
-// 역할: 시작 조건 검사 및 로컬/원격 자동화 실행 경로를 조율하는 CoordinateAutomationExecutionUseCase 동작을 검증합니다.
+// 역할: 도메인 비즈니스 불변식 검사 및 로컬/원격 자동화 실행 경로 조율 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -24,6 +24,7 @@ import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.TargetAppLauncher
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
+import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
@@ -40,6 +41,73 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CoordinateAutomationExecutionUseCaseTest {
+
+    private fun readyEnvironment(): EnvironmentStatus = EnvironmentStatus(
+        isGeminiInstalled = true,
+        isChatGptInstalled = true,
+        isAccessibilityServiceEnabled = true,
+        hasWriteSecureSettingsPermission = true,
+        isWildcardDirectoryAccessible = true
+    )
+
+    @Test
+    fun decideStart_withDomainContext_normalMode_startsWhenRequirementsMet() {
+        val (useCaseWithOverlay, _) = createUseCase(isOverlayGranted = true)
+        val (useCaseWithoutOverlay, _) = createUseCase(isOverlayGranted = false)
+
+        val successDecision = useCaseWithOverlay.decideStart(
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment(),
+            targetApp = AutomationTargetApp.GEMINI,
+            promptTemplate = "test prompt"
+        )
+        assertEquals(AutomationStartDecision.Started, successDecision)
+
+        val permissionDecision = useCaseWithoutOverlay.decideStart(
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment(),
+            targetApp = AutomationTargetApp.GEMINI,
+            promptTemplate = "test prompt"
+        )
+        assertEquals(AutomationStartDecision.PermissionRequired, permissionDecision)
+
+        val rejectedDecision = useCaseWithOverlay.decideStart(
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment(),
+            targetApp = AutomationTargetApp.GEMINI,
+            promptTemplate = "",
+            isRunning = false
+        )
+        assertEquals(AutomationStartDecision.Rejected, rejectedDecision)
+    }
+
+    @Test
+    fun decideStart_withDomainContext_senderMode_evaluatesRemoteStatus() {
+        val (useCase, _) = createUseCase(isOverlayGranted = false)
+        val pairedStatus = RemoteAutomationStatus(
+            mode = AutomationMode.SENDER,
+            discoveredDeviceName = "S25 FE",
+            isPaired = true
+        )
+
+        val startDecision = useCase.decideStart(
+            mode = AutomationMode.SENDER,
+            environmentStatus = EnvironmentStatus(),
+            targetApp = AutomationTargetApp.GEMINI,
+            promptTemplate = "remote prompt",
+            remoteAutomationStatus = pairedStatus
+        )
+        assertEquals(AutomationStartDecision.RemoteStarted, startDecision)
+
+        val rejectedDecision = useCase.decideStart(
+            mode = AutomationMode.SENDER,
+            environmentStatus = EnvironmentStatus(),
+            targetApp = AutomationTargetApp.GEMINI,
+            promptTemplate = "remote prompt",
+            remoteAutomationStatus = RemoteAutomationStatus()
+        )
+        assertEquals(AutomationStartDecision.Rejected, rejectedDecision)
+    }
 
     @Test
     fun decideStart_inReceiverMode_isAlwaysRejected() {

@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름을 검증합니다.
+// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름과 화면 액션 인터페이스(AnalysisScreenActions)를 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -10,6 +10,8 @@ import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
+import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
+import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
@@ -1402,6 +1404,60 @@ class AnalysisFeatureTest {
         val busyState = viewModel.uiState.value.copy(status = AnalysisStatus.GENERATING)
         org.junit.Assert.assertNull(busyState.preconditionHintMessage)
         assertFalse(busyState.canGenerate)
+    }
+
+
+    @Test
+    fun actions_dispatchesUserEventsAndControlsState() {
+        val keyRepo = FakeGeminiApiKeyRepository(activeKey = "gemini-secret")
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "hair"),
+            generateResponse = """[{"text":"후보 1","explanation":"설명"}]"""
+        )
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = keyRepo
+        )
+        val actions: AnalysisScreenActions = viewModel
+
+        // 1. 원문 입력 액션
+        actions.onSourcePromptChange("new prompt")
+        assertEquals("new prompt", viewModel.uiState.value.sourcePrompt)
+
+        // 2. 카테고리 선택 액션
+        actions.onCategorySelected(AnalysisCategory.WOMEN_POSE)
+        assertEquals(AnalysisCategory.WOMEN_POSE, viewModel.uiState.value.selectedCategory)
+
+        // 3. TXT 개수 변경 액션
+        actions.onTxtCountChange(20)
+        assertEquals(20, viewModel.uiState.value.txtCount)
+
+        // 4. 커스텀 힌트 변경 액션
+        actions.onCustomHintChange("dynamic pose")
+        assertEquals("dynamic pose", viewModel.uiState.value.customHint)
+
+        // 5. 결과 파일명 변경 액션
+        actions.onResultFileNameChange("custom-results.txt")
+        assertEquals("custom-results.txt", viewModel.uiState.value.resultFileName)
+
+        // 6. 리셋 요청 액션
+        actions.onRequestResetSession()
+        assertTrue(viewModel.uiState.value.showResetConfirmation)
+
+        // 7. 리셋 취소 액션
+        actions.onDismissResetSession()
+        assertFalse(viewModel.uiState.value.showResetConfirmation)
+
+        // 8. 리셋 확정 액션
+        actions.onConfirmResetSession()
+        assertEquals("", viewModel.uiState.value.sourcePrompt)
+        assertEquals(DEFAULT_ANALYSIS_CATEGORY, viewModel.uiState.value.selectedCategory)
+
+        // 9. API 키 다이얼로그 열기/닫기 액션
+        actions.onShowKeyDialog()
+        assertTrue(viewModel.uiState.value.showKeyDialog)
+        actions.onDismissKeyDialog()
+        assertFalse(viewModel.uiState.value.showKeyDialog)
     }
 
     private fun analysisViewModel(

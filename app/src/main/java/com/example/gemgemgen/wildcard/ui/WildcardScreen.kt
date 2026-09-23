@@ -88,48 +88,9 @@ internal fun WildcardScreen(
     uiState: WildcardUiState,
     environmentStatus: EnvironmentStatus,
     environmentSetupInfo: EnvironmentSetupInfo,
-    onClearFocus: () -> Unit,
-    onRefresh: () -> Unit,
-    onSelectFolder: () -> Unit,
-    onFileClick: (WildcardTextFile) -> Unit,
-    onTextChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onRequestNewFile: () -> Unit,
-    onNewFileNameChange: (String) -> Unit,
-    onCreateNewFile: () -> Unit,
-    onDismissNewFile: () -> Unit,
-    onRequestDelete: () -> Unit,
-    onConfirmDelete: () -> Unit,
-    onDismissDelete: () -> Unit,
-    onRequestRename: () -> Unit,
-    onRenameFileNameChange: (String) -> Unit,
-    onConfirmRename: () -> Unit,
-    onDismissRename: () -> Unit,
-    onPaste: () -> Unit,
-    onPasteBelow: () -> Unit,
-    onCopy: () -> Unit,
-    onUndo: () -> Unit,
-    onEnterLineSelectionMode: () -> Unit,
-    onExitLineSelectionMode: () -> Unit,
-    onToggleLineSelection: (Int) -> Unit,
-    onSelectAllLines: () -> Unit,
-    onDeselectAllLines: () -> Unit,
-    onComposeDynamicPrompt: () -> Unit,
-    onRequestClassify: () -> Unit,
-    onClassifyCriteriaChange: (String) -> Unit,
-    onClassifyProviderSelected: (AnalysisProvider) -> Unit,
-    onClassifyModelSelected: (String) -> Unit,
-    onDismissClassifyCriteria: () -> Unit,
-    onRunClassify: () -> Unit,
-    onDismissClassifyPreview: () -> Unit,
-    onClassifyFileNameChange: (Int, String) -> Unit,
-    onToggleClassifyFileNameEdit: (Int) -> Unit,
-    onSaveClassifyResult: () -> Unit,
-    onConfirmClassifyOverwrite: () -> Unit,
-    onDismissClassifyOverwrite: () -> Unit,
-    onConfirmPendingSave: () -> Unit,
-    onConfirmPendingDiscard: () -> Unit,
-    onCancelPending: () -> Unit
+    actions: WildcardScreenActions = WildcardScreenActions.Empty,
+    modifier: Modifier = Modifier,
+    onClearFocus: () -> Unit = {}
 ) {
     var editingTextFieldValueState by remember {
         mutableStateOf(
@@ -154,7 +115,7 @@ internal fun WildcardScreen(
         if (text != lastCommittedEditingText) {
             delay(TEXT_COMMIT_DEBOUNCE_MS)
             if (text != lastCommittedEditingText) {
-                onTextChange(text)
+                actions.onTextChanged(text)
                 lastCommittedEditingText = text
             }
         }
@@ -163,7 +124,7 @@ internal fun WildcardScreen(
     fun commitEditingText() {
         val text = editingTextFieldValueState.text
         if (text != lastCommittedEditingText) {
-            onTextChange(text)
+            actions.onTextChanged(text)
             lastCommittedEditingText = text
         }
     }
@@ -191,7 +152,7 @@ internal fun WildcardScreen(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(AppTheme.colors.canvas)
             .imePadding()
@@ -210,16 +171,16 @@ internal fun WildcardScreen(
                 fileItems = fileItems,
                 onFileClick = { file ->
                     runWithCommittedText {
-                        onFileClick(file)
+                        actions.onFileClick(file)
                     }
                 },
                 canCreateFile = uiState.canCreateFile,
                 canDelete = uiState.canDelete,
                 onRequestNewFile = {
-                    runWithCommittedText(onRequestNewFile)
+                    runWithCommittedText { actions.onRequestNewFile() }
                 },
                 onRequestDelete = {
-                    runWithCommittedText(onRequestDelete)
+                    runWithCommittedText { actions.onRequestDelete() }
                 }
             )
 
@@ -265,7 +226,7 @@ internal fun WildcardScreen(
                     if (uiState.selectedFile != null && !uiState.isLineSelectionMode) {
                         TextButton(
                             onClick = {
-                                runWithCommittedText(onRequestClassify)
+                                runWithCommittedText { actions.requestClassify() }
                             },
                             enabled = uiState.canRequestClassify
                         ) {
@@ -282,7 +243,7 @@ internal fun WildcardScreen(
                         }
                         TextButton(
                             onClick = {
-                                runWithCommittedText(onEnterLineSelectionMode)
+                                runWithCommittedText { actions.onEnterLineSelectionMode() }
                             },
                             enabled = uiState.canEnterLineSelectionMode
                         ) {
@@ -299,7 +260,7 @@ internal fun WildcardScreen(
                         }
                         IconButton(
                             onClick = {
-                                runWithCommittedText(onRequestRename)
+                                runWithCommittedText { actions.onRequestRename() }
                             },
                             enabled = !uiState.isFileOperationInProgress && !uiState.isClassifying,
                             modifier = Modifier.size(32.dp)
@@ -314,7 +275,7 @@ internal fun WildcardScreen(
                     }
                     if (uiState.isLineSelectionMode) {
                         TextButton(
-                            onClick = onExitLineSelectionMode,
+                            onClick = { actions.onExitLineSelectionMode() },
                             enabled = uiState.canExitLineSelectionMode
                         ) {
                             Text("편집으로", color = AppTheme.colors.textPrimary, fontSize = 12.sp)
@@ -326,7 +287,7 @@ internal fun WildcardScreen(
                     LineSelectionList(
                         lines = uiState.selectableLines,
                         selectedIndices = uiState.selectedLineIndices,
-                        onToggle = onToggleLineSelection,
+                        onToggle = { index -> actions.onToggleLineSelection(index) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -374,28 +335,28 @@ internal fun WildcardScreen(
             if (uiState.isLineSelectionMode) {
                 LineSelectionActionBar(
                     uiState = uiState,
-                    onSelectAll = onSelectAllLines,
-                    onDeselectAll = onDeselectAllLines,
-                    onCompose = onComposeDynamicPrompt,
-                    onExit = onExitLineSelectionMode
+                    onSelectAll = { actions.onSelectAllLines() },
+                    onDeselectAll = { actions.onDeselectAllLines() },
+                    onCompose = { actions.onComposeDynamicPrompt() },
+                    onExit = { actions.onExitLineSelectionMode() }
                 )
             } else {
                 ActionButtonsBar(
                     uiState = uiState,
                     onSave = {
-                        runWithCommittedText(onSave)
+                        runWithCommittedText { actions.onSaveFile() }
                     },
                     onPaste = {
-                        runWithCommittedText(onPaste)
+                        runWithCommittedText { actions.onPaste() }
                     },
                     onPasteBelow = {
-                        runWithCommittedText(onPasteBelow)
+                        runWithCommittedText { actions.onPasteBelow() }
                     },
                     onCopy = {
-                        runWithCommittedText(onCopy)
+                        runWithCommittedText { actions.onCopy() }
                     },
                     onUndo = {
-                        runWithCommittedText(onUndo)
+                        runWithCommittedText { actions.onUndo() }
                     }
                 )
             }
@@ -406,10 +367,10 @@ internal fun WildcardScreen(
                     environmentStatus = environmentStatus,
                     setupInfo = environmentSetupInfo,
                     onRefresh = {
-                        runWithCommittedText(onRefresh)
+                        runWithCommittedText { actions.onRefresh() }
                     },
                     onSelectFolder = {
-                        runWithCommittedText(onSelectFolder)
+                        runWithCommittedText { actions.onSelectFolder() }
                     }
                 )
             }
@@ -434,32 +395,157 @@ internal fun WildcardScreen(
 
     val activeDialog = deriveActiveWildcardDialog(uiState)
     val dialogActions = WildcardDialogActions(
-        onNewFileNameChange = onNewFileNameChange,
-        onCreateNewFile = { runWithCommittedText(onCreateNewFile) },
-        onDismissNewFile = onDismissNewFile,
-        onRenameFileNameChange = onRenameFileNameChange,
-        onConfirmRename = { runWithCommittedText(onConfirmRename) },
-        onDismissRename = onDismissRename,
-        onConfirmDelete = { runWithCommittedText(onConfirmDelete) },
-        onDismissDelete = onDismissDelete,
-        onConfirmPendingSave = { runWithCommittedText(onConfirmPendingSave) },
-        onConfirmPendingDiscard = onConfirmPendingDiscard,
-        onCancelPending = onCancelPending,
-        onClassifyCriteriaChange = onClassifyCriteriaChange,
-        onClassifyProviderSelected = onClassifyProviderSelected,
-        onClassifyModelSelected = onClassifyModelSelected,
-        onRunClassify = { runWithCommittedText(onRunClassify) },
-        onDismissClassifyCriteria = onDismissClassifyCriteria,
-        onClassifyFileNameChange = onClassifyFileNameChange,
-        onToggleClassifyFileNameEdit = onToggleClassifyFileNameEdit,
-        onSaveClassifyResult = onSaveClassifyResult,
-        onDismissClassifyPreview = onDismissClassifyPreview,
-        onConfirmClassifyOverwrite = onConfirmClassifyOverwrite,
-        onDismissClassifyOverwrite = onDismissClassifyOverwrite
+        onNewFileNameChange = { actions.onNewFileNameChange(it) },
+        onCreateNewFile = { runWithCommittedText { actions.onCreateNewFile() } },
+        onDismissNewFile = { actions.onDismissNewFile() },
+        onRenameFileNameChange = { actions.onRenameFileNameChange(it) },
+        onConfirmRename = { runWithCommittedText { actions.onConfirmRename() } },
+        onDismissRename = { actions.onDismissRename() },
+        onConfirmDelete = { runWithCommittedText { actions.onConfirmDelete() } },
+        onDismissDelete = { actions.onDismissDelete() },
+        onConfirmPendingSave = { runWithCommittedText { actions.onConfirmPendingSave() } },
+        onConfirmPendingDiscard = { actions.onConfirmPendingDiscard() },
+        onCancelPending = { actions.onCancelPending() },
+        onClassifyCriteriaChange = { actions.onClassifyCriteriaChange(it) },
+        onClassifyProviderSelected = { actions.onClassifyProviderSelected(it) },
+        onClassifyModelSelected = { actions.onClassifyModelSelected(it) },
+        onRunClassify = { runWithCommittedText { actions.runClassify() } },
+        onDismissClassifyCriteria = { actions.dismissClassifyCriteriaDialog() },
+        onClassifyFileNameChange = { index, name -> actions.onClassifyFileNameChange(index, name) },
+        onToggleClassifyFileNameEdit = { actions.onToggleClassifyFileNameEdit(it) },
+        onSaveClassifyResult = { actions.saveClassifyResult() },
+        onDismissClassifyPreview = { actions.dismissClassifyPreview() },
+        onConfirmClassifyOverwrite = { actions.confirmClassifyOverwrite() },
+        onDismissClassifyOverwrite = { actions.dismissClassifyOverwrite() }
     )
     WildcardDialogHost(
         activeDialog = activeDialog,
         actions = dialogActions
+    )
+}
+
+/**
+ * 개별 콜백 파라미터를 받는 기존 호출처(하위 호환성)를 지원하기 위한 오버로딩 함수입니다.
+ * 내부적으로 모든 이벤트를 [WildcardScreenAction]으로 변환하여 단일 [onAction] 핸들러로 위임합니다.
+ */
+@Composable
+internal fun WildcardScreen(
+    uiState: WildcardUiState,
+    environmentStatus: EnvironmentStatus,
+    environmentSetupInfo: EnvironmentSetupInfo,
+    onClearFocus: () -> Unit,
+    onRefresh: () -> Unit,
+    onSelectFolder: () -> Unit,
+    onFileClick: (WildcardTextFile) -> Unit,
+    onTextChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onRequestNewFile: () -> Unit,
+    onNewFileNameChange: (String) -> Unit,
+    onCreateNewFile: () -> Unit,
+    onDismissNewFile: () -> Unit,
+    onRequestDelete: () -> Unit,
+    onConfirmDelete: () -> Unit,
+    onDismissDelete: () -> Unit,
+    onRequestRename: () -> Unit,
+    onRenameFileNameChange: (String) -> Unit,
+    onConfirmRename: () -> Unit,
+    onDismissRename: () -> Unit,
+    onPaste: () -> Unit,
+    onPasteBelow: () -> Unit,
+    onCopy: () -> Unit,
+    onUndo: () -> Unit,
+    onEnterLineSelectionMode: () -> Unit,
+    onExitLineSelectionMode: () -> Unit,
+    onToggleLineSelection: (Int) -> Unit,
+    onSelectAllLines: () -> Unit,
+    onDeselectAllLines: () -> Unit,
+    onComposeDynamicPrompt: () -> Unit,
+    onRequestClassify: () -> Unit,
+    onClassifyCriteriaChange: (String) -> Unit,
+    onClassifyProviderSelected: (AnalysisProvider) -> Unit,
+    onClassifyModelSelected: (String) -> Unit,
+    onDismissClassifyCriteria: () -> Unit,
+    onRunClassify: () -> Unit,
+    onDismissClassifyPreview: () -> Unit,
+    onClassifyFileNameChange: (Int, String) -> Unit,
+    onToggleClassifyFileNameEdit: (Int) -> Unit,
+    onSaveClassifyResult: () -> Unit,
+    onConfirmClassifyOverwrite: () -> Unit,
+    onDismissClassifyOverwrite: () -> Unit,
+    onConfirmPendingSave: () -> Unit,
+    onConfirmPendingDiscard: () -> Unit,
+    onCancelPending: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val actions = remember(
+        onRefresh, onSelectFolder, onFileClick, onTextChange, onSave,
+        onRequestNewFile, onNewFileNameChange, onCreateNewFile, onDismissNewFile,
+        onRequestDelete, onConfirmDelete, onDismissDelete, onRequestRename,
+        onRenameFileNameChange, onConfirmRename, onDismissRename, onPaste,
+        onPasteBelow, onCopy, onUndo, onEnterLineSelectionMode,
+        onExitLineSelectionMode, onToggleLineSelection, onSelectAllLines,
+        onDeselectAllLines, onComposeDynamicPrompt, onRequestClassify,
+        onClassifyCriteriaChange, onClassifyProviderSelected, onClassifyModelSelected,
+        onDismissClassifyCriteria, onRunClassify, onDismissClassifyPreview,
+        onClassifyFileNameChange, onToggleClassifyFileNameEdit, onSaveClassifyResult,
+        onConfirmClassifyOverwrite, onDismissClassifyOverwrite, onConfirmPendingSave,
+        onConfirmPendingDiscard, onCancelPending
+    ) {
+        object : WildcardScreenActions {
+            override fun onRefresh() = onRefresh()
+            override fun onSelectFolder() = onSelectFolder()
+            override fun onFileClick(file: WildcardTextFile) = onFileClick(file)
+            override fun onRequestNewFile() = onRequestNewFile()
+            override fun onNewFileNameChange(name: String) = onNewFileNameChange(name)
+            override fun onCreateNewFile() = onCreateNewFile()
+            override fun onDismissNewFile() = onDismissNewFile()
+            override fun onRequestRename() = onRequestRename()
+            override fun onRenameFileNameChange(name: String) = onRenameFileNameChange(name)
+            override fun onConfirmRename() = onConfirmRename()
+            override fun onDismissRename() = onDismissRename()
+            override fun onRequestDelete() = onRequestDelete()
+            override fun onConfirmDelete() = onConfirmDelete()
+            override fun onDismissDelete() = onDismissDelete()
+
+            override fun onTextChanged(text: String) = onTextChange(text)
+            override fun onSaveFile() = onSave()
+            override fun onPaste() = onPaste()
+            override fun onPasteBelow() = onPasteBelow()
+            override fun onCopy() = onCopy()
+            override fun onUndo() = onUndo()
+
+            override fun onEnterLineSelectionMode() = onEnterLineSelectionMode()
+            override fun onExitLineSelectionMode() = onExitLineSelectionMode()
+            override fun onToggleLineSelection(index: Int) = onToggleLineSelection(index)
+            override fun onSelectAllLines() = onSelectAllLines()
+            override fun onDeselectAllLines() = onDeselectAllLines()
+            override fun onComposeDynamicPrompt() = onComposeDynamicPrompt()
+
+            override fun onConfirmPendingSave() = onConfirmPendingSave()
+            override fun onConfirmPendingDiscard() = onConfirmPendingDiscard()
+            override fun onCancelPending() = onCancelPending()
+
+            override fun requestClassify() = onRequestClassify()
+            override fun onClassifyCriteriaChange(value: String) = onClassifyCriteriaChange(value)
+            override fun onClassifyProviderSelected(provider: AnalysisProvider) = onClassifyProviderSelected(provider)
+            override fun onClassifyModelSelected(modelId: String) = onClassifyModelSelected(modelId)
+            override fun dismissClassifyCriteriaDialog() = onDismissClassifyCriteria()
+            override fun runClassify() = onRunClassify()
+            override fun dismissClassifyPreview() = onDismissClassifyPreview()
+            override fun onClassifyFileNameChange(index: Int, value: String) = onClassifyFileNameChange(index, value)
+            override fun onToggleClassifyFileNameEdit(index: Int) = onToggleClassifyFileNameEdit(index)
+            override fun saveClassifyResult(overwrite: Boolean) = onSaveClassifyResult()
+            override fun confirmClassifyOverwrite() = onConfirmClassifyOverwrite()
+            override fun dismissClassifyOverwrite() = onDismissClassifyOverwrite()
+        }
+    }
+    WildcardScreen(
+        uiState = uiState,
+        environmentStatus = environmentStatus,
+        environmentSetupInfo = environmentSetupInfo,
+        actions = actions,
+        onClearFocus = onClearFocus,
+        modifier = modifier
     )
 }
 
@@ -1093,48 +1179,7 @@ private fun WildcardScreenPreview() {
             environmentSetupInfo = EnvironmentSetupInfo(
                 wildcardDirectoryPath = "content://wildcard"
             ),
-            onClearFocus = {},
-            onRefresh = {},
-            onSelectFolder = {},
-            onFileClick = {},
-            onTextChange = {},
-            onSave = {},
-            onRequestNewFile = {},
-            onNewFileNameChange = {},
-            onCreateNewFile = {},
-            onDismissNewFile = {},
-            onRequestDelete = {},
-            onConfirmDelete = {},
-            onDismissDelete = {},
-            onRequestRename = {},
-            onRenameFileNameChange = {},
-            onConfirmRename = {},
-            onDismissRename = {},
-            onPaste = {},
-            onPasteBelow = {},
-            onCopy = {},
-            onUndo = {},
-            onEnterLineSelectionMode = {},
-            onExitLineSelectionMode = {},
-            onToggleLineSelection = {},
-            onSelectAllLines = {},
-            onDeselectAllLines = {},
-            onComposeDynamicPrompt = {},
-            onRequestClassify = {},
-            onClassifyCriteriaChange = {},
-            onClassifyProviderSelected = {},
-            onClassifyModelSelected = {},
-            onDismissClassifyCriteria = {},
-            onRunClassify = {},
-            onDismissClassifyPreview = {},
-            onClassifyFileNameChange = { _, _ -> },
-            onToggleClassifyFileNameEdit = {},
-            onSaveClassifyResult = {},
-            onConfirmClassifyOverwrite = {},
-            onDismissClassifyOverwrite = {},
-            onConfirmPendingSave = {},
-            onConfirmPendingDiscard = {},
-            onCancelPending = {}
+            actions = WildcardScreenActions.Empty
         )
     }
 }

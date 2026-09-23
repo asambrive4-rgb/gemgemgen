@@ -5,6 +5,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName
+import com.example.gemgemgen.wildcard.domain.WildcardClassifyPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
 import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer
@@ -130,12 +131,14 @@ data class WildcardUiState(
         get() = isLineSelectionMode && selectedLineIndices.isNotEmpty() && !isFileOperationInProgress
 
     val canRequestClassify: Boolean
-        get() = canModifyFiles &&
-            selectedFile != null &&
-            selectableLines.isNotEmpty() &&
-            !isFileOperationInProgress &&
-            !isLineSelectionMode &&
-            !classifyBusy
+        get() = WildcardClassifyPolicy.canRequestClassify(
+            canModifyFiles = canModifyFiles,
+            hasSelectedFile = selectedFile != null,
+            hasSelectableLines = selectableLines.isNotEmpty(),
+            isFileOperationInProgress = isFileOperationInProgress,
+            isLineSelectionMode = isLineSelectionMode,
+            isClassifyBusy = classifyBusy
+        )
 
     /** 기준 입력 다이얼로그 또는 미리보기에서 전체 재분류 가능 */
     val canRunClassify: Boolean

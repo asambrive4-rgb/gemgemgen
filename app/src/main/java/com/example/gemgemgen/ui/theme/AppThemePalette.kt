@@ -91,7 +91,11 @@ data class AppColors(
     val shadowDark: Color,
     val insetBorder: Color,
     val inputBackground: Color = Color.White,
-    val inputBorder: Color
+    val inputBorder: Color,
+    val snippetPrimary: Color = accent,
+    val snippetBorder: Color = accent.copy(alpha = 0.55f),
+    val snippetBackground: Color = card,
+    val snippetShadow: Color = accent.copy(alpha = 0.25f)
 )
 
 val CoralCreamColors = AppColors(
@@ -108,7 +112,10 @@ val CoralCreamColors = AppColors(
     shadowDark = Color(0xFFDCD4C7),
     insetBorder = Color(0xFFE4DAD0),
     inputBackground = Color(0xFFFFFFFF),
-    inputBorder = Color(0xFFC4B6A3)
+    inputBorder = Color(0xFFC4B6A3),
+    snippetPrimary = Color(0xFF1B7A5A),
+    snippetBorder = Color(0xFF1B7A5A).copy(alpha = 0.45f),
+    snippetShadow = Color(0xFF1B7A5A).copy(alpha = 0.20f)
 )
 
 val SageMatchaColors = AppColors(
@@ -125,7 +132,10 @@ val SageMatchaColors = AppColors(
     shadowDark = Color(0xFFC5D3C2),
     insetBorder = Color(0xFFD3DFD1),
     inputBackground = Color(0xFFFFFFFF),
-    inputBorder = Color(0xFF9AB197)
+    inputBorder = Color(0xFF9AB197),
+    snippetPrimary = Color(0xFF2E5EB8),
+    snippetBorder = Color(0xFF2E5EB8).copy(alpha = 0.45f),
+    snippetShadow = Color(0xFF2E5EB8).copy(alpha = 0.20f)
 )
 
 val PureIndigoColors = AppColors(
@@ -142,7 +152,10 @@ val PureIndigoColors = AppColors(
     shadowDark = Color(0xFFCCD9E8),
     insetBorder = Color(0xFFD5E3F2),
     inputBackground = Color(0xFFFFFFFF),
-    inputBorder = Color(0xFF9EB7CF)
+    inputBorder = Color(0xFF9EB7CF),
+    snippetPrimary = Color(0xFFD9532F),
+    snippetBorder = Color(0xFFD9532F).copy(alpha = 0.45f),
+    snippetShadow = Color(0xFFD9532F).copy(alpha = 0.20f)
 )
 
 // --- 다크모드 팔레트 (검은색 배경 유지 + 어두운 버튼) ---
@@ -161,7 +174,10 @@ val CoralCreamDarkColors = AppColors(
     shadowDark = Color(0x66000000),
     insetBorder = Color(0xFF202227),
     inputBackground = Color(0xFF18191D),
-    inputBorder = Color(0xFF3D3230)
+    inputBorder = Color(0xFF3D3230),
+    snippetPrimary = Color(0xFF34D399),
+    snippetBorder = Color(0xFF205E44),
+    snippetShadow = Color(0x40000000)
 )
 
 val SageMatchaDarkColors = AppColors(
@@ -178,7 +194,10 @@ val SageMatchaDarkColors = AppColors(
     shadowDark = Color(0x66000000),
     insetBorder = Color(0xFF202227),
     inputBackground = Color(0xFF18191D),
-    inputBorder = Color(0xFF2D3830)
+    inputBorder = Color(0xFF2D3830),
+    snippetPrimary = Color(0xFF82AAFF),
+    snippetBorder = Color(0xFF435B88),
+    snippetShadow = Color(0x40000000)
 )
 
 val PureIndigoDarkColors = AppColors(
@@ -195,7 +214,10 @@ val PureIndigoDarkColors = AppColors(
     shadowDark = Color(0x66000000),
     insetBorder = Color(0xFF202227),
     inputBackground = Color(0xFF18191D),
-    inputBorder = Color(0xFF2D3545)
+    inputBorder = Color(0xFF2D3545),
+    snippetPrimary = Color(0xFFFF8A65),
+    snippetBorder = Color(0xFF7A3B2B),
+    snippetShadow = Color(0x40000000)
 )
 
 fun AppThemePalette.toAppColors(isDark: Boolean = false): AppColors {

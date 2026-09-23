@@ -1,4 +1,4 @@
-// 역할: 무한 리셋 방지 임계값 가드, 전송 확인 루프 중복 탐색 차단 및 2중 텍스트 주입으로 프롬프트를 안전하게 전송하는 베이스 자동화 클래스
+// 역할: 전송 플로우 실패 시 안전망 에러 상태 전파, 무한 리셋 방지 임계값 가드 및 2중 텍스트 주입으로 프롬프트를 안전하게 전송하는 베이스 자동화 클래스
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -54,6 +54,8 @@ internal abstract class AccessibilityPromptAutomation(
                     withContext(mainDispatcher) {
                         onDone()
                     }
+                } else if (lastReportedState !is AutomationRunState.Failure) {
+                    notifyState(AutomationRunState.Failure("$targetAppName 자동화 실행 단계 완료 실패"))
                 }
             } catch (_: CancellationException) {
                 // 정상 취소
@@ -91,6 +93,8 @@ internal abstract class AccessibilityPromptAutomation(
                     withContext(mainDispatcher) {
                         onDone()
                     }
+                } else if (lastReportedState !is AutomationRunState.Failure) {
+                    notifyState(AutomationRunState.Failure("$targetAppName 자동화 실행 단계 완료 실패"))
                 }
             } catch (_: CancellationException) {
                 withContext(mainDispatcher) {

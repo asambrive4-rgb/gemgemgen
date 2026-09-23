@@ -1,14 +1,11 @@
 // 역할: 자동화 메인 화면의 프롬프트 편집, 실행 상태, 추천 후보, 메모리 정리 예약, 다이얼로그 가시성 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
+import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
-import com.example.gemgemgen.automation.domain.AutomationStartPolicy
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
-import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
-import com.example.gemgemgen.automation.domain.SelfAppControlPolicy
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
-import com.example.gemgemgen.automation.domain.VariationStartPolicy
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
@@ -51,8 +48,10 @@ data class AutomationUiState(
     val activeSuggestionCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
     /** 상용구(텍스트 대치) 관리 다이얼로그 표시 여부 */
     val showPromptSnippetDialog: Boolean = false,
-    val showPromptHistory: Boolean = false,
-    val promptHistoryItems: List<com.example.gemgemgen.automation.domain.PromptHistoryItem> = emptyList(),
+    val isSearchActive: Boolean = false,
+    val searchQuery: String = "",
+    val searchMatches: List<com.example.gemgemgen.ui.TextHighlightRange> = emptyList(),
+    val activeSearchMatchIndex: Int = -1,
     val selectedThemePalette: com.example.gemgemgen.ui.theme.AppThemePalette = com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
     val selectedThemeMode: com.example.gemgemgen.ui.theme.AppThemeMode = com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT,
     val promptInstructionConfig: com.example.gemgemgen.automation.domain.PromptInstructionConfig =
@@ -72,10 +71,14 @@ data class AutomationUiState(
         get() = automationState is AutomationRunState.Running
 
     val hasRunRequirements: Boolean
-        get() = environmentStatus.isReadyFor(selectedTargetApp) && hasPromptTemplate
+        get() = AutomationExecutionPolicy.hasRunRequirements(
+            environmentStatus = environmentStatus,
+            targetApp = selectedTargetApp,
+            promptTemplate = promptTemplate
+        )
 
     val canRun: Boolean
-        get() = AutomationStartPolicy.canRun(
+        get() = AutomationExecutionPolicy.canRun(
             mode = automationMode,
             environmentStatus = environmentStatus,
             targetApp = selectedTargetApp,
@@ -90,7 +93,7 @@ data class AutomationUiState(
         get() = variationAutomationState is AutomationRunState.Running
 
     val canRunVariation: Boolean
-        get() = VariationStartPolicy.canRun(
+        get() = AutomationExecutionPolicy.canRunVariation(
             mode = automationMode,
             environmentStatus = environmentStatus,
             isRunning = isRunning,
@@ -99,7 +102,7 @@ data class AutomationUiState(
         )
 
     val canInteractWithVariation: Boolean
-        get() = VariationStartPolicy.canInteract(
+        get() = AutomationExecutionPolicy.canInteractWithVariation(
             mode = automationMode,
             isRunning = isRunning,
             isMaintenanceBusy = isMaintenanceBusy,
@@ -107,7 +110,7 @@ data class AutomationUiState(
         )
 
     val variationUnavailableReason: String?
-        get() = VariationStartPolicy.unavailableReason(
+        get() = AutomationExecutionPolicy.variationUnavailableReason(
             mode = automationMode,
             environmentStatus = environmentStatus,
             isRunning = isRunning,
@@ -122,7 +125,7 @@ data class AutomationUiState(
         get() = maintenanceState.message
 
     val canCloseGemini: Boolean
-        get() = GeminiAppControlPolicy.canClose(
+        get() = AutomationExecutionPolicy.canCloseGemini(
             isGeminiInstalled = environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning || isVariationRunning,
@@ -130,18 +133,19 @@ data class AutomationUiState(
         )
 
     val canCloseSelfApp: Boolean
-        get() = SelfAppControlPolicy.canClose(
+        get() = AutomationExecutionPolicy.canCloseSelfApp(
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning || isVariationRunning,
             isClosingInProgress = isMaintenanceBusy
         )
 
     val canCleanMemory: Boolean
-        get() = when (automationMode) {
-            AutomationMode.SENDER -> remoteAutomationStatus.canSend && !isMaintenanceBusy
-            AutomationMode.RECEIVER -> false
-            AutomationMode.NORMAL -> environmentStatus.isAccessibilityServiceEnabled && !isMaintenanceBusy
-        }
+        get() = AutomationExecutionPolicy.canCleanMemory(
+            mode = automationMode,
+            environmentStatus = environmentStatus,
+            remoteAutomationStatus = remoteAutomationStatus,
+            isMaintenanceBusy = isMaintenanceBusy
+        )
 }
 
 data class MaintenanceState(

@@ -1,4 +1,4 @@
-// 역할: 프롬프트 원본 입력, 문단 단위 편집 및 와일드카드/상용구 자동완성 칩을 제공하는 에디터 섹션 UI입니다.
+// 역할: 프롬프트 원본 입력, 문구 찾기(검색), 문단 단위 편집 및 와일드카드/상용구 자동완성을 제공하는 에디터 섹션 UI입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -48,16 +48,23 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -131,7 +138,15 @@ internal fun PromptEditorSection(
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
     onPasteFromClipboard: () -> Unit,
-    onOpenPromptHistory: () -> Unit = {},
+    isSearchActive: Boolean = false,
+    searchQuery: String = "",
+    searchMatches: List<TextHighlightRange> = emptyList(),
+    activeSearchMatchIndex: Int = -1,
+    onToggleSearch: () -> Unit = {},
+    onSearchQueryChange: (String) -> Unit = {},
+    onNavigateSearchNext: () -> Unit = {},
+    onNavigateSearchPrevious: () -> Unit = {},
+    onCloseSearch: () -> Unit = {},
     onOpenPromptSnippetDialog: () -> Unit = {},
     onOpenGeminiAccountPicker: () -> Unit = {},
     showVariationButton: Boolean = true,
@@ -220,19 +235,35 @@ internal fun PromptEditorSection(
                 }
 
                 IconButton(
-                    onClick = onOpenPromptHistory,
+                    onClick = onToggleSearch,
                     modifier = Modifier
                         .size(36.dp)
-                        .semantics { contentDescription = "프롬프트 기록" }
+                        .semantics { contentDescription = "문구 찾기" }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.History,
+                        imageVector = Icons.Default.Search,
                         contentDescription = null,
-                        tint = AppTheme.colors.textSecondary,
+                        tint = if (isSearchActive) AppTheme.colors.accent else AppTheme.colors.textSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
             }
+        }
+
+        AnimatedVisibility(
+            visible = isSearchActive,
+            enter = fadeIn(tween(150)) + expandVertically(tween(150)),
+            exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
+        ) {
+            PromptSearchBar(
+                query = searchQuery,
+                onQueryChange = onSearchQueryChange,
+                matchCount = searchMatches.size,
+                currentMatchIndex = activeSearchMatchIndex,
+                onNavigateNext = onNavigateSearchNext,
+                onNavigatePrevious = onNavigateSearchPrevious,
+                onClose = onCloseSearch
+            )
         }
 
         AnimatedVisibility(
@@ -248,7 +279,7 @@ internal fun PromptEditorSection(
         }
 
         AnimatedVisibility(
-            visible = showWildcardSuggestions && displayedCandidates.isNotEmpty(),
+            visible = showWildcardSuggestions && effectiveCandidates.isNotEmpty(),
             enter = fadeIn(tween(150)) + expandVertically(tween(150)),
             exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
         ) {
@@ -269,6 +300,8 @@ internal fun PromptEditorSection(
             paragraphSelectionEnabled = isParagraphSelectionMode,
             highlightRange = selectedParagraphRange?.toHighlightRange(),
             selectedParagraphColor = AppTheme.colors.primary.copy(alpha = 0.22f),
+            searchHighlightRanges = searchMatches,
+            activeSearchMatchIndex = activeSearchMatchIndex,
             supportingText = paragraphSelectionMessage,
             onParagraphOffsetSelected = onParagraphOffsetSelected,
             onDeleteSelectedParagraph = onDeleteSelectedParagraph,
@@ -713,17 +746,17 @@ internal fun PromptSuggestionBar(
             val isSnippet = candidate.type == com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate.Type.SNIPPET
             val shape = RoundedCornerShape(10.dp)
             val borderColor = if (isSnippet) {
-                AppTheme.colors.accent.copy(alpha = 0.55f)
+                AppTheme.colors.snippetBorder
             } else {
                 AppTheme.colors.primary.copy(alpha = 0.4f)
             }
             val textColor = if (isSnippet) {
-                AppTheme.colors.accent
+                AppTheme.colors.snippetPrimary
             } else {
                 AppTheme.colors.primary
             }
             val shadowColor = if (isSnippet) {
-                AppTheme.colors.accent.copy(alpha = 0.25f)
+                AppTheme.colors.snippetShadow
             } else {
                 AppTheme.colors.primary.copy(alpha = 0.2f)
             }
@@ -736,7 +769,7 @@ internal fun PromptSuggestionBar(
             Surface(
                 onClick = { onSuggestionClick(candidate) },
                 shape = shape,
-                color = AppTheme.colors.card,
+                color = if (isSnippet) AppTheme.colors.snippetBackground else AppTheme.colors.card,
                 border = BorderStroke(1.5.dp, borderColor),
                 modifier = Modifier
                     .shadow(
@@ -749,13 +782,26 @@ internal fun PromptSuggestionBar(
                         contentDescription = description
                     }
             ) {
-                Text(
-                    text = candidate.displayText,
-                    color = textColor,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                ) {
+                    if (isSnippet) {
+                        Icon(
+                            imageVector = Icons.Default.Bookmarks,
+                            contentDescription = null,
+                            tint = textColor,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    Text(
+                        text = candidate.displayText,
+                        color = textColor,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         }
     }
@@ -1144,4 +1190,135 @@ private val SegmentIcon: ImageVector by lazy {
         horizontalLineTo(9f)
         close()
     }.build()
+}
+
+@Composable
+internal fun PromptSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    matchCount: Int,
+    currentMatchIndex: Int,
+    onNavigateNext: () -> Unit,
+    onNavigatePrevious: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = AppTheme.colors.card,
+        border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
+        shadowElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = AppTheme.colors.accent,
+                modifier = Modifier.size(18.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = "문구 찾기...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.colors.textSecondary.copy(alpha = 0.6f)
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = AppTheme.colors.textPrimary
+                    ),
+                    cursorBrush = SolidColor(AppTheme.colors.primary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { onNavigateNext() }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            if (query.isNotEmpty()) {
+                IconButton(
+                    onClick = { onQueryChange("") },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "검색어 지우기",
+                        tint = AppTheme.colors.textSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            val countText = if (query.isEmpty() || matchCount == 0) {
+                "0/0"
+            } else {
+                "${currentMatchIndex + 1}/$matchCount"
+            }
+            Text(
+                text = countText,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (matchCount > 0) AppTheme.colors.primary else AppTheme.colors.textSecondary,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                IconButton(
+                    onClick = onNavigatePrevious,
+                    enabled = matchCount > 0,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowUp,
+                        contentDescription = "이전 일치 항목",
+                        tint = if (matchCount > 0) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.3f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = onNavigateNext,
+                    enabled = matchCount > 0,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "다음 일치 항목",
+                        tint = if (matchCount > 0) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.3f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "찾기 닫기",
+                    tint = AppTheme.colors.textSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
 }

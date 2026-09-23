@@ -1,4 +1,4 @@
-// 역할: GPU 레이어 캐싱과 스크롤, 자리표시자 및 텍스트 하이라이트 처리를 지원하는 공용 다중 행 텍스트 입력창 UI를 제공합니다.
+// 역할: GPU 레이어 캐싱과 스크롤, 자리표시자, 문단 선택 및 문구 검색 하이라이트 처리를 지원하는 공용 다중 행 텍스트 입력창 UI를 제공합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -65,6 +66,10 @@ fun AppMultilineTextField(
     paragraphSelectionEnabled: Boolean = false,
     highlightRange: TextHighlightRange? = null,
     selectedParagraphColor: Color = Color.Transparent,
+    searchHighlightRanges: List<TextHighlightRange> = emptyList(),
+    activeSearchMatchIndex: Int = -1,
+    searchHighlightColor: Color = Color(0x66FFEB3B),
+    activeSearchHighlightColor: Color = Color(0xFFFF9800),
     supportingText: String = "",
     onParagraphOffsetSelected: (Int) -> Unit = {},
     onDeleteSelectedParagraph: () -> Unit = {},
@@ -74,6 +79,7 @@ fun AppMultilineTextField(
     var replaceRequestId by remember { mutableIntStateOf(0) }
     var replacementText by remember { mutableStateOf("") }
     var paragraphTapRequestId by remember { mutableIntStateOf(0) }
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     // Host가 매 리컴포즈마다 새 람다를 넘기더라도 debounce 구독이 재시작되지 않게 한다.
     val onValueChangeLatest by rememberUpdatedState(onValueChange)
@@ -157,15 +163,64 @@ fun AppMultilineTextField(
             }
         }
     }
-    val paragraphHighlight = remember(highlightRange, selectedParagraphColor) {
-        highlightRange?.let { range ->
+    LaunchedEffect(activeSearchMatchIndex, searchHighlightRanges, textLayoutResult) {
+        if (activeSearchMatchIndex in searchHighlightRanges.indices) {
+            val match = searchHighlightRanges[activeSearchMatchIndex]
+            val layout = textLayoutResult
+            if (layout != null && match.start <= layout.layoutInput.text.length) {
+                val lineIndex = layout.getLineForOffset(match.start.coerceIn(0, layout.layoutInput.text.length))
+                val lineTop = layout.getLineTop(lineIndex)
+                val lineHeight = layout.getLineBottom(lineIndex) - lineTop
+                // 사용자가 요청한 '상단 1줄 여백': lineTop에서 1줄 높이만큼 뺀 위치로 스크롤하여
+                // 주황색 글자가 있는 줄이 상단에서 딱 1줄 여유를 두고 바로 아래에 위치하도록 함
+                val targetScroll = (lineTop - lineHeight).toInt().coerceAtLeast(0)
+                scrollState.animateScrollTo(targetScroll.coerceIn(0, scrollState.maxValue))
+            } else {
+                val text = state.text.toString()
+                if (text.isNotEmpty() && scrollState.maxValue > 0) {
+                    val totalLines = text.count { it == '\n' } + 1
+                    val matchLine = text.substring(0, match.start.coerceIn(0, text.length)).count { it == '\n' }
+                    val targetScroll = (((matchLine - 1).coerceAtLeast(0).toFloat() / totalLines.coerceAtLeast(1)) * scrollState.maxValue).toInt()
+                    scrollState.animateScrollTo(targetScroll.coerceIn(0, scrollState.maxValue))
+                }
+            }
+        }
+    }
+
+    val textHighlightTransformation = remember(
+        highlightRange,
+        selectedParagraphColor,
+        searchHighlightRanges,
+        activeSearchMatchIndex,
+        searchHighlightColor,
+        activeSearchHighlightColor
+    ) {
+        if (highlightRange == null && searchHighlightRanges.isEmpty()) {
+            null
+        } else {
             OutputTransformation {
-                if (range.endExclusive <= length) {
-                    addStyle(
-                        spanStyle = SpanStyle(background = selectedParagraphColor),
-                        start = range.start,
-                        end = range.endExclusive
-                    )
+                highlightRange?.let { range ->
+                    if (range.endExclusive <= length) {
+                        addStyle(
+                            spanStyle = SpanStyle(background = selectedParagraphColor),
+                            start = range.start,
+                            end = range.endExclusive
+                        )
+                    }
+                }
+                searchHighlightRanges.forEachIndexed { index, range ->
+                    if (range.endExclusive <= length) {
+                        val color = if (index == activeSearchMatchIndex) {
+                            activeSearchHighlightColor
+                        } else {
+                            searchHighlightColor
+                        }
+                        addStyle(
+                            spanStyle = SpanStyle(background = color),
+                            start = range.start,
+                            end = range.endExclusive
+                        )
+                    }
                 }
             }
         }
@@ -206,7 +261,8 @@ fun AppMultilineTextField(
             null
         },
         inputTransformation = deleteOnlyTransformation,
-        outputTransformation = paragraphHighlight,
+        outputTransformation = textHighlightTransformation,
+        onTextLayout = { getResult -> textLayoutResult = getResult() },
         lineLimits = TextFieldLineLimits.MultiLine(
             minHeightInLines = minLines,
             maxHeightInLines = maxLines

@@ -7,6 +7,7 @@ import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.AnalysisException
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName
+import com.example.gemgemgen.wildcard.domain.WildcardClassifyPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
@@ -34,39 +35,39 @@ data class WildcardClassifyUiState(
     val isBusy: Boolean
         get() = isClassifying || classifyPreview != null || showClassifyCriteriaDialog
 
-    fun canRunClassify(isFileOperationInProgress: Boolean): Boolean {
-        return classifyCriteria.isNotBlank() &&
-            !isClassifying &&
-            !isFileOperationInProgress &&
-            (showClassifyCriteriaDialog || classifyPreview != null)
-    }
+    fun canRunClassify(isFileOperationInProgress: Boolean): Boolean =
+        WildcardClassifyPolicy.canRunClassify(
+            criteria = classifyCriteria,
+            isClassifying = isClassifying,
+            isFileOperationInProgress = isFileOperationInProgress,
+            showCriteriaDialog = showClassifyCriteriaDialog,
+            hasPreview = classifyPreview != null
+        )
 
-    fun canSaveClassifyResult(canModifyFiles: Boolean, isFileOperationInProgress: Boolean): Boolean {
-        return classifyPreview != null &&
-            classifySaveEntries.isNotEmpty() &&
-            classifySaveEntries.all {
-                WildcardClassifyFileName.normalizeUserInput(it.fileNameInput) != null
-            } &&
-            canModifyFiles &&
-            !isClassifying &&
-            !isFileOperationInProgress &&
-            classifyOverwriteConflicts.isEmpty()
-    }
+    fun canSaveClassifyResult(canModifyFiles: Boolean, isFileOperationInProgress: Boolean): Boolean =
+        WildcardClassifyPolicy.canSaveClassifyResult(
+            hasPreview = classifyPreview != null,
+            saveEntries = classifySaveEntries,
+            canModifyFiles = canModifyFiles,
+            isClassifying = isClassifying,
+            isFileOperationInProgress = isFileOperationInProgress,
+            hasOverwriteConflicts = classifyOverwriteConflicts.isNotEmpty()
+        )
 }
 
 interface WildcardClassifyActions {
-    fun requestClassify()
-    fun onClassifyCriteriaChange(value: String)
-    fun onClassifyProviderSelected(provider: AnalysisProvider)
-    fun onClassifyModelSelected(modelId: String)
-    fun dismissClassifyCriteriaDialog()
-    fun runClassify()
-    fun dismissClassifyPreview()
-    fun onClassifyFileNameChange(index: Int, value: String)
-    fun onToggleClassifyFileNameEdit(index: Int)
-    fun saveClassifyResult(overwrite: Boolean = false)
-    fun confirmClassifyOverwrite()
-    fun dismissClassifyOverwrite()
+    fun requestClassify() {}
+    fun onClassifyCriteriaChange(value: String) {}
+    fun onClassifyProviderSelected(provider: AnalysisProvider) {}
+    fun onClassifyModelSelected(modelId: String) {}
+    fun dismissClassifyCriteriaDialog() {}
+    fun runClassify() {}
+    fun dismissClassifyPreview() {}
+    fun onClassifyFileNameChange(index: Int, value: String) {}
+    fun onToggleClassifyFileNameEdit(index: Int) {}
+    fun saveClassifyResult(overwrite: Boolean = false) {}
+    fun confirmClassifyOverwrite() {}
+    fun dismissClassifyOverwrite() {}
 }
 
 class WildcardClassifyCoordinator(

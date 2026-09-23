@@ -199,12 +199,12 @@ class WildcardTokenAutocompleteTest {
         assertEquals(2, result.size)
         assertEquals("화풍", result[0].name)
         assertEquals("oil painting style", result[0].token)
-        assertEquals("📋 화풍", result[0].displayText)
+        assertEquals("화풍", result[0].displayText)
         assertEquals(Candidate.Type.SNIPPET, result[0].type)
 
         assertEquals("고화질", result[1].name)
         assertEquals("8k masterpiece, extremely detailed", result[1].token)
-        assertEquals("📋 고화질", result[1].displayText)
+        assertEquals("고화질", result[1].displayText)
         assertEquals(Candidate.Type.SNIPPET, result[1].type)
     }
 
@@ -213,7 +213,7 @@ class WildcardTokenAutocompleteTest {
         val combinedCandidates = listOf(
             Candidate(name = "장소", token = "__장소__", displayText = "__장소__", type = Candidate.Type.WILDCARD),
             Candidate(name = "장면", token = "__장면__", displayText = "__장면__", type = Candidate.Type.WILDCARD),
-            Candidate(name = "장편스토리", token = "A long story about...", displayText = "📋 장편스토리", type = Candidate.Type.SNIPPET)
+            Candidate(name = "장편스토리", token = "A long story about...", displayText = "장편스토리", type = Candidate.Type.SNIPPET)
         )
 
         val suggestions = WildcardTokenAutocomplete.suggestCandidates(
@@ -231,7 +231,7 @@ class WildcardTokenAutocompleteTest {
         assertEquals(Candidate.Type.WILDCARD, suggestions[1].type)
 
         assertEquals("장편스토리", suggestions[2].name)
-        assertEquals("📋 장편스토리", suggestions[2].displayText)
+        assertEquals("장편스토리", suggestions[2].displayText)
         assertEquals("A long story about...", suggestions[2].token)
         assertEquals(Candidate.Type.SNIPPET, suggestions[2].type)
     }
@@ -242,7 +242,7 @@ class WildcardTokenAutocompleteTest {
         val snippetCandidate = Candidate(
             name = "고화질",
             token = "8k masterpiece, photorealistic, best quality",
-            displayText = "📋 고화질",
+            displayText = "고화질",
             type = Candidate.Type.SNIPPET
         )
 

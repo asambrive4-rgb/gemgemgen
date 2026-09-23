@@ -1,4 +1,4 @@
-// 역할: 최초 실행 시 사이드바 정규 세션 확보 및 툴바 기반 반복/오류 탈출로 Gemini 앱 새 대화 전환 및 프롬프트를 자동 전송합니다.
+// 역할: 사이드바/툴바 단계별 실패 감지 및 탈출 경로를 제공하여 Gemini 앱 새 대화 전환 및 프롬프트를 자동 전송합니다.
 package com.example.gemgemgen.automation.android
 
 import android.view.accessibility.AccessibilityNodeInfo
@@ -113,7 +113,11 @@ internal class GeminiPromptAutomation(
     private suspend fun tryFallbackToolbarNewChat(
         notifyState: suspend (AutomationRunState) -> Unit
     ): Boolean {
-        val toolbarNewChat = nodeFinder.findToolbarNewChatNode() ?: return false
+        val toolbarNewChat = nodeFinder.findToolbarNewChatNode()
+        if (toolbarNewChat == null) {
+            notifyState(AutomationRunState.Failure("Gemini 사이드바 및 상단 툴바 새 채팅 버튼을 찾지 못했습니다."))
+            return false
+        }
         notifyState(AutomationRunState.Running("사이드바 미감지로 상단 툴바 새 채팅 대체 시도"))
         return if (clickNodeOrParent(toolbarNewChat)) {
             notifyState(AutomationRunState.Running("상단 툴바 새 채팅 진입 완료"))
@@ -121,6 +125,7 @@ internal class GeminiPromptAutomation(
             delay(NEW_CHAT_SETTLE_MS)
             true
         } else {
+            notifyState(AutomationRunState.Failure("Gemini 상단 툴바 새 채팅 클릭에 실패했습니다."))
             false
         }
     }

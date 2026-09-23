@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 사용자 인터랙션을 화면에 표시합니다.
+// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 액션 인터페이스 기반 사용자 인터랙션을 화면에 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -83,6 +83,130 @@ import kotlin.math.roundToInt
 internal fun AnalysisScreen(
     uiState: AnalysisUiState,
     sourcePromptState: TextFieldState,
+    actions: AnalysisScreenActions = AnalysisScreenActions.Empty,
+    modifier: Modifier = Modifier
+) {
+    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+
+    Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .imePadding()
+                .clearFocusOnOutsideTap { actions.onClearFocus() }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ApiKeyHeader(
+                    uiState = uiState,
+                    onRoleProviderSelected = { role, provider ->
+                        actions.onRoleProviderSelected(role, provider)
+                    },
+                    onRoleModelSelected = { role, modelId ->
+                        actions.onRoleModelSelected(role, modelId)
+                    },
+                    onShowKeyDialog = { actions.onShowKeyDialog() },
+                    onStartGrokLogin = { actions.onStartGrokLogin() },
+                    onLogoutGrok = { actions.onLogoutGrok() }
+                )
+
+                SourcePromptAndMaskingRow(
+                    sourcePromptState = sourcePromptState,
+                    onSourcePromptChange = { actions.onSourcePromptChange(it) },
+                    onImportFromAutomation = { actions.onImportFromAutomation() },
+                    targetSegment = uiState.targetSegment,
+                    isAnalyzing = uiState.status == AnalysisStatus.ANALYZING,
+                    onClearTargetSegment = { actions.onClearTargetSegment() }
+                )
+
+                DirectionSection(
+                    directions = uiState.directions,
+                    selectedIds = uiState.selectedDirectionIds,
+                    onToggleDirection = { actions.onToggleDirection(it) }
+                )
+
+                CustomHintSection(
+                    customHint = uiState.customHint,
+                    onCustomHintChange = { actions.onCustomHintChange(it) }
+                )
+
+                CountSection(
+                    count = uiState.txtCount,
+                    onCountChange = { actions.onTxtCountChange(it) }
+                )
+
+                FeedbackSection(uiState)
+
+                ResultSection(
+                    uiState = uiState,
+                    onResultFileNameChange = { actions.onResultFileNameChange(it) },
+                    onApplyCandidate = { actions.onApplyCandidate(it) },
+                    onCopyCandidate = { actions.onCopyCandidate(it) },
+                    onRestoreOriginalPrompt = { actions.onRestoreOriginalPrompt() }
+                )
+
+                // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
+                Spacer(modifier = Modifier.height(if (isKeyboardVisible) 260.dp else 160.dp))
+            }
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                tonalElevation = 3.dp,
+                shadowElevation = 8.dp
+            ) {
+                StickyBottomActionPanel(
+                    uiState = uiState,
+                    onCategorySelected = { actions.onCategorySelected(it) },
+                    onGenerate = { actions.onGenerate() },
+                    onGenerateTxt = { actions.onGenerateTxt() },
+                    onCancelWork = { actions.onCancelWork() },
+                    onRequestResetSession = { actions.onRequestResetSession() },
+                    onCopyResults = { actions.onCopyResults() },
+                    onSaveResults = { actions.onSaveResults() }
+                )
+            }
+        }
+    }
+
+    val activeDialog = deriveActiveAnalysisDialog(uiState)
+    val dialogActions = AnalysisDialogActions(
+        onDismissKeyDialog = { actions.onDismissKeyDialog() },
+        onKeyLabelChange = { actions.onKeyLabelChange(it) },
+        onKeyValueChange = { actions.onKeyValueChange(it) },
+        onAddApiKey = { actions.onAddApiKey() },
+        onDeleteApiKey = { actions.onDeleteApiKey(it) },
+        onActivateApiKey = { actions.onActivateApiKey(it) },
+        onStartEditApiKey = { actions.onStartEditApiKey(it) },
+        onEditKeyLabelChange = { actions.onEditKeyLabelChange(it) },
+        onCancelEditApiKey = { actions.onCancelEditApiKey() },
+        onUpdateKeyLabel = { actions.onUpdateKeyLabel() },
+        onConfirmResetSession = { actions.onConfirmResetSession() },
+        onDismissResetSession = { actions.onDismissResetSession() },
+        onConfirmOverwrite = { actions.onConfirmOverwrite() },
+        onDismissOverwrite = { actions.onDismissOverwrite() },
+        onOpenGrokLoginUrl = { actions.onOpenGrokLoginUrl(it) },
+        onCancelGrokLogin = { actions.onCancelGrokLogin() }
+    )
+    AnalysisDialogHost(
+        activeDialog = activeDialog,
+        uiState = uiState,
+        actions = dialogActions
+    )
+}
+
+@Composable
+internal fun AnalysisScreen(
+    uiState: AnalysisUiState,
+    sourcePromptState: TextFieldState,
     onClearFocus: () -> Unit,
     onSourcePromptChange: (String) -> Unit,
     onImportFromAutomation: () -> Unit,
@@ -123,116 +247,50 @@ internal fun AnalysisScreen(
     onCancelEditApiKey: () -> Unit,
     onUpdateKeyLabel: () -> Unit
 ) {
-    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .imePadding()
-                .clearFocusOnOutsideTap(onClearFocus)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ApiKeyHeader(
-                    uiState = uiState,
-                    onRoleProviderSelected = onRoleProviderSelected,
-                    onRoleModelSelected = onRoleModelSelected,
-                    onShowKeyDialog = onShowKeyDialog,
-                    onStartGrokLogin = onStartGrokLogin,
-                    onLogoutGrok = onLogoutGrok
-                )
-
-                SourcePromptAndMaskingRow(
-                    sourcePromptState = sourcePromptState,
-                    onSourcePromptChange = onSourcePromptChange,
-                    onImportFromAutomation = onImportFromAutomation,
-                    targetSegment = uiState.targetSegment,
-                    isAnalyzing = uiState.status == AnalysisStatus.ANALYZING,
-                    onClearTargetSegment = onClearTargetSegment
-                )
-
-                DirectionSection(
-                    directions = uiState.directions,
-                    selectedIds = uiState.selectedDirectionIds,
-                    onToggleDirection = onToggleDirection
-                )
-
-                CustomHintSection(
-                    customHint = uiState.customHint,
-                    onCustomHintChange = onCustomHintChange
-                )
-
-                CountSection(
-                    count = uiState.txtCount,
-                    onCountChange = onTxtCountChange
-                )
-
-                FeedbackSection(uiState)
-
-                ResultSection(
-                    uiState = uiState,
-                    onResultFileNameChange = onResultFileNameChange,
-                    onApplyCandidate = onApplyCandidate,
-                    onCopyCandidate = onCopyCandidate,
-                    onRestoreOriginalPrompt = onRestoreOriginalPrompt
-                )
-
-                // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
-                Spacer(modifier = Modifier.height(if (isKeyboardVisible) 260.dp else 160.dp))
-            }
-
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                tonalElevation = 3.dp,
-                shadowElevation = 8.dp
-            ) {
-                StickyBottomActionPanel(
-                    uiState = uiState,
-                    onCategorySelected = onCategorySelected,
-                    onGenerate = onGenerate,
-                    onGenerateTxt = onGenerateTxt,
-                    onCancelWork = onCancelWork,
-                    onRequestResetSession = onRequestResetSession,
-                    onCopyResults = onCopyResults,
-                    onSaveResults = onSaveResults
-                )
-            }
-        }
-    }
-
-    val activeDialog = deriveActiveAnalysisDialog(uiState)
-    val dialogActions = AnalysisDialogActions(
-        onDismissKeyDialog = onDismissKeyDialog,
-        onKeyLabelChange = onKeyLabelChange,
-        onKeyValueChange = onKeyValueChange,
-        onAddApiKey = onAddApiKey,
-        onDeleteApiKey = onDeleteApiKey,
-        onActivateApiKey = onActivateApiKey,
-        onStartEditApiKey = onStartEditApiKey,
-        onEditKeyLabelChange = onEditKeyLabelChange,
-        onCancelEditApiKey = onCancelEditApiKey,
-        onUpdateKeyLabel = onUpdateKeyLabel,
-        onConfirmResetSession = onConfirmResetSession,
-        onDismissResetSession = onDismissResetSession,
-        onConfirmOverwrite = onConfirmOverwrite,
-        onDismissOverwrite = onDismissOverwrite,
-        onOpenGrokLoginUrl = onOpenGrokLoginUrl,
-        onCancelGrokLogin = onCancelGrokLogin
-    )
-    AnalysisDialogHost(
-        activeDialog = activeDialog,
+    AnalysisScreen(
         uiState = uiState,
-        actions = dialogActions
+        sourcePromptState = sourcePromptState,
+        actions = object : AnalysisScreenActions {
+            override fun onClearFocus() = onClearFocus()
+            override fun onSourcePromptChange(value: String) = onSourcePromptChange(value)
+            override fun onImportFromAutomation() = onImportFromAutomation()
+            override fun onCategorySelected(category: AnalysisCategory) = onCategorySelected(category)
+            override fun onClearTargetSegment() = onClearTargetSegment()
+            override fun onGenerate() = onGenerate()
+            override fun onGenerateTxt() = onGenerateTxt()
+            override fun onCancelWork() = onCancelWork()
+            override fun onRequestResetSession() = onRequestResetSession()
+            override fun onConfirmResetSession() = onConfirmResetSession()
+            override fun onDismissResetSession() = onDismissResetSession()
+            override fun onTxtCountChange(value: Int) = onTxtCountChange(value)
+            override fun onToggleDirection(id: String) = onToggleDirection(id)
+            override fun onCustomHintChange(value: String) = onCustomHintChange(value)
+            override fun onResultFileNameChange(value: String) = onResultFileNameChange(value)
+            override fun onApplyCandidate(index: Int) = onApplyCandidate(index)
+            override fun onCopyCandidate(index: Int) = onCopyCandidate(index)
+            override fun onRestoreOriginalPrompt() = onRestoreOriginalPrompt()
+            override fun onCopyResults() = onCopyResults()
+            override fun onSaveResults() = onSaveResults()
+            override fun onConfirmOverwrite() = onConfirmOverwrite()
+            override fun onDismissOverwrite() = onDismissOverwrite()
+            override fun onShowKeyDialog() = onShowKeyDialog()
+            override fun onDismissKeyDialog() = onDismissKeyDialog()
+            override fun onKeyLabelChange(value: String) = onKeyLabelChange(value)
+            override fun onKeyValueChange(value: String) = onKeyValueChange(value)
+            override fun onRoleProviderSelected(role: AnalysisModelRole, provider: AnalysisProvider) = onRoleProviderSelected(role, provider)
+            override fun onRoleModelSelected(role: AnalysisModelRole, modelId: String) = onRoleModelSelected(role, modelId)
+            override fun onStartGrokLogin() = onStartGrokLogin()
+            override fun onCancelGrokLogin() = onCancelGrokLogin()
+            override fun onLogoutGrok() = onLogoutGrok()
+            override fun onOpenGrokLoginUrl(url: String) = onOpenGrokLoginUrl(url)
+            override fun onAddApiKey() = onAddApiKey()
+            override fun onDeleteApiKey(id: String) = onDeleteApiKey(id)
+            override fun onActivateApiKey(id: String) = onActivateApiKey(id)
+            override fun onStartEditApiKey(key: GeminiApiKeySummary) = onStartEditApiKey(key)
+            override fun onEditKeyLabelChange(value: String) = onEditKeyLabelChange(value)
+            override fun onCancelEditApiKey() = onCancelEditApiKey()
+            override fun onUpdateKeyLabel() = onUpdateKeyLabel()
+        }
     )
 }
 

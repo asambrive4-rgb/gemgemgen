@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면 상태를 관리하고 하위 UseCase를 통해 생성 및 세션을 조율합니다.
+// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스를 구현하여 UseCase 및 도메인 정책을 조율합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -13,6 +13,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
+import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
@@ -67,7 +68,7 @@ class AnalysisViewModel(
         promptWorkspace = promptWorkspace,
         dispatchers = dispatchers
     )
-) : ViewModel() {
+) : ViewModel(), AnalysisScreenActions {
     private val scope = coroutineScope ?: viewModelScope
     private var runningJob: Job? = null
     private var grokLoginJob: Job? = null
@@ -84,7 +85,38 @@ class AnalysisViewModel(
         refreshGrokStatus()
     }
 
-    fun onSourcePromptChange(value: String) {
+    // AnalysisScreenActions 인터페이스 위임 구현
+    override fun onImportFromAutomation() { importSourcePromptFromAutomation() }
+    override fun onClearTargetSegment() { clearTargetSegment() }
+    override fun onGenerate() { generate() }
+    override fun onGenerateTxt() { generateTxt() }
+    override fun onCancelWork() { cancelActiveWork() }
+    override fun onRequestResetSession() { requestResetSession() }
+    override fun onConfirmResetSession() { confirmResetSession() }
+    override fun onDismissResetSession() { dismissResetSession() }
+    override fun onToggleDirection(id: String) { toggleDirection(id) }
+    override fun onApplyCandidate(index: Int) { applyCandidate(index) }
+    override fun onCopyCandidate(index: Int) { copyCandidate(index) }
+    override fun onRestoreOriginalPrompt() { restoreOriginalPrompt() }
+    override fun onCopyResults() { copyGeneratedResults() }
+    override fun onSaveResults() { saveGeneratedResults() }
+    override fun onConfirmOverwrite() { confirmOverwrite() }
+    override fun onDismissOverwrite() { dismissOverwrite() }
+    override fun onStartGrokLogin() { startGrokLogin() }
+    override fun onCancelGrokLogin() { cancelGrokLogin() }
+    override fun onLogoutGrok() { logoutGrok() }
+    override fun onShowKeyDialog() { showKeyDialog() }
+    override fun onDismissKeyDialog() { dismissKeyDialog() }
+    override fun onAddApiKey() { addApiKey() }
+    override fun onDeleteApiKey(id: String) { deleteApiKey(id) }
+    override fun onActivateApiKey(id: String) { activateApiKey(id) }
+    override fun onStartEditApiKey(key: GeminiApiKeySummary) { startEditingApiKey(key) }
+    override fun onEditKeyLabelChange(value: String) { onEditingKeyLabelChange(value) }
+    override fun onCancelEditApiKey() { cancelEditingApiKey() }
+    override fun onUpdateKeyLabel() { updateApiKeyLabel() }
+
+
+    override fun onSourcePromptChange(value: String) {
         val state = _uiState.value
         if (state.sourcePrompt == value) return
 
@@ -189,7 +221,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun onCategorySelected(category: AnalysisCategory) {
+    override fun onCategorySelected(category: AnalysisCategory) {
         analysisCache = null
         val nextNeedsMasking = computeNeedsMaskingAnalysis(
             category = category,
@@ -497,7 +529,25 @@ class AnalysisViewModel(
     }
 
     fun requestResetSession() {
-        if (!_uiState.value.canResetSession) return
+        val state = _uiState.value
+        val canReset = AnalysisSessionPolicy.canResetSession(
+            sourcePrompt = state.sourcePrompt,
+            selectedCategory = state.selectedCategory,
+            targetSegment = state.targetSegment,
+            generatedCandidatesCount = state.generatedCandidates.size,
+            selectedDirectionIdsCount = state.selectedDirectionIds.size,
+            customHint = state.customHint,
+            txtCount = state.txtCount,
+            resultFileName = state.resultFileName,
+            selectedCandidateIndex = state.selectedCandidateIndex,
+            hasAppliedCandidateToAutomation = state.hasAppliedCandidateToAutomation,
+            hasPendingOverwrite = state.pendingOverwriteFileName != null,
+            error = state.error,
+            message = state.message,
+            warning = state.warning,
+            isBusy = state.isBusy
+        )
+        if (!canReset) return
         _uiState.update { it.copy(showResetConfirmation = true) }
     }
 
@@ -554,13 +604,13 @@ class AnalysisViewModel(
         }
     }
 
-    fun onTxtCountChange(value: Int) {
+    override fun onTxtCountChange(value: Int) {
         _uiState.update {
             it.copy(txtCount = AnalysisTxtCountPolicy.coerce(value))
         }
     }
 
-    fun onCustomHintChange(value: String) {
+    override fun onCustomHintChange(value: String) {
         if (value.length > 100) return
         _uiState.update { state ->
             val nextState = state.copy(customHint = value)
@@ -584,7 +634,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun onResultFileNameChange(value: String) {
+    override fun onResultFileNameChange(value: String) {
         _uiState.update { it.copy(resultFileName = value, error = "", message = "") }
     }
 
@@ -689,11 +739,11 @@ class AnalysisViewModel(
         }
     }
 
-    fun onKeyLabelChange(value: String) {
+    override fun onKeyLabelChange(value: String) {
         _uiState.update { it.copy(keyLabelInput = value) }
     }
 
-    fun onKeyValueChange(value: String) {
+    override fun onKeyValueChange(value: String) {
         _uiState.update { it.copy(keyValueInput = value) }
     }
 
@@ -795,7 +845,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun onRoleProviderSelected(role: AnalysisModelRole, provider: AnalysisProvider) {
+    override fun onRoleProviderSelected(role: AnalysisModelRole, provider: AnalysisProvider) {
         if (_uiState.value.providerFor(role) == provider) return
         analysisCache = null
         scope.launch {
@@ -807,7 +857,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun onRoleModelSelected(role: AnalysisModelRole, modelId: String) {
+    override fun onRoleModelSelected(role: AnalysisModelRole, modelId: String) {
         if (_uiState.value.modelFor(role) == modelId) return
         scope.launch {
             val setting = keyManager.setRoleModel(role, modelId)

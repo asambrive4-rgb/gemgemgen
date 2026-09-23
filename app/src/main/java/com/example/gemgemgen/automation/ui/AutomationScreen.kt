@@ -1,4 +1,4 @@
-// 역할: 가상 키보드 반응형 모바일 에디터, 추천 후보 바, 자동화 제어 바 및 통합 상태 화면을 구성합니다.
+// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 추천 후보 바, 제어 바 및 상태 화면을 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +55,7 @@ internal fun AutomationScreen(
     uiState: AutomationUiState,
     automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
+    actions: AutomationScreenActions = AutomationScreenActions.Empty,
     suggestionTokens: List<String> = emptyList(),
     suggestionCandidates: List<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate> = uiState.activeSuggestionCandidates,
     onClearFocus: () -> Unit,
@@ -93,13 +94,15 @@ internal fun AutomationScreen(
     onCancelAutomation: () -> Unit,
     onAutomationModeSelected: (AutomationMode) -> Unit,
     onPairRemoteDevice: (String) -> Unit,
-    onOpenPromptHistory: () -> Unit = {},
-    onClosePromptHistory: () -> Unit = {},
-    onSelectPromptHistoryItem: (PromptHistoryItem) -> Unit = {},
-    onClearPromptHistory: () -> Unit = {},
+    onToggleSearch: () -> Unit = {},
+    onSearchQueryChange: (String) -> Unit = {},
+    onNavigateSearchNext: () -> Unit = {},
+    onNavigateSearchPrevious: () -> Unit = {},
+    onCloseSearch: () -> Unit = {},
     onOpenPromptSnippetDialog: () -> Unit = {},
     onClosePromptSnippetDialog: () -> Unit = {},
     onAddPromptSnippet: (shortcut: String, content: String) -> Unit = { _, _ -> },
+    onUpdatePromptSnippet: (id: String, shortcut: String, content: String) -> Unit = { _, _, _ -> },
     onDeletePromptSnippet: (id: String) -> Unit = {},
     onSelectThemePalette: (AppThemePalette) -> Unit = {},
     onSelectThemeMode: (com.example.gemgemgen.ui.theme.AppThemeMode) -> Unit = {},
@@ -174,7 +177,15 @@ internal fun AutomationScreen(
                     onImportFromClipboard = onImportFromClipboard,
                     onCopyPromptToClipboard = onCopyPromptToClipboard,
                     onPasteFromClipboard = onPasteFromClipboard,
-                    onOpenPromptHistory = onOpenPromptHistory,
+                    isSearchActive = uiState.isSearchActive,
+                    searchQuery = uiState.searchQuery,
+                    searchMatches = uiState.searchMatches,
+                    activeSearchMatchIndex = uiState.activeSearchMatchIndex,
+                    onToggleSearch = onToggleSearch,
+                    onSearchQueryChange = onSearchQueryChange,
+                    onNavigateSearchNext = onNavigateSearchNext,
+                    onNavigateSearchPrevious = onNavigateSearchPrevious,
+                    onCloseSearch = onCloseSearch,
                     onOpenPromptSnippetDialog = onOpenPromptSnippetDialog,
                     onOpenGeminiAccountPicker = onOpenGeminiAccountPicker,
                     showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
@@ -315,14 +326,6 @@ internal fun AutomationScreen(
                     }
                 )
             }
-            if (uiState.showPromptHistory) {
-                PromptHistoryBottomSheet(
-                    items = uiState.promptHistoryItems,
-                    onSelect = onSelectPromptHistoryItem,
-                    onClear = onClearPromptHistory,
-                    onDismiss = onClosePromptHistory
-                )
-            }
 
             if (uiState.showInstructionConfigDialog) {
                 PromptInstructionDialog(
@@ -348,6 +351,7 @@ internal fun AutomationScreen(
                     snippets = uiState.promptSnippets,
                     currentPromptText = promptTemplateState.text.toString(),
                     onAddSnippet = onAddPromptSnippet,
+                    onUpdateSnippet = onUpdatePromptSnippet,
                     onDeleteSnippet = onDeletePromptSnippet,
                     onDismiss = onClosePromptSnippetDialog
                 )
@@ -364,6 +368,7 @@ private fun AutomationAppPreview() {
             uiState = AutomationUiState(),
             automationBarUiState = AutomationBarUiState(),
             promptTemplateState = TextFieldState(),
+            actions = AutomationScreenActions.Empty,
             onClearFocus = {},
             onHideSettings = {},
             onConfirmAccessibilityPrompt = {},

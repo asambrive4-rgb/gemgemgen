@@ -1,4 +1,4 @@
-// 역할: 프롬프트 입력창의 텍스트 편집, 세그먼트 치환, 와일드카드/상용구 자동완성 추천 계산 및 실행 기록(History) 네비게이션을 조율합니다.
+// 역할: 프롬프트 입력창의 텍스트 편집, 세그먼트 치환, 문구 찾기(검색), 실시간 텍스트 동기화 및 실행 기록 네비게이션을 조율합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -15,7 +15,10 @@ import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.usecase.ApplyWildcardTokenUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
+import com.example.gemgemgen.ui.TextHighlightRange
 import kotlinx.coroutines.CoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +31,10 @@ data class PromptEditorUiState(
     val isParagraphSelectionMode: Boolean = false,
     val selectedParagraphRange: PromptParagraphRange? = null,
     val paragraphSelectionMessage: String = "",
+    val isSearchActive: Boolean = false,
+    val searchQuery: String = "",
+    val searchMatches: List<TextHighlightRange> = emptyList(),
+    val activeSearchMatchIndex: Int = -1,
     val canNavigateHistoryBack: Boolean = false,
     val canNavigateHistoryForward: Boolean = false,
     val isHistoryIndicatorVisible: Boolean = false,
@@ -38,7 +45,7 @@ data class PromptEditorUiState(
 
 /**
  * 프롬프트 텍스트 편집기(TextFieldState)의 입력 동기화, 커서 위치 동기화,
- * 문단 단위 편집 세션, 실행 기록(History) 앞/뒤 네비게이션, 클립보드 입출력 및 와일드카드 치환을 전담하는 코디네이터.
+ * 문단 단위 편집 세션, 문구 찾기(검색), 실행 기록(History) 앞/뒤 네비게이션, 클립보드 입출력 및 와일드카드 치환을 전담하는 코디네이터.
  */
 class PromptEditorCoordinator(
     private val clipboardGateway: ClipboardGateway,
@@ -53,16 +60,30 @@ class PromptEditorCoordinator(
     private var promptTemplateValue: String = initialPrompt
     private var promptEditorSession = PromptEditorSession(text = initialPrompt)
 
+    private val _currentPromptText = MutableStateFlow(initialPrompt)
+    val currentPromptText: StateFlow<String> = _currentPromptText.asStateFlow()
+
     private val _editorUiState = MutableStateFlow(
         PromptEditorUiState(promptTemplate = initialPrompt)
     )
     val editorUiState: StateFlow<PromptEditorUiState> = _editorUiState.asStateFlow()
 
- init {
- if (initialPrompt.isNotEmpty()) {
- applyPromptTemplateText(initialPrompt)
- }
- }
+    init {
+        if (initialPrompt.isNotEmpty()) {
+            applyPromptTemplateText(initialPrompt)
+        }
+        scope.launch {
+            try {
+                snapshotFlow { textFieldState.selection }
+                    .distinctUntilChanged()
+                    .collect {
+                        refreshActiveSuggestions()
+                    }
+            } catch (_: Throwable) {
+                // JUnit 테스트 등 snapshot 시스템 미구동 환경 예외 방어
+            }
+        }
+    }
 
  fun onPromptTemplateChange(value: String) {
  onPromptTemplateChange(value, updateTextFieldState = true)
@@ -112,6 +133,121 @@ class PromptEditorCoordinator(
                 state.copy(promptTemplate = value, activeSuggestionCandidates = nextCandidates)
             }
         }
+        if (_editorUiState.value.isSearchActive && _editorUiState.value.searchQuery.isNotEmpty()) {
+            recalculateSearchMatches(query = _editorUiState.value.searchQuery, text = value)
+        }
+    }
+
+    fun toggleSearch(active: Boolean? = null) {
+        val nextActive = active ?: !_editorUiState.value.isSearchActive
+        if (nextActive) {
+            if (_editorUiState.value.isParagraphSelectionMode) {
+                publishEditorSession(promptEditorSession.cancelSelection())
+            }
+            val currentSelection = textFieldState.selection
+            val initialQuery = if (currentSelection.collapsed) {
+                _editorUiState.value.searchQuery
+            } else {
+                val text = textFieldState.text.toString()
+                val start = currentSelection.min.coerceIn(0, text.length)
+                val end = currentSelection.max.coerceIn(start, text.length)
+                text.substring(start, end)
+            }
+            _editorUiState.update { it.copy(isSearchActive = true, searchQuery = initialQuery) }
+            if (initialQuery.isNotEmpty()) {
+                recalculateSearchMatches(query = initialQuery, text = textFieldState.text.toString())
+            }
+        } else {
+            closeSearch()
+        }
+    }
+
+    fun closeSearch() {
+        _editorUiState.update {
+            it.copy(
+                isSearchActive = false,
+                searchQuery = "",
+                searchMatches = emptyList(),
+                activeSearchMatchIndex = -1
+            )
+        }
+    }
+
+    fun setSearchQuery(query: String) {
+        val text = textFieldState.text.toString()
+        _editorUiState.update { it.copy(searchQuery = query) }
+        recalculateSearchMatches(query = query, text = text, resetToFirst = true)
+    }
+
+    fun navigateSearchNext() {
+        val state = _editorUiState.value
+        if (state.searchMatches.isEmpty()) return
+        val nextIndex = (state.activeSearchMatchIndex + 1) % state.searchMatches.size
+        _editorUiState.update { it.copy(activeSearchMatchIndex = nextIndex) }
+        selectSearchMatch(state.searchMatches[nextIndex])
+    }
+
+    fun navigateSearchPrevious() {
+        val state = _editorUiState.value
+        if (state.searchMatches.isEmpty()) return
+        val prevIndex = (state.activeSearchMatchIndex - 1 + state.searchMatches.size) % state.searchMatches.size
+        _editorUiState.update { it.copy(activeSearchMatchIndex = prevIndex) }
+        selectSearchMatch(state.searchMatches[prevIndex])
+    }
+
+    private fun recalculateSearchMatches(query: String, text: String, resetToFirst: Boolean = false) {
+        if (query.isEmpty() || text.isEmpty()) {
+            _editorUiState.update {
+                it.copy(searchMatches = emptyList(), activeSearchMatchIndex = -1)
+            }
+            return
+        }
+
+        val matches = mutableListOf<TextHighlightRange>()
+        var startIndex = 0
+        while (startIndex < text.length) {
+            val foundIndex = text.indexOf(query, startIndex, ignoreCase = true)
+            if (foundIndex == -1) break
+            matches.add(
+                TextHighlightRange(
+                    start = foundIndex,
+                    endExclusive = foundIndex + query.length
+                )
+            )
+            startIndex = foundIndex + 1
+        }
+
+        val currentIndex = if (matches.isEmpty()) {
+            -1
+        } else if (resetToFirst) {
+            0
+        } else {
+            val previousIndex = _editorUiState.value.activeSearchMatchIndex
+            if (previousIndex in matches.indices) previousIndex else 0
+        }
+
+        _editorUiState.update {
+            it.copy(
+                searchMatches = matches,
+                activeSearchMatchIndex = currentIndex
+            )
+        }
+
+        if (currentIndex in matches.indices) {
+            selectSearchMatch(matches[currentIndex])
+        }
+    }
+
+    private fun selectSearchMatch(match: TextHighlightRange) {
+        try {
+            textFieldState.edit {
+                // 블록 선택 대신 커서만 이동하여 안드로이드 시스템의 강제 하단 스크롤(BringIntoView)과
+                // '복사/공유' 툴바 팝업이 화면을 가리는 현상을 방지합니다.
+                selection = TextRange(match.start)
+            }
+        } catch (_: Throwable) {
+            // JUnit 테스트 등 snapshot 시스템 미구동 환경 예외 방어
+        }
     }
 
  fun syncHistoryItems(items: List<String>) {
@@ -144,10 +280,13 @@ class PromptEditorCoordinator(
  publishEditorSession(promptEditorSession.afterWholeReplace(target))
  }
 
- fun toggleParagraphSelectionMode() {
- syncEditorTextFromCurrent()
- publishEditorSession(promptEditorSession.toggleSelectionMode())
- }
+    fun toggleParagraphSelectionMode() {
+        if (_editorUiState.value.isSearchActive) {
+            closeSearch()
+        }
+        syncEditorTextFromCurrent()
+        publishEditorSession(promptEditorSession.toggleSelectionMode())
+    }
 
  fun selectPromptParagraphAt(offset: Int) {
  syncEditorTextFromCurrent()
@@ -457,14 +596,16 @@ class PromptEditorCoordinator(
  }
  }
 
- private fun setPromptTextOnly(text: String) {
- promptTemplateValue = text
- promptEditorSession = promptEditorSession.withText(text)
- }
+    private fun setPromptTextOnly(text: String) {
+        promptTemplateValue = text
+        promptEditorSession = promptEditorSession.withText(text)
+        _currentPromptText.value = text
+    }
 
     private fun publishEditorSession(session: PromptEditorSession) {
         promptEditorSession = session
         promptTemplateValue = session.text
+        _currentPromptText.value = session.text
         val message = AutomationUiText.paragraphMessage(session.messageKey)
         val suggestions = computeActiveSuggestions(
             text = session.text,

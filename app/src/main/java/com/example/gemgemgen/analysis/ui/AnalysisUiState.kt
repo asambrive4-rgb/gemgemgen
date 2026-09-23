@@ -1,4 +1,4 @@
-// 역할: 분석 화면의 현재 입력값, 진행 상태, 분석 결과 및 팝업 상태를 표현합니다.
+// 역할: 분석 화면의 현재 입력값, 진행 상태, 분석 결과를 표현하며 세션 규칙 판단을 도메인 정책에 위임합니다.
 package com.example.gemgemgen.analysis.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
@@ -7,8 +7,8 @@ import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
+import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason
-import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
@@ -16,8 +16,8 @@ import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 
-const val DEFAULT_ANALYSIS_RESULT_FILE_NAME = "analysis-wildcard-results.txt"
-val DEFAULT_ANALYSIS_CATEGORY: AnalysisCategory = AnalysisCategory.FREE_EDIT
+const val DEFAULT_ANALYSIS_RESULT_FILE_NAME = com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
+val DEFAULT_ANALYSIS_CATEGORY: AnalysisCategory = com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 
 data class AnalysisUiState(
     val sourcePrompt: String = "",
@@ -86,51 +86,60 @@ data class AnalysisUiState(
         get() = status == AnalysisStatus.ANALYZING || status == AnalysisStatus.GENERATING
 
     val startBlockedReason: AnalysisStartBlockReason?
-        get() = if (isBusy) {
-            null
-        } else {
-            AnalysisStartPolicy.evaluatePreconditions(
-                source = sourcePrompt,
-                category = selectedCategory,
-                needsMaskingAnalysis = needsMaskingAnalysis,
-                maskingProvider = maskingProvider,
-                hasMaskingCredential = hasMaskingCredential,
-                generationProvider = generationProvider,
-                hasGenerationCredential = hasGenerationCredential
-            )
-        }
+        get() = AnalysisSessionPolicy.evaluateStartBlockReason(
+            source = sourcePrompt,
+            category = selectedCategory,
+            needsMaskingAnalysis = needsMaskingAnalysis,
+            maskingProvider = maskingProvider,
+            hasMaskingCredential = hasMaskingCredential,
+            generationProvider = generationProvider,
+            hasGenerationCredential = hasGenerationCredential,
+            isBusy = isBusy
+        )
 
     val preconditionHintMessage: String?
         get() = startBlockedReason?.let { AnalysisUiText.startBlockedMessage(it) }
 
     val canGenerate: Boolean
-        get() = !isBusy && startBlockedReason == null
+        get() = AnalysisSessionPolicy.canGenerate(
+            source = sourcePrompt,
+            category = selectedCategory,
+            needsMaskingAnalysis = needsMaskingAnalysis,
+            maskingProvider = maskingProvider,
+            hasMaskingCredential = hasMaskingCredential,
+            generationProvider = generationProvider,
+            hasGenerationCredential = hasGenerationCredential,
+            status = status
+        )
 
     val canCopyOrSave: Boolean
-        get() = resultPresentation == AnalysisResultPresentation.TXT &&
-            generatedCandidates.isNotEmpty() &&
-            status != AnalysisStatus.ANALYZING &&
-            status != AnalysisStatus.GENERATING
+        get() = AnalysisSessionPolicy.canCopyOrSave(
+            resultPresentation = resultPresentation,
+            candidateCount = generatedCandidates.size,
+            status = status
+        )
 
     val geminiKeyPreview: String
         get() = apiKeys.firstOrNull { it.isActive }?.preview.orEmpty()
 
     val canResetSession: Boolean
-        get() = sourcePrompt.isNotEmpty() ||
-            selectedCategory != DEFAULT_ANALYSIS_CATEGORY ||
-            targetSegment != null ||
-            generatedCandidates.isNotEmpty() ||
-            selectedDirectionIds.isNotEmpty() ||
-            customHint.isNotEmpty() ||
-            txtCount != AnalysisTxtCountPolicy.DEFAULT_COUNT ||
-            resultFileName != DEFAULT_ANALYSIS_RESULT_FILE_NAME ||
-            selectedCandidateIndex != null ||
-            hasAppliedCandidateToAutomation ||
-            pendingOverwriteFileName != null ||
-            error.isNotEmpty() ||
-            message.isNotEmpty() ||
-            warning.isNotEmpty() ||
-            isBusy
+        get() = AnalysisSessionPolicy.canResetSession(
+            sourcePrompt = sourcePrompt,
+            selectedCategory = selectedCategory,
+            targetSegment = targetSegment,
+            generatedCandidatesCount = generatedCandidates.size,
+            selectedDirectionIdsCount = selectedDirectionIds.size,
+            customHint = customHint,
+            txtCount = txtCount,
+            resultFileName = resultFileName,
+            selectedCandidateIndex = selectedCandidateIndex,
+            hasAppliedCandidateToAutomation = hasAppliedCandidateToAutomation,
+            hasPendingOverwrite = pendingOverwriteFileName != null,
+            error = error,
+            message = message,
+            warning = warning,
+            isBusy = isBusy
+        )
 
     fun providerFor(role: AnalysisModelRole): AnalysisProvider {
         return when (role) {

@@ -57,7 +57,7 @@ object WildcardTokenAutocomplete {
                 Candidate(
                     name = trimmedShortcut,
                     token = snippet.content,
-                    displayText = "📋 $trimmedShortcut",
+                    displayText = trimmedShortcut,
                     type = Candidate.Type.SNIPPET
                 )
             }

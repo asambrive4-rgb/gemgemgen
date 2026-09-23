@@ -131,7 +131,7 @@ class AutomationUiStateTest {
     }
 
     @Test
-    fun canCleanMemory_requiresAccessibilityAndNoConcurrentWork() {
+    fun canCleanMemory_requiresAccessibilityAndNotMaintenanceBusy() {
         assertTrue(
             AutomationUiState(environmentStatus = readyEnvironment()).canCleanMemory
         )
@@ -143,7 +143,8 @@ class AutomationUiStateTest {
                 )
             ).canCleanMemory
         )
-        assertFalse(
+        // 자동화 실행 중에도 메모리 정리 예약이 가능하므로 canCleanMemory는 true입니다.
+        assertTrue(
             AutomationUiState(
                 environmentStatus = readyEnvironment(),
                 automationState = AutomationRunState.Running("running")

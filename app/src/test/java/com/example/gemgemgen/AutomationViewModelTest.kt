@@ -1,4 +1,4 @@
-// 역할: 자동화 뷰모델의 상태 변경 및 비즈니스 이벤트 흐름을 검증합니다.
+// 역할: 자동화 뷰모델의 상태 변경, 화면 액션 인터페이스 및 비즈니스 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.ui.text.TextRange
@@ -1116,55 +1116,40 @@ class AutomationViewModelTest {
     }
 
     @Test
-    fun openPromptHistory_and_closePromptHistory_updatesUiState() {
-        val repo = FakePromptHistoryRepository()
-        val store = PromptHistoryStore(repo)
-        store.record("test prompt 1", AutomationTargetApp.CHATGPT)
-        val viewModel = viewModel(promptHistoryStore = store)
+    fun toggleSearch_and_setSearchQuery_updatesUiState_and_findsMatches() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("Hello World, hello Compose!")
 
-        viewModel.openPromptHistory()
-        assertTrue(viewModel.uiState.value.showPromptHistory)
-        assertEquals(1, viewModel.uiState.value.promptHistoryItems.size)
-        assertEquals("test prompt 1", viewModel.uiState.value.promptHistoryItems[0].prompt)
+        viewModel.toggleSearch(true)
+        assertTrue(viewModel.uiState.value.isSearchActive)
 
-        viewModel.closePromptHistory()
-        assertTrue(!viewModel.uiState.value.showPromptHistory)
+        viewModel.setSearchQuery("hello")
+        assertEquals(2, viewModel.uiState.value.searchMatches.size)
+        assertEquals(0, viewModel.uiState.value.activeSearchMatchIndex)
+
+        viewModel.navigateSearchNext()
+        assertEquals(1, viewModel.uiState.value.activeSearchMatchIndex)
+
+        viewModel.navigateSearchPrevious()
+        assertEquals(0, viewModel.uiState.value.activeSearchMatchIndex)
+
+        viewModel.closeSearch()
+        assertTrue(!viewModel.uiState.value.isSearchActive)
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        assertTrue(viewModel.uiState.value.searchMatches.isEmpty())
+        assertEquals(-1, viewModel.uiState.value.activeSearchMatchIndex)
     }
 
     @Test
-    fun selectPromptHistoryItem_replacesPromptText_and_backsUpPreviousToUndoStack() {
-        val repo = FakePromptHistoryRepository()
-        val store = PromptHistoryStore(repo)
-        val viewModel = viewModel(promptHistoryStore = store)
+    fun toggleSearch_whenParagraphSelectionActive_cancelsParagraphSelection() {
+        val viewModel = viewModel()
+        viewModel.onPromptTemplateChange("Paragraph 1\n\nParagraph 2")
+        viewModel.toggleParagraphSelectionMode()
+        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
 
-        viewModel.onPromptTemplateChange("현재 작성 중이던 텍스트")
-        val item = PromptHistoryItem(
-            id = "1",
-            prompt = "히스토리에서 고른 프롬프트",
-            targetApp = AutomationTargetApp.GEMINI,
-            createdAtMillis = 1000L
-        )
-
-        viewModel.selectPromptHistoryItem(item)
-
-        assertEquals("히스토리에서 고른 프롬프트", viewModel.uiState.value.promptTemplate)
-        assertEquals("히스토리에서 고른 프롬프트", viewModel.promptTemplateTextFieldState.text.toString())
-        assertTrue(!viewModel.uiState.value.showPromptHistory)
-    }
-
-    @Test
-    fun clearPromptHistory_clearsRepository_and_updatesUiState() {
-        val repo = FakePromptHistoryRepository()
-        val store = PromptHistoryStore(repo)
-        store.record("prompt to clear", AutomationTargetApp.GEMINI)
-        val viewModel = viewModel(promptHistoryStore = store)
-
-        viewModel.openPromptHistory()
-        assertEquals(1, viewModel.uiState.value.promptHistoryItems.size)
-
-        viewModel.clearPromptHistory()
-        assertTrue(viewModel.uiState.value.promptHistoryItems.isEmpty())
-        assertTrue(store.load().isEmpty())
+        viewModel.toggleSearch(true)
+        assertTrue(viewModel.uiState.value.isSearchActive)
+        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
     }
 
     @Test
@@ -1721,6 +1706,69 @@ class AutomationViewModelTest {
 
         override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
         override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult = RemoteActionResult.Success
+    }
+
+    @Test
+    fun actions_targetAppSelected_updatesSelectedTargetApp() {
+        val viewModel = viewModel()
+        val actions: AutomationScreenActions = viewModel
+        assertEquals(AutomationTargetApp.GEMINI, viewModel.uiState.value.selectedTargetApp)
+
+        actions.onTargetAppSelected(AutomationTargetApp.CHATGPT)
+
+        assertEquals(AutomationTargetApp.CHATGPT, viewModel.uiState.value.selectedTargetApp)
+    }
+
+    @Test
+    fun actions_repeatCountChanged_normalizesAndUpdatesRepeatCount() {
+        val viewModel = viewModel()
+        val actions: AutomationScreenActions = viewModel
+
+        actions.onRepeatCountChange("5")
+
+        assertEquals("5", viewModel.uiState.value.repeatCountText)
+    }
+
+    @Test
+    fun actions_flowImageCountSelected_updatesFlowImageCount() {
+        val viewModel = viewModel()
+        val actions: AutomationScreenActions = viewModel
+
+        actions.onFlowImageCountSelected(3)
+
+        assertEquals(3, viewModel.uiState.value.flowImageCount)
+    }
+
+    @Test
+    fun actions_promptTemplateChanged_updatesPromptTemplate() {
+        val viewModel = viewModel()
+        val actions: AutomationScreenActions = viewModel
+
+        actions.onPromptTemplateChange("action prompt")
+
+        assertEquals("action prompt", viewModel.uiState.value.promptTemplate)
+    }
+
+    @Test
+    fun actions_themeModeAndPaletteSelected_updatesThemeState() {
+        val viewModel = viewModel()
+        val actions: AutomationScreenActions = viewModel
+
+        actions.onSelectThemePalette(
+            com.example.gemgemgen.ui.theme.AppThemePalette.CORAL_CREAM
+        )
+        actions.onSelectThemeMode(
+            com.example.gemgemgen.ui.theme.AppThemeMode.DARK
+        )
+
+        assertEquals(
+            com.example.gemgemgen.ui.theme.AppThemePalette.CORAL_CREAM,
+            viewModel.uiState.value.selectedThemePalette
+        )
+        assertEquals(
+            com.example.gemgemgen.ui.theme.AppThemeMode.DARK,
+            viewModel.uiState.value.selectedThemeMode
+        )
     }
 
     private companion object {
