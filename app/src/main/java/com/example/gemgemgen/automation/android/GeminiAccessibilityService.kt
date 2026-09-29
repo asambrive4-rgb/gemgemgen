@@ -1,4 +1,4 @@
-// 역할: 메인 UI 스레드 블로킹 없는 백그라운드 최근 앱 종료 및 네이티브 인덱스 지연 순회, 제스처 탭/스와이프, 앱 제어 핵심 인프라를 제공하는 서비스
+// 역할: 메인 UI 스레드 블로킹 없는 최근 앱 제어, 제스처 주입 및 접근성 감시 패키지 등록(setServiceInfo) 최적화를 제공하는 인프라 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -27,6 +27,7 @@ import com.example.gemgemgen.core.AppDefaults
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
@@ -43,9 +44,11 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var memoryCleanupCompletion: ((MemoryCleanupResult) -> Unit)? = null
     private var memoryCleanupAutomation: GoogleAppForceStopAutomation? = null
     private var previousMemoryPackageRestriction: Array<String>? = null
+    private var isAccessibilitySubscriptionConfigured: Boolean = false
+    private var currentSubscribedPackageNames: Set<String>? = null
+    private var sessionObserverJob: Job? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
-    private var accountSwitchAutomation: GeminiAccountSwitcherAutomation? = null
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
             coroutineScope = serviceScope,
@@ -80,8 +83,6 @@ class GeminiAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 중단되었습니다."))
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
-        accountSwitchAutomation?.cancel()
-        accountSwitchAutomation = null
         ProcessAutomationHolder.onAccessibilityLost()
         serviceScope.coroutineContext.cancelChildren()
         handler.removeCallbacksAndMessages(null)
@@ -94,9 +95,11 @@ class GeminiAccessibilityService : AccessibilityService() {
             activeService = null
         }
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
-        accountSwitchAutomation?.cancel()
-        accountSwitchAutomation = null
         ProcessAutomationHolder.onAccessibilityLost()
+        sessionObserverJob?.cancel()
+        sessionObserverJob = null
+        currentSubscribedPackageNames = null
+        isAccessibilitySubscriptionConfigured = false
         serviceScope.cancel()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -183,74 +186,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
     }
 
-    internal suspend fun openGeminiAccountPicker(
-        onProgress: ((phase: String, message: String) -> Unit)? = null
-    ): GeminiAccountSwitchResult {
-        if (
-            memoryCleanupToken != null ||
-            closeAppCompletion != null ||
-            accountSwitchAutomation != null ||
-            ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
-        ) {
-            return GeminiAccountSwitchResult.Failure("다른 자동화가 실행 중입니다.")
-        }
-
-        return suspendCancellableCoroutine { continuation ->
-            var automation: GeminiAccountSwitcherAutomation? = null
-            continuation.invokeOnCancellation {
-                handler.post {
-                    automation?.cancel()
-                    if (accountSwitchAutomation === automation) {
-                        accountSwitchAutomation = null
-                    }
-                }
-            }
-
-            handler.post {
-                applyAccessibilitySubscription(packageNamesFor(AutomationTargetApp.GEMINI) + packageName)
-                val switcher = GeminiAccountSwitcherAutomation(
-                    handler = handler,
-                    rootProvider = { rootInActiveWindow },
-                    allRootsProvider = {
-                        val winRoots = runCatching { windows }.getOrNull().orEmpty()
-                            .mapNotNull { runCatching { it.root }.getOrNull() }
-                        val active = runCatching { rootInActiveWindow }.getOrNull()
-                        (winRoots + listOfNotNull(active)).distinct()
-                    },
-                    activePackageProvider = {
-                        rootInActiveWindow?.packageName?.toString()
-                    },
-                    launchGemini = {
-                        val launchIntent = packageManager.getLaunchIntentForPackage(AppDefaults.GEMINI_PACKAGE_NAME)
-                            ?: packageManager.getLaunchIntentForPackage(AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME)
-                        if (launchIntent != null) {
-                            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                            startActivity(launchIntent)
-                            true
-                        } else {
-                            false
-                        }
-                    },
-                    tapAtCoordinates = { x, y -> tapCoordinates(x, y, null) },
-                    onProgress = onProgress,
-                    onFinished = { result ->
-                        clearPackageRestriction()
-                        if (accountSwitchAutomation === automation) {
-                            accountSwitchAutomation = null
-                        }
-                        if (continuation.isActive) {
-                            continuation.resume(result)
-                        }
-                    }
-                )
-                automation = switcher
-                accountSwitchAutomation = switcher
-                switcher.start()
-            }
-        }
-    }
-
-
     /**
      * 최근 앱에서 [taskTitle] 카드의 닫기 버튼을 눌러 앱을 종료한다.
      * Gemini 종료와 같은 제스처/탐색 경로를 재사용한다.
@@ -317,13 +252,39 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     private fun applyAccessibilitySubscription(packageNames: Array<String>?) {
+        val requestedSet = packageNames?.toSet()
+        if (isAccessibilitySubscriptionConfigured && currentSubscribedPackageNames == requestedSet) {
+            return
+        }
         val info = serviceInfo ?: return
-        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK
         info.packageNames = packageNames
-        info.notificationTimeout = 200
+        info.notificationTimeout = 50
         info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+            AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
         setServiceInfo(info)
+        currentSubscribedPackageNames = requestedSet
+        isAccessibilitySubscriptionConfigured = true
+    }
+
+    internal fun isSessionRunning(): Boolean {
+        return ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
+    }
+
+    private fun registerSessionObserverIfNeeded() {
+        val useCase = ProcessAutomationHolder.current() ?: return
+        if (sessionObserverJob?.isActive == true) return
+        sessionObserverJob = serviceScope.launch {
+            var wasRunning = false
+            useCase.runState.collect { state ->
+                val isRunning = state is AutomationRunState.Running
+                if (wasRunning && !isRunning) {
+                    clearPackageRestriction()
+                }
+                wasRunning = isRunning
+            }
+        }
     }
 
     private fun packageNamesFor(targetApp: AutomationTargetApp): Array<String> {
@@ -341,7 +302,7 @@ class GeminiAccessibilityService : AccessibilityService() {
         private val delegate: PromptAutomationGateway,
         private val targetApp: AutomationTargetApp,
         private val service: GeminiAccessibilityService
-) : PromptAutomationGateway, FlowConfigurableGateway {
+    ) : PromptAutomationGateway, FlowConfigurableGateway {
         override fun setFlowImageCount(count: Int) {
             (delegate as? FlowConfigurableGateway)?.setFlowImageCount(count)
         }
@@ -351,6 +312,7 @@ class GeminiAccessibilityService : AccessibilityService() {
             onStateChange: (AutomationRunState) -> Unit,
             onDone: () -> Unit
         ) {
+            service.registerSessionObserverIfNeeded()
             service.restrictPackagesTo(targetApp)
             delegate.sendPrompt(
                 prompt = prompt,
@@ -362,7 +324,9 @@ class GeminiAccessibilityService : AccessibilityService() {
                     onStateChange(state)
                 },
                 onDone = {
-                    service.clearPackageRestriction()
+                    if (!service.isSessionRunning()) {
+                        service.clearPackageRestriction()
+                    }
                     onDone()
                 }
             )

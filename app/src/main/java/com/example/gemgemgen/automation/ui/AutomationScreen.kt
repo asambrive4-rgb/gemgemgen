@@ -32,12 +32,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import com.example.gemgemgen.ui.theme.AppTheme
-import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.automation.domain.AutomationRunState
-import com.example.gemgemgen.automation.domain.AutomationTargetApp
-import com.example.gemgemgen.automation.domain.PromptHistoryItem
-import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.ui.AutomationModePairDialog
@@ -56,74 +52,18 @@ internal fun AutomationScreen(
     automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
     actions: AutomationScreenActions = AutomationScreenActions.Empty,
-    suggestionTokens: List<String> = emptyList(),
-    suggestionCandidates: List<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate> = uiState.activeSuggestionCandidates,
-    onClearFocus: () -> Unit,
-    onHideSettings: () -> Unit = {},
-    onConfirmAccessibilityPrompt: () -> Unit = {},
-    onDismissAccessibilityPromptToSettings: () -> Unit = {},
-    onRefreshStatus: () -> Unit = {},
-    onSelectWildcardFolder: () -> Unit = {},
-    onSelectSafWildcardFolder: () -> Unit = {},
-    onOpenWildcardStorageSettings: () -> Unit = {},
-    onOpenAccessibilitySettings: () -> Unit = {},
-    onTargetAppSelected: (AutomationTargetApp) -> Unit,
-    onFlowImageCountSelected: (Int) -> Unit = {},
-    onPromptTemplateChange: (String) -> Unit,
-    onWildcardTokenSuggestionClick: (String) -> Unit = {},
-    onSuggestionClick: (com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate) -> Unit = {},
-    onNavigateHistoryBack: () -> Unit,
-    onNavigateHistoryForward: () -> Unit,
-    onInsertTopInstruction: () -> Unit = {},
-    onInsertBottomInstruction: () -> Unit = {},
-    onOpenInstructionConfigDialog: (com.example.gemgemgen.automation.domain.InstructionTab) -> Unit = {},
-    onCloseInstructionConfigDialog: () -> Unit = {},
-    onSaveInstructionConfig: (com.example.gemgemgen.automation.domain.PromptInstructionConfig) -> Unit = {},
-    onToggleParagraphSelectionMode: () -> Unit = {},
-    onParagraphOffsetSelected: (Int) -> Unit,
-    onDeleteSelectedParagraph: () -> Unit,
-    onReplaceSelectedParagraph: (String) -> Unit,
-    onImportFromClipboard: () -> Unit,
-    onCopyPromptToClipboard: () -> Unit,
-    onPasteFromClipboard: () -> Unit,
-    onCloseGeminiApp: () -> Unit,
-    onCleanDeviceMemory: () -> Unit,
-    onTerminateSelfApp: () -> Unit,
-    onRepeatCountChange: (String) -> Unit,
-    onRunMvp: () -> Unit,
-    onCancelAutomation: () -> Unit,
-    onAutomationModeSelected: (AutomationMode) -> Unit,
-    onPairRemoteDevice: (String) -> Unit,
-    onToggleSearch: () -> Unit = {},
-    onSearchQueryChange: (String) -> Unit = {},
-    onNavigateSearchNext: () -> Unit = {},
-    onNavigateSearchPrevious: () -> Unit = {},
-    onCloseSearch: () -> Unit = {},
-    onOpenPromptSnippetDialog: () -> Unit = {},
-    onClosePromptSnippetDialog: () -> Unit = {},
-    onAddPromptSnippet: (shortcut: String, content: String) -> Unit = { _, _ -> },
-    onUpdatePromptSnippet: (id: String, shortcut: String, content: String) -> Unit = { _, _, _ -> },
-    onDeletePromptSnippet: (id: String) -> Unit = {},
-    onSelectThemePalette: (AppThemePalette) -> Unit = {},
-    onSelectThemeMode: (com.example.gemgemgen.ui.theme.AppThemeMode) -> Unit = {},
-    onOpenGeminiAccountPicker: () -> Unit = {},
-    onRunVariation: (String?) -> Unit = {},
-    onOpenVariationPromptConfigDialog: () -> Unit = {},
-    onCloseVariationPromptConfigDialog: () -> Unit = {},
-    onSaveVariationPromptConfig: (VariationPromptConfig) -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     var showPairDialog by remember { mutableStateOf(false) }
-    val keyboardVariationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
-    val activeSuggestionCandidates = suggestionCandidates
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Box(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
                 .imePadding()
-                .clearFocusOnOutsideTap(onClearFocus)
+                .clearFocusOnOutsideTap { actions.onClearFocus() }
         ) {
             Column(
                 modifier = Modifier
@@ -134,83 +74,26 @@ internal fun AutomationScreen(
             ) {
 
                 PromptEditorSection(
+                    uiState = uiState,
                     promptTemplateState = promptTemplateState,
-                    selectedTargetApp = uiState.selectedTargetApp,
-                    isTargetSelectionEnabled = !uiState.isRunning,
-                    isParagraphSelectionMode = uiState.isParagraphSelectionMode,
-                    onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
-                    canNavigateHistoryBack = uiState.canNavigateHistoryBack,
-                    canNavigateHistoryForward = uiState.canNavigateHistoryForward,
-                    isHistoryIndicatorVisible = uiState.isHistoryIndicatorVisible,
-                    historyDotCount = uiState.historyDotCount,
-                    activeHistoryDotIndex = uiState.activeHistoryDotIndex,
-                    canCopyPrompt = uiState.hasPromptTemplate && !uiState.isRunning,
-                    canCloseGemini = uiState.canCloseGemini,
-                    canCloseSelfApp = uiState.canCloseSelfApp,
-                    canCleanMemory = uiState.canCleanMemory,
-                    isMemoryCleanupScheduled = uiState.isMemoryCleanupScheduled,
-                    isMaintenanceBusy = uiState.isMaintenanceBusy,
-                    maintenanceMessage = uiState.maintenanceMessage,
-                    selectedParagraphRange = uiState.selectedParagraphRange,
-                    paragraphSelectionMessage = uiState.paragraphSelectionMessage,
-                    suggestionTokens = suggestionTokens,
-                    suggestionCandidates = activeSuggestionCandidates,
+                    actions = actions,
                     showPromptActions = !isKeyboardVisible,
-                    showWildcardSuggestions = !isKeyboardVisible,
-                    onTargetAppSelected = onTargetAppSelected,
-                    flowImageCount = uiState.flowImageCount,
-                    onFlowImageCountSelected = onFlowImageCountSelected,
-                    onPromptTemplateChange = onPromptTemplateChange,
-                    onWildcardTokenSuggestionClick = onWildcardTokenSuggestionClick,
-                    onSuggestionCandidateClick = onSuggestionClick,
-                    onCloseGeminiApp = onCloseGeminiApp,
-                    onCleanDeviceMemory = onCleanDeviceMemory,
-                    onTerminateSelfApp = onTerminateSelfApp,
-                    onNavigateHistoryBack = onNavigateHistoryBack,
-                    onNavigateHistoryForward = onNavigateHistoryForward,
-                    onInsertTopInstruction = onInsertTopInstruction,
-                    onInsertBottomInstruction = onInsertBottomInstruction,
-                    onOpenInstructionConfigDialog = onOpenInstructionConfigDialog,
-                    onParagraphOffsetSelected = onParagraphOffsetSelected,
-                    onDeleteSelectedParagraph = onDeleteSelectedParagraph,
-                    onReplaceSelectedParagraph = onReplaceSelectedParagraph,
-                    onImportFromClipboard = onImportFromClipboard,
-                    onCopyPromptToClipboard = onCopyPromptToClipboard,
-                    onPasteFromClipboard = onPasteFromClipboard,
-                    isSearchActive = uiState.isSearchActive,
-                    searchQuery = uiState.searchQuery,
-                    searchMatches = uiState.searchMatches,
-                    activeSearchMatchIndex = uiState.activeSearchMatchIndex,
-                    onToggleSearch = onToggleSearch,
-                    onSearchQueryChange = onSearchQueryChange,
-                    onNavigateSearchNext = onNavigateSearchNext,
-                    onNavigateSearchPrevious = onNavigateSearchPrevious,
-                    onCloseSearch = onCloseSearch,
-                    onOpenPromptSnippetDialog = onOpenPromptSnippetDialog,
-                    onOpenGeminiAccountPicker = onOpenGeminiAccountPicker,
-                    showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
-                    isVariationButtonEnabled = uiState.canInteractWithVariation,
-                    variationAutomationState = uiState.variationAutomationState,
-                    onRunVariation = { selectedText ->
-                        onClearFocus()
-                        onRunVariation(selectedText)
-                    },
-                    onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
+                    showWildcardSuggestions = !isKeyboardVisible
                 )
 
                 if (!isKeyboardVisible && uiState.automationMode != AutomationMode.RECEIVER) {
                     AutomationBottomBar(
                         repeatCountText = uiState.repeatCountText,
-                        onRepeatCountChange = onRepeatCountChange,
-                        onRunMvp = onRunMvp,
-                        onCancelAutomation = onCancelAutomation,
+                        onRepeatCountChange = actions::onRepeatCountChange,
+                        onRunMvp = actions::onRunAutomation,
+                        onCancelAutomation = actions::onCancelAutomation,
                         canRun = uiState.canRun,
                         isRunning = uiState.isRunning,
                         automationState = automationBarUiState.automationState,
                         isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
                     )
                 } else if (isKeyboardVisible) {
-                    val hasSuggestions = activeSuggestionCandidates.isNotEmpty() || suggestionTokens.isNotEmpty()
+                    val hasSuggestions = uiState.activeSuggestionCandidates.isNotEmpty()
                     val bottomSpacerHeight = if (hasSuggestions) 105.dp else 56.dp
                     Spacer(modifier = Modifier.height(bottomSpacerHeight))
                 }
@@ -220,7 +103,7 @@ internal fun AutomationScreen(
                         selectedMode = uiState.automationMode,
                         status = uiState.remoteAutomationStatus,
                         enabled = !uiState.isRunning,
-                        onModeSelected = onAutomationModeSelected,
+                        onModeSelected = actions::onAutomationModeSelected,
                         onRequestPair = { showPairDialog = true }
                     )
 
@@ -248,77 +131,30 @@ internal fun AutomationScreen(
                             .padding(AutomationScreenContentPadding),
                         verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
                     ) {
-                        val keyboardCandidates = if (activeSuggestionCandidates.isNotEmpty()) {
-                            activeSuggestionCandidates
-                        } else {
-                            suggestionTokens.map {
-                                com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate(
-                                    name = it,
-                                    token = it,
-                                    displayText = it
-                                )
-                            }
-                        }
-                        if (keyboardCandidates.isNotEmpty()) {
+                        if (uiState.activeSuggestionCandidates.isNotEmpty()) {
                             PromptSuggestionBar(
-                                suggestions = keyboardCandidates,
+                                suggestions = uiState.activeSuggestionCandidates,
                                 onSuggestionClick = { candidate ->
-                                    onSuggestionClick(candidate)
-                                    onWildcardTokenSuggestionClick(candidate.token)
+                                    actions.onApplySuggestion(candidate)
                                 }
                             )
                         }
 
                         KeyboardPromptAccessoryBar(
-                            canRun = uiState.canRun,
-                            isRunning = uiState.isRunning,
-                            repeatCountText = uiState.repeatCountText,
-                            onRepeatCountChange = onRepeatCountChange,
-                            automationState = automationBarUiState.automationState,
-                            isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER,
-                            onRunMvp = {
-                                onClearFocus()
-                                onRunMvp()
-                            },
-                            onCancelAutomation = {
-                                onClearFocus()
-                                onCancelAutomation()
-                            },
-                            canCopyPrompt = uiState.hasPromptTemplate && !uiState.isRunning,
-                            isTargetSelectionEnabled = !uiState.isRunning,
-                            onInsertTopInstruction = onInsertTopInstruction,
-                            onInsertBottomInstruction = onInsertBottomInstruction,
-                            onOpenInstructionConfigDialog = onOpenInstructionConfigDialog,
-                            onImportFromClipboard = onImportFromClipboard,
-                            onCopyPromptToClipboard = onCopyPromptToClipboard,
-                            showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
-                            isVariationButtonEnabled = uiState.canInteractWithVariation,
-                            variationAutomationState = uiState.variationAutomationState,
-                            onRunVariation = {
-                                val selectedText = keyboardVariationSelectedTextAtPress.value
-                                    ?: promptTemplateState.selectedTextOrNull()
-                                keyboardVariationSelectedTextAtPress.value = null
-                                onClearFocus()
-                                onRunVariation(selectedText)
-                            },
-                            onVariationPointerDown = {
-                                keyboardVariationSelectedTextAtPress.value =
-                                    promptTemplateState.selectedTextOrNull()
-                            },
-                            onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog,
-                            isParagraphSelectionMode = uiState.isParagraphSelectionMode,
-                            onToggleParagraphSelectionMode = onToggleParagraphSelectionMode
+                            uiState = uiState,
+                            automationBarUiState = automationBarUiState,
+                            promptTemplateState = promptTemplateState,
+                            actions = actions
                         )
                     }
                 }
             }
 
-
             if (showPairDialog) {
                 AutomationModePairDialog(
                     targetDeviceName = uiState.remoteAutomationStatus.discoveredDeviceName.ifBlank { "S25 FE" },
                     onConfirm = { code ->
-                        onPairRemoteDevice(code)
+                        actions.onPairRemoteDevice(code)
                         showPairDialog = false
                     },
                     onDismiss = {
@@ -332,28 +168,36 @@ internal fun AutomationScreen(
                     showDialog = true,
                     config = uiState.promptInstructionConfig,
                     initialTab = uiState.instructionConfigDialogInitialTab,
-                    onSave = onSaveInstructionConfig,
-                    onDismiss = onCloseInstructionConfigDialog
+                    onSave = actions::onSaveInstructionConfig,
+                    onDismiss = actions::onCloseInstructionConfigDialog
                 )
             }
             if (uiState.showVariationPromptConfigDialog) {
                 VariationPromptDialog(
                     showDialog = true,
                     config = uiState.variationPromptConfig,
-                    onSave = onSaveVariationPromptConfig,
-                    onDismiss = onCloseVariationPromptConfigDialog
+                    onSave = actions::onSaveVariationPromptConfig,
+                    onDismiss = actions::onCloseVariationPromptConfigDialog
                 )
             }
 
             if (uiState.showPromptSnippetDialog) {
+                val selectedText = promptTemplateState.selectedTextOrNull()
+                    ?: uiState.selectedParagraphRange?.let { range ->
+                        val full = promptTemplateState.text.toString()
+                        val s = range.start.coerceIn(0, full.length)
+                        val e = range.endExclusive.coerceIn(s, full.length)
+                        full.substring(s, e).takeIf { it.isNotEmpty() }
+                    }
                 PromptSnippetDialog(
                     showDialog = true,
                     snippets = uiState.promptSnippets,
-                    currentPromptText = promptTemplateState.text.toString(),
-                    onAddSnippet = onAddPromptSnippet,
-                    onUpdateSnippet = onUpdatePromptSnippet,
-                    onDeleteSnippet = onDeletePromptSnippet,
-                    onDismiss = onClosePromptSnippetDialog
+                    currentPromptText = selectedText ?: promptTemplateState.text.toString(),
+                    isSelectionPrompt = selectedText != null,
+                    onAddSnippet = actions::onAddPromptSnippet,
+                    onUpdateSnippet = actions::onUpdatePromptSnippet,
+                    onDeleteSnippet = actions::onDeletePromptSnippet,
+                    onDismiss = actions::onDismissPromptSnippetDialog
                 )
             }
         }
@@ -368,37 +212,7 @@ private fun AutomationAppPreview() {
             uiState = AutomationUiState(),
             automationBarUiState = AutomationBarUiState(),
             promptTemplateState = TextFieldState(),
-            actions = AutomationScreenActions.Empty,
-            onClearFocus = {},
-            onHideSettings = {},
-            onConfirmAccessibilityPrompt = {},
-            onDismissAccessibilityPromptToSettings = {},
-            onRefreshStatus = {},
-            onSelectWildcardFolder = {},
-            onSelectSafWildcardFolder = {},
-            onOpenWildcardStorageSettings = {},
-            onOpenAccessibilitySettings = {},
-            onTargetAppSelected = {},
-            onPromptTemplateChange = {},
-            onNavigateHistoryBack = {},
-            onNavigateHistoryForward = {},
-            onInsertTopInstruction = {},
-            onInsertBottomInstruction = {},
-            onOpenInstructionConfigDialog = {},
-            onParagraphOffsetSelected = {},
-            onDeleteSelectedParagraph = {},
-            onReplaceSelectedParagraph = {},
-            onImportFromClipboard = {},
-            onCopyPromptToClipboard = {},
-            onPasteFromClipboard = {},
-            onCloseGeminiApp = {},
-            onCleanDeviceMemory = {},
-            onTerminateSelfApp = {},
-            onRepeatCountChange = {},
-            onRunMvp = {},
-            onCancelAutomation = {},
-            onAutomationModeSelected = {},
-            onPairRemoteDevice = {}
+            actions = AutomationScreenActions.Empty
         )
     }
 }

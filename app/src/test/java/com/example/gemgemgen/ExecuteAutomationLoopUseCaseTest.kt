@@ -484,10 +484,8 @@ class ExecuteAutomationLoopUseCaseTest {
                         return true
                     }
                 },
-                nullKeyboardImeId = NULL_IME_ID
+                nullKeyboardCandidates = listOf(NULL_IME_ID)
             ),
-            lastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
-            clipboardGateway = FakeClipboardGateway(),
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcardSets),
             promptGatewayProvider = PromptAutomationGatewayProvider { targetApp ->
                 onGatewayRequest(targetApp)
@@ -545,18 +543,6 @@ class ExecuteAutomationLoopUseCaseTest {
             wasCancelled = true
             pendingDone.clear()
         }
-    }
-
-    private class FakeLastRunSnapshotStorage : LastRunSnapshotRepository {
-        override fun load(): LastRunSnapshot? = null
-
-        override fun save(snapshot: LastRunSnapshot) = Unit
-    }
-
-    private class FakeClipboardGateway : ClipboardGateway {
-        override fun readText(): String = ""
-
-        override fun writeText(text: String) = Unit
     }
 
     private class FakeWildcardSetRepository(

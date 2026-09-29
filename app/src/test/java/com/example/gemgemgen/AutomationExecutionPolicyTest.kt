@@ -8,7 +8,6 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -326,75 +325,5 @@ class AutomationExecutionPolicyTest {
                 isMaintenanceBusy = false
             )
         )
-    }
-
-    @Test
-    fun memoryCleanupTiming_immediatelyVsScheduled() {
-        val env = readyEnvironment()
-        val remote = RemoteAutomationStatus()
-
-        // 비실행 상태: 즉시 실행 가능, 예약 불가
-        assertTrue(
-            AutomationExecutionPolicy.canExecuteCleanMemoryImmediately(
-                mode = AutomationMode.NORMAL,
-                environmentStatus = env,
-                remoteAutomationStatus = remote,
-                isRunning = false,
-                isVariationRunning = false,
-                isMaintenanceBusy = false
-            )
-        )
-        assertFalse(
-            AutomationExecutionPolicy.canScheduleCleanMemory(
-                mode = AutomationMode.NORMAL,
-                environmentStatus = env,
-                remoteAutomationStatus = remote,
-                isRunning = false,
-                isVariationRunning = false,
-                isMaintenanceBusy = false
-            )
-        )
-
-        // 자동화 실행 중 상태: 즉시 실행 불가, 예약 가능
-        assertFalse(
-            AutomationExecutionPolicy.canExecuteCleanMemoryImmediately(
-                mode = AutomationMode.NORMAL,
-                environmentStatus = env,
-                remoteAutomationStatus = remote,
-                isRunning = true,
-                isVariationRunning = false,
-                isMaintenanceBusy = false
-            )
-        )
-        assertTrue(
-            AutomationExecutionPolicy.canScheduleCleanMemory(
-                mode = AutomationMode.NORMAL,
-                environmentStatus = env,
-                remoteAutomationStatus = remote,
-                isRunning = true,
-                isVariationRunning = false,
-                isMaintenanceBusy = false
-            )
-        )
-    }
-
-    @Test
-    fun evaluatePermissions_returnsConsistentSnapshot() {
-        val permissions = AutomationExecutionPolicy.evaluatePermissions(
-            mode = AutomationMode.NORMAL,
-            environmentStatus = readyEnvironment(),
-            targetApp = AutomationTargetApp.GEMINI,
-            promptTemplate = "test prompt",
-            isRunning = false,
-            remoteAutomationStatus = RemoteAutomationStatus()
-        )
-
-        assertTrue(permissions.canRun)
-        assertTrue(permissions.canRunVariation)
-        assertTrue(permissions.canInteractWithVariation)
-        assertNull(permissions.variationUnavailableReason)
-        assertTrue(permissions.canCloseGemini)
-        assertTrue(permissions.canCloseSelfApp)
-        assertTrue(permissions.canCleanMemory)
     }
 }

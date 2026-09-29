@@ -110,61 +110,6 @@ class CoordinateAutomationExecutionUseCaseTest {
     }
 
     @Test
-    fun decideStart_inReceiverMode_isAlwaysRejected() {
-        val (useCase, _) = createUseCase(isOverlayGranted = true)
-
-        assertEquals(
-            AutomationStartDecision.Rejected,
-            useCase.decideStart(canRun = true, isStartInProgress = false, mode = AutomationMode.RECEIVER)
-        )
-        assertEquals(
-            AutomationStartDecision.Rejected,
-            useCase.decideStart(canRun = false, isStartInProgress = true, mode = AutomationMode.RECEIVER)
-        )
-    }
-
-    @Test
-    fun decideStart_inSenderMode_startsOnlyWhenCanRunAndNotInProgress() {
-        val (useCase, _) = createUseCase(isOverlayGranted = false)
-
-        assertEquals(
-            AutomationStartDecision.RemoteStarted,
-            useCase.decideStart(canRun = true, isStartInProgress = false, mode = AutomationMode.SENDER)
-        )
-        assertEquals(
-            AutomationStartDecision.Rejected,
-            useCase.decideStart(canRun = false, isStartInProgress = false, mode = AutomationMode.SENDER)
-        )
-        assertEquals(
-            AutomationStartDecision.Rejected,
-            useCase.decideStart(canRun = true, isStartInProgress = true, mode = AutomationMode.SENDER)
-        )
-    }
-
-    @Test
-    fun decideStart_inNormalMode_checksOverlayPermissionAndStartStatus() {
-        val (useCaseWithOverlay, _) = createUseCase(isOverlayGranted = true)
-        val (useCaseWithoutOverlay, _) = createUseCase(isOverlayGranted = false)
-
-        assertEquals(
-            AutomationStartDecision.Started,
-            useCaseWithOverlay.decideStart(canRun = true, isStartInProgress = false, mode = AutomationMode.NORMAL)
-        )
-        assertEquals(
-            AutomationStartDecision.PermissionRequired,
-            useCaseWithoutOverlay.decideStart(canRun = true, isStartInProgress = false, mode = AutomationMode.NORMAL)
-        )
-        assertEquals(
-            AutomationStartDecision.Rejected,
-            useCaseWithOverlay.decideStart(canRun = false, isStartInProgress = false, mode = AutomationMode.NORMAL)
-        )
-        assertEquals(
-            AutomationStartDecision.Rejected,
-            useCaseWithOverlay.decideStart(canRun = true, isStartInProgress = true, mode = AutomationMode.NORMAL)
-        )
-    }
-
-    @Test
     fun executeRemote_recordsHistoryAndDelegatesToManageRemoteAutomation() = runBlocking {
         val historyRepo = FakePromptHistoryRepository()
         val historyStore = PromptHistoryStore(historyRepo)
@@ -344,7 +289,7 @@ class CoordinateAutomationExecutionUseCaseTest {
                         return true
                     }
                 },
-                nullKeyboardImeId = "com.example/.NullKeyboard"
+                nullKeyboardCandidates = listOf("com.example/.NullKeyboard")
             ),
             lastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
             clipboardGateway = FakeClipboardGateway(),
@@ -435,6 +380,5 @@ class CoordinateAutomationExecutionUseCaseTest {
         }
 
         override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
-        override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult = RemoteActionResult.Success
     }
 }

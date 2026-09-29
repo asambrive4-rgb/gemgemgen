@@ -1,4 +1,4 @@
-// 역할: 상단 탭 전환과 문단 편집 모드를 비롯한 화면 간 사용자 액션을 조율하는 최상위 UI 진입점입니다.
+// 역할: 상단 탭 전환과 각 화면별 ScreenActions 인터페이스를 바인딩하여 조율하는 최상위 UI 진입점입니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -8,6 +8,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.ui.AnalysisScreen
+import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
@@ -15,12 +16,14 @@ import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.automation.ui.AutomationScreen
+import com.example.gemgemgen.automation.ui.AutomationScreenActions
 import com.example.gemgemgen.automation.ui.AutomationUiState
 import com.example.gemgemgen.automation.ui.SettingsDialogHost
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.ui.WildcardScreen
+import com.example.gemgemgen.wildcard.ui.WildcardScreenActions
 import com.example.gemgemgen.wildcard.ui.WildcardUiState
 import com.example.gemgemgen.remote.domain.AutomationMode
 
@@ -41,7 +44,6 @@ internal data class AutomationAppActions(
     val onTargetAppSelected: (AutomationTargetApp) -> Unit,
     val onFlowImageCountSelected: (Int) -> Unit = {},
     val onPromptTemplateChange: (String) -> Unit,
-    val onWildcardTokenSuggestionClick: (String) -> Unit,
     val onSuggestionClick: (com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate) -> Unit = {},
     val onNavigateHistoryBack: () -> Unit,
     val onNavigateHistoryForward: () -> Unit,
@@ -81,7 +83,58 @@ internal data class AutomationAppActions(
     val onOpenVariationPromptConfigDialog: () -> Unit = {},
     val onCloseVariationPromptConfigDialog: () -> Unit = {},
     val onSaveVariationPromptConfig: (VariationPromptConfig) -> Unit = {}
-)
+) : AutomationScreenActions {
+    override fun onTargetAppSelected(targetApp: AutomationTargetApp) = onTargetAppSelected.invoke(targetApp)
+    override fun onFlowImageCountSelected(count: Int) = onFlowImageCountSelected.invoke(count)
+    override fun onRepeatCountChange(value: String) = onRepeatCountChange.invoke(value)
+    override fun onRunAutomation() = onRunAutomation.invoke()
+    override fun onCancelAutomation() = onCancelAutomation.invoke()
+    override fun onAutomationModeSelected(mode: AutomationMode) = onAutomationModeSelected.invoke(mode)
+    override fun onPairRemoteDevice(pairingCode: String) = onPairRemoteDevice.invoke(pairingCode)
+    override fun onDisconnectRemoteDevice() = onDisconnectRemoteDevice.invoke()
+    override fun onPromptTemplateChange(value: String) = onPromptTemplateChange.invoke(value)
+    override fun onImportPromptFromClipboard() = onImportFromClipboard.invoke()
+    override fun onCopyPromptToClipboard() = onCopyPromptToClipboard.invoke()
+    override fun onPastePromptFromClipboard() = onPasteFromClipboard.invoke()
+    override fun onApplySuggestion(candidate: com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate) = onSuggestionClick.invoke(candidate)
+    override fun onNavigatePromptHistoryBack() = onNavigateHistoryBack.invoke()
+    override fun onNavigatePromptHistoryForward() = onNavigateHistoryForward.invoke()
+    override fun onToggleParagraphSelectionMode() = onToggleParagraphSelectionMode.invoke()
+    override fun onSelectPromptParagraphAt(offset: Int) = onParagraphOffsetSelected.invoke(offset)
+    override fun onDeleteSelectedPromptParagraph() = onDeleteSelectedParagraph.invoke()
+    override fun onReplaceSelectedPromptParagraph(replacement: String) = onReplaceSelectedParagraph.invoke(replacement)
+    override fun onToggleSearch(active: Boolean?) = onToggleSearch.invoke()
+    override fun onSetSearchQuery(query: String) = onSearchQueryChange.invoke(query)
+    override fun onNavigateSearchNext() = onNavigateSearchNext.invoke()
+    override fun onNavigateSearchPrevious() = onNavigateSearchPrevious.invoke()
+    override fun onCloseSearch() = onCloseSearch.invoke()
+    override fun onInsertTopInstruction() = onInsertTopInstruction.invoke()
+    override fun onInsertBottomInstruction() = onInsertBottomInstruction.invoke()
+    override fun onOpenInstructionConfigDialog(initialTab: com.example.gemgemgen.automation.domain.InstructionTab) = onOpenInstructionConfigDialog.invoke(initialTab)
+    override fun onCloseInstructionConfigDialog() = onCloseInstructionConfigDialog.invoke()
+    override fun onSaveInstructionConfig(config: com.example.gemgemgen.automation.domain.PromptInstructionConfig) = onSaveInstructionConfig.invoke(config)
+    override fun onRunVariation(selectedText: String?) = onRunVariation.invoke(selectedText)
+    override fun onOpenVariationPromptConfigDialog() = onOpenVariationPromptConfigDialog.invoke()
+    override fun onCloseVariationPromptConfigDialog() = onCloseVariationPromptConfigDialog.invoke()
+    override fun onSaveVariationPromptConfig(config: VariationPromptConfig) = onSaveVariationPromptConfig.invoke(config)
+    override fun onShowPromptSnippetDialog() = onOpenPromptSnippetDialog.invoke()
+    override fun onDismissPromptSnippetDialog() = onClosePromptSnippetDialog.invoke()
+    override fun onAddPromptSnippet(shortcut: String, content: String) = onAddPromptSnippet.invoke(shortcut, content)
+    override fun onUpdatePromptSnippet(id: String, shortcut: String, content: String) = onUpdatePromptSnippet.invoke(id, shortcut, content)
+    override fun onDeletePromptSnippet(id: String) = onDeletePromptSnippet.invoke(id)
+    override fun onCloseGeminiApp() = onCloseGeminiApp.invoke()
+    override fun onTerminateSelfApp() = onTerminateSelfApp.invoke()
+    override fun onCleanDeviceMemory() = onCleanDeviceMemory.invoke()
+    override fun onOpenGeminiAccountPicker() = onOpenGeminiAccountPicker.invoke()
+    override fun onRefreshStatus() = onRefreshStatus.invoke()
+    override fun onShowSettings() = onShowSettings.invoke()
+    override fun onHideSettings() = onHideSettings.invoke()
+    override fun onConfirmAccessibilityPrompt() = onConfirmAccessibilityPrompt.invoke()
+    override fun onDismissAccessibilityPromptToSettings() = onDismissAccessibilityPromptToSettings.invoke()
+    override fun onSelectThemePalette(palette: AppThemePalette) = onSelectThemePalette.invoke(palette)
+    override fun onSelectThemeMode(mode: AppThemeMode) = onSelectThemeMode.invoke(mode)
+    override fun onClearFocus() = onClearFocus.invoke()
+}
 
 internal data class WildcardAppActions(
     val onRefresh: () -> Unit,
@@ -125,7 +178,50 @@ internal data class WildcardAppActions(
     val onConfirmPendingSave: () -> Unit,
     val onConfirmPendingDiscard: () -> Unit,
     val onCancelPending: () -> Unit
-)
+) : WildcardScreenActions {
+    override fun onRefresh() = onRefresh.invoke()
+    override fun onSelectFolder() = onSelectFolder.invoke()
+    override fun onFileClick(file: WildcardTextFile) = onFileClick.invoke(file)
+    override fun onRequestNewFile() = onRequestNewFile.invoke()
+    override fun onNewFileNameChange(name: String) = onNewFileNameChange.invoke(name)
+    override fun onCreateNewFile() = onCreateNewFile.invoke()
+    override fun onDismissNewFile() = onDismissNewFile.invoke()
+    override fun onRequestRename() = onRequestRename.invoke()
+    override fun onRenameFileNameChange(name: String) = onRenameFileNameChange.invoke(name)
+    override fun onConfirmRename() = onConfirmRename.invoke()
+    override fun onDismissRename() = onDismissRename.invoke()
+    override fun onRequestDelete() = onRequestDelete.invoke()
+    override fun onConfirmDelete() = onConfirmDelete.invoke()
+    override fun onDismissDelete() = onDismissDelete.invoke()
+    override fun onTextChanged(text: String) = onTextChange.invoke(text)
+    override fun onSaveFile() = onSave.invoke()
+    override fun onPaste() = onPaste.invoke()
+    override fun onPasteBelow() = onPasteBelow.invoke()
+    override fun onCopy() = onCopy.invoke()
+    override fun onUndo() = onUndo.invoke()
+    override fun onEnterLineSelectionMode() = onEnterLineSelectionMode.invoke()
+    override fun onExitLineSelectionMode() = onExitLineSelectionMode.invoke()
+    override fun onToggleLineSelection(index: Int) = onToggleLineSelection.invoke(index)
+    override fun onSelectAllLines() = onSelectAllLines.invoke()
+    override fun onDeselectAllLines() = onDeselectAllLines.invoke()
+    override fun onComposeDynamicPrompt() = onComposeDynamicPrompt.invoke()
+    override fun onConfirmPendingSave() = onConfirmPendingSave.invoke()
+    override fun onConfirmPendingDiscard() = onConfirmPendingDiscard.invoke()
+    override fun onCancelPending() = onCancelPending.invoke()
+
+    override fun requestClassify() = onRequestClassify.invoke()
+    override fun onClassifyCriteriaChange(value: String) = onClassifyCriteriaChange.invoke(value)
+    override fun onClassifyProviderSelected(provider: AnalysisProvider) = onClassifyProviderSelected.invoke(provider)
+    override fun onClassifyModelSelected(modelId: String) = onClassifyModelSelected.invoke(modelId)
+    override fun dismissClassifyCriteriaDialog() = onDismissClassifyCriteria.invoke()
+    override fun runClassify() = onRunClassify.invoke()
+    override fun dismissClassifyPreview() = onDismissClassifyPreview.invoke()
+    override fun onClassifyFileNameChange(index: Int, value: String) = onClassifyFileNameChange.invoke(index, value)
+    override fun onToggleClassifyFileNameEdit(index: Int) = onToggleClassifyFileNameEdit.invoke(index)
+    override fun saveClassifyResult(overwrite: Boolean) = onSaveClassifyResult.invoke()
+    override fun confirmClassifyOverwrite() = onConfirmClassifyOverwrite.invoke()
+    override fun dismissClassifyOverwrite() = onDismissClassifyOverwrite.invoke()
+}
 
 internal data class AnalysisAppActions(
     val onClearFocus: () -> Unit,
@@ -167,7 +263,47 @@ internal data class AnalysisAppActions(
     val onEditKeyLabelChange: (String) -> Unit,
     val onCancelEditApiKey: () -> Unit,
     val onUpdateKeyLabel: () -> Unit
-)
+) : AnalysisScreenActions {
+    override fun onClearFocus() = onClearFocus.invoke()
+    override fun onSourcePromptChange(value: String) = onSourcePromptChange.invoke(value)
+    override fun onImportFromAutomation() = onImportFromAutomation.invoke()
+    override fun onCategorySelected(category: AnalysisCategory) = onCategorySelected.invoke(category)
+    override fun onClearTargetSegment() = onClearTargetSegment.invoke()
+    override fun onGenerate() = onGenerate.invoke()
+    override fun onGenerateTxt() = onGenerateTxt.invoke()
+    override fun onCancelWork() = onCancelWork.invoke()
+    override fun onRequestResetSession() = onRequestResetSession.invoke()
+    override fun onConfirmResetSession() = onConfirmResetSession.invoke()
+    override fun onDismissResetSession() = onDismissResetSession.invoke()
+    override fun onTxtCountChange(value: Int) = onTxtCountChange.invoke(value)
+    override fun onToggleDirection(id: String) = onToggleDirection.invoke(id)
+    override fun onCustomHintChange(value: String) = onCustomHintChange.invoke(value)
+    override fun onResultFileNameChange(value: String) = onResultFileNameChange.invoke(value)
+    override fun onApplyCandidate(index: Int) = onApplyCandidate.invoke(index)
+    override fun onCopyCandidate(index: Int) = onCopyCandidate.invoke(index)
+    override fun onRestoreOriginalPrompt() = onRestoreOriginalPrompt.invoke()
+    override fun onCopyResults() = onCopyResults.invoke()
+    override fun onSaveResults() = onSaveResults.invoke()
+    override fun onConfirmOverwrite() = onConfirmOverwrite.invoke()
+    override fun onDismissOverwrite() = onDismissOverwrite.invoke()
+    override fun onRoleProviderSelected(role: AnalysisModelRole, provider: AnalysisProvider) = onRoleProviderSelected.invoke(role, provider)
+    override fun onRoleModelSelected(role: AnalysisModelRole, modelId: String) = onRoleModelSelected.invoke(role, modelId)
+    override fun onStartGrokLogin() = onStartGrokLogin.invoke()
+    override fun onCancelGrokLogin() = onCancelGrokLogin.invoke()
+    override fun onLogoutGrok() = onLogoutGrok.invoke()
+    override fun onOpenGrokLoginUrl(url: String) = onOpenGrokLoginUrl.invoke(url)
+    override fun onShowKeyDialog() = onShowKeyDialog.invoke()
+    override fun onDismissKeyDialog() = onDismissKeyDialog.invoke()
+    override fun onKeyLabelChange(value: String) = onKeyLabelChange.invoke(value)
+    override fun onKeyValueChange(value: String) = onKeyValueChange.invoke(value)
+    override fun onAddApiKey() = onAddApiKey.invoke()
+    override fun onDeleteApiKey(id: String) = onDeleteApiKey.invoke(id)
+    override fun onActivateApiKey(id: String) = onActivateApiKey.invoke(id)
+    override fun onStartEditApiKey(key: GeminiApiKeySummary) = onStartEditApiKey.invoke(key)
+    override fun onEditKeyLabelChange(value: String) = onEditKeyLabelChange.invoke(value)
+    override fun onCancelEditApiKey() = onCancelEditApiKey.invoke()
+    override fun onUpdateKeyLabel() = onUpdateKeyLabel.invoke()
+}
 
 @Composable
 internal fun AutomationApp(
@@ -199,119 +335,14 @@ internal fun AutomationApp(
                     uiState = mainUiState,
                     automationBarUiState = automationBarUiState,
                     promptTemplateState = promptTemplateState,
-                    onClearFocus = automationActions.onClearFocus,
-                    onHideSettings = automationActions.onHideSettings,
-                    onConfirmAccessibilityPrompt =
-                        automationActions.onConfirmAccessibilityPrompt,
-                    onDismissAccessibilityPromptToSettings =
-                        automationActions.onDismissAccessibilityPromptToSettings,
-                    onRefreshStatus = automationActions.onRefreshStatus,
-                    onSelectWildcardFolder = automationActions.onSelectWildcardFolder,
-                    onSelectSafWildcardFolder = automationActions.onSelectSafWildcardFolder,
-                    onOpenWildcardStorageSettings =
-                        automationActions.onOpenWildcardStorageSettings,
-                    onOpenAccessibilitySettings =
-                        automationActions.onOpenAccessibilitySettings,
-                    onTargetAppSelected = automationActions.onTargetAppSelected,
-                    onFlowImageCountSelected = automationActions.onFlowImageCountSelected,
-                    onPromptTemplateChange = automationActions.onPromptTemplateChange,
-                    onWildcardTokenSuggestionClick =
-                        automationActions.onWildcardTokenSuggestionClick,
-                    onSuggestionClick = automationActions.onSuggestionClick,
-                    onOpenPromptSnippetDialog = automationActions.onOpenPromptSnippetDialog,
-                    onClosePromptSnippetDialog = automationActions.onClosePromptSnippetDialog,
-                    onAddPromptSnippet = automationActions.onAddPromptSnippet,
-                    onUpdatePromptSnippet = automationActions.onUpdatePromptSnippet,
-                    onDeletePromptSnippet = automationActions.onDeletePromptSnippet,
-                    onNavigateHistoryBack = automationActions.onNavigateHistoryBack,
-                    onNavigateHistoryForward = automationActions.onNavigateHistoryForward,
-                    onInsertTopInstruction =
-                        automationActions.onInsertTopInstruction,
-                    onInsertBottomInstruction =
-                        automationActions.onInsertBottomInstruction,
-                    onOpenInstructionConfigDialog =
-                        automationActions.onOpenInstructionConfigDialog,
-                    onCloseInstructionConfigDialog =
-                        automationActions.onCloseInstructionConfigDialog,
-                    onSaveInstructionConfig =
-                        automationActions.onSaveInstructionConfig,
-                    onToggleParagraphSelectionMode =
-                        automationActions.onToggleParagraphSelectionMode,
-                    onParagraphOffsetSelected =
-                        automationActions.onParagraphOffsetSelected,
-                    onDeleteSelectedParagraph =
-                        automationActions.onDeleteSelectedParagraph,
-                    onReplaceSelectedParagraph =
-                        automationActions.onReplaceSelectedParagraph,
-                    onImportFromClipboard = automationActions.onImportFromClipboard,
-                    onCopyPromptToClipboard =
-                        automationActions.onCopyPromptToClipboard,
-                    onPasteFromClipboard = automationActions.onPasteFromClipboard,
-                    onCloseGeminiApp = automationActions.onCloseGeminiApp,
-                    onCleanDeviceMemory = automationActions.onCleanDeviceMemory,
-                    onTerminateSelfApp = automationActions.onTerminateSelfApp,
-                    onRepeatCountChange = automationActions.onRepeatCountChange,
-                    onRunMvp = automationActions.onRunAutomation,
-                    onCancelAutomation = automationActions.onCancelAutomation,
-                    onAutomationModeSelected = automationActions.onAutomationModeSelected,
-                    onPairRemoteDevice = automationActions.onPairRemoteDevice,
-                    onToggleSearch = automationActions.onToggleSearch,
-                    onSearchQueryChange = automationActions.onSearchQueryChange,
-                    onNavigateSearchNext = automationActions.onNavigateSearchNext,
-                    onNavigateSearchPrevious = automationActions.onNavigateSearchPrevious,
-                    onCloseSearch = automationActions.onCloseSearch,
-                    onSelectThemePalette = automationActions.onSelectThemePalette,
-                    onSelectThemeMode = automationActions.onSelectThemeMode,
-                    onOpenGeminiAccountPicker = automationActions.onOpenGeminiAccountPicker,
-                    onRunVariation = automationActions.onRunVariation,
-                    onOpenVariationPromptConfigDialog = automationActions.onOpenVariationPromptConfigDialog,
-                    onCloseVariationPromptConfigDialog = automationActions.onCloseVariationPromptConfigDialog,
-                    onSaveVariationPromptConfig = automationActions.onSaveVariationPromptConfig
+                    actions = automationActions
                 )
             },
             MainTabPage(MainTab.ANALYSIS) {
                 AnalysisScreen(
                     uiState = analysisUiState,
                     sourcePromptState = analysisPromptState,
-                    onClearFocus = analysisActions.onClearFocus,
-                    onSourcePromptChange = analysisActions.onSourcePromptChange,
-                    onImportFromAutomation = analysisActions.onImportFromAutomation,
-                    onCategorySelected = analysisActions.onCategorySelected,
-                    onClearTargetSegment = analysisActions.onClearTargetSegment,
-                    onGenerate = analysisActions.onGenerate,
-                    onGenerateTxt = analysisActions.onGenerateTxt,
-                    onCancelWork = analysisActions.onCancelWork,
-                    onRequestResetSession = analysisActions.onRequestResetSession,
-                    onConfirmResetSession = analysisActions.onConfirmResetSession,
-                    onDismissResetSession = analysisActions.onDismissResetSession,
-                    onTxtCountChange = analysisActions.onTxtCountChange,
-                    onToggleDirection = analysisActions.onToggleDirection,
-                    onCustomHintChange = analysisActions.onCustomHintChange,
-                    onResultFileNameChange = analysisActions.onResultFileNameChange,
-                    onApplyCandidate = analysisActions.onApplyCandidate,
-                    onCopyCandidate = analysisActions.onCopyCandidate,
-                    onRestoreOriginalPrompt = analysisActions.onRestoreOriginalPrompt,
-                    onCopyResults = analysisActions.onCopyResults,
-                    onSaveResults = analysisActions.onSaveResults,
-                    onConfirmOverwrite = analysisActions.onConfirmOverwrite,
-                    onDismissOverwrite = analysisActions.onDismissOverwrite,
-                    onShowKeyDialog = analysisActions.onShowKeyDialog,
-                    onDismissKeyDialog = analysisActions.onDismissKeyDialog,
-                    onKeyLabelChange = analysisActions.onKeyLabelChange,
-                    onKeyValueChange = analysisActions.onKeyValueChange,
-                    onRoleProviderSelected = analysisActions.onRoleProviderSelected,
-                    onRoleModelSelected = analysisActions.onRoleModelSelected,
-                    onStartGrokLogin = analysisActions.onStartGrokLogin,
-                    onCancelGrokLogin = analysisActions.onCancelGrokLogin,
-                    onLogoutGrok = analysisActions.onLogoutGrok,
-                    onOpenGrokLoginUrl = analysisActions.onOpenGrokLoginUrl,
-                    onAddApiKey = analysisActions.onAddApiKey,
-                    onDeleteApiKey = analysisActions.onDeleteApiKey,
-                    onActivateApiKey = analysisActions.onActivateApiKey,
-                    onStartEditApiKey = analysisActions.onStartEditApiKey,
-                    onEditKeyLabelChange = analysisActions.onEditKeyLabelChange,
-                    onCancelEditApiKey = analysisActions.onCancelEditApiKey,
-                    onUpdateKeyLabel = analysisActions.onUpdateKeyLabel
+                    actions = analysisActions
                 )
             },
             MainTabPage(MainTab.WILDCARD) {
@@ -319,48 +350,7 @@ internal fun AutomationApp(
                     uiState = wildcardUiState,
                     environmentStatus = mainUiState.environmentStatus,
                     environmentSetupInfo = mainUiState.environmentSetupInfo,
-                    onClearFocus = automationActions.onClearFocus,
-                    onRefresh = wildcardActions.onRefresh,
-                    onSelectFolder = wildcardActions.onSelectFolder,
-                    onFileClick = wildcardActions.onFileClick,
-                    onTextChange = wildcardActions.onTextChange,
-                    onSave = wildcardActions.onSave,
-                    onRequestNewFile = wildcardActions.onRequestNewFile,
-                    onNewFileNameChange = wildcardActions.onNewFileNameChange,
-                    onCreateNewFile = wildcardActions.onCreateNewFile,
-                    onDismissNewFile = wildcardActions.onDismissNewFile,
-                    onRequestDelete = wildcardActions.onRequestDelete,
-                    onConfirmDelete = wildcardActions.onConfirmDelete,
-                    onDismissDelete = wildcardActions.onDismissDelete,
-                    onRequestRename = wildcardActions.onRequestRename,
-                    onRenameFileNameChange = wildcardActions.onRenameFileNameChange,
-                    onConfirmRename = wildcardActions.onConfirmRename,
-                    onDismissRename = wildcardActions.onDismissRename,
-                    onPaste = wildcardActions.onPaste,
-                    onPasteBelow = wildcardActions.onPasteBelow,
-                    onCopy = wildcardActions.onCopy,
-                    onUndo = wildcardActions.onUndo,
-                    onEnterLineSelectionMode = wildcardActions.onEnterLineSelectionMode,
-                    onExitLineSelectionMode = wildcardActions.onExitLineSelectionMode,
-                    onToggleLineSelection = wildcardActions.onToggleLineSelection,
-                    onSelectAllLines = wildcardActions.onSelectAllLines,
-                    onDeselectAllLines = wildcardActions.onDeselectAllLines,
-                    onComposeDynamicPrompt = wildcardActions.onComposeDynamicPrompt,
-                    onRequestClassify = wildcardActions.onRequestClassify,
-                    onClassifyCriteriaChange = wildcardActions.onClassifyCriteriaChange,
-                    onClassifyProviderSelected = wildcardActions.onClassifyProviderSelected,
-                    onClassifyModelSelected = wildcardActions.onClassifyModelSelected,
-                    onDismissClassifyCriteria = wildcardActions.onDismissClassifyCriteria,
-                    onRunClassify = wildcardActions.onRunClassify,
-                    onDismissClassifyPreview = wildcardActions.onDismissClassifyPreview,
-                    onClassifyFileNameChange = wildcardActions.onClassifyFileNameChange,
-                    onToggleClassifyFileNameEdit = wildcardActions.onToggleClassifyFileNameEdit,
-                    onSaveClassifyResult = wildcardActions.onSaveClassifyResult,
-                    onConfirmClassifyOverwrite = wildcardActions.onConfirmClassifyOverwrite,
-                    onDismissClassifyOverwrite = wildcardActions.onDismissClassifyOverwrite,
-                    onConfirmPendingSave = wildcardActions.onConfirmPendingSave,
-                    onConfirmPendingDiscard = wildcardActions.onConfirmPendingDiscard,
-                    onCancelPending = wildcardActions.onCancelPending
+                    actions = wildcardActions
                 )
             }
         )
@@ -374,28 +364,7 @@ internal fun AutomationApp(
     )
 
     SettingsDialogHost(
-        showSettings = mainUiState.showSettings,
-        showAccessibilityPrompt = mainUiState.showAccessibilityPrompt,
-        status = mainUiState.environmentStatus,
-        setupInfo = mainUiState.environmentSetupInfo,
-        hasPromptTemplate = mainUiState.hasPromptTemplate,
-        message = mainUiState.settingsMessage,
-        error = mainUiState.settingsError,
-        selectedThemePalette = mainUiState.selectedThemePalette,
-        selectedThemeMode = mainUiState.selectedThemeMode,
-        remoteStatus = mainUiState.remoteAutomationStatus,
-        isDisconnectingRemote = mainUiState.isDisconnectingRemote,
-        remoteDisconnectMessage = mainUiState.remoteDisconnectMessage,
-        onSelectThemePalette = automationActions.onSelectThemePalette,
-        onSelectThemeMode = automationActions.onSelectThemeMode,
-        onDismiss = automationActions.onHideSettings,
-        onConfirmAccessibilityPrompt = automationActions.onConfirmAccessibilityPrompt,
-        onDismissAccessibilityPromptToSettings = automationActions.onDismissAccessibilityPromptToSettings,
-        onRefresh = automationActions.onRefreshStatus,
-        onSelectWildcardFolder = automationActions.onSelectWildcardFolder,
-        onSelectSafWildcardFolder = automationActions.onSelectSafWildcardFolder,
-        onOpenWildcardStorageSettings = automationActions.onOpenWildcardStorageSettings,
-        onOpenAccessibilitySettings = automationActions.onOpenAccessibilitySettings,
-        onDisconnectRemote = automationActions.onDisconnectRemoteDevice
+        uiState = mainUiState,
+        actions = automationActions
     )
 }

@@ -32,7 +32,7 @@ class ManageImeUseCaseTest {
     @Test
     fun switchToNullKeyboard_doesNothingWhenAlreadyUsingNullKeyboard() {
         val settings = FakeImeSettings(defaultImeId = NULL_IME_ID)
-        val useCase = ManageImeUseCase(settings, NULL_IME_ID)
+        val useCase = ManageImeUseCase(settings, listOf(NULL_IME_ID))
 
         val result = useCase.switchToNullKeyboard()
 
@@ -46,7 +46,7 @@ class ManageImeUseCaseTest {
     @Test
     fun switchToNullKeyboard_failsWhenCurrentImeCannotBeRead() {
         val settings = FakeImeSettings(defaultImeId = null)
-        val useCase = ManageImeUseCase(settings, NULL_IME_ID)
+        val useCase = ManageImeUseCase(settings, listOf(NULL_IME_ID))
 
         val result = useCase.switchToNullKeyboard()
 
@@ -61,7 +61,7 @@ class ManageImeUseCaseTest {
             defaultImeId = ORIGINAL_IME_ID,
             writeResult = false
         )
-        val useCase = ManageImeUseCase(settings, NULL_IME_ID)
+        val useCase = ManageImeUseCase(settings, listOf(NULL_IME_ID))
 
         val result = useCase.switchToNullKeyboard()
 
@@ -76,7 +76,7 @@ class ManageImeUseCaseTest {
             defaultImeId = ORIGINAL_IME_ID,
             applyWrites = false
         )
-        val useCase = ManageImeUseCase(settings, NULL_IME_ID)
+        val useCase = ManageImeUseCase(settings, listOf(NULL_IME_ID))
 
         val result = useCase.switchToNullKeyboard()
 
@@ -88,7 +88,7 @@ class ManageImeUseCaseTest {
     @Test
     fun restore_setsOriginalImeWhenSwitchChangedInputMethod() {
         val settings = FakeImeSettings(defaultImeId = NULL_IME_ID)
-        val useCase = ManageImeUseCase(settings, NULL_IME_ID)
+        val useCase = ManageImeUseCase(settings, listOf(NULL_IME_ID))
         val session = ImeSwitchSession(
             originalImeId = ORIGINAL_IME_ID,
             targetImeId = NULL_IME_ID,
@@ -104,7 +104,7 @@ class ManageImeUseCaseTest {
     @Test
     fun restore_doesNothingWhenSwitchDidNotChangeInputMethod() {
         val settings = FakeImeSettings(defaultImeId = NULL_IME_ID)
-        val useCase = ManageImeUseCase(settings, NULL_IME_ID)
+        val useCase = ManageImeUseCase(settings, listOf(NULL_IME_ID))
         val session = ImeSwitchSession(
             originalImeId = NULL_IME_ID,
             targetImeId = NULL_IME_ID,
@@ -123,7 +123,7 @@ class ManageImeUseCaseTest {
             defaultImeId = NULL_IME_ID,
             writeResult = false
         )
-        val useCase = ManageImeUseCase(settings, NULL_IME_ID)
+        val useCase = ManageImeUseCase(settings, listOf(NULL_IME_ID))
         val session = ImeSwitchSession(
             originalImeId = ORIGINAL_IME_ID,
             targetImeId = NULL_IME_ID,

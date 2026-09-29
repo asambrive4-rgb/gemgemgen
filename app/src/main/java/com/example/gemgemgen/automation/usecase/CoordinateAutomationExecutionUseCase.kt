@@ -60,19 +60,6 @@ class CoordinateAutomationExecutionUseCase(
         )
     }
 
-    /**
-     * 외부에서 계산된 플래그를 수신하는 오버로딩 (기존 테스트 및 호출처와의 하위 호환성 유지).
-     */
-    fun decideStart(
-        canRun: Boolean,
-        isStartInProgress: Boolean,
-        mode: AutomationMode
-    ): AutomationStartDecision = when (mode) {
-        AutomationMode.RECEIVER -> AutomationStartDecision.Rejected
-        AutomationMode.SENDER -> if (canRun && !isStartInProgress) AutomationStartDecision.RemoteStarted else AutomationStartDecision.Rejected
-        AutomationMode.NORMAL -> checkAutomationStart.decide(canRun = canRun, isStartInProgress = isStartInProgress)
-    }
-
     suspend fun executeRemote(
         request: AutomationRunRequest,
         onStateChange: (AutomationRunState) -> Unit

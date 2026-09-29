@@ -812,7 +812,6 @@ class AutomationViewModelTest {
                 cleanCount += 1
                 return RemoteActionResult.Success
             }
-            override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult = RemoteActionResult.Success
         }
         val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
         val viewModel = viewModel(
@@ -1415,6 +1414,135 @@ class AutomationViewModelTest {
         assertTrue(pastedPrompt?.endsWith("프롬프트 원문") == true)
     }
 
+    @Test
+    fun applySuggestion_and_editingActions_workWhileAutomationRunning_inNormalMode() {
+        val clipboardGateway = FakeClipboardGateway()
+        val historyStore = PromptHistoryStore(FakePromptHistoryRepository()).apply {
+            record("이전 기록 프롬프트", AutomationTargetApp.GEMINI)
+        }
+        val holdingService = HoldingPromptAutomationGateway(
+            AutomationRunState.Running("일반 모드 실행 중", currentIndex = 1, totalCount = 3)
+        )
+        val snippetCandidate = WildcardTokenAutocomplete.Candidate(
+            name = "고화질",
+            token = "8k masterpiece",
+            displayText = "고화질",
+            type = WildcardTokenAutocomplete.Candidate.Type.SNIPPET
+        )
+        val wildcardRepository = object : WildcardFileRepository {
+            override fun listFiles(): List<WildcardTextFile> = listOf(
+                WildcardTextFile(id = "장소.txt", fileName = "장소.txt")
+            )
+            override fun readFile(file: WildcardTextFile): String = ""
+            override fun createFile(fileName: String): WildcardTextFile = WildcardTextFile(id = fileName, fileName = fileName)
+            override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile = file.copy(fileName = newName)
+            override fun writeFile(file: WildcardTextFile, text: String) = Unit
+            override fun deleteFile(file: WildcardTextFile) = Unit
+        }
+        val snippetRepository = object : PromptSnippetRepository {
+            private var items = listOf(PromptSnippet(shortcut = "고화질", content = "8k masterpiece"))
+            override fun load(): List<PromptSnippet> = items
+            override fun save(snippets: List<PromptSnippet>) { items = snippets }
+        }
+        val viewModel = viewModel(
+            clipboardGateway = clipboardGateway,
+            promptHistoryStore = historyStore,
+            automationRunner = automation(service = holdingService),
+            wildcardFileRepository = wildcardRepository,
+            promptSnippetRepository = snippetRepository
+        )
+
+        viewModel.onPromptTemplateChange("초기 실행 프롬프트")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+        assertTrue(viewModel.uiState.value.isRunning)
+
+        // 1. 일반 모드 실행 중 프롬프트 상용구(스니펫) 칩 클릭 반영 검증
+        viewModel.onPromptTemplateChange("배경 고화")
+        viewModel.applySuggestion(snippetCandidate)
+        assertEquals("배경 8k masterpiece", viewModel.uiState.value.promptTemplate)
+        assertEquals("배경 8k masterpiece", viewModel.promptTemplateTextFieldState.text.toString())
+
+        // 2. 일반 모드 실행 중 와일드카드 칩 클릭 반영 검증
+        viewModel.onPromptTemplateChange("배경 8k masterpiece 장")
+        viewModel.applySuggestion(WildcardTokenAutocomplete.Candidate(name = "장소", token = "__장소__"))
+        assertEquals("배경 8k masterpiece __장소__", viewModel.uiState.value.promptTemplate)
+        assertEquals("배경 8k masterpiece __장소__", viewModel.promptTemplateTextFieldState.text.toString())
+
+        // 3. 일반 모드 실행 중 상단/하단 삽입, 복사, 히스토리 탐색 검증
+        viewModel.saveInstructionConfig(
+            PromptInstructionConfig(topInstruction = "TOP", bottomInstruction = "BOTTOM")
+        )
+        viewModel.insertTopInstruction()
+        viewModel.insertBottomInstruction()
+        assertEquals("TOP\n\n배경 8k masterpiece __장소__\n\nBOTTOM", viewModel.uiState.value.promptTemplate)
+
+        viewModel.copyPromptToClipboard()
+        assertEquals("TOP\n\n배경 8k masterpiece __장소__\n\nBOTTOM", clipboardGateway.writtenText)
+
+        viewModel.navigatePromptHistoryBack()
+        assertEquals("이전 기록 프롬프트", viewModel.uiState.value.promptTemplate)
+        viewModel.navigatePromptHistoryForward()
+        assertEquals("TOP\n\n배경 8k masterpiece __장소__\n\nBOTTOM", viewModel.uiState.value.promptTemplate)
+    }
+
+    @Test
+    fun applySuggestion_and_wildcardToken_workWhileAutomationRunning_inSenderMode() {
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            )
+        )
+        remoteGateway.sendAction = { _, onStateChange ->
+            onStateChange(AutomationRunState.Running("원격 실행 중", currentIndex = 1, totalCount = 2))
+        }
+        val snippetCandidate = WildcardTokenAutocomplete.Candidate(
+            name = "고화질",
+            token = "8k masterpiece",
+            displayText = "고화질",
+            type = WildcardTokenAutocomplete.Candidate.Type.SNIPPET
+        )
+        val wildcardRepository = object : WildcardFileRepository {
+            override fun listFiles(): List<WildcardTextFile> = listOf(
+                WildcardTextFile(id = "장소.txt", fileName = "장소.txt")
+            )
+            override fun readFile(file: WildcardTextFile): String = ""
+            override fun createFile(fileName: String): WildcardTextFile = WildcardTextFile(id = fileName, fileName = fileName)
+            override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile = file.copy(fileName = newName)
+            override fun writeFile(file: WildcardTextFile, text: String) = Unit
+            override fun deleteFile(file: WildcardTextFile) = Unit
+        }
+        val snippetRepository = object : PromptSnippetRepository {
+            private var items = listOf(PromptSnippet(shortcut = "고화질", content = "8k masterpiece"))
+            override fun load(): List<PromptSnippet> = items
+            override fun save(snippets: List<PromptSnippet>) { items = snippets }
+        }
+        val viewModel = viewModel(
+            manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway),
+            wildcardFileRepository = wildcardRepository,
+            promptSnippetRepository = snippetRepository
+        )
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.onPromptTemplateChange("원격 프롬프트")
+
+        assertEquals(AutomationStartDecision.RemoteStarted, viewModel.runAutomation())
+        assertTrue(viewModel.uiState.value.isRunning)
+        assertEquals(AutomationMode.SENDER, viewModel.uiState.value.automationMode)
+
+        // 1. 송신 모드 실행 중 프롬프트 상용구(스니펫) 칩 클릭 반영 검증
+        viewModel.onPromptTemplateChange("인물 고화")
+        viewModel.applySuggestion(snippetCandidate)
+        assertEquals("인물 8k masterpiece", viewModel.uiState.value.promptTemplate)
+        assertEquals("인물 8k masterpiece", viewModel.promptTemplateTextFieldState.text.toString())
+
+        // 2. 송신 모드 실행 중 와일드카드 칩 클릭 반영 검증
+        viewModel.onPromptTemplateChange("인물 8k masterpiece 장")
+        viewModel.applySuggestion(WildcardTokenAutocomplete.Candidate(name = "장소", token = "__장소__"))
+        assertEquals("인물 8k masterpiece __장소__", viewModel.uiState.value.promptTemplate)
+        assertEquals("인물 8k masterpiece __장소__", viewModel.promptTemplateTextFieldState.text.toString())
+    }
+
     private fun viewModel(
         environmentStatusReader: FakeEnvironmentStatusReader = FakeEnvironmentStatusReader(readyEnvironment()),
         clipboardText: String = "",
@@ -1429,9 +1557,10 @@ class AutomationViewModelTest {
         cleanMemoryGateway: MemoryCleanupGateway? = null,
         promptHistoryStore: PromptHistoryStore? = null,
         manageRemoteAutomation: ManageRemoteAutomationUseCase? = null,
-        openGeminiAccountPicker: OpenGeminiAccountPickerUseCase? = null,
         soundAlertGateway: SoundAlertGateway = NoOpSoundAlertGateway,
         runVariationPrompt: RunVariationPromptUseCase? = null,
+        wildcardFileRepository: WildcardFileRepository? = null,
+        promptSnippetRepository: PromptSnippetRepository? = null,
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): AutomationViewModel {
@@ -1445,16 +1574,6 @@ class AutomationViewModelTest {
             memoryCleanupGateway = cleanMemoryGateway ?: FakeMemoryCleanupGateway(),
             manageRemoteAutomation = resolvedRemote
         )
-        val resolvedOpenGeminiAccountPicker = openGeminiAccountPicker ?: OpenGeminiAccountPickerUseCase(
-            manageRemoteAutomation = resolvedRemote,
-            switcherGateway = object : GeminiAccountSwitcherGateway {
-                override val isServiceAvailable: Boolean = true
-                override suspend fun openAccountPicker(
-                    onProgress: (phase: String, message: String) -> Unit
-                ): GeminiAccountSwitchResult = GeminiAccountSwitchResult.Success("계정 목록 열기 성공")
-                override fun launchGeminiForManualSwitch(): Boolean = true
-            }
-        )
         return AutomationViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentStatusReader),
             clipboardGateway = clipboardGateway,
@@ -1465,8 +1584,9 @@ class AutomationViewModelTest {
                 dispatchers = dispatchers
             ),
             appMaintenance = resolvedMaintenance,
+            wildcardFileRepository = wildcardFileRepository,
+            promptSnippetRepository = promptSnippetRepository,
             manageRemoteAutomation = resolvedRemote,
-            openGeminiAccountPicker = resolvedOpenGeminiAccountPicker,
             soundAlertGateway = soundAlertGateway,
             promptHistoryStore = promptHistoryStore,
             runVariationPrompt = runVariationPrompt,
@@ -1493,7 +1613,7 @@ class AutomationViewModelTest {
                         return true
                     }
                 },
-                nullKeyboardImeId = NULL_IME_ID
+                nullKeyboardCandidates = listOf(NULL_IME_ID)
             ),
             lastRunSnapshotStore = lastRunSnapshotStore,
             clipboardGateway = clipboardGateway,
@@ -1705,7 +1825,6 @@ class AutomationViewModelTest {
         }
 
         override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
-        override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult = RemoteActionResult.Success
     }
 
     @Test

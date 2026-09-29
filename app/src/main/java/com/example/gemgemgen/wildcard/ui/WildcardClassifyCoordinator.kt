@@ -16,9 +16,6 @@ import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClassifySaveResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class WildcardClassifyUiState(
@@ -97,18 +94,20 @@ class WildcardClassifyCoordinator(
     }
 
     private var classifyJob: Job? = null
-    private val _classifyUiState = MutableStateFlow(WildcardClassifyUiState())
-    val classifyUiState: StateFlow<WildcardClassifyUiState> = _classifyUiState.asStateFlow()
+    private var currentState = WildcardClassifyUiState()
 
     private fun updateState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState) {
-        val next = transform(_classifyUiState.value)
-        _classifyUiState.value = next
-        host.updateClassifyState { next }
+        host.updateClassifyState { state ->
+            transform(state).also { currentState = it }
+        }
     }
 
     fun cancelJob() {
         classifyJob?.cancel()
         classifyJob = null
+        if (currentState.isClassifying) {
+            currentState = currentState.copy(isClassifying = false)
+        }
     }
 
     fun reset() {
@@ -192,7 +191,7 @@ class WildcardClassifyCoordinator(
     }
 
     override fun dismissClassifyCriteriaDialog() {
-        if (_classifyUiState.value.isClassifying) return
+        if (currentState.isClassifying) return
         updateState { it.copy(showClassifyCriteriaDialog = false) }
         host.clearError()
     }
@@ -202,16 +201,16 @@ class WildcardClassifyCoordinator(
             host.showError("분류 기능을 사용할 수 없습니다.")
             return
         }
-        val currentState = _classifyUiState.value
-        if (!currentState.canRunClassify(host.isFileOperationInProgress)) {
-            if (currentState.classifyCriteria.isBlank()) {
+        val state = currentState
+        if (!state.canRunClassify(host.isFileOperationInProgress)) {
+            if (state.classifyCriteria.isBlank()) {
                 host.showError("분류 기준을 입력해주세요.")
             }
             return
         }
 
         val editingText = host.editingText
-        val criteria = currentState.classifyCriteria
+        val criteria = state.classifyCriteria
         cancelJob()
         classifyJob = scope.launch {
             updateState {
@@ -258,7 +257,7 @@ class WildcardClassifyCoordinator(
     }
 
     override fun dismissClassifyPreview() {
-        if (_classifyUiState.value.isClassifying) return
+        if (currentState.isClassifying) return
         updateState {
             it.copy(
                 classifyPreview = null,
@@ -278,7 +277,7 @@ class WildcardClassifyCoordinator(
     }
 
     private fun mutateSaveEntry(index: Int, transform: (WildcardClassifySaveEntry) -> WildcardClassifySaveEntry) {
-        val entries = _classifyUiState.value.classifySaveEntries
+        val entries = currentState.classifySaveEntries
         if (index !in entries.indices) return
         val updated = entries.toMutableList().also { it[index] = transform(it[index]) }
         updateState { it.copy(classifySaveEntries = updated) }
@@ -290,12 +289,12 @@ class WildcardClassifyCoordinator(
             host.showError("분류 저장 기능을 사용할 수 없습니다.")
             return
         }
-        val entries = _classifyUiState.value.classifySaveEntries
+        val entries = currentState.classifySaveEntries
         if (entries.isEmpty()) {
             host.showError("저장할 그룹이 없습니다.")
             return
         }
-        if (host.isFileOperationInProgress || _classifyUiState.value.isClassifying) return
+        if (host.isFileOperationInProgress || currentState.isClassifying) return
         if (!host.canModifyFiles) {
             host.showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
             return

@@ -22,34 +22,27 @@ class ApplyWildcardTokenUseCase {
         candidates: List<WildcardTokenAutocomplete.Candidate>,
         isParagraphSelectionMode: Boolean = false,
         isBlocked: Boolean = false
-    ): Result? = invoke(
-        text = text,
-        selectionStart = selectionStart,
-        selectionEnd = selectionEnd,
-        token = candidate.token,
-        candidates = candidates,
-        isParagraphSelectionMode = isParagraphSelectionMode,
-        isBlocked = isBlocked
-    )
-
-    operator fun invoke(
-        text: String,
-        selectionStart: Int,
-        selectionEnd: Int,
-        token: String,
-        candidates: List<WildcardTokenAutocomplete.Candidate>,
-        isParagraphSelectionMode: Boolean = false,
-        isBlocked: Boolean = false
     ): Result? {
         if (isBlocked || isParagraphSelectionMode) return null
-        if (token.isBlank()) return null
+        if (candidate.token.isBlank()) return null
         if (selectionStart != selectionEnd) return null // 드래그 선택 중에는 치환 불가
-        if (candidates.none { it.token == token }) return null
+        if (candidates.none { it.token == candidate.token }) return null
+
+        val range = WildcardTokenAutocomplete.wordRangeAt(text, selectionEnd) ?: return null
+        val word = text.substring(range.first, range.last + 1)
+        if (word.isEmpty()) return null
+
+        // 커서 위치의 단어가 해당 후보(단축어명 또는 토큰)와 접두어/일치 관계인지 검증하여 엉뚱한 단어 치환 방지
+        val isMatchingPrefix = candidate.name.startsWith(word, ignoreCase = true) ||
+                candidate.token.startsWith(word, ignoreCase = true) ||
+                candidate.token.equals(word, ignoreCase = true) ||
+                candidate.name.equals(word, ignoreCase = true)
+        if (!isMatchingPrefix) return null
 
         val replacement = WildcardTokenAutocomplete.replaceWordAtCursor(
             text = text,
             cursor = selectionEnd,
-            token = token
+            token = candidate.token
         ) ?: return null
 
         if (replacement.newText == text) return null

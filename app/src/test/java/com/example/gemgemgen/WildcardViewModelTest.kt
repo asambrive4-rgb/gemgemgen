@@ -470,7 +470,7 @@ class WildcardViewModelTest {
                 dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
             ),
             coroutineScope = CoroutineScope(Dispatchers.Unconfined),
-            wildcardFolderRepository = folderRepository,
+            saveWildcardFolder = folderRepository,
             checkEnvironmentStatus = environmentGateway?.let { CheckEnvironmentStatusUseCase(it) }
         ).also {
             it.onFolderAccessChanged(canModifyFiles)

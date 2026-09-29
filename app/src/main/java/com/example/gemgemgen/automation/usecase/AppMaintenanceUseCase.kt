@@ -48,18 +48,6 @@ class AppMaintenanceUseCase(
     private val memoryCleanupGateway: MemoryCleanupGateway,
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase? = null
 ) {
-    constructor(
-        geminiAppCloser: GeminiAppCloser,
-        memoryCleanupGateway: MemoryCleanupGateway,
-        manageRemoteAutomation: ManageRemoteAutomationUseCase? = null
-    ) : this(
-        geminiRestartCloser = geminiAppCloser,
-        geminiTerminateCloser = geminiAppCloser,
-        selfAppCloser = geminiAppCloser,
-        memoryCleanupGateway = memoryCleanupGateway,
-        manageRemoteAutomation = manageRemoteAutomation
-    )
-
     suspend fun restartGemini(): MaintenanceResult =
         closeApp(geminiRestartCloser, "Gemini 앱을 재시작했습니다.", "Gemini 앱 %d개를 종료하고 재시작했습니다.", "Gemini 재시작 실패: %s", "최근 앱에서 Gemini를 찾지 못했습니다.")
 
@@ -86,10 +74,9 @@ class AppMaintenanceUseCase(
     }
 
     suspend fun cleanMemory(
-        mode: AutomationMode = AutomationMode.NORMAL,
-        remoteCleaner: (suspend () -> MaintenanceResult)? = null
+        mode: AutomationMode = AutomationMode.NORMAL
     ): MaintenanceResult = when (mode) {
-        AutomationMode.SENDER -> cleanRemoteMemory(remoteCleaner)
+        AutomationMode.SENDER -> cleanRemoteMemory()
         AutomationMode.NORMAL,
         AutomationMode.RECEIVER -> cleanLocalMemory()
     }
@@ -102,12 +89,8 @@ class AppMaintenanceUseCase(
             is MemoryCleanupResult.Failure -> MaintenanceResult.Failure("메모리 정리 실패: ${result.message}")
         }
 
-    suspend fun cleanRemoteMemory(
-        remoteCleaner: (suspend () -> MaintenanceResult)? = null
-    ): MaintenanceResult =
-        if (remoteCleaner != null) {
-            remoteCleaner.invoke()
-        } else if (manageRemoteAutomation != null) {
+    suspend fun cleanRemoteMemory(): MaintenanceResult =
+        if (manageRemoteAutomation != null) {
             when (val result = manageRemoteAutomation.cleanMemory()) {
                 RemoteActionResult.Success -> MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
                 is RemoteActionResult.Failure -> MaintenanceResult.Failure(result.message)

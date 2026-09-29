@@ -1,4 +1,4 @@
-// 역할: 전송 플로우 실패 시 안전망 에러 상태 전파, 무한 리셋 방지 임계값 가드 및 2중 텍스트 주입으로 프롬프트를 안전하게 전송하는 베이스 자동화 클래스
+// 역할: 텍스트 주입 시점 캐시 무효화 및 지연 안정화 검증으로 클립보드 오염 없이 프롬프트를 안전하게 전송하는 베이스 자동화 클래스
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -146,6 +146,8 @@ internal abstract class AccessibilityPromptAutomation(
             ?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
     }
 
+    protected open fun invalidateInputCache() = Unit
+
     protected open suspend fun applyPromptText(
         inputNode: AccessibilityNodeInfo,
         prompt: String
@@ -153,8 +155,7 @@ internal abstract class AccessibilityPromptAutomation(
         clickNodeOrParent(inputNode)
         delay(INPUT_CLICK_SETTLE_MS)
 
-        val isInputStillValid = runCatching { inputNode.refresh() }.getOrDefault(false)
-        val targetNode = if (isInputStillValid) inputNode else (findInputNode() ?: inputNode)
+        val targetNode = inputNode
         targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         val arguments = Bundle().apply {
             putCharSequence(
@@ -164,15 +165,21 @@ internal abstract class AccessibilityPromptAutomation(
         }
         targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
 
+        invalidateInputCache()
+
         val textAppliedDirectly = runCatching {
             targetNode.refresh()
             isNodeTextApplied(targetNode, prompt)
         }.getOrDefault(false)
 
         if (!textAppliedDirectly && !isPromptTextApplied(prompt)) {
-            copyToClipboard?.invoke(prompt)
-            targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-            delay(INPUT_PASTE_SETTLE_MS)
+            delay(INPUT_SETTLE_RECHECK_MS)
+            invalidateInputCache()
+            if (!isPromptTextApplied(prompt)) {
+                copyToClipboard?.invoke(prompt)
+                targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                delay(INPUT_PASTE_SETTLE_MS)
+            }
         }
 
         return true
@@ -390,6 +397,7 @@ internal abstract class AccessibilityPromptAutomation(
         const val STATE_NOTIFY_THROTTLE_MS = 1200L
         const val INPUT_CLICK_SETTLE_MS = 150L
         const val INPUT_PASTE_SETTLE_MS = 100L
+        const val INPUT_SETTLE_RECHECK_MS = 60L
         const val INPUT_CONFIRM_WAIT_MS = 500L
         const val SEND_CONFIRM_WAIT_MS = 500L
     }

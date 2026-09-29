@@ -8,47 +8,33 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
-import com.example.gemgemgen.automation.domain.InstructionTab
+import com.example.gemgemgen.remote.domain.AutomationMode
 
 @Composable
 internal fun KeyboardPromptAccessoryBar(
-    canRun: Boolean,
-    isRunning: Boolean,
-    repeatCountText: String,
-    onRepeatCountChange: (String) -> Unit = {},
-    automationState: AutomationRunState,
-    isRemoteSendMode: Boolean = false,
-    onRunMvp: () -> Unit,
-    onCancelAutomation: () -> Unit,
-    canCopyPrompt: Boolean,
-    isTargetSelectionEnabled: Boolean,
-    onInsertTopInstruction: () -> Unit,
-    onInsertBottomInstruction: () -> Unit,
-    onOpenInstructionConfigDialog: (InstructionTab) -> Unit,
-    onImportFromClipboard: () -> Unit,
-    onCopyPromptToClipboard: () -> Unit,
-    showVariationButton: Boolean = true,
-    isVariationButtonEnabled: Boolean = true,
-    variationAutomationState: AutomationRunState = AutomationRunState.Idle,
-    onRunVariation: () -> Unit = {},
-    onVariationPointerDown: (() -> Unit)? = null,
-    onOpenVariationPromptConfigDialog: () -> Unit = {},
-    isParagraphSelectionMode: Boolean = false,
-    onToggleParagraphSelectionMode: () -> Unit = {},
+    uiState: AutomationUiState,
+    automationBarUiState: AutomationBarUiState,
+    promptTemplateState: TextFieldState,
+    actions: AutomationScreenActions = AutomationScreenActions.Empty,
     modifier: Modifier = Modifier
 ) {
-    val countBadgeText = if (automationState is AutomationRunState.Running &&
-        automationState.currentIndex != null &&
-        automationState.totalCount != null
+    val keyboardVariationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
+
+    val countBadgeText = if (automationBarUiState.automationState is AutomationRunState.Running &&
+        automationBarUiState.automationState.currentIndex != null &&
+        automationBarUiState.automationState.totalCount != null
     ) {
-        "${automationState.currentIndex}/${automationState.totalCount}"
+        "${automationBarUiState.automationState.currentIndex}/${automationBarUiState.automationState.totalCount}"
     } else {
-        "×${repeatCountText.ifBlank { "1" }}"
+        "×${uiState.repeatCountText.ifBlank { "1" }}"
     }
 
     Row(
@@ -64,17 +50,23 @@ internal fun KeyboardPromptAccessoryBar(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             AutomationRunButton(
-                canRun = canRun,
-                isRunning = isRunning,
-                onRunMvp = onRunMvp,
-                onCancelAutomation = onCancelAutomation,
-                isRemoteSendMode = isRemoteSendMode
+                canRun = uiState.canRun,
+                isRunning = uiState.isRunning,
+                onRunMvp = {
+                    actions.onClearFocus()
+                    actions.onRunAutomation()
+                },
+                onCancelAutomation = {
+                    actions.onClearFocus()
+                    actions.onCancelAutomation()
+                },
+                isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
             )
 
-            if (!isRunning) {
+            if (!uiState.isRunning) {
                 RepeatCountStepper(
-                    repeatCountText = repeatCountText,
-                    onRepeatCountChange = onRepeatCountChange
+                    repeatCountText = uiState.repeatCountText,
+                    onRepeatCountChange = actions::onRepeatCountChange
                 )
             } else {
                 AutomationProgressBadge(
@@ -92,27 +84,35 @@ internal fun KeyboardPromptAccessoryBar(
         ) {
             ActionIsland {
                 ParagraphSelectionModeButton(
-                    selected = isParagraphSelectionMode,
-                    enabled = isTargetSelectionEnabled,
-                    onClick = onToggleParagraphSelectionMode
+                    selected = uiState.isParagraphSelectionMode,
+                    enabled = true,
+                    onClick = actions::onToggleParagraphSelectionMode
                 )
             }
 
             PromptEditorActionGroup(
-                isTargetSelectionEnabled = isTargetSelectionEnabled,
-                canCopyPrompt = canCopyPrompt,
-                onInsertTopInstruction = onInsertTopInstruction,
-                onInsertBottomInstruction = onInsertBottomInstruction,
-                onOpenInstructionConfigDialog = onOpenInstructionConfigDialog,
-                onImportFromClipboard = onImportFromClipboard,
-                onCopyPromptToClipboard = onCopyPromptToClipboard,
+                isTargetSelectionEnabled = true,
+                canCopyPrompt = uiState.hasPromptTemplate,
+                onInsertTopInstruction = actions::onInsertTopInstruction,
+                onInsertBottomInstruction = actions::onInsertBottomInstruction,
+                onOpenInstructionConfigDialog = actions::onOpenInstructionConfigDialog,
+                onImportFromClipboard = actions::onImportPromptFromClipboard,
+                onCopyPromptToClipboard = actions::onCopyPromptToClipboard,
                 showInsertButtons = false,
-                showVariationButton = showVariationButton,
-                isVariationButtonEnabled = isVariationButtonEnabled,
-                variationAutomationState = variationAutomationState,
-                onRunVariation = onRunVariation,
-                onVariationPointerDown = onVariationPointerDown,
-                onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
+                showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
+                isVariationButtonEnabled = uiState.canInteractWithVariation,
+                variationAutomationState = uiState.variationAutomationState,
+                onRunVariation = {
+                    val selectedText = keyboardVariationSelectedTextAtPress.value
+                        ?: promptTemplateState.selectedTextOrNull()
+                    keyboardVariationSelectedTextAtPress.value = null
+                    actions.onClearFocus()
+                    actions.onRunVariation(selectedText)
+                },
+                onVariationPointerDown = {
+                    keyboardVariationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
+                },
+                onOpenVariationPromptConfigDialog = actions::onOpenVariationPromptConfigDialog
             )
         }
     }

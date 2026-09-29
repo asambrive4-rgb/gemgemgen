@@ -1,4 +1,4 @@
-// 역할: 접근성 권한, 배터리 촜적화 예외, 키보드 설정 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
+// 역할: 접근성 권한, 배터리 최적화 예외, 키보드 및 테마 설정 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -58,40 +58,20 @@ enum class SettingsDialogStage {
 
 @Composable
 internal fun SettingsDialogHost(
-    showSettings: Boolean,
-    showAccessibilityPrompt: Boolean,
-    status: EnvironmentStatus,
-    setupInfo: EnvironmentSetupInfo,
-    hasPromptTemplate: Boolean,
-    message: String,
-    error: String,
-    selectedThemePalette: AppThemePalette = AppThemePalette.DEFAULT,
-    selectedThemeMode: AppThemeMode = AppThemeMode.DEFAULT,
-    remoteStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
-    isDisconnectingRemote: Boolean = false,
-    remoteDisconnectMessage: String = "",
-    onSelectThemePalette: (AppThemePalette) -> Unit = {},
-    onSelectThemeMode: (AppThemeMode) -> Unit = {},
-    onDismiss: () -> Unit,
-    onConfirmAccessibilityPrompt: () -> Unit,
-    onDismissAccessibilityPromptToSettings: () -> Unit,
-    onRefresh: () -> Unit,
-    onSelectWildcardFolder: () -> Unit,
-    onSelectSafWildcardFolder: () -> Unit,
-    onOpenWildcardStorageSettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit,
-    onDisconnectRemote: () -> Unit = {}
+    uiState: AutomationUiState,
+    actions: AutomationScreenActions = AutomationScreenActions.Empty,
+    modifier: Modifier = Modifier
 ) {
     val activeStage = when {
-        showAccessibilityPrompt -> SettingsDialogStage.ACCESSIBILITY_PROMPT
-        showSettings -> SettingsDialogStage.SETTINGS
+        uiState.showAccessibilityPrompt -> SettingsDialogStage.ACCESSIBILITY_PROMPT
+        uiState.showSettings -> SettingsDialogStage.SETTINGS
         else -> null
     } ?: return
 
     val onDismissRequest: () -> Unit = {
         when (activeStage) {
-            SettingsDialogStage.ACCESSIBILITY_PROMPT -> onDismissAccessibilityPromptToSettings()
-            SettingsDialogStage.SETTINGS -> onDismiss()
+            SettingsDialogStage.ACCESSIBILITY_PROMPT -> actions.onDismissAccessibilityPromptToSettings()
+            SettingsDialogStage.SETTINGS -> actions.onHideSettings()
         }
     }
 
@@ -100,7 +80,7 @@ internal fun SettingsDialogHost(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
-            modifier = Modifier
+            modifier = modifier
                 .padding(24.dp)
                 .imePadding()
                 .widthIn(min = 280.dp, max = 560.dp)
@@ -121,31 +101,14 @@ internal fun SettingsDialogHost(
                 when (stage) {
                     SettingsDialogStage.ACCESSIBILITY_PROMPT -> {
                         AccessibilityPromptDialogContent(
-                            onConfirm = onConfirmAccessibilityPrompt,
-                            onDismissToSettings = onDismissAccessibilityPromptToSettings
+                            onConfirm = { actions.onConfirmAccessibilityPrompt() },
+                            onDismissToSettings = { actions.onDismissAccessibilityPromptToSettings() }
                         )
                     }
                     SettingsDialogStage.SETTINGS -> {
                         StatusSettingsDialogContent(
-                            status = status,
-                            setupInfo = setupInfo,
-                            hasPromptTemplate = hasPromptTemplate,
-                            message = message,
-                            error = error,
-                            selectedThemePalette = selectedThemePalette,
-                            selectedThemeMode = selectedThemeMode,
-                            remoteStatus = remoteStatus,
-                            isDisconnectingRemote = isDisconnectingRemote,
-                            remoteDisconnectMessage = remoteDisconnectMessage,
-                            onSelectThemePalette = onSelectThemePalette,
-                            onSelectThemeMode = onSelectThemeMode,
-                            onDismiss = onDismiss,
-                            onRefresh = onRefresh,
-                            onSelectWildcardFolder = onSelectWildcardFolder,
-                            onSelectSafWildcardFolder = onSelectSafWildcardFolder,
-                            onOpenWildcardStorageSettings = onOpenWildcardStorageSettings,
-                            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
-                            onDisconnectRemote = onDisconnectRemote
+                            uiState = uiState,
+                            actions = actions
                         )
                     }
                 }
@@ -194,119 +157,17 @@ private fun AccessibilityPromptDialogContent(
 }
 
 @Composable
-internal fun AccessibilityPromptDialog(
-    onConfirm: () -> Unit,
-    onDismissToSettings: () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onDismissToSettings,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier
-                .padding(24.dp)
-                .imePadding()
-                .widthIn(min = 280.dp, max = 560.dp)
-                .fillMaxWidth()
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
-        ) {
-            AccessibilityPromptDialogContent(
-                onConfirm = onConfirm,
-                onDismissToSettings = onDismissToSettings
-            )
-        }
-    }
-}
-
-@Composable
-internal fun StatusSettingsDialog(
-    status: EnvironmentStatus,
-    setupInfo: EnvironmentSetupInfo,
-    hasPromptTemplate: Boolean,
-    message: String,
-    error: String,
-    selectedThemePalette: AppThemePalette = AppThemePalette.DEFAULT,
-    selectedThemeMode: AppThemeMode = AppThemeMode.DEFAULT,
-    remoteStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
-    isDisconnectingRemote: Boolean = false,
-    remoteDisconnectMessage: String = "",
-    onSelectThemePalette: (AppThemePalette) -> Unit = {},
-    onSelectThemeMode: (AppThemeMode) -> Unit = {},
-    onDismiss: () -> Unit,
-    onRefresh: () -> Unit,
-    onSelectWildcardFolder: () -> Unit,
-    onSelectSafWildcardFolder: () -> Unit,
-    onOpenWildcardStorageSettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit,
-    onDisconnectRemote: () -> Unit = {}
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier
-                .padding(24.dp)
-                .imePadding()
-                .widthIn(min = 280.dp, max = 560.dp)
-                .fillMaxWidth()
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
-        ) {
-            StatusSettingsDialogContent(
-                status = status,
-                setupInfo = setupInfo,
-                hasPromptTemplate = hasPromptTemplate,
-                message = message,
-                error = error,
-                selectedThemePalette = selectedThemePalette,
-                selectedThemeMode = selectedThemeMode,
-                remoteStatus = remoteStatus,
-                isDisconnectingRemote = isDisconnectingRemote,
-                remoteDisconnectMessage = remoteDisconnectMessage,
-                onSelectThemePalette = onSelectThemePalette,
-                onSelectThemeMode = onSelectThemeMode,
-                onDismiss = onDismiss,
-                onRefresh = onRefresh,
-                onSelectWildcardFolder = onSelectWildcardFolder,
-                onSelectSafWildcardFolder = onSelectSafWildcardFolder,
-                onOpenWildcardStorageSettings = onOpenWildcardStorageSettings,
-                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
-                onDisconnectRemote = onDisconnectRemote
-            )
-        }
-    }
-}
-
-@Composable
 private fun StatusSettingsDialogContent(
-    status: EnvironmentStatus,
-    setupInfo: EnvironmentSetupInfo,
-    hasPromptTemplate: Boolean,
-    message: String,
-    error: String,
-    selectedThemePalette: AppThemePalette = AppThemePalette.DEFAULT,
-    selectedThemeMode: AppThemeMode = AppThemeMode.DEFAULT,
-    remoteStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
-    isDisconnectingRemote: Boolean = false,
-    remoteDisconnectMessage: String = "",
-    onSelectThemePalette: (AppThemePalette) -> Unit = {},
-    onSelectThemeMode: (AppThemeMode) -> Unit = {},
-    onDismiss: () -> Unit,
-    onRefresh: () -> Unit,
-    onSelectWildcardFolder: () -> Unit,
-    onSelectSafWildcardFolder: () -> Unit,
-    onOpenWildcardStorageSettings: () -> Unit,
-    onOpenAccessibilitySettings: () -> Unit,
-    onDisconnectRemote: () -> Unit = {}
+    uiState: AutomationUiState,
+    actions: AutomationScreenActions = AutomationScreenActions.Empty,
+    modifier: Modifier = Modifier
 ) {
+    val status = uiState.environmentStatus
+    val setupInfo = uiState.environmentSetupInfo
+    val remoteStatus = uiState.remoteAutomationStatus
+
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(24.dp)
     ) {
@@ -336,12 +197,12 @@ private fun StatusSettingsDialogContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 AppThemeMode.entries.forEach { mode ->
-                    val isModeSelected = mode == selectedThemeMode
+                    val isModeSelected = mode == uiState.selectedThemeMode
                     Surface(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { onSelectThemeMode(mode) },
+                            .clickable { actions.onSelectThemeMode(mode) },
                         shape = RoundedCornerShape(12.dp),
                         color = if (isModeSelected) {
                             AppTheme.colors.card
@@ -389,12 +250,12 @@ private fun StatusSettingsDialogContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 AppThemePalette.entries.forEach { palette ->
-                    val isSelected = palette == selectedThemePalette
+                    val isSelected = palette == uiState.selectedThemePalette
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable { onSelectThemePalette(palette) },
+                            .clickable { actions.onSelectThemePalette(palette) },
                         shape = RoundedCornerShape(14.dp),
                         color = if (isSelected) {
                             AppTheme.colors.card
@@ -434,7 +295,7 @@ private fun StatusSettingsDialogContent(
                             }
                             RadioButton(
                                 selected = isSelected,
-                                onClick = { onSelectThemePalette(palette) }
+                                onClick = { actions.onSelectThemePalette(palette) }
                             )
                         }
                     }
@@ -503,11 +364,11 @@ private fun StatusSettingsDialogContent(
                         )
                     }
 
-                    if (remoteDisconnectMessage.isNotBlank()) {
+                    if (uiState.remoteDisconnectMessage.isNotBlank()) {
                         Text(
-                            text = remoteDisconnectMessage,
+                            text = uiState.remoteDisconnectMessage,
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (remoteDisconnectMessage == "원격 연결을 끊었습니다.") {
+                            color = if (uiState.remoteDisconnectMessage == "원격 연결을 끊었습니다.") {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.error
@@ -516,11 +377,11 @@ private fun StatusSettingsDialogContent(
                     }
 
                     OutlinedButton(
-                        onClick = onDisconnectRemote,
-                        enabled = isRemoteConnected && !isRemoteRunning && !isDisconnectingRemote,
+                        onClick = { actions.onDisconnectRemoteDevice() },
+                        enabled = isRemoteConnected && !isRemoteRunning && !uiState.isDisconnectingRemote,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(if (isDisconnectingRemote) "연결 끊는 중…" else "연결 끊기")
+                        Text(if (uiState.isDisconnectingRemote) "연결 끊는 중…" else "연결 끊기")
                     }
                 }
             }
@@ -538,7 +399,7 @@ private fun StatusSettingsDialogContent(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
-                OutlinedButton(onClick = onRefresh) {
+                OutlinedButton(onClick = { actions.onRefreshStatus() }) {
                     Text("새로고침")
                 }
             }
@@ -549,28 +410,28 @@ private fun StatusSettingsDialogContent(
             StatusRow("WRITE_SECURE_SETTINGS", status.hasWriteSecureSettingsPermission)
             StatusRow("wildcard 폴더", status.isWildcardDirectoryAccessible)
             StatusRow("wildcard 편집 권한", status.isWildcardDirectoryWritable)
-            StatusRow("프롬프트", hasPromptTemplate)
+            StatusRow("프롬프트", uiState.hasPromptTemplate)
 
             if (!status.isWildcardDirectoryAccessible) {
                 Text(
                     text = "Android 14 이상에서는 시스템 파일 선택기가 Download/Documents 하위 폴더를 차단할 수 있습니다. 기존 경로를 사용하려면 공유 저장소 접근을 허용하세요.",
                     style = MaterialTheme.typography.bodySmall
                 )
-                Button(onClick = onOpenWildcardStorageSettings) {
+                Button(onClick = { actions.onOpenWildcardStorageSettings() }) {
                     Text("공유 저장소 접근 설정")
                 }
             }
 
             if (!status.isAccessibilityServiceEnabled) {
-                Button(onClick = onOpenAccessibilitySettings) {
+                Button(onClick = { actions.onOpenAccessibilitySettings() }) {
                     Text("접근성 설정 열기")
                 }
             }
 
-            OutlinedButton(onClick = onSelectWildcardFolder) {
+            OutlinedButton(onClick = { actions.onSelectWildcardFolder() }) {
                 Text("wildcard 폴더 선택")
             }
-            TextButton(onClick = onSelectSafWildcardFolder) {
+            TextButton(onClick = { actions.onSelectSafWildcardFolder() }) {
                 Text("SAF로 허용된 다른 폴더 선택")
             }
 
@@ -589,28 +450,13 @@ private fun StatusSettingsDialogContent(
                 text = "Null Keyboard 전환 대상: ${setupInfo.nullKeyboardTargetImeId}",
                 style = MaterialTheme.typography.bodySmall
             )
-
-            if (message.isNotBlank()) {
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-
-            if (error.isNotBlank()) {
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
         }
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = { actions.onHideSettings() }) {
                 Text("닫기")
             }
         }

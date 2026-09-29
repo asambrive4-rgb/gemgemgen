@@ -14,6 +14,10 @@ internal class FlowAccessibilityNodeFinder(
         snapshotCache.clear()
     }
 
+    fun invalidateInputNode() {
+        snapshotCache.invalidate("input")
+    }
+
     fun findInputNode(): AccessibilityNodeInfo? {
         val root = rootProvider() ?: return null
         return snapshotCache.getOrFind("input", root) {

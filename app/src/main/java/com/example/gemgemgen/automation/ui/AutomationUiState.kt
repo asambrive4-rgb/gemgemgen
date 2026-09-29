@@ -25,8 +25,6 @@ data class AutomationUiState(
     val remoteAutomationStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
     val showSettings: Boolean = false,
     val showAccessibilityPrompt: Boolean = false,
-    val settingsMessage: String = "",
-    val settingsError: String = "",
     val isDisconnectingRemote: Boolean = false,
     val remoteDisconnectMessage: String = "",
     val isParagraphSelectionMode: Boolean = false,
@@ -38,8 +36,6 @@ data class AutomationUiState(
     val historyDotCount: Int = 0,
     val activeHistoryDotIndex: Int = 0,
     val maintenanceState: MaintenanceState = MaintenanceState(),
-    /** 와일드카드 파일 기반 토큰 추천 후보 (입력창 위 칩용). */
-    val wildcardTokenCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
     /** 등록된 프롬프트 상용구(스니펫) 목록 */
     val promptSnippets: List<com.example.gemgemgen.automation.domain.PromptSnippet> = emptyList(),
     /** 와일드카드 토큰 및 상용구가 모두 포함된 통합 자동완성 후보 목록 */

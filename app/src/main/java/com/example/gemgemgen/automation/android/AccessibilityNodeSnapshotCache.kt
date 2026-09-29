@@ -1,4 +1,4 @@
-// 역할: 엔트리별 독립 TTL 및 Stale 검증으로 중복 Binder IPC를 최소화하며 최신 접근성 노드를 캐싱합니다.
+// 역할: 엔트리별 독립 TTL 및 windowId 검증으로 추가 Binder IPC(refresh) 없이 타깃 앱 메인 스레드 부하를 최소화하며 최신 접근성 노드를 캐싱합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.SystemClock
@@ -50,9 +50,8 @@ internal class AccessibilityNodeSnapshotCache(
             if (entry != null) {
                 val isTtlValid = nowMillis - entry.cachedAtMillis <= cacheTtlMs
                 val isWindowMatching = runCatching { entry.node.windowId == windowId }.getOrDefault(false)
-                val isNotStale = runCatching { entry.node.refresh() }.getOrDefault(true)
 
-                if (isTtlValid && isWindowMatching && isNotStale) {
+                if (isTtlValid && isWindowMatching) {
                     cacheHitCount++
                     return entry.node
                 } else {
@@ -69,6 +68,10 @@ internal class AccessibilityNodeSnapshotCache(
             cachedNamedNodes.remove(key)
         }
         return result
+    }
+
+    fun invalidate(key: String) {
+        cachedNamedNodes.remove(key)
     }
 
     fun clear() {

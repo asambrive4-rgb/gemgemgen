@@ -26,7 +26,6 @@ interface AutomationScreenActions {
     fun onImportPromptFromClipboard() {}
     fun onCopyPromptToClipboard() {}
     fun onPastePromptFromClipboard() {}
-    fun onApplyWildcardTokenSuggestion(token: String) {}
     fun onApplySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {}
 
     // 히스토리 탐색
@@ -82,6 +81,10 @@ interface AutomationScreenActions {
     fun onDismissAccessibilityPromptToSettings() {}
     fun onSelectThemePalette(palette: AppThemePalette) {}
     fun onSelectThemeMode(mode: AppThemeMode) {}
+    fun onSelectWildcardFolder() {}
+    fun onSelectSafWildcardFolder() {}
+    fun onOpenWildcardStorageSettings() {}
+    fun onOpenAccessibilitySettings() {}
     fun onClearFocus() {}
 
     companion object {

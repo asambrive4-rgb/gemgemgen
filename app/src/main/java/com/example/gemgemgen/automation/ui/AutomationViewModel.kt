@@ -37,10 +37,6 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.RecordAutomationHistoryUseCase
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
-import com.example.gemgemgen.automation.android.AndroidGeminiAccountSwitcherGateway
-import com.example.gemgemgen.automation.usecase.OpenGeminiAccountPickerUseCase
-import com.example.gemgemgen.automation.usecase.OpenGeminiAccountPickerResult
-import com.example.gemgemgen.automation.domain.GeminiAccountSwitchProgressPolicy
 import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
@@ -83,7 +79,7 @@ class AutomationViewModel(
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: ExecuteAutomationLoopUseCase,
     private val appMaintenance: AppMaintenanceUseCase = AppMaintenanceUseCase(
-        geminiAppCloser = object : GeminiAppCloser {
+        geminiRestartCloser = object : GeminiAppCloser {
             override suspend fun closeGeminiApp(): CloseGeminiAppResult {
                 return CloseGeminiAppResult.AccessibilityUnavailable
             }
@@ -117,10 +113,6 @@ class AutomationViewModel(
         automation = automation,
         manageRemoteAutomation = manageRemoteAutomation,
         promptHistoryStore = promptHistoryStore
-    ),
-    private val openGeminiAccountPicker: OpenGeminiAccountPickerUseCase = OpenGeminiAccountPickerUseCase(
-        manageRemoteAutomation = manageRemoteAutomation,
-        switcherGateway = AndroidGeminiAccountSwitcherGateway()
     ),
     promptInstructionRepository: PromptInstructionRepository =
         object : PromptInstructionRepository {
@@ -254,7 +246,6 @@ class AutomationViewModel(
     override fun onImportPromptFromClipboard() { importPromptFromClipboard() }
     override fun onCopyPromptToClipboard() { copyPromptToClipboard() }
     override fun onPastePromptFromClipboard() { pastePromptFromClipboard() }
-    override fun onApplyWildcardTokenSuggestion(token: String) { applyWildcardTokenSuggestion(token) }
     override fun onApplySuggestion(candidate: WildcardTokenAutocomplete.Candidate) { applySuggestion(candidate) }
 
     override fun onNavigatePromptHistoryBack() { navigatePromptHistoryBack() }
@@ -293,7 +284,6 @@ class AutomationViewModel(
     override fun onTerminateGeminiApp() { terminateGeminiApp() }
     override fun onTerminateSelfApp() { terminateSelfApp() }
     override fun onCleanDeviceMemory() { cleanDeviceMemory() }
-    override fun onOpenGeminiAccountPicker() { openGeminiAccountPicker() }
 
     override fun onRefreshStatus() { refreshStatus() }
     override fun onShowSettings() { showSettings() }
@@ -398,7 +388,7 @@ class AutomationViewModel(
         preferredStartIndex = preferredStartIndex
     )
 
-    fun copyPromptToClipboard() = promptEditor.copyPromptToClipboard(_uiState.value.isRunning)
+    fun copyPromptToClipboard() = promptEditor.copyPromptToClipboard()
 
     fun pastePromptFromClipboard() = promptEditor.pastePromptFromClipboard()
 
@@ -412,7 +402,7 @@ class AutomationViewModel(
             openInstructionConfigDialog(InstructionTab.TOP)
             return
         }
-        promptEditor.insertTopInstruction(config.topInstruction, _uiState.value.isRunning)
+        promptEditor.insertTopInstruction(config.topInstruction)
     }
 
     /**
@@ -426,7 +416,7 @@ class AutomationViewModel(
             openInstructionConfigDialog(InstructionTab.BOTTOM)
             return
         }
-        promptEditor.insertBottomInstruction(bottom, _uiState.value.isRunning)
+        promptEditor.insertBottomInstruction(bottom)
     }
 
     fun openInstructionConfigDialog(initialTab: InstructionTab = InstructionTab.TOP) =
@@ -504,26 +494,12 @@ class AutomationViewModel(
     }
 
     /**
-     * 추천 칩 탭: 커서 기준 현재 단어를 와일드카드 토큰으로 교체.
-     * Undo 가능. 실행 중·문단 선택 모드에서는 무시.
-     */
-    fun applyWildcardTokenSuggestion(token: String) {
-        val candidates = _uiState.value.allAutocompleteCandidates.ifEmpty { _uiState.value.wildcardTokenCandidates }
-        promptEditor.applyWildcardTokenSuggestion(
-            token = token,
-            isBlocked = _uiState.value.isRunning,
-            candidates = candidates
-        )
-    }
-
-    /**
      * 추천 칩 탭 (Candidate 직접 전달): 커서 기준 현재 단어를 치환.
      */
     fun applySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {
-        val candidates = _uiState.value.allAutocompleteCandidates.ifEmpty { _uiState.value.wildcardTokenCandidates }
+        val candidates = _uiState.value.allAutocompleteCandidates
         promptEditor.applySuggestion(
             candidate = candidate,
-            isBlocked = _uiState.value.isRunning,
             candidates = candidates
         )
     }
@@ -545,7 +521,6 @@ class AutomationViewModel(
             promptEditor.updateAutocompleteCandidates(combined)
             _uiState.update { state ->
                 state.copy(
-                    wildcardTokenCandidates = wildcardCandidates,
                     promptSnippets = snippets,
                     allAutocompleteCandidates = combined
                 )
@@ -708,10 +683,10 @@ class AutomationViewModel(
     }
 
     fun navigatePromptHistoryBack() =
-        promptEditor.navigatePromptHistoryBack(_uiState.value.isRunning)
+        promptEditor.navigatePromptHistoryBack()
 
     fun navigatePromptHistoryForward() =
-        promptEditor.navigatePromptHistoryForward(_uiState.value.isRunning)
+        promptEditor.navigatePromptHistoryForward()
 
     fun refreshStatus() {
         scope.launch {
@@ -731,7 +706,6 @@ class AutomationViewModel(
                 it.copy(
                     environmentStatus = report.status,
                     environmentSetupInfo = report.setupInfo,
-                    wildcardTokenCandidates = wildcardCandidates,
                     promptSnippets = snippets,
                     allAutocompleteCandidates = combined
                 )
@@ -1010,48 +984,6 @@ class AutomationViewModel(
             this
         } else {
             nextState
-        }
-    }
-
-    fun openGeminiAccountPicker() {
-        if (_uiState.value.isMaintenanceBusy) return
-        scope.launch {
-            val mode = _uiState.value.automationMode
-            val startingMessage = GeminiAccountSwitchProgressPolicy.startingMaintenanceMessage(
-                isSenderMode = mode == AutomationMode.SENDER
-            )
-            _uiState.update {
-                it.copy(
-                    maintenanceState = MaintenanceState(isBusy = true, message = startingMessage)
-                )
-            }
-
-            val result = openGeminiAccountPicker.execute(
-                mode = mode,
-                onProgress = { phase, msg ->
-                    _uiState.update { current ->
-                        current.copy(
-                            maintenanceState = MaintenanceState(isBusy = true, message = "[$phase] $msg")
-                        )
-                    }
-                }
-            )
-
-            when (result) {
-                is OpenGeminiAccountPickerResult.Success -> _uiState.update {
-                    it.copy(
-                        maintenanceState = MaintenanceState(isBusy = false, message = result.message)
-                    )
-                }
-                is OpenGeminiAccountPickerResult.Failure -> {
-                    val maintenanceMsg = GeminiAccountSwitchProgressPolicy.formatMaintenanceErrorMessage(result.message)
-                    _uiState.update {
-                        it.copy(
-                            maintenanceState = MaintenanceState(isBusy = false, message = maintenanceMsg)
-                        )
-                    }
-                }
-            }
         }
     }
 

@@ -16,7 +16,6 @@ data class PreparedAutomationRun(
 )
 
 class PrepareAutomationRunUseCase(
-    @Suppress("UNUSED_PARAMETER") automationHistoryRecorder: AutomationHistoryRecorder? = null,
     private val wildcardSetRepository: WildcardSetRepository,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val promptGenerator: PromptGenerator = PromptGenerator()

@@ -23,7 +23,6 @@ import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.ActiveVariationPromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
-import com.example.gemgemgen.automation.android.AndroidGeminiAccountSwitcherGateway
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
@@ -32,7 +31,6 @@ import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRe
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptInstructionRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesPromptSnippetRepository
 import com.example.gemgemgen.automation.android.SharedPreferencesVariationPromptRepository
-import com.example.gemgemgen.automation.usecase.OpenGeminiAccountPickerUseCase
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
@@ -103,11 +101,6 @@ class AndroidAppContainer(context: Context) {
             automationHistoryRecorder = recordAutomationStart,
             wildcardSetRepository = AndroidWildcardSetRepository(appContext)
         )
-        val switcherGateway = AndroidGeminiAccountSwitcherGateway(appContext)
-        val openGeminiAccountPicker = OpenGeminiAccountPickerUseCase(
-            manageRemoteAutomation = manageRemoteAutomation,
-            switcherGateway = switcherGateway
-        )
         val executeAutomation = CoordinateAutomationExecutionUseCase(
             checkAutomationStart = checkAutomationStart,
             automationHistoryRecorder = recordAutomationStart,
@@ -135,7 +128,6 @@ class AndroidAppContainer(context: Context) {
             promptHistoryStore = promptHistoryStore,
             themePaletteStore = themePaletteStore,
             promptWorkspace = promptWorkspace,
-            openGeminiAccountPicker = openGeminiAccountPicker,
             promptInstructionRepository = promptInstructionRepository,
             variationPromptRepository = variationPromptRepository,
             promptSnippetRepository = promptSnippetRepository,

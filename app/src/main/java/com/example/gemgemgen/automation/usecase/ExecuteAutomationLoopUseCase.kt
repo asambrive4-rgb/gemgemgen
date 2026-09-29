@@ -29,8 +29,8 @@ data class AutomationRunRequest(
 
 class ExecuteAutomationLoopUseCase(
     private val manageImeUseCase: ManageImeUseCase,
-    lastRunSnapshotStore: LastRunSnapshotStore,
-    clipboardGateway: ClipboardGateway,
+    @Suppress("UNUSED_PARAMETER") lastRunSnapshotStore: LastRunSnapshotStore? = null,
+    @Suppress("UNUSED_PARAMETER") clipboardGateway: ClipboardGateway? = null,
     wildcardSetRepository: WildcardSetRepository,
     private val promptGatewayProvider: PromptAutomationGatewayProvider,
     private val targetAppLauncher: TargetAppLauncher,
@@ -38,14 +38,8 @@ class ExecuteAutomationLoopUseCase(
     private val dispatchers: AppDispatchers = AppDispatchers(),
     promptGenerator: PromptGenerator = PromptGenerator(),
     private val generateFinalPrompt: ((String, List<WildcardSet>, Int) -> String)? = null,
-    promptHistoryStore: PromptHistoryStore? = null,
+    @Suppress("UNUSED_PARAMETER") promptHistoryStore: PromptHistoryStore? = null,
     private val runPreparer: PrepareAutomationRunUseCase = PrepareAutomationRunUseCase(
-        automationHistoryRecorder = RecordAutomationHistoryUseCase(
-            lastRunSnapshotStore = lastRunSnapshotStore,
-            clipboardGateway = clipboardGateway,
-            promptHistoryStore = promptHistoryStore,
-            dispatchers = dispatchers
-        ),
         wildcardSetRepository = wildcardSetRepository,
         dispatchers = dispatchers,
         promptGenerator = promptGenerator

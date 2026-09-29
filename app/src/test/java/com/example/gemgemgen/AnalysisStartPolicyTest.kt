@@ -4,7 +4,6 @@ package com.example.gemgemgen
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason
-import com.example.gemgemgen.analysis.domain.AnalysisStartGate
 import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import org.junit.Assert.assertEquals
@@ -116,22 +115,6 @@ class AnalysisStartPolicyTest {
                 needsMaskingAnalysis = true,
                 maskingProvider = AnalysisProvider.GEMINI,
                 hasMaskingCredential = true,
-                generationProvider = AnalysisProvider.GROK,
-                hasGenerationCredential = true
-            )
-        )
-    }
-
-    @Test
-    fun evaluateGeneration_returnsAllowedWhenPreconditionsMet() {
-        assertEquals(
-            AnalysisStartGate.Allowed,
-            AnalysisStartPolicy.evaluateGeneration(
-                source = "prompt",
-                category = AnalysisCategory.WOMEN_HAIRSTYLE,
-                needsMaskingAnalysis = false,
-                maskingProvider = AnalysisProvider.GEMINI,
-                hasMaskingCredential = false,
                 generationProvider = AnalysisProvider.GROK,
                 hasGenerationCredential = true
             )

@@ -17,7 +17,6 @@ import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
-import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardPasteResult
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardFolderRepository
@@ -36,18 +35,12 @@ class WildcardViewModel(
     analysisKeyManager: ManageGeminiApiKeysUseCase? = null,
     classifyCoordinator: WildcardClassifyCoordinator? = null,
     coroutineScope: CoroutineScope? = null,
-    saveWildcardFolder: SaveWildcardFolderUseCase? = null,
-    wildcardFolderRepository: WildcardFolderRepository? = null,
-    checkEnvironmentStatus: CheckEnvironmentStatusUseCase? = null
+    private val saveWildcardFolder: WildcardFolderRepository? = null,
+    private val checkEnvironmentStatus: CheckEnvironmentStatusUseCase? = null
 ) : ViewModel(), WildcardScreenActions {
     private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardUiState())
     val uiState: StateFlow<WildcardUiState> = _uiState.asStateFlow()
-
-    private val wildcardFolderSaver: WildcardFolderRepository? =
-        saveWildcardFolder ?: wildcardFolderRepository
-    private val environmentStatusChecker: CheckEnvironmentStatusUseCase? =
-        checkEnvironmentStatus
 
     private val classifyCoordinator: WildcardClassifyCoordinator =
         classifyCoordinator ?: WildcardClassifyCoordinator(
@@ -231,18 +224,18 @@ class WildcardViewModel(
     }
 
     fun getInitialWildcardFolderUri(): String? =
-        wildcardFolderSaver?.getFolderUri()
+        saveWildcardFolder?.getFolderUri()
 
     fun decideWildcardFolderAction(
-        hasAllFilesAccess: Boolean = environmentStatusChecker?.check()?.status?.hasAllFilesAccess ?: false,
-        isWildcardDirectoryAccessible: Boolean = environmentStatusChecker?.check()?.status?.isWildcardDirectoryAccessible ?: false
+        hasAllFilesAccess: Boolean = checkEnvironmentStatus?.check()?.status?.hasAllFilesAccess ?: false,
+        isWildcardDirectoryAccessible: Boolean = checkEnvironmentStatus?.check()?.status?.isWildcardDirectoryAccessible ?: false
     ): WildcardFolderAction = WildcardFolderAccessPolicy.decideAction(
         hasAllFilesAccess = hasAllFilesAccess,
         isWildcardDirectoryAccessible = isWildcardDirectoryAccessible
     )
 
     fun saveWildcardFolder(folderUri: String): FolderSelectionResult {
-        val result = wildcardFolderSaver?.save(folderUri) ?: FolderSelectionResult.Success
+        val result = saveWildcardFolder?.save(folderUri) ?: FolderSelectionResult.Success
         when (result) {
             FolderSelectionResult.Success -> {
                 onFolderChanged()

@@ -7,11 +7,6 @@ class ManageImeUseCase(
     private val settings: ImeSettings,
     private val nullKeyboardCandidates: List<String> = AppDefaults.NULL_KEYBOARD_IME_CANDIDATES
 ) {
-    constructor(settings: ImeSettings, nullKeyboardImeId: String) : this(
-        settings = settings,
-        nullKeyboardCandidates = listOf(nullKeyboardImeId)
-    )
-
     fun switchToNullKeyboard(): ImeSwitchResult {
         val originalImeId = settings.getDefaultInputMethod()
         if (originalImeId.isNullOrBlank()) {

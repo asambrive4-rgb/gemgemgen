@@ -12,11 +12,6 @@ sealed interface AnalysisStartBlockReason {
     data class MissingGenerationCredential(val provider: AnalysisProvider) : AnalysisStartBlockReason
 }
 
-sealed interface AnalysisStartGate {
-    data object Allowed : AnalysisStartGate
-    data class Blocked(val reason: AnalysisStartBlockReason) : AnalysisStartGate
-}
-
 object AnalysisStartPolicy {
     fun evaluatePreconditions(
         source: String,
@@ -40,27 +35,6 @@ object AnalysisStartPolicy {
             return AnalysisStartBlockReason.MissingGenerationCredential(generationProvider)
         }
         return null
-    }
-
-    fun evaluateGeneration(
-        source: String,
-        category: AnalysisCategory?,
-        needsMaskingAnalysis: Boolean,
-        maskingProvider: AnalysisProvider,
-        hasMaskingCredential: Boolean,
-        generationProvider: AnalysisProvider,
-        hasGenerationCredential: Boolean
-    ): AnalysisStartGate {
-        val reason = evaluatePreconditions(
-            source = source,
-            category = category,
-            needsMaskingAnalysis = needsMaskingAnalysis,
-            maskingProvider = maskingProvider,
-            hasMaskingCredential = hasMaskingCredential,
-            generationProvider = generationProvider,
-            hasGenerationCredential = hasGenerationCredential
-        )
-        return if (reason == null) AnalysisStartGate.Allowed else AnalysisStartGate.Blocked(reason)
     }
 
     fun canGenerate(

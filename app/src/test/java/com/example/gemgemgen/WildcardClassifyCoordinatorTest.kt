@@ -43,7 +43,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.requestClassify()
 
         assertEquals("먼저 txt 파일을 선택해주세요.", host.lastError)
-        assertFalse(coordinator.classifyUiState.value.showClassifyCriteriaDialog)
+        assertFalse(host.classifyState.showClassifyCriteriaDialog)
     }
 
     @Test
@@ -54,7 +54,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.requestClassify()
 
         assertEquals("분류할 줄이 없습니다.", host.lastError)
-        assertFalse(coordinator.classifyUiState.value.showClassifyCriteriaDialog)
+        assertFalse(host.classifyState.showClassifyCriteriaDialog)
     }
 
     @Test
@@ -65,7 +65,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.requestClassify()
 
         assertEquals("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.", host.lastError)
-        assertFalse(coordinator.classifyUiState.value.showClassifyCriteriaDialog)
+        assertFalse(host.classifyState.showClassifyCriteriaDialog)
     }
 
     @Test
@@ -76,7 +76,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.requestClassify()
 
         assertTrue(host.lineSelectionCleared)
-        assertTrue(coordinator.classifyUiState.value.showClassifyCriteriaDialog)
+        assertTrue(host.classifyState.showClassifyCriteriaDialog)
         assertEquals("", host.lastError)
     }
 
@@ -88,7 +88,7 @@ class WildcardClassifyCoordinatorTest {
         host.showError("임의 에러")
         coordinator.onClassifyCriteriaChange("분위기별 분류")
 
-        assertEquals("분위기별 분류", coordinator.classifyUiState.value.classifyCriteria)
+        assertEquals("분위기별 분류", host.classifyState.classifyCriteria)
         assertEquals("", host.lastError)
     }
 
@@ -98,10 +98,10 @@ class WildcardClassifyCoordinatorTest {
         val coordinator = createCoordinator(host = host)
 
         coordinator.requestClassify()
-        assertTrue(coordinator.classifyUiState.value.showClassifyCriteriaDialog)
+        assertTrue(host.classifyState.showClassifyCriteriaDialog)
 
         coordinator.dismissClassifyCriteriaDialog()
-        assertFalse(coordinator.classifyUiState.value.showClassifyCriteriaDialog)
+        assertFalse(host.classifyState.showClassifyCriteriaDialog)
     }
 
     @Test
@@ -124,7 +124,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.onClassifyCriteriaChange("의류 종류별")
         coordinator.runClassify()
 
-        val state = coordinator.classifyUiState.value
+        val state = host.classifyState
         assertFalse(state.isClassifying)
         assertFalse(state.showClassifyCriteriaDialog)
         assertNotNull(state.classifyPreview)
@@ -162,10 +162,10 @@ class WildcardClassifyCoordinatorTest {
         coordinator.onClassifyCriteriaChange("과일")
         coordinator.runClassify()
 
-        assertEquals(1, coordinator.classifyUiState.value.classifySaveEntries.size)
+        assertEquals(1, host.classifyState.classifySaveEntries.size)
         coordinator.onClassifyFileNameChange(0, "fresh_fruits")
 
-        assertEquals("fresh_fruits", coordinator.classifyUiState.value.classifySaveEntries[0].fileNameInput)
+        assertEquals("fresh_fruits", host.classifyState.classifySaveEntries[0].fileNameInput)
     }
 
     @Test
@@ -191,8 +191,8 @@ class WildcardClassifyCoordinatorTest {
         coordinator.saveClassifyResult()
 
         assertTrue(host.filesSavedCalled)
-        assertNull(coordinator.classifyUiState.value.classifyPreview)
-        assertTrue(coordinator.classifyUiState.value.classifySaveEntries.isEmpty())
+        assertNull(host.classifyState.classifyPreview)
+        assertTrue(host.classifyState.classifySaveEntries.isEmpty())
         assertEquals("1개 파일로 저장했습니다.", host.lastMessage)
         assertEquals("red\nblue", repo.contentOf("색상.txt"))
     }
@@ -219,7 +219,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.runClassify()
         coordinator.saveClassifyResult(overwrite = false)
 
-        assertEquals(listOf("색상.txt"), coordinator.classifyUiState.value.classifyOverwriteConflicts)
+        assertEquals(listOf("색상.txt"), host.classifyState.classifyOverwriteConflicts)
         assertEquals("같은 이름의 파일이 있습니다. 덮어쓸까요?", host.lastError)
 
         coordinator.confirmClassifyOverwrite()
@@ -235,10 +235,10 @@ class WildcardClassifyCoordinatorTest {
         val coordinator = createCoordinator(host = host)
 
         coordinator.onClassifyCriteriaChange("임의 기준")
-        assertEquals("임의 기준", coordinator.classifyUiState.value.classifyCriteria)
+        assertEquals("임의 기준", host.classifyState.classifyCriteria)
 
         coordinator.reset()
-        assertEquals("", coordinator.classifyUiState.value.classifyCriteria)
+        assertEquals("", host.classifyState.classifyCriteria)
     }
 
     private fun createCoordinator(

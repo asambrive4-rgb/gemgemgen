@@ -98,6 +98,7 @@ fun PromptSnippetDialog(
     showDialog: Boolean,
     snippets: List<PromptSnippet>,
     currentPromptText: String = "",
+    isSelectionPrompt: Boolean = false,
     onAddSnippet: (shortcut: String, content: String) -> Unit,
     onUpdateSnippet: (id: String, shortcut: String, content: String) -> Unit = { _, _, _ -> },
     onDeleteSnippet: (id: String) -> Unit,
@@ -287,6 +288,7 @@ fun PromptSnippetDialog(
                                     contentInput = contentInput,
                                     errorMessage = errorMessage,
                                     currentPromptText = currentPromptText,
+                                    isSelectionPrompt = isSelectionPrompt,
                                     existingShortcuts = snippets
                                         .filter { it.id != editingSnippet?.id }
                                         .map { it.shortcut.lowercase() },
@@ -804,6 +806,7 @@ private fun SnippetFormContent(
     contentInput: String,
     errorMessage: String,
     currentPromptText: String,
+    isSelectionPrompt: Boolean = false,
     existingShortcuts: List<String>,
     clipboardManager: androidx.compose.ui.platform.ClipboardManager,
     onShortcutChange: (String) -> Unit,
@@ -924,7 +927,7 @@ private fun SnippetFormContent(
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Text(
-                                    text = "현재 프롬프트",
+                                    text = if (isSelectionPrompt) "선택 문구" else "현재 프롬프트",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = AppTheme.colors.primary

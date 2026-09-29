@@ -12,13 +12,15 @@ internal class GeminiAccessibilityNodeFinder(
     private val snapshotCache = AccessibilityNodeSnapshotCache()
     private val inputViewIds = listOf(
         inputResourceId,
-        "com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_half_sheet",
-        "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_text",
-        "com.google.android.googlequicksearchbox:id/chat_input_text"
+        "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_text"
     ).distinct()
 
     fun invalidateCache() {
         snapshotCache.clear()
+    }
+
+    fun invalidateInputNode() {
+        snapshotCache.invalidate("input")
     }
 
     fun getPerformanceStats(): String {
@@ -231,13 +233,11 @@ internal class GeminiAccessibilityNodeFinder(
     internal companion object {
         const val NEW_CHAT_DESCRIPTION = "새 채팅"
         const val MORE_OPTIONS_DESCRIPTION = "옵션 더보기"
-        val INPUT_KEYWORDS = listOf("프롬프트", "메시지", "Message", "Ask Gemini", "질문하기", "여기에 메시지 입력")
-        val SEND_KEYWORDS = listOf("보내기", "전송", "Send", "메시지 보내기", "프롬프트 보내기")
+        val INPUT_KEYWORDS = listOf("프롬프트", "메시지")
+        val SEND_KEYWORDS = listOf("보내기", "전송")
         val SEND_VIEW_IDS = listOf(
             "com.google.android.googlequicksearchbox:id/assistant_robin_input_send_button",
-            "com.google.android.googlequicksearchbox:id/gemini_chat_input_send_button",
-            "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_send_button",
-            "com.google.android.googlequicksearchbox:id/chat_input_send_button"
+            "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_send_button"
         )
 
         val GEMINI_ACCESSIBILITY_PACKAGES = setOf(

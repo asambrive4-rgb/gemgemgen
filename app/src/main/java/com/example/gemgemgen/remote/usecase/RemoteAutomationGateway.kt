@@ -21,7 +21,6 @@ interface RemoteAutomationGateway {
     )
     fun forceStop(requestId: String?)
     suspend fun cleanMemory(): RemoteActionResult
-    suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult
 }
 
 open class NoOpRemoteAutomationGateway : RemoteAutomationGateway {
@@ -58,10 +57,6 @@ open class NoOpRemoteAutomationGateway : RemoteAutomationGateway {
     }
 
     override suspend fun cleanMemory(): RemoteActionResult {
-        return RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
-    }
-
-    override suspend fun switchGeminiAccount(id: String, alias: String, identifier: String): RemoteActionResult {
         return RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
     }
 }

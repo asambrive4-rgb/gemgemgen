@@ -37,6 +37,10 @@ internal class ChatGptPromptAutomation(
         }
     }
 
+    override fun invalidateInputCache() {
+        nodeFinder.invalidateInputNode()
+    }
+
     override fun findInputNode(): AccessibilityNodeInfo? {
         return nodeFinder.findInputNode()
     }

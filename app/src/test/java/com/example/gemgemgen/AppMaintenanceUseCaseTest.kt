@@ -24,7 +24,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun restartGemini_successSingle_returnsSuccessMessage() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.Success(closedCount = 1))
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.restartGemini()
 
@@ -36,7 +39,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun restartGemini_successMultiple_returnsCountInMessage() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.Success(closedCount = 3))
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.restartGemini()
 
@@ -47,7 +53,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun restartGemini_accessibilityUnavailable_returnsUnavailable() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.AccessibilityUnavailable)
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.restartGemini()
 
@@ -57,7 +66,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun restartGemini_recentsUnavailable_returnsFailure() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.RecentsUnavailable)
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.restartGemini()
 
@@ -68,7 +80,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun restartGemini_notFound_returnsFailure() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.restartGemini()
 
@@ -79,7 +94,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun restartGemini_failure_returnsFailureWithMessage() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.Failure("crash"))
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.restartGemini()
 
@@ -90,7 +108,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun terminateGemini_success_returnsSuccessMessage() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.Success(closedCount = 1))
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.terminateGemini()
 
@@ -101,7 +122,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun terminateGemini_successMultiple_returnsCountInMessage() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.Success(closedCount = 2))
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.terminateGemini()
 
@@ -112,7 +136,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun terminateGemini_accessibilityUnavailable_returnsUnavailable() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.AccessibilityUnavailable)
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.terminateGemini()
 
@@ -122,7 +149,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun terminateSelf_success_returnsSuccessMessage() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.Success(closedCount = 1))
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.terminateSelf()
 
@@ -133,7 +163,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun terminateSelf_notFound_returnsFailure() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
-        val useCase = AppMaintenanceUseCase(closer, FakeMemoryGateway(MemoryCleanupResult.Success))
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
+        )
 
         val result = useCase.terminateSelf()
 
@@ -144,7 +177,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun cleanMemory_success_returnsSuccessMessage() = runBlocking {
         val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
+            memoryCleanupGateway = gateway
+        )
 
         val result = useCase.cleanMemory()
 
@@ -156,7 +192,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun cleanMemory_accessibilityUnavailable_returnsUnavailable() = runBlocking {
         val gateway = FakeMemoryGateway(MemoryCleanupResult.AccessibilityUnavailable)
-        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
+            memoryCleanupGateway = gateway
+        )
 
         val result = useCase.cleanMemory()
 
@@ -166,7 +205,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun cleanMemory_inProgress_returnsFailure() = runBlocking {
         val gateway = FakeMemoryGateway(MemoryCleanupResult.InProgress)
-        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
+            memoryCleanupGateway = gateway
+        )
 
         val result = useCase.cleanMemory()
 
@@ -177,7 +219,10 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun cleanMemory_failure_returnsFailureWithMessage() = runBlocking {
         val gateway = FakeMemoryGateway(MemoryCleanupResult.Failure("timeout"))
-        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
+            memoryCleanupGateway = gateway
+        )
 
         val result = useCase.cleanMemory()
 
@@ -186,37 +231,12 @@ class AppMaintenanceUseCaseTest {
     }
 
     @Test
-    fun cleanMemory_senderMode_success_invokesRemoteCleaner() = runBlocking {
+    fun cleanMemory_senderMode_withoutRemoteManager_returnsFailure() = runBlocking {
         val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
-
-        val result = useCase.cleanMemory(AutomationMode.SENDER) {
-            MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
-        }
-
-        assertTrue(result is MaintenanceResult.Success)
-        assertEquals("수신 기기 메모리를 정리했습니다.", (result as MaintenanceResult.Success).message)
-        assertEquals(0, gateway.callCount)
-    }
-
-    @Test
-    fun cleanMemory_senderMode_failure_returnsFailure() = runBlocking {
-        val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
-
-        val result = useCase.cleanMemory(AutomationMode.SENDER) {
-            MaintenanceResult.Failure("연결 시간 초과")
-        }
-
-        assertTrue(result is MaintenanceResult.Failure)
-        assertEquals("연결 시간 초과", (result as MaintenanceResult.Failure).message)
-        assertEquals(0, gateway.callCount)
-    }
-
-    @Test
-    fun cleanMemory_senderMode_withoutRemoteCleaner_returnsFailure() = runBlocking {
-        val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
+            memoryCleanupGateway = gateway
+        )
 
         val result = useCase.cleanMemory(AutomationMode.SENDER)
 
@@ -228,18 +248,19 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun cleanMemory_receiverMode_cleansLocalMemory() = runBlocking {
         val gateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        val useCase = AppMaintenanceUseCase(FakeGeminiCloser(CloseGeminiAppResult.NotFound), gateway)
-        var remoteCleanerCalled = false
+        val remoteGateway = FakeRemoteGateway(cleanMemoryResult = RemoteActionResult.Success, canSend = true)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
+            memoryCleanupGateway = gateway,
+            manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway)
+        )
 
-        val result = useCase.cleanMemory(AutomationMode.RECEIVER) {
-            remoteCleanerCalled = true
-            MaintenanceResult.Success("원격")
-        }
+        val result = useCase.cleanMemory(AutomationMode.RECEIVER)
 
         assertTrue(result is MaintenanceResult.Success)
         assertEquals("메모리 정리를 완료했습니다.", (result as MaintenanceResult.Success).message)
         assertEquals(1, gateway.callCount)
-        assertEquals(false, remoteCleanerCalled)
+        assertEquals(0, remoteGateway.cleanCount)
     }
 
     @Test
@@ -319,7 +340,10 @@ class AppMaintenanceUseCaseTest {
     fun cleanLocalMemory_invokesGatewayDirectly() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
         val memoryGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        val useCase = AppMaintenanceUseCase(closer, memoryGateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = memoryGateway
+        )
 
         val result = useCase.cleanLocalMemory()
 
@@ -348,10 +372,13 @@ class AppMaintenanceUseCaseTest {
     }
 
     @Test
-    fun cleanRemoteMemory_withoutRemoteCleanerOrManager_returnsFailure() = runBlocking {
+    fun cleanRemoteMemory_withoutRemoteManager_returnsFailure() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.NotFound)
         val memoryGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        val useCase = AppMaintenanceUseCase(closer, memoryGateway)
+        val useCase = AppMaintenanceUseCase(
+            geminiRestartCloser = closer,
+            memoryCleanupGateway = memoryGateway
+        )
 
         val result = useCase.cleanRemoteMemory()
 

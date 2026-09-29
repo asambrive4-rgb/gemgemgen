@@ -56,18 +56,6 @@ internal sealed interface RemoteProtocolMessage {
         val success: Boolean,
         val message: String = ""
     ) : RemoteProtocolMessage
-    data class SwitchGeminiAccountRequest(
-        val senderId: String,
-        val token: String,
-        val accountId: String,
-        val accountAlias: String,
-        val accountIdentifier: String
-    ) : RemoteProtocolMessage
-    data class SwitchGeminiAccountResult(
-        val success: Boolean,
-        val message: String = "",
-        val activeAccountId: String = ""
-    ) : RemoteProtocolMessage
 }
 
 internal object RemoteAutomationProtocol {
@@ -146,20 +134,6 @@ internal object RemoteAutomationProtocol {
                 put("success", message.success)
                 put("message", message.message)
             }
-            is RemoteProtocolMessage.SwitchGeminiAccountRequest -> buildJsonObject {
-                put("type", "switchGeminiAccount")
-                put("senderId", message.senderId)
-                put("token", message.token)
-                put("accountId", message.accountId)
-                put("accountAlias", message.accountAlias)
-                put("accountIdentifier", message.accountIdentifier)
-            }
-            is RemoteProtocolMessage.SwitchGeminiAccountResult -> buildJsonObject {
-                put("type", "switchGeminiAccountResult")
-                put("success", message.success)
-                put("message", message.message)
-                put("activeAccountId", message.activeAccountId)
-            }
         }.toString()
     }
 
@@ -227,18 +201,6 @@ internal object RemoteAutomationProtocol {
             "cleanMemoryResult" -> RemoteProtocolMessage.CleanMemoryResult(
                 success = value.boolean("success"),
                 message = value.string("message")
-            )
-            "switchGeminiAccount" -> RemoteProtocolMessage.SwitchGeminiAccountRequest(
-                senderId = value.string("senderId"),
-                token = value.string("token"),
-                accountId = value.string("accountId"),
-                accountAlias = value.string("accountAlias"),
-                accountIdentifier = value.string("accountIdentifier")
-            )
-            "switchGeminiAccountResult" -> RemoteProtocolMessage.SwitchGeminiAccountResult(
-                success = value.boolean("success"),
-                message = value.string("message"),
-                activeAccountId = value.string("activeAccountId")
             )
             else -> null
         }

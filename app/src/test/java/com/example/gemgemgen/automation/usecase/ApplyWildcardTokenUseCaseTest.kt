@@ -11,9 +11,11 @@ class ApplyWildcardTokenUseCaseTest {
 
     private val useCase = ApplyWildcardTokenUseCase()
 
+    private val placeCandidate = Candidate(name = "장소", token = "__장소__")
+
     private val candidates = listOf(
         Candidate(name = "top", token = "__top__"),
-        Candidate(name = "장소", token = "__장소__")
+        placeCandidate
     )
 
     @Test
@@ -23,7 +25,7 @@ class ApplyWildcardTokenUseCaseTest {
             text = text,
             selectionStart = text.length,
             selectionEnd = text.length,
-            token = "__장소__",
+            candidate = placeCandidate,
             candidates = candidates
         )
 
@@ -40,7 +42,7 @@ class ApplyWildcardTokenUseCaseTest {
             text = text,
             selectionStart = cursor,
             selectionEnd = cursor,
-            token = "__장소__",
+            candidate = placeCandidate,
             candidates = candidates
         )
 
@@ -55,7 +57,7 @@ class ApplyWildcardTokenUseCaseTest {
             text = "장",
             selectionStart = 1,
             selectionEnd = 1,
-            token = "__장소__",
+            candidate = placeCandidate,
             candidates = candidates,
             isBlocked = true
         )
@@ -68,7 +70,7 @@ class ApplyWildcardTokenUseCaseTest {
             text = "장",
             selectionStart = 1,
             selectionEnd = 1,
-            token = "__장소__",
+            candidate = placeCandidate,
             candidates = candidates,
             isParagraphSelectionMode = true
         )
@@ -81,7 +83,7 @@ class ApplyWildcardTokenUseCaseTest {
             text = "한적한 장소",
             selectionStart = 4,
             selectionEnd = 6,
-            token = "__장소__",
+            candidate = placeCandidate,
             candidates = candidates
         )
         assertNull(result)
@@ -93,7 +95,7 @@ class ApplyWildcardTokenUseCaseTest {
             text = "장",
             selectionStart = 1,
             selectionEnd = 1,
-            token = "__미등록토큰__",
+            candidate = Candidate(name = "미등록토큰", token = "__미등록토큰__"),
             candidates = candidates
         )
         assertNull(result)
@@ -105,7 +107,7 @@ class ApplyWildcardTokenUseCaseTest {
             text = "장",
             selectionStart = 1,
             selectionEnd = 1,
-            token = "   ",
+            candidate = Candidate(name = "장소", token = "   "),
             candidates = candidates
         )
         assertNull(result)
@@ -117,7 +119,7 @@ class ApplyWildcardTokenUseCaseTest {
             text = "한적한    ",
             selectionStart = 5,
             selectionEnd = 5,
-            token = "__장소__",
+            candidate = placeCandidate,
             candidates = candidates
         )
         assertNull(result)
@@ -143,5 +145,46 @@ class ApplyWildcardTokenUseCaseTest {
         assertNotNull(result)
         assertEquals("프롬프트 시작 8k masterpiece, extremely detailed", result?.newText)
         assertEquals("프롬프트 시작 8k masterpiece, extremely detailed".length, result?.cursorAfter)
+    }
+
+    @Test
+    fun invoke_returnsNullWhenWordAtCursorDoesNotMatchCandidatePrefix() {
+        val snippetCandidate = Candidate(
+            name = "하체",
+            token = "두꺼운 허벅지.",
+            displayText = "📋 하체",
+            type = Candidate.Type.SNIPPET
+        )
+        val text = "여성은 두툼하고 존재감이 뚜렷한 허벅지."
+        val result = useCase(
+            text = text,
+            selectionStart = text.length,
+            selectionEnd = text.length,
+            candidate = snippetCandidate,
+            candidates = listOf(snippetCandidate)
+        )
+
+        assertNull(result)
+    }
+
+    @Test
+    fun invoke_replacesWhenWordIsExactShortcutMatch() {
+        val snippetCandidate = Candidate(
+            name = "하체",
+            token = "두꺼운 허벅지.",
+            displayText = "📋 하체",
+            type = Candidate.Type.SNIPPET
+        )
+        val text = "여성은 두툼하고 존재감이 뚜렷한 하체"
+        val result = useCase(
+            text = text,
+            selectionStart = text.length,
+            selectionEnd = text.length,
+            candidate = snippetCandidate,
+            candidates = listOf(snippetCandidate)
+        )
+
+        assertNotNull(result)
+        assertEquals("여성은 두툼하고 존재감이 뚜렷한 두꺼운 허벅지.", result?.newText)
     }
 }

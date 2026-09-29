@@ -93,81 +93,18 @@ import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.TextHighlightRange
 import com.example.gemgemgen.ui.theme.AppTheme
 
+import com.example.gemgemgen.remote.domain.AutomationMode
+
 @Composable
 internal fun PromptEditorSection(
+    uiState: AutomationUiState,
     promptTemplateState: TextFieldState,
-    selectedTargetApp: AutomationTargetApp,
-    isTargetSelectionEnabled: Boolean,
-    isParagraphSelectionMode: Boolean,
-    onToggleParagraphSelectionMode: () -> Unit = {},
-    canNavigateHistoryBack: Boolean = false,
-    canNavigateHistoryForward: Boolean = false,
-    isHistoryIndicatorVisible: Boolean = false,
-    historyDotCount: Int = 0,
-    activeHistoryDotIndex: Int = 0,
-    canCopyPrompt: Boolean,
-    canCloseGemini: Boolean,
-    canCloseSelfApp: Boolean,
-    canCleanMemory: Boolean,
-    isMemoryCleanupScheduled: Boolean = false,
-    isMaintenanceBusy: Boolean = false,
-    maintenanceMessage: String = "",
-    selectedParagraphRange: PromptParagraphRange?,
-    paragraphSelectionMessage: String,
-    suggestionTokens: List<String> = emptyList(),
-    suggestionCandidates: List<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate> = emptyList(),
+    actions: AutomationScreenActions = AutomationScreenActions.Empty,
     showPromptActions: Boolean = true,
     showWildcardSuggestions: Boolean = true,
-    onTargetAppSelected: (AutomationTargetApp) -> Unit,
-    flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
-    onFlowImageCountSelected: (Int) -> Unit = {},
-    onPromptTemplateChange: (String) -> Unit,
-    onWildcardTokenSuggestionClick: (String) -> Unit = {},
-    onSuggestionCandidateClick: (com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate) -> Unit = {},
-    onCloseGeminiApp: () -> Unit,
-    onCleanDeviceMemory: () -> Unit,
-    onTerminateSelfApp: () -> Unit,
-    onNavigateHistoryBack: () -> Unit = {},
-    onNavigateHistoryForward: () -> Unit = {},
-    onInsertTopInstruction: () -> Unit,
-    onInsertBottomInstruction: () -> Unit,
-    onOpenInstructionConfigDialog: (InstructionTab) -> Unit,
-    onParagraphOffsetSelected: (Int) -> Unit,
-    onDeleteSelectedParagraph: () -> Unit,
-    onReplaceSelectedParagraph: (String) -> Unit,
-    onImportFromClipboard: () -> Unit,
-    onCopyPromptToClipboard: () -> Unit,
-    onPasteFromClipboard: () -> Unit,
-    isSearchActive: Boolean = false,
-    searchQuery: String = "",
-    searchMatches: List<TextHighlightRange> = emptyList(),
-    activeSearchMatchIndex: Int = -1,
-    onToggleSearch: () -> Unit = {},
-    onSearchQueryChange: (String) -> Unit = {},
-    onNavigateSearchNext: () -> Unit = {},
-    onNavigateSearchPrevious: () -> Unit = {},
-    onCloseSearch: () -> Unit = {},
-    onOpenPromptSnippetDialog: () -> Unit = {},
-    onOpenGeminiAccountPicker: () -> Unit = {},
-    showVariationButton: Boolean = true,
-    isVariationButtonEnabled: Boolean = true,
-    variationAutomationState: AutomationRunState = AutomationRunState.Idle,
-    onRunVariation: (String?) -> Unit = {},
-    onOpenVariationPromptConfigDialog: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
-    val effectiveCandidates = remember(suggestionCandidates, suggestionTokens) {
-        if (suggestionCandidates.isNotEmpty()) {
-            suggestionCandidates
-        } else {
-            suggestionTokens.map {
-                com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate(
-                    name = it,
-                    token = it,
-                    displayText = it
-                )
-            }
-        }
-    }
+    val effectiveCandidates = uiState.activeSuggestionCandidates
     val lastNonEmptyCandidates = remember { mutableListOf<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>() }
     if (effectiveCandidates.isNotEmpty()) {
         lastNonEmptyCandidates.clear()
@@ -181,7 +118,7 @@ internal fun PromptEditorSection(
     val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .graphicsLayer(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -208,9 +145,9 @@ internal fun PromptEditorSection(
                     AutomationTargetApp.entries.forEach { targetApp ->
                         TargetAppButton(
                             targetApp = targetApp,
-                            selected = selectedTargetApp == targetApp,
-                            enabled = isTargetSelectionEnabled,
-                            onClick = { onTargetAppSelected(targetApp) }
+                            selected = uiState.selectedTargetApp == targetApp,
+                            enabled = !uiState.isRunning,
+                            onClick = { actions.onTargetAppSelected(targetApp) }
                         )
                     }
                 }
@@ -221,7 +158,7 @@ internal fun PromptEditorSection(
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 IconButton(
-                    onClick = onOpenPromptSnippetDialog,
+                    onClick = actions::onShowPromptSnippetDialog,
                     modifier = Modifier
                         .size(36.dp)
                         .semantics { contentDescription = "상용구(텍스트 대치) 관리" }
@@ -235,7 +172,7 @@ internal fun PromptEditorSection(
                 }
 
                 IconButton(
-                    onClick = onToggleSearch,
+                    onClick = { actions.onToggleSearch() },
                     modifier = Modifier
                         .size(36.dp)
                         .semantics { contentDescription = "문구 찾기" }
@@ -243,7 +180,7 @@ internal fun PromptEditorSection(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = null,
-                        tint = if (isSearchActive) AppTheme.colors.accent else AppTheme.colors.textSecondary,
+                        tint = if (uiState.isSearchActive) AppTheme.colors.accent else AppTheme.colors.textSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -251,30 +188,30 @@ internal fun PromptEditorSection(
         }
 
         AnimatedVisibility(
-            visible = isSearchActive,
+            visible = uiState.isSearchActive,
             enter = fadeIn(tween(150)) + expandVertically(tween(150)),
             exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
         ) {
             PromptSearchBar(
-                query = searchQuery,
-                onQueryChange = onSearchQueryChange,
-                matchCount = searchMatches.size,
-                currentMatchIndex = activeSearchMatchIndex,
-                onNavigateNext = onNavigateSearchNext,
-                onNavigatePrevious = onNavigateSearchPrevious,
-                onClose = onCloseSearch
+                query = uiState.searchQuery,
+                onQueryChange = actions::onSetSearchQuery,
+                matchCount = uiState.searchMatches.size,
+                currentMatchIndex = uiState.activeSearchMatchIndex,
+                onNavigateNext = actions::onNavigateSearchNext,
+                onNavigatePrevious = actions::onNavigateSearchPrevious,
+                onClose = actions::onCloseSearch
             )
         }
 
         AnimatedVisibility(
-            visible = selectedTargetApp == AutomationTargetApp.FLOW,
+            visible = uiState.selectedTargetApp == AutomationTargetApp.FLOW,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically()
         ) {
             FlowImageCountRow(
-                selectedCount = flowImageCount,
-                enabled = isTargetSelectionEnabled,
-                onCountSelected = onFlowImageCountSelected
+                selectedCount = uiState.flowImageCount,
+                enabled = !uiState.isRunning,
+                onCountSelected = actions::onFlowImageCountSelected
             )
         }
 
@@ -286,69 +223,69 @@ internal fun PromptEditorSection(
             PromptSuggestionBar(
                 suggestions = displayedCandidates,
                 onSuggestionClick = { candidate ->
-                    onSuggestionCandidateClick(candidate)
-                    onWildcardTokenSuggestionClick(candidate.token)
+                    actions.onApplySuggestion(candidate)
                 }
             )
         }
 
         AppMultilineTextField(
             state = promptTemplateState,
-            onValueChange = onPromptTemplateChange,
+            onValueChange = actions::onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
             minLines = 6,
-            paragraphSelectionEnabled = isParagraphSelectionMode,
-            highlightRange = selectedParagraphRange?.toHighlightRange(),
+            paragraphSelectionEnabled = uiState.isParagraphSelectionMode,
+            highlightRange = uiState.selectedParagraphRange?.toHighlightRange(),
             selectedParagraphColor = AppTheme.colors.primary.copy(alpha = 0.22f),
-            searchHighlightRanges = searchMatches,
-            activeSearchMatchIndex = activeSearchMatchIndex,
-            supportingText = paragraphSelectionMessage,
-            onParagraphOffsetSelected = onParagraphOffsetSelected,
-            onDeleteSelectedParagraph = onDeleteSelectedParagraph,
-            onReplaceSelectedParagraph = onReplaceSelectedParagraph
+            searchHighlightRanges = uiState.searchMatches,
+            activeSearchMatchIndex = uiState.activeSearchMatchIndex,
+            supportingText = uiState.paragraphSelectionMessage,
+            onParagraphOffsetSelected = actions::onSelectPromptParagraphAt,
+            onDeleteSelectedParagraph = actions::onDeleteSelectedPromptParagraph,
+            onReplaceSelectedParagraph = actions::onReplaceSelectedPromptParagraph
         )
 
         if (showPromptActions) {
             PromptActionRow(
-                isParagraphSelectionMode = isParagraphSelectionMode,
-                onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
-                canCloseGemini = canCloseGemini,
-                canCloseSelfApp = canCloseSelfApp,
-                canCleanMemory = canCleanMemory,
-                isMemoryCleanupScheduled = isMemoryCleanupScheduled,
-                isMaintenanceBusy = isMaintenanceBusy,
-                canNavigateHistoryBack = canNavigateHistoryBack,
-                canNavigateHistoryForward = canNavigateHistoryForward,
-                isHistoryIndicatorVisible = isHistoryIndicatorVisible,
-                historyDotCount = historyDotCount,
-                activeHistoryDotIndex = activeHistoryDotIndex,
-                canCopyPrompt = canCopyPrompt,
-                isTargetSelectionEnabled = isTargetSelectionEnabled,
-                onCloseGeminiApp = onCloseGeminiApp,
-                onCleanDeviceMemory = onCleanDeviceMemory,
-                onTerminateSelfApp = onTerminateSelfApp,
-                onNavigateHistoryBack = onNavigateHistoryBack,
-                onNavigateHistoryForward = onNavigateHistoryForward,
-                onInsertTopInstruction = onInsertTopInstruction,
-                onInsertBottomInstruction = onInsertBottomInstruction,
-                onOpenInstructionConfigDialog = onOpenInstructionConfigDialog,
-                onImportFromClipboard = onImportFromClipboard,
-                onCopyPromptToClipboard = onCopyPromptToClipboard,
-                onPasteFromClipboard = onPasteFromClipboard,
-                onOpenGeminiAccountPicker = onOpenGeminiAccountPicker,
-                showVariationButton = showVariationButton,
-                isVariationButtonEnabled = isVariationButtonEnabled,
-                variationAutomationState = variationAutomationState,
+                isParagraphSelectionMode = uiState.isParagraphSelectionMode,
+                onToggleParagraphSelectionMode = actions::onToggleParagraphSelectionMode,
+                canCloseGemini = uiState.canCloseGemini,
+                canCloseSelfApp = uiState.canCloseSelfApp,
+                canCleanMemory = uiState.canCleanMemory,
+                isMemoryCleanupScheduled = uiState.isMemoryCleanupScheduled,
+                isMaintenanceBusy = uiState.isMaintenanceBusy,
+                canNavigateHistoryBack = uiState.canNavigateHistoryBack,
+                canNavigateHistoryForward = uiState.canNavigateHistoryForward,
+                isHistoryIndicatorVisible = uiState.isHistoryIndicatorVisible,
+                historyDotCount = uiState.historyDotCount,
+                activeHistoryDotIndex = uiState.activeHistoryDotIndex,
+                canCopyPrompt = uiState.hasPromptTemplate,
+                isTargetSelectionEnabled = true,
+                onCloseGeminiApp = actions::onCloseGeminiApp,
+                onCleanDeviceMemory = actions::onCleanDeviceMemory,
+                onTerminateSelfApp = actions::onTerminateSelfApp,
+                onNavigateHistoryBack = actions::onNavigatePromptHistoryBack,
+                onNavigateHistoryForward = actions::onNavigatePromptHistoryForward,
+                onInsertTopInstruction = actions::onInsertTopInstruction,
+                onInsertBottomInstruction = actions::onInsertBottomInstruction,
+                onOpenInstructionConfigDialog = actions::onOpenInstructionConfigDialog,
+                onImportFromClipboard = actions::onImportPromptFromClipboard,
+                onCopyPromptToClipboard = actions::onCopyPromptToClipboard,
+                onPasteFromClipboard = actions::onPastePromptFromClipboard,
+                onOpenGeminiAccountPicker = actions::onOpenGeminiAccountPicker,
+                showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
+                isVariationButtonEnabled = uiState.canInteractWithVariation,
+                variationAutomationState = uiState.variationAutomationState,
                 onRunVariation = {
                     val selectedText = variationSelectedTextAtPress.value
                         ?: promptTemplateState.selectedTextOrNull()
                     variationSelectedTextAtPress.value = null
-                    onRunVariation(selectedText)
+                    actions.onClearFocus()
+                    actions.onRunVariation(selectedText)
                 },
                 onVariationPointerDown = {
                     variationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
                 },
-                onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
+                onOpenVariationPromptConfigDialog = actions::onOpenVariationPromptConfigDialog
             )
         }
     }
@@ -805,28 +742,6 @@ internal fun PromptSuggestionBar(
             }
         }
     }
-}
-
-@Composable
-internal fun WildcardTokenSuggestionBar(
-    tokens: List<String>,
-    onTokenClick: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val candidates = remember(tokens) {
-        tokens.map {
-            com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate(
-                name = it,
-                token = it,
-                displayText = it
-            )
-        }
-    }
-    PromptSuggestionBar(
-        suggestions = candidates,
-        onSuggestionClick = { onTokenClick(it.token) },
-        modifier = modifier
-    )
 }
 
 @Composable

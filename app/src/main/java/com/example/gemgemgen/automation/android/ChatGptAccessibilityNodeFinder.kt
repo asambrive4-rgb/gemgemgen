@@ -13,6 +13,10 @@ internal class ChatGptAccessibilityNodeFinder(
         snapshotCache.clear()
     }
 
+    fun invalidateInputNode() {
+        snapshotCache.invalidate("input")
+    }
+
     fun findInputNode(): AccessibilityNodeInfo? {
         val root = rootProvider() ?: return null
         return snapshotCache.getOrFind("input", root) {
@@ -131,13 +135,13 @@ internal class ChatGptAccessibilityNodeFinder(
     }
 
     internal companion object {
-        val INPUT_KEYWORDS = listOf("메시지", "Message", "Ask", "질문", "프롬프트")
-        val NEW_CHAT_DESCRIPTIONS = listOf("새 채팅", "새 대화", "새로운 채팅", "New chat")
-        val INITIAL_CHAT_TEXTS = listOf("채팅", "Chat", "대화")
-        val MENU_DESCRIPTIONS = listOf("메뉴", "사이드바 열기", "탐색 창 열기", "Menu", "Open navigation drawer")
-        val SEND_DESCRIPTIONS = listOf("메시지 보내기", "보내기", "전송", "Send message", "Send")
+        val INPUT_KEYWORDS = listOf("메시지", "프롬프트")
+        val NEW_CHAT_DESCRIPTIONS = listOf("새 채팅", "새 대화")
+        val INITIAL_CHAT_TEXTS = listOf("채팅", "대화")
+        val MENU_DESCRIPTIONS = listOf("사이드바 열기", "메뉴")
+        val SEND_DESCRIPTIONS = listOf("보내기", "전송")
         val SEARCH_DESCRIPTIONS = listOf("검색", "Search")
-        val SETTINGS_DESCRIPTIONS = listOf("계정 설정", "설정", "Settings", "Account settings")
+        val SETTINGS_DESCRIPTIONS = listOf("설정", "계정 설정")
         const val TOO_MANY_REQUESTS_MESSAGE = "Too many requests"
         const val TOO_MANY_REQUESTS_CLOSE_DESCRIPTION = "닫기"
     }
