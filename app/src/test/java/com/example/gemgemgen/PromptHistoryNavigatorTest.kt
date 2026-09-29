@@ -120,8 +120,8 @@ class PromptHistoryNavigatorTest {
         assertTrue(navigator.isNavigating)
         assertTrue(navigator.isIndicatorVisible)
 
-        // 자동화 시작 발생 (새 프롬프트 P2 실행)
-        navigator.onAutomationStarted(executedPrompt = "P2", updatedHistory = listOf("P2", "P1"))
+        // 자동화 시작 발생 (새 프롬프트 P2 실행 - 인메모리 이력 자동 갱신)
+        navigator.onAutomationStarted(executedPrompt = "P2")
 
         // 인디케이터가 즉시 닫히고, 앞뒤 이동 가능 여부와 위치가 최신으로 리셋되어야 함
         assertFalse(navigator.isNavigating)
@@ -130,6 +130,8 @@ class PromptHistoryNavigatorTest {
         assertTrue(navigator.canNavigateBack)
         assertEquals(2, navigator.dotCount) // 과거 기록 P2, P1 = 2개 점
         assertEquals(1, navigator.activeDotIndex) // 맨 오른쪽 최신 위치
+        assertEquals("P2", navigator.navigateBack("NextDraft"))
+        assertEquals("P1", navigator.navigateBack("P2"))
     }
 
     @Test

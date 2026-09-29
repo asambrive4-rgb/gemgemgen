@@ -256,11 +256,15 @@ class PromptEditorCoordinator(
  updateNavigationAvailability()
  }
 
- fun onAutomationStarted(prompt: String, updatedHistory: List<String>) {
- syncPromptTemplateFromTextField()
- promptHistoryNavigator.onAutomationStarted(prompt, updatedHistory)
- updateNavigationAvailability()
- }
+    fun onAutomationStarted(prompt: String, updatedHistory: List<String>? = null) {
+        syncPromptTemplateFromTextField()
+        if (updatedHistory != null) {
+            promptHistoryNavigator.onAutomationStarted(prompt, updatedHistory)
+        } else {
+            promptHistoryNavigator.onAutomationStarted(prompt)
+        }
+        updateNavigationAvailability()
+    }
 
     fun navigatePromptHistoryBack() {
         syncPromptTemplateFromTextField()

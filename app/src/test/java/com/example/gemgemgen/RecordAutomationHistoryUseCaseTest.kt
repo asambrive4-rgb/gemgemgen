@@ -9,7 +9,6 @@ import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationHistoryUseCase
 import com.example.gemgemgen.core.AppDispatchers
-import com.example.gemgemgen.core.ClipboardGateway
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -17,12 +16,10 @@ import org.junit.Test
 
 class RecordAutomationHistoryUseCaseTest {
     @Test
-    fun record_savesLastRunSnapshotAndCopiesOriginalPrompt() = runBlocking {
+    fun record_savesLastRunSnapshot() = runBlocking {
         val repository = RecordingLastRunSnapshotRepository()
-        val clipboard = RecordingClipboardGateway()
         val useCase = RecordAutomationHistoryUseCase(
             lastRunSnapshotStore = LastRunSnapshotStore(repository),
-            clipboardGateway = clipboard,
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         )
 
@@ -38,18 +35,15 @@ class RecordAutomationHistoryUseCaseTest {
             LastRunSnapshot("base __hair__ prompt", "7", AutomationTargetApp.CHATGPT),
             repository.savedSnapshot
         )
-        assertEquals("base __hair__ prompt", clipboard.writtenText)
     }
 
     @Test
     fun record_recordsPromptHistoryWhenStoreProvided() = runBlocking {
         val repository = RecordingLastRunSnapshotRepository()
-        val clipboard = RecordingClipboardGateway()
         val historyRepo = FakePromptHistoryRepository()
         val historyStore = PromptHistoryStore(historyRepo)
         val useCase = RecordAutomationHistoryUseCase(
             lastRunSnapshotStore = LastRunSnapshotStore(repository),
-            clipboardGateway = clipboard,
             promptHistoryStore = historyStore,
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         )
@@ -75,16 +69,6 @@ class RecordAutomationHistoryUseCaseTest {
 
         override fun save(snapshot: LastRunSnapshot) {
             savedSnapshot = snapshot
-        }
-    }
-
-    private class RecordingClipboardGateway : ClipboardGateway {
-        var writtenText = ""
-
-        override fun readText(): String = ""
-
-        override fun writeText(text: String) {
-            writtenText = text
         }
     }
 }

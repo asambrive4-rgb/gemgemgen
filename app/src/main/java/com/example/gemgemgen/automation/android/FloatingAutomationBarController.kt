@@ -15,6 +15,8 @@ import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.gemgemgen.automation.ui.AutomationBarUiState
 import com.example.gemgemgen.automation.ui.FloatingOverlayBar
+import com.example.gemgemgen.ui.theme.AppThemeMode
+import com.example.gemgemgen.ui.theme.AppThemePalette
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.max
 import kotlin.math.min
@@ -66,6 +68,8 @@ internal class FloatingAutomationBarController(
 
     fun showOrUpdate(
         uiStateFlow: StateFlow<AutomationBarUiState>,
+        palette: AppThemePalette = AppThemePalette.DEFAULT,
+        themeMode: AppThemeMode = AppThemeMode.DEFAULT,
         onCancelAutomation: () -> Unit,
         onRepeatCountChange: (String) -> Unit,
         onAutomationFinished: () -> Unit
@@ -81,6 +85,8 @@ internal class FloatingAutomationBarController(
         view.setContent {
             FloatingOverlayBar(
                 uiStateFlow = uiStateFlow,
+                palette = palette,
+                themeMode = themeMode,
                 onCancelAutomation = onCancelAutomation,
                 onRepeatCountChange = onRepeatCountChange,
                 onAutomationFinished = onAutomationFinished,

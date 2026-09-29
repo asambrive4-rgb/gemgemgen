@@ -338,10 +338,12 @@ class AutomationViewModelTest {
         val decision = viewModel.runAutomation()
         assertTrue(decision is AutomationStartDecision.Started)
 
-        // 인디케이터가 즉시 닫히고, 방금 실행한 프롬프트가 히스토리 1순위로 저장됨
+        // 인디케이터가 즉시 닫히고, 방금 실행한 프롬프트가 히스토리 1순위로 저장 및 편집기에 반영됨
         assertTrue(!viewModel.uiState.value.isHistoryIndicatorVisible)
+        assertEquals(2, viewModel.uiState.value.historyDotCount)
         assertEquals("신규 실행 프롬프트", store.load().first().prompt)
         assertEquals(2, store.load().size)
+        assertEquals(1, repo.loadCallCount)
     }
 
     @Test
@@ -630,8 +632,8 @@ class AutomationViewModelTest {
     }
 
     @Test
-    fun runAutomation_copiesPromptTemplateToClipboardWhenRunStarts() {
-        val clipboardGateway = FakeClipboardGateway()
+    fun runAutomation_doesNotOverwriteClipboardWhenRunStarts() {
+        val clipboardGateway = FakeClipboardGateway("user personal clipboard")
         val viewModel = viewModel(
             clipboardGateway = clipboardGateway
         )
@@ -639,7 +641,8 @@ class AutomationViewModelTest {
         viewModel.onPromptTemplateChange("base __hair__ prompt")
         viewModel.runAutomation()
 
-        assertEquals("base __hair__ prompt", clipboardGateway.writtenText)
+        assertEquals("", clipboardGateway.writtenText)
+        assertEquals("user personal clipboard", clipboardGateway.readText())
     }
 
     @Test
@@ -1480,7 +1483,11 @@ class AutomationViewModelTest {
         assertEquals("TOP\n\n배경 8k masterpiece __장소__\n\nBOTTOM", clipboardGateway.writtenText)
 
         viewModel.navigatePromptHistoryBack()
+        assertEquals("초기 실행 프롬프트", viewModel.uiState.value.promptTemplate)
+        viewModel.navigatePromptHistoryBack()
         assertEquals("이전 기록 프롬프트", viewModel.uiState.value.promptTemplate)
+        viewModel.navigatePromptHistoryForward()
+        assertEquals("초기 실행 프롬프트", viewModel.uiState.value.promptTemplate)
         viewModel.navigatePromptHistoryForward()
         assertEquals("TOP\n\n배경 8k masterpiece __장소__\n\nBOTTOM", viewModel.uiState.value.promptTemplate)
     }

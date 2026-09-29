@@ -14,12 +14,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.isTerminal
+import com.example.gemgemgen.ui.theme.AppThemeMode
+import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 internal fun FloatingOverlayBar(
     uiStateFlow: StateFlow<AutomationBarUiState>,
+    palette: AppThemePalette = AppThemePalette.DEFAULT,
+    themeMode: AppThemeMode = AppThemeMode.DEFAULT,
     onCancelAutomation: () -> Unit,
     onRepeatCountChange: (String) -> Unit,
     onAutomationFinished: () -> Unit,
@@ -37,6 +41,8 @@ internal fun FloatingOverlayBar(
     if (uiState.isRunning) {
         FloatingOverlayContent(
             uiState = uiState,
+            palette = palette,
+            themeMode = themeMode,
             onCancelAutomation = onCancelAutomation,
             onRepeatCountChange = onRepeatCountChange,
             onDrag = onDrag,
@@ -48,12 +54,14 @@ internal fun FloatingOverlayBar(
 @Composable
 private fun FloatingOverlayContent(
     uiState: AutomationBarUiState,
+    palette: AppThemePalette,
+    themeMode: AppThemeMode,
     onCancelAutomation: () -> Unit,
     onRepeatCountChange: (String) -> Unit,
     onDrag: (Float, Float) -> Unit,
     onDragEnd: () -> Unit
 ) {
-    GemgemgenTheme {
+    GemgemgenTheme(palette = palette, themeMode = themeMode) {
         Box(
             modifier = Modifier
                 .width(470.dp)

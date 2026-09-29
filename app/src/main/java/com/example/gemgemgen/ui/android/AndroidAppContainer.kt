@@ -68,7 +68,6 @@ class AndroidAppContainer(context: Context) {
     private val clipboardGateway = AndroidClipboardGateway(appContext)
     private val recordAutomationStart = RecordAutomationHistoryUseCase(
         lastRunSnapshotStore = lastRunSnapshotStore,
-        clipboardGateway = clipboardGateway,
         promptHistoryStore = promptHistoryStore
     )
     private val geminiApiKeyRepository = AndroidEncryptedGeminiApiKeyRepository(appContext)

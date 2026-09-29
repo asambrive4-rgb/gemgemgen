@@ -5,7 +5,6 @@ import android.Manifest
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -26,19 +25,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
-import com.example.gemgemgen.analysis.ui.AnalysisUiState
+import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
+import com.example.gemgemgen.automation.ui.AutomationScreenActions
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.core.android.AndroidExternalBrowserLauncher
-import com.example.gemgemgen.ui.AnalysisAppActions
 import com.example.gemgemgen.ui.AutomationApp
-import com.example.gemgemgen.ui.AutomationAppActions
 import com.example.gemgemgen.ui.MainTab
-import com.example.gemgemgen.ui.WildcardAppActions
-import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
+import com.example.gemgemgen.wildcard.ui.WildcardScreenActions
 import com.example.gemgemgen.wildcard.ui.WildcardViewModel
 import com.example.gemgemgen.remote.domain.AutomationMode
 
@@ -163,6 +160,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 if (!automationViewModel.uiState.value.isRunning) return
                 floatingBarController?.showOrUpdate(
                     uiStateFlow = automationViewModel.automationBarUiState,
+                    palette = mainUiState.selectedThemePalette,
+                    themeMode = mainUiState.selectedThemeMode,
                     onCancelAutomation = automationViewModel::cancelAutomation,
                     onRepeatCountChange = automationViewModel::onRepeatCountChange,
                     onAutomationFinished = {
@@ -233,119 +232,92 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
     }
 
-    GemgemgenTheme(
-        palette = mainUiState.selectedThemePalette,
-        themeMode = mainUiState.selectedThemeMode
-    ) {
-        AutomationApp(
-            selectedTab = selectedTab,
-            mainUiState = mainUiState,
-            automationBarUiState = automationBarUiState,
-            promptTemplateState = automationViewModel.promptTemplateTextFieldState,
-            analysisUiState = analysisUiState,
-            analysisPromptState = analysisPromptState,
-            wildcardUiState = wildcardUiState,
-            automationActions = remember(automationViewModel, platformNavigator, clearInputFocus) {
-                createAutomationActions(
-                    automationViewModel = automationViewModel,
-                    platformNavigator = platformNavigator,
-                    clearInputFocus = clearInputFocus,
-                    selectMainTab = ::selectMainTab,
-                    selectWildcardFolder = ::selectWildcardFolder,
-                    selectSafWildcardFolder = ::selectSafWildcardFolder,
-                    openWildcardStorageSettings = ::openWildcardStorageSettings,
-                    runAutomation = ::runAutomation,
-                    selectAutomationMode = ::selectAutomationMode
-                )
-            },
-            analysisActions = remember(analysisViewModel, platformNavigator, browserLauncher, clearInputFocus) {
-                createAnalysisActions(
-                    analysisViewModel = analysisViewModel,
-                    platformNavigator = platformNavigator,
-                    browserLauncher = browserLauncher,
-                    clearInputFocus = clearInputFocus,
-                    onCompleteSave = { selectMainTab(MainTab.AUTOMATION) }
-                )
-            },
-            wildcardActions = remember(wildcardViewModel) {
-                createWildcardActions(
-                    wildcardViewModel = wildcardViewModel,
-                    selectWildcardFolder = ::selectWildcardFolder
-                )
-            }
-        )
-    }
+    AutomationApp(
+        selectedTab = selectedTab,
+        onSelectTab = ::selectMainTab,
+        mainUiState = mainUiState,
+        automationBarUiState = automationBarUiState,
+        promptTemplateState = automationViewModel.promptTemplateTextFieldState,
+        analysisUiState = analysisUiState,
+        analysisPromptState = analysisPromptState,
+        wildcardUiState = wildcardUiState,
+        automationActions = remember(automationViewModel, platformNavigator, clearInputFocus) {
+            createAutomationActions(
+                automationViewModel = automationViewModel,
+                platformNavigator = platformNavigator,
+                clearInputFocus = clearInputFocus,
+                selectWildcardFolder = ::selectWildcardFolder,
+                selectSafWildcardFolder = ::selectSafWildcardFolder,
+                openWildcardStorageSettings = ::openWildcardStorageSettings,
+                runAutomation = ::runAutomation,
+                selectAutomationMode = ::selectAutomationMode
+            )
+        },
+        analysisActions = remember(analysisViewModel, platformNavigator, browserLauncher, clearInputFocus) {
+            createAnalysisActions(
+                analysisViewModel = analysisViewModel,
+                platformNavigator = platformNavigator,
+                browserLauncher = browserLauncher,
+                clearInputFocus = clearInputFocus,
+                onCompleteSave = { selectMainTab(MainTab.AUTOMATION) }
+            )
+        },
+        wildcardActions = remember(wildcardViewModel) {
+            createWildcardActions(
+                wildcardViewModel = wildcardViewModel,
+                selectWildcardFolder = ::selectWildcardFolder
+            )
+        }
+    )
 }
 
 private fun createAutomationActions(
     automationViewModel: AutomationViewModel,
     platformNavigator: AndroidHostPlatformNavigator,
     clearInputFocus: () -> Unit,
-    selectMainTab: (MainTab) -> Unit,
     selectWildcardFolder: () -> Unit,
     selectSafWildcardFolder: () -> Unit,
     openWildcardStorageSettings: () -> Unit,
     runAutomation: () -> Unit,
     selectAutomationMode: (AutomationMode) -> Unit
-): AutomationAppActions = AutomationAppActions(
-    onSelectTab = selectMainTab,
-    onShowSettings = automationViewModel::showSettings,
-    onSelectThemePalette = automationViewModel::onSelectThemePalette,
-    onSelectThemeMode = automationViewModel::onSelectThemeMode,
-    onClearFocus = clearInputFocus,
-    onHideSettings = automationViewModel::hideSettings,
-    onConfirmAccessibilityPrompt = {
+): AutomationScreenActions = object : AutomationScreenActions by automationViewModel {
+    override fun onPromptTemplateChange(value: String) {
+        automationViewModel.onPromptTemplateFromEditor(value)
+    }
+
+    override fun onRunAutomation() {
+        runAutomation()
+    }
+
+    override fun onAutomationModeSelected(mode: AutomationMode) {
+        selectAutomationMode(mode)
+    }
+
+    override fun onConfirmAccessibilityPrompt() {
         automationViewModel.confirmAccessibilityPrompt()
         platformNavigator.openAccessibilitySettings()
-    },
-    onDismissAccessibilityPromptToSettings = automationViewModel::dismissAccessibilityPromptToSettings,
-    onRefreshStatus = automationViewModel::refreshStatus,
-    onSelectWildcardFolder = selectWildcardFolder,
-    onSelectSafWildcardFolder = selectSafWildcardFolder,
-    onOpenWildcardStorageSettings = openWildcardStorageSettings,
-    onOpenAccessibilitySettings = platformNavigator::openAccessibilitySettings,
-    onTargetAppSelected = automationViewModel::onTargetAppSelected,
-    onFlowImageCountSelected = automationViewModel::onFlowImageCountSelected,
-    onPromptTemplateChange = automationViewModel::onPromptTemplateFromEditor,
-    onSuggestionClick = automationViewModel::applySuggestion,
-    onOpenPromptSnippetDialog = automationViewModel::showPromptSnippetDialog,
-    onClosePromptSnippetDialog = automationViewModel::dismissPromptSnippetDialog,
-    onAddPromptSnippet = automationViewModel::addPromptSnippet,
-    onUpdatePromptSnippet = automationViewModel::updatePromptSnippet,
-    onDeletePromptSnippet = automationViewModel::deletePromptSnippet,
-    onNavigateHistoryBack = automationViewModel::navigatePromptHistoryBack,
-    onNavigateHistoryForward = automationViewModel::navigatePromptHistoryForward,
-    onInsertTopInstruction = automationViewModel::insertTopInstruction,
-    onInsertBottomInstruction = automationViewModel::insertBottomInstruction,
-    onOpenInstructionConfigDialog = automationViewModel::openInstructionConfigDialog,
-    onCloseInstructionConfigDialog = automationViewModel::closeInstructionConfigDialog,
-    onSaveInstructionConfig = automationViewModel::saveInstructionConfig,
-    onToggleParagraphSelectionMode = automationViewModel::toggleParagraphSelectionMode,
-    onParagraphOffsetSelected = automationViewModel::selectPromptParagraphAt,
-    onDeleteSelectedParagraph = automationViewModel::deleteSelectedPromptParagraph,
-    onReplaceSelectedParagraph = automationViewModel::replaceSelectedPromptParagraph,
-    onImportFromClipboard = automationViewModel::importPromptFromClipboard,
-    onCopyPromptToClipboard = automationViewModel::copyPromptToClipboard,
-    onPasteFromClipboard = automationViewModel::pastePromptFromClipboard,
-    onCloseGeminiApp = automationViewModel::closeGeminiApp,
-    onCleanDeviceMemory = automationViewModel::cleanDeviceMemory,
-    onTerminateSelfApp = automationViewModel::terminateSelfApp,
-    onRepeatCountChange = automationViewModel::onRepeatCountChange,
-    onRunAutomation = runAutomation,
-    onCancelAutomation = automationViewModel::cancelAutomation,
-    onAutomationModeSelected = selectAutomationMode,
-    onPairRemoteDevice = automationViewModel::pairRemoteDevice,
-    onDisconnectRemoteDevice = automationViewModel::disconnectRemoteDevice,
-    onToggleSearch = automationViewModel::toggleSearch,
-    onSearchQueryChange = automationViewModel::setSearchQuery,
-    onNavigateSearchNext = automationViewModel::navigateSearchNext,
-    onNavigateSearchPrevious = automationViewModel::navigateSearchPrevious,
-    onCloseSearch = automationViewModel::closeSearch,
-    onRunVariation = { selectedText -> automationViewModel.runVariation(selectedText) },
-    onOpenVariationPromptConfigDialog = automationViewModel::openVariationPromptConfigDialog,
-    onCloseVariationPromptConfigDialog = automationViewModel::closeVariationPromptConfigDialog,
-    onSaveVariationPromptConfig = automationViewModel::saveVariationPromptConfig
-)
+    }
+
+    override fun onSelectWildcardFolder() {
+        selectWildcardFolder()
+    }
+
+    override fun onSelectSafWildcardFolder() {
+        selectSafWildcardFolder()
+    }
+
+    override fun onOpenWildcardStorageSettings() {
+        openWildcardStorageSettings()
+    }
+
+    override fun onOpenAccessibilitySettings() {
+        platformNavigator.openAccessibilitySettings()
+    }
+
+    override fun onClearFocus() {
+        clearInputFocus()
+    }
+}
 
 private fun createAnalysisActions(
     analysisViewModel: AnalysisViewModel,
@@ -353,105 +325,43 @@ private fun createAnalysisActions(
     browserLauncher: AndroidExternalBrowserLauncher,
     clearInputFocus: () -> Unit,
     onCompleteSave: () -> Unit
-): AnalysisAppActions = AnalysisAppActions(
-    onClearFocus = clearInputFocus,
-    onSourcePromptChange = analysisViewModel::onSourcePromptChange,
-    onImportFromAutomation = analysisViewModel::importSourcePromptFromAutomation,
-    onCategorySelected = analysisViewModel::onCategorySelected,
-    onClearTargetSegment = analysisViewModel::clearTargetSegment,
-    onGenerate = analysisViewModel::generate,
-    onGenerateTxt = analysisViewModel::generateTxt,
-    onCancelWork = analysisViewModel::cancelActiveWork,
-    onRequestResetSession = analysisViewModel::requestResetSession,
-    onConfirmResetSession = analysisViewModel::confirmResetSession,
-    onDismissResetSession = analysisViewModel::dismissResetSession,
-    onTxtCountChange = analysisViewModel::onTxtCountChange,
-    onToggleDirection = analysisViewModel::toggleDirection,
-    onCustomHintChange = analysisViewModel::onCustomHintChange,
-    onResultFileNameChange = analysisViewModel::onResultFileNameChange,
-    onApplyCandidate = { index -> analysisViewModel.applyCandidate(index = index) },
-    onCopyCandidate = analysisViewModel::copyCandidate,
-    onRestoreOriginalPrompt = analysisViewModel::restoreOriginalPrompt,
-    onCopyResults = analysisViewModel::copyGeneratedResults,
-    onSaveResults = {
+): AnalysisScreenActions = object : AnalysisScreenActions by analysisViewModel {
+    override fun onClearFocus() {
+        clearInputFocus()
+    }
+
+    override fun onSaveResults() {
         analysisViewModel.saveGeneratedResults()
         onCompleteSave()
-    },
-    onConfirmOverwrite = {
+    }
+
+    override fun onConfirmOverwrite() {
         analysisViewModel.confirmOverwrite()
         onCompleteSave()
-    },
-    onDismissOverwrite = analysisViewModel::dismissOverwrite,
-    onShowKeyDialog = analysisViewModel::showKeyDialog,
-    onDismissKeyDialog = analysisViewModel::dismissKeyDialog,
-    onKeyLabelChange = analysisViewModel::onKeyLabelChange,
-    onKeyValueChange = analysisViewModel::onKeyValueChange,
-    onRoleProviderSelected = analysisViewModel::onRoleProviderSelected,
-    onRoleModelSelected = analysisViewModel::onRoleModelSelected,
-    onStartGrokLogin = analysisViewModel::startGrokLogin,
-    onCancelGrokLogin = analysisViewModel::cancelGrokLogin,
-    onLogoutGrok = analysisViewModel::logoutGrok,
-    onOpenGrokLoginUrl = { url -> platformNavigator.openUrlPreferFirefox(browserLauncher, url) },
-    onAddApiKey = analysisViewModel::addApiKey,
-    onDeleteApiKey = analysisViewModel::deleteApiKey,
-    onActivateApiKey = analysisViewModel::activateApiKey,
-    onStartEditApiKey = analysisViewModel::startEditingApiKey,
-    onEditKeyLabelChange = analysisViewModel::onEditingKeyLabelChange,
-    onCancelEditApiKey = analysisViewModel::cancelEditingApiKey,
-    onUpdateKeyLabel = analysisViewModel::updateApiKeyLabel
-)
+    }
+
+    override fun onOpenGrokLoginUrl(url: String) {
+        platformNavigator.openUrlPreferFirefox(browserLauncher, url)
+    }
+}
 
 private fun createWildcardActions(
     wildcardViewModel: WildcardViewModel,
     selectWildcardFolder: () -> Unit
-): WildcardAppActions = WildcardAppActions(
-    onRefresh = { wildcardViewModel.refreshFiles(openFirstFile = true) },
-    onSelectFolder = selectWildcardFolder,
-    onFileClick = wildcardViewModel::selectFile,
-    onTextChange = wildcardViewModel::onTextChange,
-    onSave = { wildcardViewModel.saveCurrent() },
-    onRequestNewFile = wildcardViewModel::requestNewFile,
-    onNewFileNameChange = wildcardViewModel::onNewFileNameChange,
-    onCreateNewFile = wildcardViewModel::createNewFile,
-    onDismissNewFile = wildcardViewModel::dismissNewFileDialog,
-    onRequestDelete = wildcardViewModel::requestDeleteSelectedFile,
-    onConfirmDelete = wildcardViewModel::confirmDeleteSelectedFile,
-    onDismissDelete = wildcardViewModel::dismissDeleteConfirm,
-    onRequestRename = wildcardViewModel::requestRenameSelectedFile,
-    onRenameFileNameChange = wildcardViewModel::onRenameFileNameChange,
-    onConfirmRename = wildcardViewModel::renameSelectedFile,
-    onDismissRename = wildcardViewModel::dismissRenameDialog,
-    onPaste = wildcardViewModel::pasteFromClipboard,
-    onPasteBelow = wildcardViewModel::pasteBelowFromClipboard,
-    onCopy = wildcardViewModel::copyToClipboard,
-    onUndo = wildcardViewModel::undoClipboardEdit,
-    onEnterLineSelectionMode = wildcardViewModel::enterLineSelectionMode,
-    onExitLineSelectionMode = wildcardViewModel::exitLineSelectionMode,
-    onToggleLineSelection = wildcardViewModel::toggleLineSelection,
-    onSelectAllLines = wildcardViewModel::selectAllLines,
-    onDeselectAllLines = wildcardViewModel::deselectAllLines,
-    onComposeDynamicPrompt = wildcardViewModel::composeDynamicPromptToClipboard,
-    onRequestClassify = wildcardViewModel::requestClassify,
-    onClassifyCriteriaChange = wildcardViewModel::onClassifyCriteriaChange,
-    onClassifyProviderSelected = wildcardViewModel::onClassifyProviderSelected,
-    onClassifyModelSelected = wildcardViewModel::onClassifyModelSelected,
-    onDismissClassifyCriteria = wildcardViewModel::dismissClassifyCriteriaDialog,
-    onRunClassify = wildcardViewModel::runClassify,
-    onDismissClassifyPreview = wildcardViewModel::dismissClassifyPreview,
-    onClassifyFileNameChange = wildcardViewModel::onClassifyFileNameChange,
-    onToggleClassifyFileNameEdit = wildcardViewModel::onToggleClassifyFileNameEdit,
-    onSaveClassifyResult = { wildcardViewModel.saveClassifyResult(overwrite = false) },
-    onConfirmClassifyOverwrite = wildcardViewModel::confirmClassifyOverwrite,
-    onDismissClassifyOverwrite = wildcardViewModel::dismissClassifyOverwrite,
-    onConfirmPendingSave = {
+): WildcardScreenActions = object : WildcardScreenActions by wildcardViewModel {
+    override fun onSelectFolder() {
+        selectWildcardFolder()
+    }
+
+    override fun onConfirmPendingSave() {
         wildcardViewModel.confirmPendingWithSave {
             selectWildcardFolder()
         }
-    },
-    onConfirmPendingDiscard = {
+    }
+
+    override fun onConfirmPendingDiscard() {
         if (wildcardViewModel.confirmPendingWithDiscard()) {
             selectWildcardFolder()
         }
-    },
-    onCancelPending = wildcardViewModel::cancelPendingAction
-)
+    }
+}

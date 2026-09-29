@@ -1,4 +1,4 @@
-// 역할: 프롬프트 실행 기록 저장 및 조회 리포지토리 동작을 검증합니다.
+// 역할: 프롬프트 실행 기록 메모리 캐싱, 저장 및 조회 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
@@ -13,8 +13,13 @@ class FakePromptHistoryRepository(
     initialItems: List<PromptHistoryItem> = emptyList()
 ) : PromptHistoryRepository {
     private var items: List<PromptHistoryItem> = initialItems
+    var loadCallCount: Int = 0
+        private set
 
-    override fun load(): List<PromptHistoryItem> = items
+    override fun load(): List<PromptHistoryItem> {
+        loadCallCount += 1
+        return items
+    }
 
     override fun save(items: List<PromptHistoryItem>) {
         this.items = items
@@ -121,5 +126,30 @@ class PromptHistoryStoreTest {
 
         store.clear()
         assertTrue(store.load().isEmpty())
+    }
+
+    @Test
+    fun load_and_record_reuseInMemoryCacheWithoutRepeatedRepositoryLoad() {
+        val repo = FakePromptHistoryRepository(
+            initialItems = listOf(
+                PromptHistoryItem(
+                    id = "1",
+                    prompt = "기존 프롬프트",
+                    targetApp = AutomationTargetApp.GEMINI,
+                    createdAtMillis = 100L
+                )
+            )
+        )
+        val store = PromptHistoryStore(repo)
+
+        assertEquals(1, store.load().size)
+        assertEquals(1, repo.loadCallCount)
+
+        assertEquals(1, store.load().size)
+        assertEquals(1, repo.loadCallCount)
+
+        val updated = store.record("새 프롬프트", AutomationTargetApp.GEMINI)
+        assertEquals(2, updated.size)
+        assertEquals(1, repo.loadCallCount)
     }
 }

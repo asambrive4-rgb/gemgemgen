@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
@@ -50,6 +51,7 @@ import androidx.compose.ui.zIndex
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 
+@Immutable
 internal class MainTabPage(
     val tab: MainTab,
     val content: @Composable () -> Unit
@@ -234,20 +236,31 @@ internal fun MainTabbedScreen(
                 if (hasVisited) {
                     key(page.tab) {
                         saveableStateHolder.SaveableStateProvider(page.tab) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .zIndex(if (isSelected) 1f else 0f)
-                                    .graphicsLayer {
-                                        alpha = if (isSelected) 1f else 0f
-                                    }
-                            ) {
-                                page.content()
-                            }
+                            TabPageContent(
+                                isSelected = isSelected,
+                                page = page
+                            )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TabPageContent(
+    isSelected: Boolean,
+    page: MainTabPage
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(if (isSelected) 1f else 0f)
+            .graphicsLayer {
+                alpha = if (isSelected) 1f else 0f
+            }
+    ) {
+        page.content()
     }
 }

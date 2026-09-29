@@ -106,7 +106,6 @@ class AutomationViewModel(
         checkAutomationStart = checkAutomationStart,
         automationHistoryRecorder = RecordAutomationHistoryUseCase(
             lastRunSnapshotStore = lastRunSnapshotStore,
-            clipboardGateway = clipboardGateway,
             promptHistoryStore = promptHistoryStore,
             dispatchers = dispatchers
         ),
@@ -155,19 +154,6 @@ class AutomationViewModel(
         _automationBarUiState.asStateFlow()
 
     init {
-
-        themePaletteStore?.let { store ->
-            scope.launch {
-                store.currentPalette.collect { palette ->
-                    _uiState.update { it.copy(selectedThemePalette = palette) }
-                }
-            }
-            scope.launch {
-                store.currentMode.collect { mode ->
-                    _uiState.update { it.copy(selectedThemeMode = mode) }
-                }
-            }
-        }
         scope.launch {
             promptEditor.editorUiState.collect { editorState ->
                 _uiState.update { current ->
@@ -292,11 +278,13 @@ class AutomationViewModel(
     override fun onDismissAccessibilityPromptToSettings() { dismissAccessibilityPromptToSettings() }
 
     override fun onSelectThemePalette(palette: com.example.gemgemgen.ui.theme.AppThemePalette) {
-        themePaletteStore?.setPalette(palette) ?: _uiState.update { it.copy(selectedThemePalette = palette) }
+        themePaletteStore?.setPalette(palette)
+        _uiState.update { it.copy(selectedThemePalette = palette) }
     }
 
     override fun onSelectThemeMode(mode: com.example.gemgemgen.ui.theme.AppThemeMode) {
-        themePaletteStore?.setThemeMode(mode) ?: _uiState.update { it.copy(selectedThemeMode = mode) }
+        themePaletteStore?.setThemeMode(mode)
+        _uiState.update { it.copy(selectedThemeMode = mode) }
     }
 
     fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean = true) =
@@ -760,8 +748,7 @@ class AutomationViewModel(
             return decision
         }
 
-        val history = promptHistoryStore?.load().orEmpty()
-        promptEditor.onAutomationStarted(state.promptTemplate, history.map { it.prompt })
+        promptEditor.onAutomationStarted(state.promptTemplate)
 
         cancelParagraphSelection()
         val request = AutomationRunRequest(

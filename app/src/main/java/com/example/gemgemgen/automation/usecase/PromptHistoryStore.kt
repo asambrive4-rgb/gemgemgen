@@ -1,4 +1,4 @@
-// 역할: 과거 프롬프트 기록 저장소 인터페이스를 정의합니다.
+// 역할: 과거 프롬프트 기록을 메모리에 캐싱하고 저장소와 동기화합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
@@ -17,10 +17,16 @@ class PromptHistoryStore(
     private val currentTimeMillisProvider: () -> Long = System::currentTimeMillis,
     private val idGenerator: () -> String = { UUID.randomUUID().toString() }
 ) {
+    @Volatile
+    private var cachedItems: List<PromptHistoryItem>? = null
+
+    @Synchronized
     fun load(): List<PromptHistoryItem> {
-        return repository.load()
+        cachedItems?.let { return it }
+        return repository.load().also { cachedItems = it }
     }
 
+    @Synchronized
     fun record(
         prompt: String,
         targetApp: AutomationTargetApp
@@ -30,7 +36,7 @@ class PromptHistoryStore(
         }
 
         val trimmed = prompt.trim()
-        val existingItems = repository.load()
+        val existingItems = load()
 
         // 방식 1: 기존에 동일한 프롬프트가 있으면 제거하고 최신으로 끌어올림
         val filtered = existingItems.filterNot { it.prompt.trim() == trimmed }
@@ -43,11 +49,14 @@ class PromptHistoryStore(
         )
 
         val updated = (listOf(newItem) + filtered).take(maxCount)
+        cachedItems = updated
         repository.save(updated)
         return updated
     }
 
+    @Synchronized
     fun clear() {
+        cachedItems = emptyList()
         repository.save(emptyList())
     }
 
