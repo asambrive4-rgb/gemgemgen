@@ -1,8 +1,15 @@
-// 역할: AI 분석 세션의 실행 가능 여부, 결과 복사/저장 권한, 세션 초기화 가능 여부 등 핵심 도메인 규칙을 판정합니다.
+// 역할: AI 분석 세션의 실행 전제조건·차단 사유 판정, 결과 복사/저장 권한, 세션 초기화 가능 여부를 판정합니다.
 package com.example.gemgemgen.analysis.domain
 
 const val DEFAULT_ANALYSIS_RESULT_FILE_NAME = "analysis-wildcard-results.txt"
 val DEFAULT_ANALYSIS_CATEGORY: AnalysisCategory = AnalysisCategory.FREE_EDIT
+
+sealed interface AnalysisStartBlockReason {
+    data object BlankSource : AnalysisStartBlockReason
+    data object MissingCategory : AnalysisStartBlockReason
+    data class MissingMaskingCredential(val provider: AnalysisProvider) : AnalysisStartBlockReason
+    data class MissingGenerationCredential(val provider: AnalysisProvider) : AnalysisStartBlockReason
+}
 
 object AnalysisSessionPolicy {
     fun evaluateStartBlockReason(
@@ -13,18 +20,22 @@ object AnalysisSessionPolicy {
         hasMaskingCredential: Boolean,
         generationProvider: AnalysisProvider,
         hasGenerationCredential: Boolean,
-        isBusy: Boolean
+        isBusy: Boolean = false
     ): AnalysisStartBlockReason? {
         if (isBusy) return null
-        return AnalysisStartPolicy.evaluatePreconditions(
-            source = source,
-            category = category,
-            needsMaskingAnalysis = needsMaskingAnalysis,
-            maskingProvider = maskingProvider,
-            hasMaskingCredential = hasMaskingCredential,
-            generationProvider = generationProvider,
-            hasGenerationCredential = hasGenerationCredential
-        )
+        if (source.isBlank()) {
+            return AnalysisStartBlockReason.BlankSource
+        }
+        if (category == null) {
+            return AnalysisStartBlockReason.MissingCategory
+        }
+        if (needsMaskingAnalysis && !hasMaskingCredential) {
+            return AnalysisStartBlockReason.MissingMaskingCredential(maskingProvider)
+        }
+        if (!hasGenerationCredential) {
+            return AnalysisStartBlockReason.MissingGenerationCredential(generationProvider)
+        }
+        return null
     }
 
     fun canGenerate(
@@ -37,16 +48,18 @@ object AnalysisSessionPolicy {
         hasGenerationCredential: Boolean,
         status: AnalysisStatus
     ): Boolean {
-        return AnalysisStartPolicy.canGenerate(
+        if (status == AnalysisStatus.GENERATING) {
+            return false
+        }
+        return evaluateStartBlockReason(
             source = source,
             category = category,
             needsMaskingAnalysis = needsMaskingAnalysis,
             maskingProvider = maskingProvider,
             hasMaskingCredential = hasMaskingCredential,
             generationProvider = generationProvider,
-            hasGenerationCredential = hasGenerationCredential,
-            status = status
-        )
+            hasGenerationCredential = hasGenerationCredential
+        ) == null
     }
 
     fun canCopyOrSave(
@@ -54,10 +67,9 @@ object AnalysisSessionPolicy {
         candidateCount: Int,
         status: AnalysisStatus
     ): Boolean {
-        val isBusy = status == AnalysisStatus.ANALYZING || status == AnalysisStatus.GENERATING
         return resultPresentation == AnalysisResultPresentation.TXT &&
             candidateCount > 0 &&
-            !isBusy
+            status != AnalysisStatus.GENERATING
     }
 
     fun canResetSession(
@@ -96,3 +108,4 @@ object AnalysisSessionPolicy {
             isBusy
     }
 }
+

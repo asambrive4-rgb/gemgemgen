@@ -85,11 +85,7 @@ fun GemgemgenTheme(
         )
     }
 
-    CompositionLocalProvider(
-        LocalAppColors provides appColors,
-        LocalAppThemePalette provides palette,
-        LocalAppThemeMode provides themeMode
-    ) {
+    CompositionLocalProvider(LocalAppColors provides appColors) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

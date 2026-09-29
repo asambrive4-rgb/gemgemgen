@@ -5,7 +5,6 @@ import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
@@ -16,22 +15,18 @@ import com.example.gemgemgen.environment.domain.EnvironmentReport
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.environment.usecase.EnvironmentGateway
-import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderAccessChecker
 import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
-import com.example.gemgemgen.wildcard.android.WildcardFolderStore
+import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderAccessChecker
+import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
 
 class AndroidEnvironmentGateway(
     context: Context
 ) : EnvironmentGateway, OverlayPermissionGateway {
     private val appContext = context.applicationContext
-    private val packageInstallChecker = AndroidPackageInstallChecker(appContext)
-    private val accessibilityStatus = AndroidAccessibilityServiceStatus(appContext)
-    private val secureSettingsPermission = AndroidSecureSettingsPermissionChecker(appContext)
-    private val wildcardDirectoryStatus = AndroidWildcardDirectoryStatus(appContext)
     private val wildcardDirectStorage = AndroidWildcardDirectStorage()
 
     override fun check(): EnvironmentReport {
-        val wildcardFolderUri = wildcardDirectoryStatus.folderUri()
+        val wildcardFolderUri = AndroidWildcardFolderRepository.getFolderUri(appContext)
         val hasAllFilesAccess = AndroidWildcardDirectStorage.hasAllFilesAccess()
         val directFolder = if (hasAllFilesAccess) {
             runCatching { wildcardDirectStorage.ensureFolder() }.getOrNull()
@@ -60,26 +55,20 @@ class AndroidEnvironmentGateway(
 
         return EnvironmentReport(
             status = EnvironmentStatus(
-                isGeminiInstalled = packageInstallChecker.isInstalled(
-                    AppDefaults.GEMINI_PACKAGE_NAME
-                ),
-                isChatGptInstalled = packageInstallChecker.isInstalled(
-                    AppDefaults.CHATGPT_PACKAGE_NAME
-                ),
-                isFlowInstalled = packageInstallChecker.isInstalled(
-                    AppDefaults.FLOW_PACKAGE_NAME
-                ),
-                isAccessibilityServiceEnabled = accessibilityStatus.isEnabled(),
-                hasWriteSecureSettingsPermission = secureSettingsPermission.isGranted(),
+                isGeminiInstalled = isPackageInstalled(AppDefaults.GEMINI_PACKAGE_NAME),
+                isChatGptInstalled = isPackageInstalled(AppDefaults.CHATGPT_PACKAGE_NAME),
+                isFlowInstalled = isPackageInstalled(AppDefaults.FLOW_PACKAGE_NAME),
+                isAccessibilityServiceEnabled = isAccessibilityServiceEnabled(),
+                hasWriteSecureSettingsPermission = hasWriteSecureSettingsPermission(),
                 isWildcardDirectoryAccessible = if (hasAllFilesAccess) {
                     directFolder != null && directFolder.isDirectory && directFolder.canRead()
                 } else {
-                    wildcardFolderUri != null && wildcardDirectoryStatus.canRead(wildcardFolderUri)
+                    wildcardFolderUri != null && AndroidWildcardFolderAccessChecker.canReadFolder(appContext, wildcardFolderUri)
                 },
                 isWildcardDirectoryWritable = if (hasAllFilesAccess) {
                     directFolder != null && directFolder.isDirectory && directFolder.canWrite()
                 } else {
-                    wildcardFolderUri != null && wildcardDirectoryStatus.canWrite(wildcardFolderUri)
+                    wildcardFolderUri != null && AndroidWildcardFolderAccessChecker.canWriteFolder(appContext, wildcardFolderUri)
                 },
                 hasOverlayPermission = hasOverlay,
                 hasNotificationPermission = hasNotification,
@@ -98,67 +87,33 @@ class AndroidEnvironmentGateway(
         )
     }
 
-    override fun isGranted(): Boolean {
-        return Settings.canDrawOverlays(appContext)
-    }
-}
+    override fun isGranted(): Boolean = Settings.canDrawOverlays(appContext)
 
-private class AndroidPackageInstallChecker(
-    private val context: Context
-) {
-    fun isInstalled(packageName: String): Boolean {
-        return try {
-            context.packageManager.getPackageInfo(packageName, 0)
-            true
-        } catch (_: PackageManager.NameNotFoundException) {
-            false
-        }
+    private fun isPackageInstalled(packageName: String): Boolean = try {
+        appContext.packageManager.getPackageInfo(packageName, 0)
+        true
+    } catch (_: PackageManager.NameNotFoundException) {
+        false
     }
-}
 
-private class AndroidAccessibilityServiceStatus(
-    private val context: Context
-) {
-    fun isEnabled(): Boolean {
+    private fun isAccessibilityServiceEnabled(): Boolean {
         if (GeminiAccessibilityService.activeService != null) return true
-
-        val expectedService = ComponentName(context, GeminiAccessibilityService::class.java)
+        val expectedService = ComponentName(appContext, GeminiAccessibilityService::class.java)
         val enabledServices = Settings.Secure.getString(
-            context.contentResolver,
+            appContext.contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         )
-
         return AccessibilityServiceMatcher.containsService(
             enabledServices = enabledServices,
             expectedPackageName = expectedService.packageName,
             expectedClassName = expectedService.className
         )
     }
-}
 
-private class AndroidSecureSettingsPermissionChecker(
-    private val context: Context
-) {
-    fun isGranted(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
+    private fun hasWriteSecureSettingsPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            appContext,
             Manifest.permission.WRITE_SECURE_SETTINGS
         ) == PackageManager.PERMISSION_GRANTED
-    }
 }
 
-private class AndroidWildcardDirectoryStatus(
-    private val context: Context
-) {
-    fun folderUri(): Uri? {
-        return WildcardFolderStore.getFolderUri(context)
-    }
-
-    fun canRead(folderUri: Uri): Boolean {
-        return AndroidWildcardFolderAccessChecker.canReadFolder(context, folderUri)
-    }
-
-    fun canWrite(folderUri: Uri): Boolean {
-        return AndroidWildcardFolderAccessChecker.canWriteFolder(context, folderUri)
-    }
-}

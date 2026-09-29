@@ -52,16 +52,13 @@ class PromptEditorCoordinator(
     private val scope: CoroutineScope,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     initialPrompt: String = "",
-    private val applyWildcardTokenUseCase: ApplyWildcardTokenUseCase = ApplyWildcardTokenUseCase()
+    private val applyWildcardTokenUseCase: ApplyWildcardTokenUseCase = ApplyWildcardTokenUseCase(),
+    private val onPromptTextChanged: ((String) -> Unit)? = null
 ) {
     val textFieldState = TextFieldState()
     private val promptHistoryNavigator = PromptHistoryNavigator(initialDraft = initialPrompt)
     private var ignoredPromptChangeText: String? = null
-    private var promptTemplateValue: String = initialPrompt
     private var promptEditorSession = PromptEditorSession(text = initialPrompt)
-
-    private val _currentPromptText = MutableStateFlow(initialPrompt)
-    val currentPromptText: StateFlow<String> = _currentPromptText.asStateFlow()
 
     private val _editorUiState = MutableStateFlow(
         PromptEditorUiState(promptTemplate = initialPrompt)
@@ -72,12 +69,15 @@ class PromptEditorCoordinator(
         if (initialPrompt.isNotEmpty()) {
             applyPromptTemplateText(initialPrompt)
         }
+        onPromptTextChanged?.invoke(initialPrompt)
         scope.launch {
             try {
                 snapshotFlow { textFieldState.selection }
                     .distinctUntilChanged()
                     .collect {
-                        refreshActiveSuggestions()
+                        if (textFieldState.text.contentEquals(promptEditorSession.text)) {
+                            refreshActiveSuggestions()
+                        }
                     }
             } catch (_: Throwable) {
                 // JUnit 테스트 등 snapshot 시스템 미구동 환경 예외 방어
@@ -85,39 +85,39 @@ class PromptEditorCoordinator(
         }
     }
 
- fun onPromptTemplateChange(value: String) {
- onPromptTemplateChange(value, updateTextFieldState = true)
- }
+    fun onPromptTemplateChange(value: String) {
+        onPromptTemplateChange(value, updateTextFieldState = true)
+    }
 
- fun onPromptTemplateFromEditor(value: String) {
- onPromptTemplateChange(value, updateTextFieldState = false)
- }
+    fun onPromptTemplateFromEditor(value: String) {
+        onPromptTemplateChange(value, updateTextFieldState = false)
+    }
 
- fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean) {
- if (updateTextFieldState && !textFieldState.text.contentEquals(value)) {
- textFieldState.setTextAndPlaceCursorAtEnd(value)
- }
- when (
- val change = PromptEditorSession.classifyTypingChange(
- previousText = promptTemplateValue,
- newText = value,
- programmaticEchoText = ignoredPromptChangeText
- )
- ) {
- PromptTypingChange.IgnoredEcho -> {
- ignoredPromptChangeText = null
- setPromptTextOnly(value)
- publishPromptTemplateToUiState(value, force = true)
- }
- PromptTypingChange.Unchanged -> Unit
- is PromptTypingChange.UserEdit -> {
- setPromptTextOnly(change.newText)
- promptHistoryNavigator.onUserTyping(change.newText)
- publishPromptTemplateToUiState(change.newText, force = updateTextFieldState)
- updateNavigationAvailability()
- }
- }
- }
+    fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean) {
+        if (updateTextFieldState && !textFieldState.text.contentEquals(value)) {
+            textFieldState.setTextAndPlaceCursorAtEnd(value)
+        }
+        when (
+            val change = PromptEditorSession.classifyTypingChange(
+                previousText = promptEditorSession.text,
+                newText = value,
+                programmaticEchoText = ignoredPromptChangeText
+            )
+        ) {
+            PromptTypingChange.IgnoredEcho -> {
+                ignoredPromptChangeText = null
+                setPromptTextOnly(value)
+                publishPromptTemplateToUiState(value, force = true)
+            }
+            PromptTypingChange.Unchanged -> Unit
+            is PromptTypingChange.UserEdit -> {
+                setPromptTextOnly(change.newText)
+                promptHistoryNavigator.onUserTyping(change.newText)
+                publishPromptTemplateToUiState(change.newText, force = updateTextFieldState)
+                updateNavigationAvailability()
+            }
+        }
+    }
 
     private fun publishPromptTemplateToUiState(value: String, force: Boolean) {
         val nextCandidates = computeActiveSuggestions(
@@ -259,11 +259,11 @@ class PromptEditorCoordinator(
         }
     }
 
- fun syncHistoryItems(items: List<String>) {
- syncPromptTemplateFromTextField()
- promptHistoryNavigator.updateHistory(items, promptTemplateValue)
- updateNavigationAvailability()
- }
+    fun syncHistoryItems(items: List<String>) {
+        syncPromptTemplateFromTextField()
+        promptHistoryNavigator.updateHistory(items, promptEditorSession.text)
+        updateNavigationAvailability()
+    }
 
     fun onAutomationStarted(prompt: String, updatedHistory: List<String>? = null) {
         syncPromptTemplateFromTextField()
@@ -277,9 +277,8 @@ class PromptEditorCoordinator(
 
     fun navigatePromptHistoryBack() {
         syncPromptTemplateFromTextField()
-        val target = promptHistoryNavigator.navigateBack(promptTemplateValue) ?: return
+        val target = promptHistoryNavigator.navigateBack(promptEditorSession.text) ?: return
         applyPromptTemplateText(target)
-        promptTemplateValue = target
         publishEditorSession(promptEditorSession.afterWholeReplace(target))
     }
 
@@ -287,7 +286,6 @@ class PromptEditorCoordinator(
         syncPromptTemplateFromTextField()
         val target = promptHistoryNavigator.navigateForward() ?: return
         applyPromptTemplateText(target)
-        promptTemplateValue = target
         publishEditorSession(promptEditorSession.afterWholeReplace(target))
     }
 
@@ -299,76 +297,75 @@ class PromptEditorCoordinator(
         publishEditorSession(promptEditorSession.toggleSelectionMode())
     }
 
- fun selectPromptParagraphAt(offset: Int) {
- syncEditorTextFromCurrent()
- publishEditorSession(promptEditorSession.selectAt(offset))
- }
+    fun selectPromptParagraphAt(offset: Int) {
+        syncEditorTextFromCurrent()
+        publishEditorSession(promptEditorSession.selectAt(offset))
+    }
 
- fun deleteSelectedPromptParagraph() {
- syncEditorTextFromCurrent()
- when (val result = promptEditorSession.prepareDeleteSelected()) {
- PromptParagraphActionResult.NoOp -> Unit
- is PromptParagraphActionResult.SessionOnly -> publishEditorSession(result.session)
- is PromptParagraphActionResult.Mutated -> applyTextMutation(result.mutation)
- }
- }
+    fun deleteSelectedPromptParagraph() {
+        syncEditorTextFromCurrent()
+        when (val result = promptEditorSession.prepareDeleteSelected()) {
+            PromptParagraphActionResult.NoOp -> Unit
+            is PromptParagraphActionResult.SessionOnly -> publishEditorSession(result.session)
+            is PromptParagraphActionResult.Mutated -> applyTextMutation(result.mutation)
+        }
+    }
 
- fun cancelParagraphSelection() {
- publishEditorSession(promptEditorSession.cancelSelection())
- }
+    fun cancelParagraphSelection() {
+        publishEditorSession(promptEditorSession.cancelSelection())
+    }
 
- fun importPromptFromClipboard() {
- syncPromptTemplateFromTextField()
- scope.launch {
- val text = withContext(dispatchers.io) {
- clipboardGateway.readText()
- }
- val state = _editorUiState.value
- if (!state.isParagraphSelectionMode) {
- replaceWholePromptTemplate(text)
- return@launch
- }
- replaceSelectedPromptParagraph(text)
- }
- }
+    fun importPromptFromClipboard() {
+        syncPromptTemplateFromTextField()
+        scope.launch {
+            val text = withContext(dispatchers.io) {
+                clipboardGateway.readText()
+            }
+            val state = _editorUiState.value
+            if (!state.isParagraphSelectionMode) {
+                replaceWholePromptTemplate(text)
+                return@launch
+            }
+            replaceSelectedPromptParagraph(text)
+        }
+    }
 
- fun currentPromptTemplateText(): String {
- syncPromptTemplateFromTextField()
- return promptTemplateValue
- }
+    fun currentPromptTemplateText(): String {
+        syncPromptTemplateFromTextField()
+        return promptEditorSession.text
+    }
 
- fun replacePromptTemplateEntirely(replacement: String) {
- replaceWholePromptTemplate(replacement)
- }
+    fun replacePromptTemplateEntirely(replacement: String) {
+        replaceWholePromptTemplate(replacement)
+    }
 
- fun replacePromptTemplateSegment(
- expectedSegment: String,
- replacement: String,
- preferredStartIndex: Int
- ): Int? {
- syncPromptTemplateFromTextField()
- val currentText = promptTemplateValue
- val edit = PromptSegmentEditPolicy.replace(
- currentText = currentText,
- expectedSegment = expectedSegment,
- replacement = replacement,
- preferredStartIndex = preferredStartIndex
- ) ?: return null
+    fun replacePromptTemplateSegment(
+        expectedSegment: String,
+        replacement: String,
+        preferredStartIndex: Int
+    ): Int? {
+        syncPromptTemplateFromTextField()
+        val currentText = promptEditorSession.text
+        val edit = PromptSegmentEditPolicy.replace(
+            currentText = currentText,
+            expectedSegment = expectedSegment,
+            replacement = replacement,
+            preferredStartIndex = preferredStartIndex
+        ) ?: return null
 
- ignoredPromptChangeText = edit.updatedText
- textFieldState.edit {
- replace(edit.startIndex, edit.previousEndIndex, replacement)
- selection = TextRange(edit.replacementEndIndex)
- }
- promptTemplateValue = edit.updatedText
- promptHistoryNavigator.onUserTyping(edit.updatedText)
- publishEditorSession(promptEditorSession.afterWholeReplace(edit.updatedText))
- return edit.startIndex
- }
+        ignoredPromptChangeText = edit.updatedText
+        textFieldState.edit {
+            replace(edit.startIndex, edit.previousEndIndex, replacement)
+            selection = TextRange(edit.replacementEndIndex)
+        }
+        promptHistoryNavigator.onUserTyping(edit.updatedText)
+        publishEditorSession(promptEditorSession.afterWholeReplace(edit.updatedText))
+        return edit.startIndex
+    }
 
     fun copyPromptToClipboard() {
         syncPromptTemplateFromTextField()
-        val text = _editorUiState.value.promptTemplate
+        val text = promptEditorSession.text
         if (text.isBlank()) return
 
         scope.launch {
@@ -381,7 +378,7 @@ class PromptEditorCoordinator(
     fun insertTopInstruction(topInstruction: String) {
         if (topInstruction.isBlank()) return
         syncPromptTemplateFromTextField()
-        val currentText = promptTemplateValue
+        val currentText = promptEditorSession.text
         val newText = if (currentText.isEmpty()) topInstruction else "$topInstruction\n\n$currentText"
         if (currentText == newText) return
 
@@ -395,7 +392,6 @@ class PromptEditorCoordinator(
             replace(0, length, newText)
             selection = TextRange(cursorAfter.coerceIn(0, newText.length))
         }
-        promptTemplateValue = newText
         promptHistoryNavigator.onUserTyping(newText)
         publishEditorSession(promptEditorSession.afterWholeReplace(newText))
     }
@@ -403,7 +399,7 @@ class PromptEditorCoordinator(
     fun insertBottomInstruction(bottomInstruction: String) {
         if (bottomInstruction.isBlank()) return
         syncPromptTemplateFromTextField()
-        val currentText = promptTemplateValue
+        val currentText = promptEditorSession.text
         val newText = if (currentText.isEmpty()) bottomInstruction else "$currentText\n\n$bottomInstruction"
         if (currentText == newText) return
 
@@ -413,7 +409,6 @@ class PromptEditorCoordinator(
             replace(0, length, newText)
             selection = TextRange(cursorAfter.coerceIn(0, newText.length))
         }
-        promptTemplateValue = newText
         promptHistoryNavigator.onUserTyping(newText)
         publishEditorSession(promptEditorSession.afterWholeReplace(newText))
     }
@@ -466,84 +461,77 @@ class PromptEditorCoordinator(
     }
 
     fun replaceSelectedPromptParagraph(replacement: String) {
- syncEditorTextFromCurrent()
- when (val result = promptEditorSession.prepareReplaceSelected(replacement)) {
- PromptParagraphActionResult.NoOp -> Unit
- is PromptParagraphActionResult.SessionOnly -> publishEditorSession(result.session)
- is PromptParagraphActionResult.Mutated -> applyTextMutation(result.mutation)
- }
- }
+        syncEditorTextFromCurrent()
+        when (val result = promptEditorSession.prepareReplaceSelected(replacement)) {
+            PromptParagraphActionResult.NoOp -> Unit
+            is PromptParagraphActionResult.SessionOnly -> publishEditorSession(result.session)
+            is PromptParagraphActionResult.Mutated -> applyTextMutation(result.mutation)
+        }
+    }
 
- fun restorePrompt(prompt: String) {
- applyPromptTemplateText(prompt)
- promptTemplateValue = prompt
- promptHistoryNavigator.onUserTyping(prompt)
- publishEditorSession(promptEditorSession.afterWholeReplace(prompt))
- }
+    fun restorePrompt(prompt: String) {
+        applyPromptTemplateText(prompt)
+        promptHistoryNavigator.onUserTyping(prompt)
+        publishEditorSession(promptEditorSession.afterWholeReplace(prompt))
+    }
 
- private fun replaceWholePromptTemplate(replacement: String) {
- syncEditorTextFromCurrent()
- val currentText = promptTemplateValue
- if (currentText == replacement) return
+    private fun replaceWholePromptTemplate(replacement: String) {
+        syncEditorTextFromCurrent()
+        if (promptEditorSession.text == replacement) return
 
- applyPromptTemplateText(replacement)
- promptTemplateValue = replacement
- promptHistoryNavigator.onUserTyping(replacement)
- publishEditorSession(promptEditorSession.afterWholeReplace(replacement))
- }
+        applyPromptTemplateText(replacement)
+        promptHistoryNavigator.onUserTyping(replacement)
+        publishEditorSession(promptEditorSession.afterWholeReplace(replacement))
+    }
 
- private fun applyTextMutation(mutation: PromptTextMutation) {
- val newText = mutation.session.text
- ignoredPromptChangeText = newText
- val start = mutation.selectionStart.coerceIn(0, newText.length)
- val end = mutation.selectionEnd.coerceIn(start, newText.length)
- textFieldState.edit {
- replace(0, length, newText)
- selection = TextRange(start, end)
- }
- promptTemplateValue = newText
- promptHistoryNavigator.onUserTyping(newText)
- publishEditorSession(mutation.session)
- }
+    private fun applyTextMutation(mutation: PromptTextMutation) {
+        val newText = mutation.session.text
+        ignoredPromptChangeText = newText
+        val start = mutation.selectionStart.coerceIn(0, newText.length)
+        val end = mutation.selectionEnd.coerceIn(start, newText.length)
+        textFieldState.edit {
+            replace(0, length, newText)
+            selection = TextRange(start, end)
+        }
+        promptHistoryNavigator.onUserTyping(newText)
+        publishEditorSession(mutation.session)
+    }
 
- private fun applyPromptTemplateText(text: String) {
- if (!textFieldState.text.contentEquals(text)) {
- ignoredPromptChangeText = text
- textFieldState.setTextAndPlaceCursorAtEnd(text)
- }
- }
+    private fun applyPromptTemplateText(text: String) {
+        if (!textFieldState.text.contentEquals(text)) {
+            ignoredPromptChangeText = text
+            textFieldState.setTextAndPlaceCursorAtEnd(text)
+        }
+    }
 
- fun syncPromptTemplateFromTextField() {
- val currentText = textFieldState.text.toString()
- if (promptTemplateValue == currentText &&
- _editorUiState.value.promptTemplate == currentText &&
- promptEditorSession.text == currentText
- ) {
- return
- }
- setPromptTextOnly(currentText)
- _editorUiState.update {
- if (it.promptTemplate == currentText) it else it.copy(promptTemplate = currentText)
- }
- }
+    fun syncPromptTemplateFromTextField() {
+        val currentText = textFieldState.text.toString()
+        if (_editorUiState.value.promptTemplate == currentText &&
+            promptEditorSession.text == currentText
+        ) {
+            return
+        }
+        setPromptTextOnly(currentText)
+        _editorUiState.update {
+            if (it.promptTemplate == currentText) it else it.copy(promptTemplate = currentText)
+        }
+    }
 
- private fun syncEditorTextFromCurrent() {
- val currentText = textFieldState.text.toString()
- if (promptTemplateValue != currentText || promptEditorSession.text != currentText) {
- setPromptTextOnly(currentText)
- }
- }
+    private fun syncEditorTextFromCurrent() {
+        val currentText = textFieldState.text.toString()
+        if (promptEditorSession.text != currentText) {
+            setPromptTextOnly(currentText)
+        }
+    }
 
     private fun setPromptTextOnly(text: String) {
-        promptTemplateValue = text
         promptEditorSession = promptEditorSession.withText(text)
-        _currentPromptText.value = text
+        onPromptTextChanged?.invoke(text)
     }
 
     private fun publishEditorSession(session: PromptEditorSession) {
         promptEditorSession = session
-        promptTemplateValue = session.text
-        _currentPromptText.value = session.text
+        onPromptTextChanged?.invoke(session.text)
         val message = AutomationUiText.paragraphMessage(session.messageKey)
         val suggestions = computeActiveSuggestions(
             text = session.text,
@@ -578,21 +566,12 @@ class PromptEditorCoordinator(
     }
 
     private var currentAutocompleteCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
-    private var lastSuggestionText: String? = null
-    private var lastSuggestionCursor: Int = -1
-    private var lastSuggestionSelectionStart: Int = -1
-    private var lastSuggestionSelectionEnd: Int = -1
-    private var lastSuggestionCandidates: List<WildcardTokenAutocomplete.Candidate>? = null
-    private var lastSuggestionParagraphMode: Boolean = false
-    private var lastSuggestionIsRunning: Boolean = false
-    private var lastSuggestionResult: List<WildcardTokenAutocomplete.Candidate> = emptyList()
 
     fun updateAutocompleteCandidates(
-        candidates: List<WildcardTokenAutocomplete.Candidate>,
-        isRunning: Boolean = false
+        candidates: List<WildcardTokenAutocomplete.Candidate>
     ) {
         currentAutocompleteCandidates = candidates
-        refreshActiveSuggestions(isRunning = isRunning)
+        refreshActiveSuggestions()
     }
 
     fun computeActiveSuggestions(
@@ -601,41 +580,17 @@ class PromptEditorCoordinator(
         selectionStart: Int = textFieldState.selection.min,
         selectionEnd: Int = textFieldState.selection.max,
         candidates: List<WildcardTokenAutocomplete.Candidate> = currentAutocompleteCandidates,
-        isParagraphSelectionMode: Boolean = _editorUiState.value.isParagraphSelectionMode,
-        isRunning: Boolean = false
-    ): List<WildcardTokenAutocomplete.Candidate> {
-        if (
-            lastSuggestionText == text &&
-            lastSuggestionCursor == cursor &&
-            lastSuggestionSelectionStart == selectionStart &&
-            lastSuggestionSelectionEnd == selectionEnd &&
-            lastSuggestionCandidates === candidates &&
-            lastSuggestionParagraphMode == isParagraphSelectionMode &&
-            lastSuggestionIsRunning == isRunning
-        ) {
-            return lastSuggestionResult
-        }
-        val computed = Companion.computeActiveSuggestions(
-            text = text,
-            cursor = cursor,
-            selectionMin = selectionStart,
-            selectionMax = selectionEnd,
-            candidates = candidates,
-            isParagraphSelectionMode = isParagraphSelectionMode,
-            isRunning = isRunning
-        )
-        lastSuggestionText = text
-        lastSuggestionCursor = cursor
-        lastSuggestionSelectionStart = selectionStart
-        lastSuggestionSelectionEnd = selectionEnd
-        lastSuggestionCandidates = candidates
-        lastSuggestionParagraphMode = isParagraphSelectionMode
-        lastSuggestionIsRunning = isRunning
-        lastSuggestionResult = computed
-        return computed
-    }
+        isParagraphSelectionMode: Boolean = _editorUiState.value.isParagraphSelectionMode
+    ): List<WildcardTokenAutocomplete.Candidate> = Companion.computeActiveSuggestions(
+        text = text,
+        cursor = cursor,
+        selectionMin = selectionStart,
+        selectionMax = selectionEnd,
+        candidates = candidates,
+        isParagraphSelectionMode = isParagraphSelectionMode
+    )
 
-    fun refreshActiveSuggestions(isRunning: Boolean = false) {
+    fun refreshActiveSuggestions() {
         val selection = textFieldState.selection
         val suggestions = computeActiveSuggestions(
             text = textFieldState.text.toString(),
@@ -643,10 +598,11 @@ class PromptEditorCoordinator(
             selectionStart = selection.min,
             selectionEnd = selection.max,
             candidates = currentAutocompleteCandidates,
-            isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode,
-            isRunning = isRunning
+            isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode
         )
-        _editorUiState.update { it.copy(activeSuggestionCandidates = suggestions) }
+        _editorUiState.update {
+            if (it.activeSuggestionCandidates == suggestions) it else it.copy(activeSuggestionCandidates = suggestions)
+        }
     }
 
     companion object {
@@ -656,10 +612,9 @@ class PromptEditorCoordinator(
             selectionMin: Int,
             selectionMax: Int,
             candidates: List<WildcardTokenAutocomplete.Candidate>,
-            isParagraphSelectionMode: Boolean = false,
-            isRunning: Boolean = false
+            isParagraphSelectionMode: Boolean = false
         ): List<WildcardTokenAutocomplete.Candidate> {
-            if (isParagraphSelectionMode || isRunning || selectionMin != selectionMax) {
+            if (isParagraphSelectionMode || selectionMin != selectionMax) {
                 return emptyList()
             }
             return WildcardTokenAutocomplete.suggestCandidates(
@@ -668,22 +623,5 @@ class PromptEditorCoordinator(
                 candidates = candidates
             )
         }
-    }
-
-    fun selectedTextOrNull(): String? {
-        val sel = textFieldState.selection
-        if (sel.collapsed) return null
-        val text = textFieldState.text.toString()
-        val start = sel.min.coerceIn(0, text.length)
-        val end = sel.max.coerceIn(start, text.length)
-        return text.substring(start, end).takeIf { it.isNotEmpty() }
-    }
-
-    fun selectedParagraphTextOrNull(): String? {
-        val range = _editorUiState.value.selectedParagraphRange ?: return null
-        val text = promptTemplateValue
-        val start = range.start.coerceIn(0, text.length)
-        val end = range.endExclusive.coerceIn(start, text.length)
-        return text.substring(start, end).takeIf { it.isNotEmpty() }
     }
 }

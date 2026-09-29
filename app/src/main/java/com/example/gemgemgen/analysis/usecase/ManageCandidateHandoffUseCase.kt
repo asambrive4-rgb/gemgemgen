@@ -5,6 +5,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.CandidateAutomationSession
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.core.PromptWorkspace
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
@@ -24,8 +25,7 @@ sealed interface ApplyCandidateResult {
         val message: String = "후보는 복사했지만 자동화 프롬프트에서 교체할 구간을 찾지 못했습니다. 자동화에서 원문을 다시 가져와 주세요."
     ) : ApplyCandidateResult
     data class Failure(
-        val message: String,
-        val cause: Throwable? = null
+        val message: String
     ) : ApplyCandidateResult
 }
 
@@ -36,13 +36,12 @@ sealed interface RestorePromptResult {
         val message: String = "자동화 프롬프트에서 복원할 구간을 찾지 못했습니다. 자동화에서 원문을 다시 가져와 주세요."
     ) : RestorePromptResult
     data class Failure(
-        val message: String,
-        val cause: Throwable? = null
+        val message: String
     ) : RestorePromptResult
 }
 
 class ManageCandidateHandoffUseCase(
-    private val copyResults: CopyAnalysisResultsUseCase,
+    private val clipboardGateway: ClipboardGateway,
     private val promptWorkspace: PromptWorkspace? = null,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
@@ -53,19 +52,10 @@ class ManageCandidateHandoffUseCase(
         currentSession = null
     }
 
-    fun setSession(session: CandidateAutomationSession?) {
-        currentSession = session
-    }
-
     suspend fun applyCandidate(
         candidate: String,
         sourcePrompt: String,
-        targetSegment: AnalysisTargetSegment?,
-        applyToAutomation: ((
-            expectedSegment: String,
-            replacement: String,
-            preferredStartIndex: Int
-        ) -> Int?)? = null
+        targetSegment: AnalysisTargetSegment?
     ): ApplyCandidateResult = withContext(dispatchers.io) {
         val segment = targetSegment?.takeIf { it.isValid }
             ?: return@withContext ApplyCandidateResult.SegmentMissing()
@@ -83,11 +73,8 @@ class ManageCandidateHandoffUseCase(
         val preferredStartIndex = existing?.automationSegmentStartIndex ?: segment.startIndex
 
         try {
-            copyResults.copyText(candidate)
-            val replacer = applyToAutomation ?: { exp, rep, start ->
-                promptWorkspace?.replaceSegment(exp, rep, start)
-            }
-            val appliedStartIndex = replacer(
+            clipboardGateway.writeText(candidate)
+            val appliedStartIndex = promptWorkspace?.replaceSegment(
                 expectedSegment,
                 candidate,
                 preferredStartIndex
@@ -104,23 +91,14 @@ class ManageCandidateHandoffUseCase(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            ApplyCandidateResult.Failure(e.message ?: "후보 적용에 실패했습니다.", e)
+            ApplyCandidateResult.Failure(e.message ?: "후보 적용에 실패했습니다.")
         }
     }
 
-    fun restoreOriginalPrompt(
-        restoreInAutomation: ((
-            expectedSegment: String,
-            originalSegment: String,
-            preferredStartIndex: Int
-        ) -> Int?)? = null
-    ): RestorePromptResult {
+    fun restoreOriginalPrompt(): RestorePromptResult {
         val session = currentSession ?: return RestorePromptResult.NoSession
-        val replacer = restoreInAutomation ?: { exp, rep, start ->
-            promptWorkspace?.replaceSegment(exp, rep, start)
-        }
         return try {
-            val restoredStartIndex = replacer(
+            promptWorkspace?.replaceSegment(
                 session.appliedCandidate,
                 session.targetSegment.text,
                 session.automationSegmentStartIndex
@@ -131,7 +109,7 @@ class ManageCandidateHandoffUseCase(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            RestorePromptResult.Failure(e.message ?: "원본 복원에 실패했습니다.", e)
+            RestorePromptResult.Failure(e.message ?: "원본 복원에 실패했습니다.")
         }
     }
 }

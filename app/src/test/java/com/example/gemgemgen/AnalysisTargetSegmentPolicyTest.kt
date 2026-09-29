@@ -1,4 +1,4 @@
-// 역할: 분석 대상 세그먼트 추출 및 벾위 판정 규칙을 검증합니다.
+// 역할: 분석 대상 세그먼트 추출 및 범위 판정 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
@@ -51,8 +51,7 @@ class AnalysisTargetSegmentPolicyTest {
                 exactText = "blue dress",
                 startIndex = 13,
                 endIndex = 23,
-                confidence = 0.9,
-                reason = "auto"
+                confidence = 0.9
             )
         )
         val segment = AnalysisTargetSegmentPolicy.fromAutoReport(
@@ -63,7 +62,6 @@ class AnalysisTargetSegmentPolicyTest {
         assertEquals("blue dress", segment.text)
         assertEquals(AnalysisTargetSource.AUTO, segment.source)
         assertEquals(0.9, segment.confidence, 0.0)
-        assertEquals("auto", segment.reason)
     }
 
     @Test
@@ -73,8 +71,7 @@ class AnalysisTargetSegmentPolicyTest {
                 exactText = "",
                 startIndex = 0,
                 endIndex = 0,
-                confidence = 0.1,
-                reason = "missing"
+                confidence = 0.1
             )
         )
         assertNull(
@@ -113,16 +110,5 @@ class AnalysisTargetSegmentPolicyTest {
             replacement = "black wavy hair"
         )
         assertEquals("black wavy hair and blue dress", replaced)
-    }
-
-    @Test
-    fun segmentAfterReplacement_keepsStartAndUpdatesEnd() {
-        val next = AnalysisTargetSegmentPolicy.segmentAfterReplacement(
-            previous = hairSegment,
-            replacement = "black wavy hair"
-        )
-        assertEquals("black wavy hair", next.text)
-        assertEquals(hairSegment.startIndex, next.startIndex)
-        assertEquals(hairSegment.startIndex + "black wavy hair".length, next.endIndex)
     }
 }

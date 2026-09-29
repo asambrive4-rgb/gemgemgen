@@ -8,8 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -21,18 +19,14 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
@@ -48,12 +42,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
-import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -115,7 +105,7 @@ internal fun WildcardScreen(
         if (text != lastCommittedEditingText) {
             delay(TEXT_COMMIT_DEBOUNCE_MS)
             if (text != lastCommittedEditingText) {
-                actions.onTextChanged(text)
+                actions.onTextChange(text)
                 lastCommittedEditingText = text
             }
         }
@@ -124,7 +114,7 @@ internal fun WildcardScreen(
     fun commitEditingText() {
         val text = editingTextFieldValueState.text
         if (text != lastCommittedEditingText) {
-            actions.onTextChanged(text)
+            actions.onTextChange(text)
             lastCommittedEditingText = text
         }
     }
@@ -171,16 +161,16 @@ internal fun WildcardScreen(
                 fileItems = fileItems,
                 onFileClick = { file ->
                     runWithCommittedText {
-                        actions.onFileClick(file)
+                        actions.selectFile(file)
                     }
                 },
                 canCreateFile = uiState.canCreateFile,
                 canDelete = uiState.canDelete,
                 onRequestNewFile = {
-                    runWithCommittedText { actions.onRequestNewFile() }
+                    runWithCommittedText { actions.requestNewFile() }
                 },
                 onRequestDelete = {
-                    runWithCommittedText { actions.onRequestDelete() }
+                    runWithCommittedText { actions.requestDeleteSelectedFile() }
                 }
             )
 
@@ -243,7 +233,7 @@ internal fun WildcardScreen(
                         }
                         TextButton(
                             onClick = {
-                                runWithCommittedText { actions.onEnterLineSelectionMode() }
+                                runWithCommittedText { actions.enterLineSelectionMode() }
                             },
                             enabled = uiState.canEnterLineSelectionMode
                         ) {
@@ -260,7 +250,7 @@ internal fun WildcardScreen(
                         }
                         IconButton(
                             onClick = {
-                                runWithCommittedText { actions.onRequestRename() }
+                                runWithCommittedText { actions.requestRenameSelectedFile() }
                             },
                             enabled = !uiState.isFileOperationInProgress && !uiState.isClassifying,
                             modifier = Modifier.size(32.dp)
@@ -275,7 +265,7 @@ internal fun WildcardScreen(
                     }
                     if (uiState.isLineSelectionMode) {
                         TextButton(
-                            onClick = { actions.onExitLineSelectionMode() },
+                            onClick = { actions.exitLineSelectionMode() },
                             enabled = uiState.canExitLineSelectionMode
                         ) {
                             Text("편집으로", color = AppTheme.colors.textPrimary, fontSize = 12.sp)
@@ -287,7 +277,7 @@ internal fun WildcardScreen(
                     LineSelectionList(
                         lines = uiState.selectableLines,
                         selectedIndices = uiState.selectedLineIndices,
-                        onToggle = { index -> actions.onToggleLineSelection(index) },
+                        onToggle = { index -> actions.toggleLineSelection(index) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -335,10 +325,10 @@ internal fun WildcardScreen(
             if (uiState.isLineSelectionMode) {
                 LineSelectionActionBar(
                     uiState = uiState,
-                    onSelectAll = { actions.onSelectAllLines() },
-                    onDeselectAll = { actions.onDeselectAllLines() },
-                    onCompose = { actions.onComposeDynamicPrompt() },
-                    onExit = { actions.onExitLineSelectionMode() }
+                    onSelectAll = { actions.selectAllLines() },
+                    onDeselectAll = { actions.deselectAllLines() },
+                    onCompose = { actions.composeDynamicPromptToClipboard() },
+                    onExit = { actions.exitLineSelectionMode() }
                 )
             } else {
                 ActionButtonsBar(
@@ -347,16 +337,16 @@ internal fun WildcardScreen(
                         runWithCommittedText { actions.onSaveFile() }
                     },
                     onPaste = {
-                        runWithCommittedText { actions.onPaste() }
+                        runWithCommittedText { actions.pasteFromClipboard() }
                     },
                     onPasteBelow = {
-                        runWithCommittedText { actions.onPasteBelow() }
+                        runWithCommittedText { actions.pasteBelowFromClipboard() }
                     },
                     onCopy = {
-                        runWithCommittedText { actions.onCopy() }
+                        runWithCommittedText { actions.copyToClipboard() }
                     },
                     onUndo = {
-                        runWithCommittedText { actions.onUndo() }
+                        runWithCommittedText { actions.undoClipboardEdit() }
                     }
                 )
             }
@@ -394,34 +384,12 @@ internal fun WildcardScreen(
     }
 
     val activeDialog = deriveActiveWildcardDialog(uiState)
-    val dialogActions = WildcardDialogActions(
-        onNewFileNameChange = { actions.onNewFileNameChange(it) },
-        onCreateNewFile = { runWithCommittedText { actions.onCreateNewFile() } },
-        onDismissNewFile = { actions.onDismissNewFile() },
-        onRenameFileNameChange = { actions.onRenameFileNameChange(it) },
-        onConfirmRename = { runWithCommittedText { actions.onConfirmRename() } },
-        onDismissRename = { actions.onDismissRename() },
-        onConfirmDelete = { runWithCommittedText { actions.onConfirmDelete() } },
-        onDismissDelete = { actions.onDismissDelete() },
-        onConfirmPendingSave = { runWithCommittedText { actions.onConfirmPendingSave() } },
-        onConfirmPendingDiscard = { actions.onConfirmPendingDiscard() },
-        onCancelPending = { actions.onCancelPending() },
-        onClassifyCriteriaChange = { actions.onClassifyCriteriaChange(it) },
-        onClassifyProviderSelected = { actions.onClassifyProviderSelected(it) },
-        onClassifyModelSelected = { actions.onClassifyModelSelected(it) },
-        onRunClassify = { runWithCommittedText { actions.runClassify() } },
-        onDismissClassifyCriteria = { actions.dismissClassifyCriteriaDialog() },
-        onClassifyFileNameChange = { index, name -> actions.onClassifyFileNameChange(index, name) },
-        onToggleClassifyFileNameEdit = { actions.onToggleClassifyFileNameEdit(it) },
-        onSaveClassifyResult = { actions.saveClassifyResult() },
-        onDismissClassifyPreview = { actions.dismissClassifyPreview() },
-        onConfirmClassifyOverwrite = { actions.confirmClassifyOverwrite() },
-        onDismissClassifyOverwrite = { actions.dismissClassifyOverwrite() }
-    )
-    WildcardDialogHost(
-        activeDialog = activeDialog,
-        actions = dialogActions
-    )
+    if (activeDialog !is WildcardDialogType.None) {
+        WildcardDialogHost(
+            activeDialog = activeDialog,
+            actions = actions
+        )
+    }
 }
 
 private const val TEXT_COMMIT_DEBOUNCE_MS = 250L

@@ -43,13 +43,4 @@ object SystemInstructionPrompt {
 
         --- [Insert Your Image Prompt Below]
     """.trimIndent()
-
-    /**
-     * 기존 템플릿 맨 앞에 SI를 붙인다.
-     * 본문이 비어 있지 않으면 SI와 본문 사이에 빈 줄 1개(`\n\n`)를 둔다.
-     */
-    fun prependTo(currentPrompt: String): String {
-        if (currentPrompt.isEmpty()) return text
-        return text + "\n\n" + currentPrompt
-    }
 }

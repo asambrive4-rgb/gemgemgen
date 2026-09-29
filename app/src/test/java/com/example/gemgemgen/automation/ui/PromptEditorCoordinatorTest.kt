@@ -19,12 +19,16 @@ class PromptEditorCoordinatorTest {
         }
     }
 
-    private fun createCoordinator(initialPrompt: String = ""): PromptEditorCoordinator {
+    private fun createCoordinator(
+        initialPrompt: String = "",
+        onPromptTextChanged: ((String) -> Unit)? = null
+    ): PromptEditorCoordinator {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         return PromptEditorCoordinator(
             clipboardGateway = TestClipboardGateway(),
             scope = scope,
-            initialPrompt = initialPrompt
+            initialPrompt = initialPrompt,
+            onPromptTextChanged = onPromptTextChanged
         )
     }
 
@@ -118,14 +122,15 @@ class PromptEditorCoordinatorTest {
 
     @Test
     fun currentPromptText_updatesImmediatelyOnTyping_evenWhenBlanknessUnchanged() {
-        val coordinator = createCoordinator("initial prompt")
-        assertEquals("initial prompt", coordinator.currentPromptText.value)
+        var latestSyncedPrompt = ""
+        val coordinator = createCoordinator("initial prompt") { latestSyncedPrompt = it }
+        assertEquals("initial prompt", latestSyncedPrompt)
 
         // 에디터에서 타이핑 발생 (updateTextFieldState = false)
         coordinator.onPromptTemplateFromEditor("initial prompt updated")
 
-        // 1) PromptWorkspace 동기화용 실시간 Flow는 즉시 최신 타이핑 텍스트를 방출해야 함
-        assertEquals("initial prompt updated", coordinator.currentPromptText.value)
+        // 1) PromptWorkspace 동기화용 실시간 콜백은 즉시 최신 타이핑 텍스트를 전달해야 함
+        assertEquals("initial prompt updated", latestSyncedPrompt)
 
         // 2) 반면 Compose 화면 전체 리컴포지션 방지 최적화로 인해 editorUiState.promptTemplate는 갱신되지 않고 유지됨
         assertEquals("initial prompt", coordinator.editorUiState.value.promptTemplate)

@@ -1,8 +1,8 @@
 // 역할: Gemini 앱 자동 제어 및 프로세스 관리 정책을 검증합니다.
 package com.example.gemgemgen
 
+import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
-import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -13,7 +13,7 @@ class GeminiAppControlPolicyTest {
     @Test
     fun canClose_whenInstalledAccessibleAndIdle() {
         assertTrue(
-            GeminiAppControlPolicy.canClose(
+            AutomationExecutionPolicy.canCloseGemini(
                 isGeminiInstalled = true,
                 isAccessibilityServiceEnabled = true,
                 isAutomationRunning = false,
@@ -21,7 +21,7 @@ class GeminiAppControlPolicyTest {
             )
         )
         assertNull(
-            GeminiAppControlPolicy.blockReason(
+            AutomationExecutionPolicy.geminiBlockReason(
                 isGeminiInstalled = true,
                 isAccessibilityServiceEnabled = true,
                 isAutomationRunning = false,
@@ -34,7 +34,7 @@ class GeminiAppControlPolicyTest {
     fun blockReason_prefersAutomationRunningFirst() {
         assertEquals(
             GeminiAppControlBlockReason.AutomationRunning,
-            GeminiAppControlPolicy.blockReason(
+            AutomationExecutionPolicy.geminiBlockReason(
                 isGeminiInstalled = false,
                 isAccessibilityServiceEnabled = false,
                 isAutomationRunning = true,
@@ -47,7 +47,7 @@ class GeminiAppControlPolicyTest {
     fun blockReason_coversEachCondition() {
         assertEquals(
             GeminiAppControlBlockReason.AlreadyInProgress,
-            GeminiAppControlPolicy.blockReason(
+            AutomationExecutionPolicy.geminiBlockReason(
                 isGeminiInstalled = true,
                 isAccessibilityServiceEnabled = true,
                 isAutomationRunning = false,
@@ -56,7 +56,7 @@ class GeminiAppControlPolicyTest {
         )
         assertEquals(
             GeminiAppControlBlockReason.GeminiNotInstalled,
-            GeminiAppControlPolicy.blockReason(
+            AutomationExecutionPolicy.geminiBlockReason(
                 isGeminiInstalled = false,
                 isAccessibilityServiceEnabled = true,
                 isAutomationRunning = false,
@@ -65,7 +65,7 @@ class GeminiAppControlPolicyTest {
         )
         assertEquals(
             GeminiAppControlBlockReason.AccessibilityDisabled,
-            GeminiAppControlPolicy.blockReason(
+            AutomationExecutionPolicy.geminiBlockReason(
                 isGeminiInstalled = true,
                 isAccessibilityServiceEnabled = false,
                 isAutomationRunning = false,
@@ -73,7 +73,7 @@ class GeminiAppControlPolicyTest {
             )
         )
         assertFalse(
-            GeminiAppControlPolicy.canClose(
+            AutomationExecutionPolicy.canCloseGemini(
                 isGeminiInstalled = true,
                 isAccessibilityServiceEnabled = false,
                 isAutomationRunning = false,

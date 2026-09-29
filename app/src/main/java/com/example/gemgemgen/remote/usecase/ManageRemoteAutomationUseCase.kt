@@ -2,11 +2,11 @@
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
-import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.NoOpAutomationHistoryRecorder
+import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
@@ -16,12 +16,14 @@ import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 class ManageRemoteAutomationUseCase(
     private val gateway: RemoteAutomationGateway,
     private val automationHistoryRecorder: AutomationHistoryRecorder = NoOpAutomationHistoryRecorder,
     private val wildcardSetRepository: WildcardSetRepository = NoOpWildcardSetRepository,
     private val promptGenerator: PromptGenerator = PromptGenerator(),
+    private val dispatchers: AppDispatchers = AppDispatchers(),
     private val requestIdProvider: () -> String = { UUID.randomUUID().toString() }
 ) {
     private val activeRequestId = AtomicReference<String?>(null)
@@ -56,7 +58,6 @@ class ManageRemoteAutomationUseCase(
         return gateway.cleanMemory()
     }
 
-
     suspend fun start(
         request: AutomationRunRequest,
         onStateChange: (AutomationRunState) -> Unit
@@ -87,7 +88,9 @@ class ManageRemoteAutomationUseCase(
         val wildcards = if (wildcardTokens.isEmpty()) {
             emptyList()
         } else {
-            runCatching { wildcardSetRepository.load(wildcardTokens) }.getOrDefault(emptyList())
+            withContext(dispatchers.io) {
+                runCatching { wildcardSetRepository.load(wildcardTokens) }.getOrDefault(emptyList())
+            }
         }
 
         try {

@@ -1,10 +1,12 @@
-// 역할: 앱에서 지원하는 테마 색상 팔레트 옵션들을 정의합니다.
+// 역할: 앱에서 지원하는 테마 색상 팔레트 옵션과 시맨틱 컬러 토큰을 정의합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+
+val RemoteStartGreen = Color(0xFF2E7D32)
 
 /**
  * GemGemGen 앱의 3가지 소프트 3D 뉴모피즘 테마 색상 팔레트.
@@ -87,14 +89,12 @@ data class AppColors(
     val textPrimary: Color,
     val textSecondary: Color,
     val cardBorder: Color,
-    val shadowLight: Color,
     val shadowDark: Color,
     val insetBorder: Color,
     val inputBackground: Color = Color.White,
     val inputBorder: Color,
     val snippetPrimary: Color = accent,
     val snippetBorder: Color = accent.copy(alpha = 0.55f),
-    val snippetBackground: Color = card,
     val snippetShadow: Color = accent.copy(alpha = 0.25f)
 )
 
@@ -108,7 +108,6 @@ val CoralCreamColors = AppColors(
     textPrimary = Color(0xFF2E2419),
     textSecondary = Color(0xFF7A6F62),
     cardBorder = Color(0xFFEDE4D5),
-    shadowLight = Color(0xFFFFFFFF),
     shadowDark = Color(0xFFDCD4C7),
     insetBorder = Color(0xFFE4DAD0),
     inputBackground = Color(0xFFFFFFFF),
@@ -128,7 +127,6 @@ val SageMatchaColors = AppColors(
     textPrimary = Color(0xFF14261C),
     textSecondary = Color(0xFF52665B),
     cardBorder = Color(0xFFDEE7DD),
-    shadowLight = Color(0xFFFFFFFF),
     shadowDark = Color(0xFFC5D3C2),
     insetBorder = Color(0xFFD3DFD1),
     inputBackground = Color(0xFFFFFFFF),
@@ -148,7 +146,6 @@ val PureIndigoColors = AppColors(
     textPrimary = Color(0xFF0B1A30),
     textSecondary = Color(0xFF587494),
     cardBorder = Color(0xFFDEE9F5),
-    shadowLight = Color(0xFFFFFFFF),
     shadowDark = Color(0xFFCCD9E8),
     insetBorder = Color(0xFFD5E3F2),
     inputBackground = Color(0xFFFFFFFF),
@@ -170,7 +167,6 @@ val CoralCreamDarkColors = AppColors(
     textPrimary = Color(0xFFEDEDF0),
     textSecondary = Color(0xFF8E929B),
     cardBorder = Color(0xFF332928),
-    shadowLight = Color.Transparent,
     shadowDark = Color(0x66000000),
     insetBorder = Color(0xFF202227),
     inputBackground = Color(0xFF18191D),
@@ -190,7 +186,6 @@ val SageMatchaDarkColors = AppColors(
     textPrimary = Color(0xFFEDEDF0),
     textSecondary = Color(0xFF8E929B),
     cardBorder = Color(0xFF26302A),
-    shadowLight = Color.Transparent,
     shadowDark = Color(0x66000000),
     insetBorder = Color(0xFF202227),
     inputBackground = Color(0xFF18191D),
@@ -210,7 +205,6 @@ val PureIndigoDarkColors = AppColors(
     textPrimary = Color(0xFFEDEDF0),
     textSecondary = Color(0xFF8E929B),
     cardBorder = Color(0xFF262C36),
-    shadowLight = Color.Transparent,
     shadowDark = Color(0x66000000),
     insetBorder = Color(0xFF202227),
     inputBackground = Color(0xFF18191D),
@@ -237,22 +231,11 @@ fun AppThemePalette.toAppColors(isDark: Boolean = false): AppColors {
 }
 
 val LocalAppColors = staticCompositionLocalOf { SageMatchaColors }
-val LocalAppThemePalette = staticCompositionLocalOf { AppThemePalette.DEFAULT }
-val LocalAppThemeMode = staticCompositionLocalOf { AppThemeMode.DEFAULT }
 
 object AppTheme {
     val colors: AppColors
         @Composable
         @ReadOnlyComposable
         get() = LocalAppColors.current
-
-    val palette: AppThemePalette
-        @Composable
-        @ReadOnlyComposable
-        get() = LocalAppThemePalette.current
-
-    val mode: AppThemeMode
-        @Composable
-        @ReadOnlyComposable
-        get() = LocalAppThemeMode.current
 }
+

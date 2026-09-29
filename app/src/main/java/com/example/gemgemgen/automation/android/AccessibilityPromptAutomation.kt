@@ -1,4 +1,4 @@
-// 역할: 텍스트 주입 시점 캐시 무효화 및 지연 안정화 검증으로 클립보드 오염 없이 프롬프트를 안전하게 전송하는 베이스 자동화 클래스
+// 역할: 코루틴 실행 제어, 상위 노드 클릭 위임 및 텍스트 주입·전송 검증을 공통화하여 프롬프트를 안전하게 전송/붙여넣기하는 베이스 자동화 클래스
 package com.example.gemgemgen.automation.android
 
 import android.os.Bundle
@@ -35,37 +35,12 @@ internal abstract class AccessibilityPromptAutomation(
         onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
     ) {
-        cancelCurrentRun()
-
-        var lastReportedState: AutomationRunState? = null
-        val notifyState: suspend (AutomationRunState) -> Unit = { state ->
-            if (lastReportedState != state) {
-                lastReportedState = state
-                withContext(mainDispatcher) {
-                    onStateChange(state)
-                }
-            }
-        }
-
-        activeJob = coroutineScope.launch(dispatcher) {
-            try {
-                val flowSuccess = executePromptFlow(prompt, newChatMode, notifyState)
-                if (flowSuccess) {
-                    withContext(mainDispatcher) {
-                        onDone()
-                    }
-                } else if (lastReportedState !is AutomationRunState.Failure) {
-                    notifyState(AutomationRunState.Failure("$targetAppName 자동화 실행 단계 완료 실패"))
-                }
-            } catch (_: CancellationException) {
-                // 정상 취소
-            } catch (error: Throwable) {
-                withContext(mainDispatcher) {
-                    onStateChange(AutomationRunState.Failure("자동화 실행 실패: ${error.message}"))
-                }
-            } finally {
-                onRunFinished()
-            }
+        launchAutomationFlow(
+            onStateChange = onStateChange,
+            onDone = onDone,
+            notifyStoppedOnCancel = false
+        ) { notifyState ->
+            executePromptFlow(prompt, newChatMode, notifyState)
         }
     }
 
@@ -73,6 +48,21 @@ internal abstract class AccessibilityPromptAutomation(
         prompt: String,
         onStateChange: (AutomationRunState) -> Unit,
         onDone: () -> Unit
+    ) {
+        launchAutomationFlow(
+            onStateChange = onStateChange,
+            onDone = onDone,
+            notifyStoppedOnCancel = true
+        ) { notifyState ->
+            executePromptPasteOnlyFlow(prompt, notifyState)
+        }
+    }
+
+    private fun launchAutomationFlow(
+        onStateChange: (AutomationRunState) -> Unit,
+        onDone: () -> Unit,
+        notifyStoppedOnCancel: Boolean,
+        flowBlock: suspend (notifyState: suspend (AutomationRunState) -> Unit) -> Boolean
     ) {
         cancelCurrentRun()
 
@@ -88,7 +78,7 @@ internal abstract class AccessibilityPromptAutomation(
 
         activeJob = coroutineScope.launch(dispatcher) {
             try {
-                val flowSuccess = executePromptPasteOnlyFlow(prompt, notifyState)
+                val flowSuccess = flowBlock(notifyState)
                 if (flowSuccess) {
                     withContext(mainDispatcher) {
                         onDone()
@@ -97,8 +87,10 @@ internal abstract class AccessibilityPromptAutomation(
                     notifyState(AutomationRunState.Failure("$targetAppName 자동화 실행 단계 완료 실패"))
                 }
             } catch (_: CancellationException) {
-                withContext(mainDispatcher) {
-                    onStateChange(AutomationRunState.Stopped)
+                if (notifyStoppedOnCancel) {
+                    withContext(mainDispatcher) {
+                        onStateChange(AutomationRunState.Stopped)
+                    }
                 }
             } catch (error: Throwable) {
                 withContext(mainDispatcher) {
@@ -128,7 +120,10 @@ internal abstract class AccessibilityPromptAutomation(
     protected abstract fun findSendNode(): AccessibilityNodeInfo?
 
     protected open fun performSendClick(sendNode: AccessibilityNodeInfo): Boolean {
-        val clickableNode = findClickableNodeOrParent(sendNode)
+        val clickableNode = AccessibilityNodeTraversal.findClickableNodeOrParent(
+            sendNode,
+            MAX_CLICKABLE_PARENT_DEPTH
+        )
         return clickableNode != null && clickableNode.isEnabled &&
             clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
@@ -142,8 +137,7 @@ internal abstract class AccessibilityPromptAutomation(
     ) = Unit
 
     protected fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
-        return findClickableNodeOrParent(node)
-            ?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+        return AccessibilityNodeTraversal.clickNodeOrParent(node, MAX_CLICKABLE_PARENT_DEPTH)
     }
 
     protected open fun invalidateInputCache() = Unit
@@ -366,22 +360,6 @@ internal abstract class AccessibilityPromptAutomation(
     private fun isPromptTextApplied(prompt: String): Boolean {
         val inputNode = findInputNode() ?: return false
         return isNodeTextApplied(inputNode, prompt)
-    }
-
-    private fun findClickableNodeOrParent(
-        node: AccessibilityNodeInfo,
-        maxDepth: Int = MAX_CLICKABLE_PARENT_DEPTH
-    ): AccessibilityNodeInfo? {
-        var current: AccessibilityNodeInfo? = node
-        repeat(maxDepth) {
-            if (current == null) return null
-            if (current?.isClickable == true) {
-                return current
-            }
-            current = current?.parent
-        }
-
-        return null
     }
 
     private enum class PromptInputAfterSend {

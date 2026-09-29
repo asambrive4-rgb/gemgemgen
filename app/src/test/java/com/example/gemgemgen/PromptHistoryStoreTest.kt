@@ -116,19 +116,6 @@ class PromptHistoryStoreTest {
     }
 
     @Test
-    fun clear_removesAllItems() {
-        val repo = FakePromptHistoryRepository()
-        val store = PromptHistoryStore(repo)
-
-        store.record("A", AutomationTargetApp.CHATGPT)
-        store.record("B", AutomationTargetApp.CHATGPT)
-        assertEquals(2, store.load().size)
-
-        store.clear()
-        assertTrue(store.load().isEmpty())
-    }
-
-    @Test
     fun load_and_record_reuseInMemoryCacheWithoutRepeatedRepositoryLoad() {
         val repo = FakePromptHistoryRepository(
             initialItems = listOf(

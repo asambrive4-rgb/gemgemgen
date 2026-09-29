@@ -38,27 +38,6 @@ class AnalysisModelMemoryTest {
         assertEquals(MODEL_GROK_4_5, generation.modelId)
     }
 
-    @Test
-    fun rememberLastUsed_updatesOnlyThatRole() = runBlocking {
-        val repository = MemorySettingsRepository()
-        val manager = ManageGeminiApiKeysUseCase(
-            repository = repository,
-            dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
-        )
-
-        manager.rememberLastUsed(
-            role = AnalysisModelRole.GENERATION,
-            provider = AnalysisProvider.GROK,
-            modelId = MODEL_GROK_4_5
-        )
-
-        val generation = manager.getRoleSetting(AnalysisModelRole.GENERATION)
-        val masking = manager.getRoleSetting(AnalysisModelRole.MASKING)
-        assertEquals(AnalysisProvider.GROK, generation.provider)
-        assertEquals(MODEL_GROK_4_5, generation.modelId)
-        assertEquals(AnalysisProvider.GEMINI, masking.provider)
-    }
-
     private class MemorySettingsRepository : GeminiApiKeyRepository {
         private val providers = mutableMapOf(
             "masking" to "gemini",
@@ -70,7 +49,7 @@ class AnalysisModelMemoryTest {
         )
 
         override fun listKeys(): List<GeminiApiKeyRecord> = emptyList()
-        override fun addKey(label: String, rawKey: String, createdAtMillis: Long) = error("unused")
+        override fun addKey(label: String, rawKey: String) = error("unused")
         override fun deleteKey(id: String) = Unit
         override fun activateKey(id: String) = Unit
         override fun activeKeyValue(): String? = null

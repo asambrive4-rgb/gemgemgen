@@ -2,10 +2,8 @@
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.usecase.AnalysisException
-import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.serialization.json.Json
@@ -13,7 +11,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -29,20 +26,6 @@ class AndroidGrokAnalysisGateway : AnalysisAiGateway {
         apiKey: String,
         modelId: String,
         payload: AnalysisPromptPayload
-    ): String {
-        return complete(
-            accessToken = apiKey,
-            modelId = modelId,
-            systemInstruction = payload.systemInstruction,
-            userPrompt = payload.userPrompt,
-            responseSchema = payload.responseSchema
-        )
-    }
-
-    override suspend fun generateTxt(
-        apiKey: String,
-        modelId: String,
-        payload: AnalysisTxtPromptPayload
     ): String {
         return complete(
             accessToken = apiKey,
@@ -102,20 +85,13 @@ class AndroidGrokAnalysisGateway : AnalysisAiGateway {
             }
 
             try {
-                OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                    writer.write(body.toString())
-                }
+                writeRequestBody(connection, body.toString())
 
                 val responseCode = connection.responseCode
-                val responseText = if (responseCode in 200..299) {
-                    connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } else {
-                    connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                        .orEmpty()
-                }
+                val responseText = readResponseBody(connection, responseCode)
 
                 if (responseCode == 401 || responseCode == 403) {
-                    val raw = errorMessage(responseText)
+                    val raw = extractJsonErrorMessage(json, responseText)
                     throw AnalysisException(
                         "Grok 인증/권한 오류입니다 ($responseCode). 로그인 상태를 확인하거나 Gemini로 전환해 주세요.${if (raw.isNotBlank()) " ($raw)" else ""}"
                     )
@@ -131,7 +107,7 @@ class AndroidGrokAnalysisGateway : AnalysisAiGateway {
                     )
                 }
                 if (responseCode !in 200..299) {
-                    val raw = errorMessage(responseText)
+                    val raw = extractJsonErrorMessage(json, responseText)
                     throw AnalysisException(
                         "Grok 요청에 실패했습니다 (응답 코드 $responseCode)${if (raw.isNotBlank()) ": $raw" else "."}"
                     )
@@ -144,28 +120,14 @@ class AndroidGrokAnalysisGateway : AnalysisAiGateway {
         } catch (error: AnalysisException) {
             throw error
         } catch (error: Exception) {
-            val timeoutSec = READ_TIMEOUT_MILLIS / 1000
-            val msg = when (error) {
-                is java.net.SocketTimeoutException ->
-                    "Grok 응답 대기 시간(${timeoutSec}초)이 초과되었습니다 (타임아웃). 잠시 후 다시 시도해 주세요."
-                is java.net.UnknownHostException ->
-                    "네트워크 연결 실패: 인터넷 연결이 끊겼거나 xAI 서버 주소를 찾을 수 없습니다. 네트워크 상태를 확인해 주세요."
-                is java.net.ConnectException ->
-                    "Grok 서버 연결 실패: xAI 서버에 접속할 수 없습니다. 인터넷 연결 및 방화벽/VPN 상태를 확인해 주세요."
-                is javax.net.ssl.SSLException ->
-                    "보안 연결(SSL/TLS) 오류: xAI 서버와의 안전한 통신 연결에 실패했습니다."
-                else -> {
-                    val errText = error.message?.trim().orEmpty()
-                    if (errText.contains("timeout", ignoreCase = true) || errText.contains("timed out", ignoreCase = true)) {
-                        "Grok 응답 대기 시간(${timeoutSec}초)이 초과되었습니다 (타임아웃). 잠시 후 다시 시도해 주세요."
-                    } else if (errText.isNotBlank()) {
-                        "Grok 통신 오류 (${error.javaClass.simpleName}): $errText"
-                    } else {
-                        "Grok 통신 중 알 수 없는 오류가 발생했습니다 (${error.javaClass.simpleName})."
-                    }
-                }
-            }
-            throw AnalysisException(msg)
+            throw AnalysisException(
+                formatAnalysisNetworkError(
+                    error = error,
+                    serviceName = "Grok",
+                    serverLabel = "xAI 서버",
+                    timeoutMillis = READ_TIMEOUT_MILLIS
+                )
+            )
         }
     }
 
@@ -196,17 +158,6 @@ class AndroidGrokAnalysisGateway : AnalysisAiGateway {
             .trimStart()
         val end = withoutOpen.lastIndexOf("```")
         return if (end >= 0) withoutOpen.substring(0, end).trim() else withoutOpen.trim()
-    }
-
-    private fun errorMessage(responseText: String): String {
-        return runCatching {
-            val root = json.parseToJsonElement(responseText).jsonObject
-            val error = root["error"] ?: return@runCatching ""
-            error.jsonPrimitive.contentOrNull
-                ?: error.jsonObject["message"]?.jsonPrimitive?.content
-                ?: error.jsonObject["error"]?.jsonPrimitive?.content
-                ?: ""
-        }.getOrDefault("")
     }
 
     private companion object {

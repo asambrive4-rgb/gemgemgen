@@ -70,8 +70,8 @@ internal fun SettingsDialogHost(
 
     val onDismissRequest: () -> Unit = {
         when (activeStage) {
-            SettingsDialogStage.ACCESSIBILITY_PROMPT -> actions.onDismissAccessibilityPromptToSettings()
-            SettingsDialogStage.SETTINGS -> actions.onHideSettings()
+            SettingsDialogStage.ACCESSIBILITY_PROMPT -> actions.dismissAccessibilityPromptToSettings()
+            SettingsDialogStage.SETTINGS -> actions.hideSettings()
         }
     }
 
@@ -102,7 +102,7 @@ internal fun SettingsDialogHost(
                     SettingsDialogStage.ACCESSIBILITY_PROMPT -> {
                         AccessibilityPromptDialogContent(
                             onConfirm = { actions.onConfirmAccessibilityPrompt() },
-                            onDismissToSettings = { actions.onDismissAccessibilityPromptToSettings() }
+                            onDismissToSettings = { actions.dismissAccessibilityPromptToSettings() }
                         )
                     }
                     SettingsDialogStage.SETTINGS -> {
@@ -377,7 +377,7 @@ private fun StatusSettingsDialogContent(
                     }
 
                     OutlinedButton(
-                        onClick = { actions.onDisconnectRemoteDevice() },
+                        onClick = { actions.disconnectRemoteDevice() },
                         enabled = isRemoteConnected && !isRemoteRunning && !uiState.isDisconnectingRemote,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -399,7 +399,7 @@ private fun StatusSettingsDialogContent(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
-                OutlinedButton(onClick = { actions.onRefreshStatus() }) {
+                OutlinedButton(onClick = { actions.refreshStatus() }) {
                     Text("새로고침")
                 }
             }
@@ -456,7 +456,7 @@ private fun StatusSettingsDialogContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = { actions.onHideSettings() }) {
+            TextButton(onClick = { actions.hideSettings() }) {
                 Text("닫기")
             }
         }

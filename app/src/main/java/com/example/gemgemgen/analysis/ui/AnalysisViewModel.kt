@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스를 구현하여 UseCase 및 도메인 정책을 조율합니다.
+// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스를 직접 구현하여 UseCase 및 도메인 정책을 조율합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -12,7 +12,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
-import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
@@ -22,12 +21,10 @@ import com.example.gemgemgen.analysis.usecase.AnalysisGenerationStep
 import com.example.gemgemgen.analysis.usecase.AnalysisReportCache
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.ApplyCandidateResult
-import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationRequest
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationResult
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
-import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
 import com.example.gemgemgen.analysis.usecase.ManageCandidateHandoffUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
@@ -36,23 +33,24 @@ import com.example.gemgemgen.analysis.usecase.RestorePromptResult
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.core.PromptWorkspace
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AnalysisViewModel(
     private val resolveTarget: ResolveAnalysisTargetUseCase,
     private val generateTxtUseCase: GenerateAnalysisTxtUseCase,
     private val keyManager: ManageGeminiApiKeysUseCase,
     private val grokAuth: ManageGrokAuthUseCase,
-    private val copyResults: CopyAnalysisResultsUseCase,
+    private val clipboardGateway: ClipboardGateway,
     private val saveWildcardFile: SaveAnalysisWildcardFileUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val promptWorkspace: PromptWorkspace? = null,
@@ -60,11 +58,10 @@ class AnalysisViewModel(
     private val executeGeneration: ExecuteAnalysisGenerationUseCase = ExecuteAnalysisGenerationUseCase(
         resolveTarget = resolveTarget,
         generateTxtUseCase = generateTxtUseCase,
-        keyManager = keyManager,
         dispatchers = dispatchers
     ),
     private val candidateHandoff: ManageCandidateHandoffUseCase = ManageCandidateHandoffUseCase(
-        copyResults = copyResults,
+        clipboardGateway = clipboardGateway,
         promptWorkspace = promptWorkspace,
         dispatchers = dispatchers
     )
@@ -72,8 +69,8 @@ class AnalysisViewModel(
     private val scope = coroutineScope ?: viewModelScope
     private var runningJob: Job? = null
     private var grokLoginJob: Job? = null
-    private var pendingGrokChallenge: GrokDeviceLoginChallenge? = null
     private var analysisCache: AnalysisReportCache? = null
+    private var lastObservedSourcePrompt: String = ""
 
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
@@ -85,40 +82,13 @@ class AnalysisViewModel(
         refreshGrokStatus()
     }
 
-    // AnalysisScreenActions 인터페이스 위임 구현
-    override fun onImportFromAutomation() { importSourcePromptFromAutomation() }
-    override fun onClearTargetSegment() { clearTargetSegment() }
-    override fun onGenerate() { generate() }
-    override fun onGenerateTxt() { generateTxt() }
-    override fun onCancelWork() { cancelActiveWork() }
-    override fun onRequestResetSession() { requestResetSession() }
-    override fun onConfirmResetSession() { confirmResetSession() }
-    override fun onDismissResetSession() { dismissResetSession() }
-    override fun onToggleDirection(id: String) { toggleDirection(id) }
-    override fun onApplyCandidate(index: Int) { applyCandidate(index) }
-    override fun onCopyCandidate(index: Int) { copyCandidate(index) }
-    override fun onRestoreOriginalPrompt() { restoreOriginalPrompt() }
-    override fun onCopyResults() { copyGeneratedResults() }
-    override fun onSaveResults() { saveGeneratedResults() }
-    override fun onConfirmOverwrite() { confirmOverwrite() }
-    override fun onDismissOverwrite() { dismissOverwrite() }
-    override fun onStartGrokLogin() { startGrokLogin() }
-    override fun onCancelGrokLogin() { cancelGrokLogin() }
-    override fun onLogoutGrok() { logoutGrok() }
-    override fun onShowKeyDialog() { showKeyDialog() }
-    override fun onDismissKeyDialog() { dismissKeyDialog() }
-    override fun onAddApiKey() { addApiKey() }
-    override fun onDeleteApiKey(id: String) { deleteApiKey(id) }
-    override fun onActivateApiKey(id: String) { activateApiKey(id) }
-    override fun onStartEditApiKey(key: GeminiApiKeySummary) { startEditingApiKey(key) }
-    override fun onEditKeyLabelChange(value: String) { onEditingKeyLabelChange(value) }
-    override fun onCancelEditApiKey() { cancelEditingApiKey() }
-    override fun onUpdateKeyLabel() { updateApiKeyLabel() }
-
-
     override fun onSourcePromptChange(value: String) {
+        if (!sourcePromptTextFieldState.text.contentEquals(value)) {
+            sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(value)
+        }
         val state = _uiState.value
-        if (state.sourcePrompt == value) return
+        if (lastObservedSourcePrompt == value && state.sourcePrompt == value) return
+        lastObservedSourcePrompt = value
 
         // 분석 캐시는 항상 무효화. 실제 원문은 TextField + currentSourcePrompt() 가 기준.
         analysisCache = null
@@ -151,11 +121,15 @@ class AnalysisViewModel(
         )
     }
 
+    override fun importSourcePromptFromAutomation() {
+        importSourcePromptFromAutomation(promptWorkspace?.currentPrompt?.value.orEmpty())
+    }
+
     /**
      * 자동화 탭에 입력된 원본 프롬프트로 분석 원문을 통째로 교체한다.
      * 비어 있으면 원문은 유지하고 안내만 표시한다.
      */
-    fun importSourcePromptFromAutomation(text: String = promptWorkspace?.currentPrompt?.value.orEmpty()) {
+    fun importSourcePromptFromAutomation(text: String) {
         if (text.isBlank()) {
             showError("자동화에 입력된 텍스트가 없습니다.")
             return
@@ -167,6 +141,7 @@ class AnalysisViewModel(
         if (sourcePromptTextFieldState.text.toString() != value) {
             sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(value)
         }
+        lastObservedSourcePrompt = value
 
         analysisCache = null
         val state = _uiState.value
@@ -223,13 +198,16 @@ class AnalysisViewModel(
 
     override fun onCategorySelected(category: AnalysisCategory) {
         analysisCache = null
+        val source = currentSourcePrompt()
         val nextNeedsMasking = computeNeedsMaskingAnalysis(
+            source = source,
             category = category,
             targetSegment = null,
             cache = null
         )
         _uiState.update {
             it.copy(
+                sourcePrompt = source,
                 selectedCategory = category,
                 targetSegment = null,
                 needsMaskingAnalysis = nextNeedsMasking,
@@ -244,14 +222,17 @@ class AnalysisViewModel(
         }
     }
 
-    fun clearTargetSegment() {
+    override fun clearTargetSegment() {
         analysisCache = null
+        val source = currentSourcePrompt()
         val nextNeedsMasking = computeNeedsMaskingAnalysis(
+            source = source,
             targetSegment = null,
             cache = null
         )
         _uiState.update {
             it.copy(
+                sourcePrompt = source,
                 targetSegment = null,
                 needsMaskingAnalysis = nextNeedsMasking,
                 generatedCandidates = emptyList(),
@@ -265,7 +246,7 @@ class AnalysisViewModel(
     }
 
     /** 「생성」모드: 고정 개수 후보를 카드로 보여 준다. */
-    fun generate() {
+    override fun generate() {
         startGeneration(
             count = AnalysisGenerationCountPolicy.FIXED_COUNT,
             presentation = AnalysisResultPresentation.CARDS,
@@ -276,7 +257,7 @@ class AnalysisViewModel(
     }
 
     /** 「TXT 생성」모드: 슬라이더 개수 후보를 목록으로 보여 주고 파일 저장에 쓴다. */
-    fun generateTxt() {
+    override fun generateTxt() {
         startGeneration(
             count = AnalysisTxtCountPolicy.coerce(_uiState.value.txtCount),
             presentation = AnalysisResultPresentation.TXT,
@@ -323,6 +304,7 @@ class AnalysisViewModel(
                     onStep = { step ->
                         _uiState.update {
                             it.copy(
+                                sourcePrompt = source,
                                 status = AnalysisStatus.GENERATING,
                                 error = "",
                                 message = if (step == AnalysisGenerationStep.MASKING) "자동 마스킹 중..." else generatingMessage,
@@ -333,6 +315,7 @@ class AnalysisViewModel(
                     onTargetChanged = { newTarget, warning ->
                         _uiState.update {
                             it.copy(
+                                sourcePrompt = source,
                                 targetSegment = newTarget,
                                 generatedCandidates = emptyList(),
                                 resultPresentation = AnalysisResultPresentation.NONE,
@@ -381,8 +364,7 @@ class AnalysisViewModel(
                             )
                         }
                         val usedGrok = snapshot.generationProvider == AnalysisProvider.GROK ||
-                            (result.didAnalyze && snapshot.maskingProvider == AnalysisProvider.GROK) ||
-                            _uiState.value.usesGrok
+                            (result.didAnalyze && snapshot.maskingProvider == AnalysisProvider.GROK)
                         if (usedGrok) {
                             refreshGrokQuotaIfLoggedIn()
                         }
@@ -405,14 +387,7 @@ class AnalysisViewModel(
      * 「생성」카드 탭: 후보를 복사하고 자동화 프롬프트의 대상 구간에 반영한다.
      * 분석 원문은 다음 후보를 비교할 기준이므로 변경하지 않는다.
      */
-    fun applyCandidate(
-        index: Int,
-        applyToAutomation: ((
-            expectedSegment: String,
-            replacement: String,
-            preferredStartIndex: Int
-        ) -> Int?)? = null
-    ) {
+    override fun applyCandidate(index: Int) {
         val state = _uiState.value
         if (state.resultPresentation != AnalysisResultPresentation.CARDS || state.isBusy) return
         val candidate = state.generatedCandidates.getOrNull(index) ?: return
@@ -422,8 +397,7 @@ class AnalysisViewModel(
             when (val result = candidateHandoff.applyCandidate(
                 candidate = candidate,
                 sourcePrompt = source,
-                targetSegment = state.targetSegment,
-                applyToAutomation = applyToAutomation
+                targetSegment = state.targetSegment
             )) {
                 is ApplyCandidateResult.Success -> {
                     _uiState.update {
@@ -446,14 +420,14 @@ class AnalysisViewModel(
     }
 
     /** 오른쪽 복사 버튼: 자동화 프롬프트를 바꾸지 않고 선택한 후보만 복사한다. */
-    fun copyCandidate(index: Int) {
+    override fun copyCandidate(index: Int) {
         val state = _uiState.value
         if (state.resultPresentation != AnalysisResultPresentation.CARDS || state.isBusy) return
         val candidate = state.generatedCandidates.getOrNull(index) ?: return
 
         scope.launch {
             try {
-                copyResults.copyText(candidate)
+                withContext(dispatchers.io) { clipboardGateway.writeText(candidate) }
                 _uiState.update {
                     it.copy(
                         message = "${index + 1}번 후보를 복사했습니다.",
@@ -467,15 +441,9 @@ class AnalysisViewModel(
     }
 
     /** 자동화 프롬프트에 마지막으로 적용한 후보를 최초 분석 원문으로 복원한다. */
-    fun restoreOriginalPrompt(
-        restoreInAutomation: ((
-            expectedSegment: String,
-            originalSegment: String,
-            preferredStartIndex: Int
-        ) -> Int?)? = null
-    ) {
+    override fun restoreOriginalPrompt() {
         if (_uiState.value.isBusy) return
-        when (val result = candidateHandoff.restoreOriginalPrompt(restoreInAutomation)) {
+        when (val result = candidateHandoff.restoreOriginalPrompt()) {
             is RestorePromptResult.Success -> {
                 _uiState.update {
                     it.copy(
@@ -498,15 +466,17 @@ class AnalysisViewModel(
         category: AnalysisCategory? = _uiState.value.selectedCategory,
         targetSegment: AnalysisTargetSegment? = _uiState.value.targetSegment,
         cache: AnalysisReportCache? = analysisCache,
-        state: AnalysisUiState = _uiState.value
+        state: AnalysisUiState = _uiState.value,
+        selectedDirectionIds: Set<String> = state.selectedDirectionIds,
+        customHint: String = state.customHint
     ): Boolean = AnalysisMaskingPolicy.shouldAnalyzeMaskingFromHints(
         source = source,
         category = category,
         targetSegment = targetSegment,
         cache = cache,
         directions = state.directions,
-        selectedDirectionIds = state.selectedDirectionIds,
-        customHint = state.customHint
+        selectedDirectionIds = selectedDirectionIds,
+        customHint = customHint
     )
 
     private fun currentDirectionInput(
@@ -517,7 +487,7 @@ class AnalysisViewModel(
         customHint = state.customHint
     )
 
-    fun cancelActiveWork() {
+    override fun cancelActiveWork() {
         runningJob?.cancel()
         runningJob = null
         _uiState.update {
@@ -528,10 +498,11 @@ class AnalysisViewModel(
         }
     }
 
-    fun requestResetSession() {
+    override fun requestResetSession() {
         val state = _uiState.value
+        val source = currentSourcePrompt()
         val canReset = AnalysisSessionPolicy.canResetSession(
-            sourcePrompt = state.sourcePrompt,
+            sourcePrompt = source,
             selectedCategory = state.selectedCategory,
             targetSegment = state.targetSegment,
             generatedCandidatesCount = state.generatedCandidates.size,
@@ -548,18 +519,19 @@ class AnalysisViewModel(
             isBusy = state.isBusy
         )
         if (!canReset) return
-        _uiState.update { it.copy(showResetConfirmation = true) }
+        _uiState.update { it.copy(sourcePrompt = source, showResetConfirmation = true) }
     }
 
-    fun dismissResetSession() {
+    override fun dismissResetSession() {
         _uiState.update { it.copy(showResetConfirmation = false) }
     }
 
     /** 계정·모델 설정과 자동화 프롬프트는 보존하고 현재 분석 작업만 초기화한다. */
-    fun confirmResetSession() {
+    override fun confirmResetSession() {
         runningJob?.cancel()
         runningJob = null
         analysisCache = null
+        lastObservedSourcePrompt = ""
         candidateHandoff.clearSession()
         sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("")
 
@@ -612,24 +584,36 @@ class AnalysisViewModel(
 
     override fun onCustomHintChange(value: String) {
         if (value.length > 100) return
+        val source = currentSourcePrompt()
         _uiState.update { state ->
-            val nextState = state.copy(customHint = value)
-            nextState.copy(
-                needsMaskingAnalysis = computeNeedsMaskingAnalysis(state = nextState)
+            state.copy(
+                sourcePrompt = source,
+                customHint = value,
+                needsMaskingAnalysis = computeNeedsMaskingAnalysis(
+                    source = source,
+                    customHint = value,
+                    state = state
+                )
             )
         }
     }
 
-    fun toggleDirection(id: String) {
+    override fun toggleDirection(id: String) {
+        val source = currentSourcePrompt()
         _uiState.update { state ->
             val nextIds = if (id in state.selectedDirectionIds) {
                 state.selectedDirectionIds - id
             } else {
                 state.selectedDirectionIds + id
             }
-            val nextState = state.copy(selectedDirectionIds = nextIds)
-            nextState.copy(
-                needsMaskingAnalysis = computeNeedsMaskingAnalysis(state = nextState)
+            state.copy(
+                sourcePrompt = source,
+                selectedDirectionIds = nextIds,
+                needsMaskingAnalysis = computeNeedsMaskingAnalysis(
+                    source = source,
+                    selectedDirectionIds = nextIds,
+                    state = state
+                )
             )
         }
     }
@@ -638,17 +622,23 @@ class AnalysisViewModel(
         _uiState.update { it.copy(resultFileName = value, error = "", message = "") }
     }
 
-    fun copyGeneratedResults() {
+    override fun copyGeneratedResults() {
         val state = _uiState.value
         if (state.resultPresentation != AnalysisResultPresentation.TXT || state.generatedCandidates.isEmpty()) return
         scope.launch {
             try {
-                copyResults.copy(state.generatedCandidates)
+                withContext(dispatchers.io) {
+                    clipboardGateway.writeText(state.generatedCandidates.joinToString(separator = "\n"))
+                }
                 _uiState.update { it.copy(message = "생성 결과를 복사했습니다.", error = "") }
             } catch (error: RuntimeException) {
                 showError(error.message ?: "복사에 실패했습니다.")
             }
         }
+    }
+
+    override fun onSaveResults() {
+        saveGeneratedResults()
     }
 
     /**
@@ -715,21 +705,24 @@ class AnalysisViewModel(
         }
     }
 
+    override fun onConfirmOverwrite() {
+        confirmOverwrite()
+    }
+
     fun confirmOverwrite(onSuccess: ((replacedSource: String) -> Unit)? = null) {
         if (_uiState.value.pendingOverwriteFileName.isNullOrBlank()) return
         saveGeneratedResults(overwrite = true, onSuccess = onSuccess)
     }
 
-    fun dismissOverwrite() {
+    override fun dismissOverwrite() {
         _uiState.update { it.copy(pendingOverwriteFileName = null) }
     }
 
-    fun showKeyDialog() {
+    override fun showKeyDialog() {
         _uiState.update { it.copy(showKeyDialog = true, error = "", message = "") }
-        refreshKeys()
     }
 
-    fun dismissKeyDialog() {
+    override fun dismissKeyDialog() {
         _uiState.update {
             it.copy(
                 showKeyDialog = false,
@@ -747,7 +740,7 @@ class AnalysisViewModel(
         _uiState.update { it.copy(keyValueInput = value) }
     }
 
-    fun addApiKey() {
+    override fun addApiKey() {
         val state = _uiState.value
         scope.launch {
             try {
@@ -771,7 +764,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun deleteApiKey(id: String) {
+    override fun deleteApiKey(id: String) {
         scope.launch {
             try {
                 analysisCache = null
@@ -785,7 +778,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun activateApiKey(id: String) {
+    override fun activateApiKey(id: String) {
         scope.launch {
             try {
                 analysisCache = null
@@ -799,7 +792,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun startEditingApiKey(key: GeminiApiKeySummary) {
+    override fun startEditingApiKey(key: GeminiApiKeySummary) {
         _uiState.update {
             it.copy(
                 editingApiKey = key,
@@ -808,11 +801,11 @@ class AnalysisViewModel(
         }
     }
 
-    fun onEditingKeyLabelChange(value: String) {
+    override fun onEditingKeyLabelChange(value: String) {
         _uiState.update { it.copy(editingKeyLabelInput = value) }
     }
 
-    fun cancelEditingApiKey() {
+    override fun cancelEditingApiKey() {
         _uiState.update {
             it.copy(
                 editingApiKey = null,
@@ -821,7 +814,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun updateApiKeyLabel() {
+    override fun updateApiKeyLabel() {
         val state = _uiState.value
         val keyToEdit = state.editingApiKey ?: return
         scope.launch {
@@ -865,7 +858,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun startGrokLogin() {
+    override fun startGrokLogin() {
         if (_uiState.value.isGrokLoginPolling) return
         grokLoginJob?.cancel()
         grokLoginJob = scope.launch {
@@ -881,7 +874,6 @@ class AnalysisViewModel(
                     )
                 }
                 val challenge = grokAuth.startDeviceLogin()
-                pendingGrokChallenge = challenge
                 _uiState.update {
                     it.copy(
                         grokLoginUserCode = challenge.userCode,
@@ -891,7 +883,6 @@ class AnalysisViewModel(
                     )
                 }
                 val status = grokAuth.awaitDeviceLogin(challenge)
-                pendingGrokChallenge = null
                 val quota = grokAuth.fetchQuota()
                 _uiState.update {
                     it.copy(
@@ -909,7 +900,6 @@ class AnalysisViewModel(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                pendingGrokChallenge = null
                 _uiState.update {
                     it.copy(
                         isGrokLoginPolling = false,
@@ -923,10 +913,9 @@ class AnalysisViewModel(
         }
     }
 
-    fun cancelGrokLogin() {
+    override fun cancelGrokLogin() {
         grokLoginJob?.cancel()
         grokLoginJob = null
-        pendingGrokChallenge = null
         _uiState.update {
             it.copy(
                 showGrokLoginDialog = false,
@@ -938,7 +927,7 @@ class AnalysisViewModel(
         }
     }
 
-    fun logoutGrok() {
+    override fun logoutGrok() {
         scope.launch {
             try {
                 analysisCache = null
@@ -1028,11 +1017,7 @@ class AnalysisViewModel(
     }
 
     private fun currentSourcePrompt(): String =
-        sourcePromptTextFieldState.text.toString().also { text ->
-            if (text != _uiState.value.sourcePrompt) {
-                _uiState.update { it.copy(sourcePrompt = text) }
-            }
-        }
+        sourcePromptTextFieldState.text.toString()
 
     private fun showError(message: String) {
         _uiState.update {

@@ -1,23 +1,13 @@
-// 역할: 기기 보안 저장소에 암호화된 Gemini API 키를 저장하고 불러옵니다.
+// 역할: 기기 보안 저장소에 암호화된 Gemini API 키와 역할별 모델 설정을 저장하고 불러옵니다.
 package com.example.gemgemgen.analysis.android
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import android.util.Base64
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.domain.migrateLegacyAnalysisModelId
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
-import java.security.KeyStore
 import java.util.UUID
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
-import javax.crypto.spec.GCMParameterSpec
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -33,6 +23,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
         PREFS_NAME,
         Context.MODE_PRIVATE
     )
+    private val cipher = AndroidKeyStoreCipher(KEY_ALIAS)
     private val json = Json { ignoreUnknownKeys = true }
 
     override fun listKeys(): List<GeminiApiKeyRecord> {
@@ -41,16 +32,14 @@ class AndroidEncryptedGeminiApiKeyRepository(
 
     override fun addKey(
         label: String,
-        rawKey: String,
-        createdAtMillis: Long
+        rawKey: String
     ): GeminiApiKeyRecord {
         val existing = readRecords()
         val record = GeminiApiKeyRecord(
             id = UUID.randomUUID().toString(),
             label = label,
-            encryptedValue = encrypt(rawKey),
+            encryptedValue = cipher.encrypt(rawKey),
             preview = preview(rawKey),
-            createdAtMillis = createdAtMillis,
             isActive = existing.none { it.isActive }
         )
         writeRecords(existing + record)
@@ -71,7 +60,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
 
     override fun activeKeyValue(): String? {
         val activeRecord = readRecords().firstOrNull { it.isActive } ?: return null
-        return decrypt(activeRecord.encryptedValue)
+        return cipher.decrypt(activeRecord.encryptedValue)
     }
 
     override fun updateKeyLabel(id: String, newLabel: String) {
@@ -92,13 +81,6 @@ class AndroidEncryptedGeminiApiKeyRepository(
         val stored = prefs.getString(key, null)
         if (!stored.isNullOrBlank()) {
             return AnalysisProvider.fromStorage(stored).storageValue
-        }
-        // 구버전 단일 프로바이더 마이그레이션
-        val legacy = prefs.getString(KEY_SELECTED_PROVIDER, null)
-        if (!legacy.isNullOrBlank()) {
-            val migrated = AnalysisProvider.fromStorage(legacy).storageValue
-            prefs.edit().putString(key, migrated).apply()
-            return migrated
         }
         return AnalysisModelRole.defaultProvider(analysisRole).storageValue
     }
@@ -130,23 +112,10 @@ class AndroidEncryptedGeminiApiKeyRepository(
         val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
         val modelKey = roleModelKey(analysisRole.storageValue)
         val stored = prefs.getString(modelKey, null)
-        val migratedStored = stored?.let(::migrateLegacyAnalysisModelId)
-        if (!migratedStored.isNullOrBlank() &&
-            AnalysisProvider.isModelForProvider(migratedStored, provider)
+        if (!stored.isNullOrBlank() &&
+            AnalysisProvider.isModelForProvider(stored, provider)
         ) {
-            if (migratedStored != stored) {
-                prefs.edit().putString(modelKey, migratedStored).apply()
-            }
-            return migratedStored
-        }
-        // 구버전 단일 모델 마이그레이션
-        val legacy = prefs.getString(KEY_SELECTED_MODEL, null)
-        val migratedLegacy = legacy?.let(::migrateLegacyAnalysisModelId)
-        if (!migratedLegacy.isNullOrBlank() &&
-            AnalysisProvider.isModelForProvider(migratedLegacy, provider)
-        ) {
-            prefs.edit().putString(modelKey, migratedLegacy).apply()
-            return migratedLegacy
+            return stored
         }
         return if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
             AnalysisModelRole.defaultModel(analysisRole)
@@ -158,9 +127,8 @@ class AndroidEncryptedGeminiApiKeyRepository(
     override fun setRoleModel(role: String, modelId: String) {
         val analysisRole = AnalysisModelRole.fromStorage(role)
         val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
-        val migratedModelId = migrateLegacyAnalysisModelId(modelId)
-        val normalized = if (AnalysisProvider.isModelForProvider(migratedModelId, provider)) {
-            migratedModelId
+        val normalized = if (AnalysisProvider.isModelForProvider(modelId, provider)) {
+            modelId
         } else if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
             AnalysisModelRole.defaultModel(analysisRole)
         } else {
@@ -190,7 +158,6 @@ class AndroidEncryptedGeminiApiKeyRepository(
                         put("label", JsonPrimitive(record.label))
                         put("encryptedValue", JsonPrimitive(record.encryptedValue))
                         put("preview", JsonPrimitive(record.preview))
-                        put("createdAtMillis", JsonPrimitive(record.createdAtMillis))
                         put("isActive", JsonPrimitive(record.isActive))
                     }
                 )
@@ -204,8 +171,6 @@ class AndroidEncryptedGeminiApiKeyRepository(
         val label = this["label"]?.jsonPrimitive?.content ?: return null
         val encryptedValue = this["encryptedValue"]?.jsonPrimitive?.content ?: return null
         val preview = this["preview"]?.jsonPrimitive?.content ?: return null
-        val createdAtMillis = this["createdAtMillis"]?.jsonPrimitive?.content?.toLongOrNull()
-            ?: return null
         val isActive = this["isActive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
             ?: false
         return GeminiApiKeyRecord(
@@ -213,53 +178,8 @@ class AndroidEncryptedGeminiApiKeyRepository(
             label = label,
             encryptedValue = encryptedValue,
             preview = preview,
-            createdAtMillis = createdAtMillis,
             isActive = isActive
         )
-    }
-
-    private fun encrypt(value: String): String {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
-        val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
-        return "${cipher.iv.base64()}:${encrypted.base64()}"
-    }
-
-    private fun decrypt(encryptedValue: String): String? {
-        return runCatching {
-            val parts = encryptedValue.split(":")
-            if (parts.size != 2) return null
-            val iv = Base64.decode(parts[0], Base64.NO_WRAP)
-            val encrypted = Base64.decode(parts[1], Base64.NO_WRAP)
-            val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
-            cipher.doFinal(encrypted).toString(Charsets.UTF_8)
-        }.getOrNull()
-    }
-
-    private fun secretKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-        val existing = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
-        if (existing != null) return existing.secretKey
-
-        val keyGenerator = KeyGenerator.getInstance(
-            KeyProperties.KEY_ALGORITHM_AES,
-            ANDROID_KEY_STORE
-        )
-        val spec = KeyGenParameterSpec.Builder(
-            KEY_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .build()
-            keyGenerator.init(spec)
-        return keyGenerator.generateKey()
-    }
-
-    private fun ByteArray.base64(): String {
-        return Base64.encodeToString(this, Base64.NO_WRAP)
     }
 
     private fun preview(rawKey: String): String {
@@ -269,12 +189,8 @@ class AndroidEncryptedGeminiApiKeyRepository(
     private companion object {
         const val PREFS_NAME = "gemgemgen_analysis_api_keys"
         const val KEY_RECORDS = "records"
-        const val KEY_SELECTED_MODEL = "selected_model_id"
-        const val KEY_SELECTED_PROVIDER = "selected_provider_id"
         const val KEY_ROLE_PROVIDER_PREFIX = "role_provider_"
         const val KEY_ROLE_MODEL_PREFIX = "role_model_"
-        const val ANDROID_KEY_STORE = "AndroidKeyStore"
         const val KEY_ALIAS = "gemgemgen_analysis_api_key"
-        const val TRANSFORMATION = "AES/GCM/NoPadding"
     }
 }

@@ -104,18 +104,6 @@ class AnalysisSessionPolicyTest {
                 hasMaskingCredential = true,
                 generationProvider = AnalysisProvider.GROK,
                 hasGenerationCredential = true,
-                status = AnalysisStatus.ANALYZING
-            )
-        )
-        assertFalse(
-            AnalysisSessionPolicy.canGenerate(
-                source = "prompt",
-                category = AnalysisCategory.FREE_EDIT,
-                needsMaskingAnalysis = false,
-                maskingProvider = AnalysisProvider.GEMINI,
-                hasMaskingCredential = true,
-                generationProvider = AnalysisProvider.GROK,
-                hasGenerationCredential = true,
                 status = AnalysisStatus.GENERATING
             )
         )
@@ -168,13 +156,6 @@ class AnalysisSessionPolicyTest {
                 resultPresentation = AnalysisResultPresentation.TXT,
                 candidateCount = 3,
                 status = AnalysisStatus.GENERATING
-            )
-        )
-        assertFalse(
-            AnalysisSessionPolicy.canCopyOrSave(
-                resultPresentation = AnalysisResultPresentation.TXT,
-                candidateCount = 3,
-                status = AnalysisStatus.ANALYZING
             )
         )
     }

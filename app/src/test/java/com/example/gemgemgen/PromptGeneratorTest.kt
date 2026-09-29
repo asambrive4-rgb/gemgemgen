@@ -1,16 +1,8 @@
-// 역할: 와일드카드 규칙에 따른 최종 프롬프트 생성 알고리즘을 검증합니다.
+// 역할: 와일드카드 규칙과 다이나믹 구문에 따른 최종 프롬프트 생성 알고리즘을 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.automation.android.*
-import com.example.gemgemgen.automation.domain.*
-import com.example.gemgemgen.automation.usecase.*
-import com.example.gemgemgen.core.*
-import com.example.gemgemgen.environment.android.*
-import com.example.gemgemgen.environment.domain.*
-import com.example.gemgemgen.environment.usecase.*
-import com.example.gemgemgen.ui.*
-import com.example.gemgemgen.wildcard.domain.*
-import com.example.gemgemgen.wildcard.usecase.*
+import com.example.gemgemgen.automation.domain.PromptGenerator
+import com.example.gemgemgen.wildcard.domain.WildcardSet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -28,20 +20,20 @@ class PromptGeneratorTest {
     }
 
     @Test
-    fun generate_keepsPromptWhenThereAreNoTokens() {
-        val generated = PromptGenerator(Random(0)).generate(
+    fun generateFinalPrompt_keepsPromptWhenThereAreNoTokens() {
+        val compiledPrompt = PromptGenerator(Random(0)).compile(
             basePrompt = "plain prompt",
-            wildcardSets = emptyList(),
-            repeatCount = 3
+            wildcardSets = emptyList()
         )
+        val generated = (1..3).map { compiledPrompt.generateFinalPrompt(it) }
 
         assertEquals(3, generated.size)
-        assertEquals(listOf("plain prompt", "plain prompt", "plain prompt"), generated.map { it.finalPrompt })
+        assertEquals(listOf("plain prompt", "plain prompt", "plain prompt"), generated)
     }
 
     @Test
-    fun generate_replacesSameTokenWithSameValueInOnePrompt() {
-        val generated = PromptGenerator(Random(0)).generate(
+    fun generateFinalPrompt_replacesSameTokenWithSameValueInOnePrompt() {
+        val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "__color__ dress with __color__ ribbon",
             wildcardSets = listOf(
                 WildcardSet(
@@ -49,29 +41,25 @@ class PromptGeneratorTest {
                     fileName = "color.txt",
                     items = listOf("red")
                 )
-            ),
-            repeatCount = 1
-        ).single()
+            )
+        ).generateFinalPrompt(index = 1)
 
-        assertEquals("red dress with red ribbon", generated.finalPrompt)
-        assertEquals(mapOf("__color__" to "red"), generated.replacements)
+        assertEquals("red dress with red ribbon", generated)
     }
 
     @Test
-    fun generate_keepsMissingTokenAsOriginalText() {
-        val generated = PromptGenerator(Random(0)).generate(
+    fun generateFinalPrompt_keepsMissingTokenAsOriginalText() {
+        val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "portrait with __hair__",
-            wildcardSets = emptyList(),
-            repeatCount = 1
-        ).single()
+            wildcardSets = emptyList()
+        ).generateFinalPrompt(index = 1)
 
-        assertEquals("portrait with __hair__", generated.finalPrompt)
-        assertEquals(emptyMap<String, String>(), generated.replacements)
+        assertEquals("portrait with __hair__", generated)
     }
 
     @Test
-    fun generate_keepsTokenWhenCandidateListIsEmpty() {
-        val generated = PromptGenerator(Random(0)).generate(
+    fun generateFinalPrompt_keepsTokenWhenCandidateListIsEmpty() {
+        val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "portrait with __hair__",
             wildcardSets = listOf(
                 WildcardSet(
@@ -79,12 +67,10 @@ class PromptGeneratorTest {
                     fileName = "hair.txt",
                     items = emptyList()
                 )
-            ),
-            repeatCount = 1
-        ).single()
+            )
+        ).generateFinalPrompt(index = 1)
 
-        assertEquals("portrait with __hair__", generated.finalPrompt)
-        assertEquals(emptyMap<String, String>(), generated.replacements)
+        assertEquals("portrait with __hair__", generated)
     }
 
     @Test
@@ -101,63 +87,38 @@ class PromptGeneratorTest {
         )
 
         val generated = listOf(
-            compiledPrompt.generate(index = 1),
-            compiledPrompt.generate(index = 2)
+            compiledPrompt.generateFinalPrompt(index = 1),
+            compiledPrompt.generateFinalPrompt(index = 2)
         )
 
-        assertEquals(listOf(1, 2), generated.map { it.index })
         assertEquals(
             listOf("red dress with red ribbon", "red dress with red ribbon"),
-            generated.map { it.finalPrompt }
-        )
-        assertEquals(
-            listOf(mapOf("__color__" to "red"), mapOf("__color__" to "red")),
-            generated.map { it.replacements }
+            generated
         )
     }
 
     @Test
-    fun generateFinalPrompt_returnsReplacedStringWithoutWrapper() {
-        val compiledPrompt = PromptGenerator(Random(0)).compile(
-            basePrompt = "__color__ dress with __color__ ribbon",
-            wildcardSets = listOf(
-                WildcardSet(
-                    token = "__color__",
-                    fileName = "color.txt",
-                    items = listOf("red")
-                )
-            )
-        )
-
-        assertEquals(
-            "red dress with red ribbon",
-            compiledPrompt.generateFinalPrompt(index = 1)
-        )
-    }
-
-    @Test
-    fun generate_expandsDynamicPromptWithTwoOptions() {
-        val generated = PromptGenerator(Random(0)).generate(
+    fun generateFinalPrompt_expandsDynamicPromptWithTwoOptions() {
+        val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "a <cat|dog> on the sofa",
-            wildcardSets = emptyList(),
-            repeatCount = 1
-        ).single()
+            wildcardSets = emptyList()
+        ).generateFinalPrompt(index = 1)
 
         assertTrue(
-            generated.finalPrompt == "a cat on the sofa" ||
-                generated.finalPrompt == "a dog on the sofa"
+            generated == "a cat on the sofa" ||
+                generated == "a dog on the sofa"
         )
-        assertFalse(generated.finalPrompt.contains('<'))
-        assertFalse(generated.finalPrompt.contains('|'))
+        assertFalse(generated.contains('<'))
+        assertFalse(generated.contains('|'))
     }
 
     @Test
-    fun generate_expandsDynamicPromptWithThreeOrMoreOptions() {
-        val results = PromptGenerator(Random(1)).generate(
+    fun generateFinalPrompt_expandsDynamicPromptWithThreeOrMoreOptions() {
+        val compiledPrompt = PromptGenerator(Random(1)).compile(
             basePrompt = "wear a <red|blue|green> dress",
-            wildcardSets = emptyList(),
-            repeatCount = 30
-        ).map { it.finalPrompt }.toSet()
+            wildcardSets = emptyList()
+        )
+        val results = (1..30).map { compiledPrompt.generateFinalPrompt(it) }.toSet()
 
         assertTrue(results.contains("wear a red dress"))
         assertTrue(results.contains("wear a blue dress"))
@@ -166,43 +127,42 @@ class PromptGeneratorTest {
     }
 
     @Test
-    fun generate_keepsAngleBracketsWithoutPipeAsLiteral() {
-        val generated = PromptGenerator(Random(0)).generate(
+    fun generateFinalPrompt_keepsAngleBracketsWithoutPipeAsLiteral() {
+        val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "tag <red> and value",
-            wildcardSets = emptyList(),
-            repeatCount = 1
-        ).single()
+            wildcardSets = emptyList()
+        ).generateFinalPrompt(index = 1)
 
-        assertEquals("tag <red> and value", generated.finalPrompt)
+        assertEquals("tag <red> and value", generated)
     }
 
     @Test
-    fun generate_trimsDynamicOptionsAndAllowsEmptyOption() {
-        val results = PromptGenerator(Random(2)).generate(
+    fun generateFinalPrompt_trimsDynamicOptionsAndAllowsEmptyOption() {
+        val compiledPrompt = PromptGenerator(Random(2)).compile(
             basePrompt = "prefix< A | >suffix",
-            wildcardSets = emptyList(),
-            repeatCount = 40
-        ).map { it.finalPrompt }.toSet()
+            wildcardSets = emptyList()
+        )
+        val results = (1..40).map { compiledPrompt.generateFinalPrompt(it) }.toSet()
 
         assertTrue(results.contains("prefixAsuffix"))
         assertTrue(results.contains("prefixsuffix"))
     }
 
     @Test
-    fun generate_picksIndependentValuesForSeparateDynamicSegments() {
-        val results = PromptGenerator(Random(3)).generate(
+    fun generateFinalPrompt_picksIndependentValuesForSeparateDynamicSegments() {
+        val compiledPrompt = PromptGenerator(Random(3)).compile(
             basePrompt = "<a|b> and <a|b>",
-            wildcardSets = emptyList(),
-            repeatCount = 50
-        ).map { it.finalPrompt }.toSet()
+            wildcardSets = emptyList()
+        )
+        val results = (1..50).map { compiledPrompt.generateFinalPrompt(it) }.toSet()
 
         // 위치마다 독립 선택이므로 혼합 결과도 나와야 한다.
         assertTrue(results.any { it == "a and b" || it == "b and a" })
     }
 
     @Test
-    fun generate_appliesWildcardsBeforeDynamicPrompts() {
-        val generated = PromptGenerator(Random(0)).generate(
+    fun generateFinalPrompt_appliesWildcardsBeforeDynamicPrompts() {
+        val compiledPrompt = PromptGenerator(Random(0)).compile(
             basePrompt = "<__color__|navy> shirt",
             wildcardSets = listOf(
                 WildcardSet(
@@ -210,9 +170,9 @@ class PromptGeneratorTest {
                     fileName = "color.txt",
                     items = listOf("crimson")
                 )
-            ),
-            repeatCount = 20
-        ).map { it.finalPrompt }.toSet()
+            )
+        )
+        val generated = (1..20).map { compiledPrompt.generateFinalPrompt(it) }.toSet()
 
         // 와일드카드 먼저 → <crimson|navy> → 둘 중 하나
         assertTrue(generated.all { it == "crimson shirt" || it == "navy shirt" })
@@ -220,8 +180,8 @@ class PromptGeneratorTest {
     }
 
     @Test
-    fun generate_combinesWildcardTokenAndDynamicInSamePrompt() {
-        val generated = PromptGenerator(Random(0)).generate(
+    fun generateFinalPrompt_combinesWildcardTokenAndDynamicInSamePrompt() {
+        val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "__hair__ with <smile|serious> face",
             wildcardSets = listOf(
                 WildcardSet(
@@ -229,15 +189,13 @@ class PromptGeneratorTest {
                     fileName = "hair.txt",
                     items = listOf("short black hair")
                 )
-            ),
-            repeatCount = 1
-        ).single()
+            )
+        ).generateFinalPrompt(index = 1)
 
         assertTrue(
-            generated.finalPrompt == "short black hair with smile face" ||
-                generated.finalPrompt == "short black hair with serious face"
+            generated == "short black hair with smile face" ||
+                generated == "short black hair with serious face"
         )
-        assertEquals(mapOf("__hair__" to "short black hair"), generated.replacements)
     }
 
     @Test

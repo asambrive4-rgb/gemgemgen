@@ -1,4 +1,4 @@
-// 역할: 와일드카드 규칙과 반복 설정을 통해 실제 전송할 프롬프트 목록을 생성합니다.
+// 역할: 와일드카드 규칙과 다이나믹 구문을 치환하여 실제 전송할 최종 프롬프트를 생성합니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.wildcard.domain.WildcardFileParser
@@ -9,21 +9,6 @@ import java.util.Random
 class PromptGenerator(
     private val random: Random = SecureRandom()
 ) {
-    fun generate(
-        basePrompt: String,
-        wildcardSets: List<WildcardSet>,
-        repeatCount: Int
-    ): List<GeneratedPrompt> {
-        val compiledPrompt = compile(
-            basePrompt = basePrompt,
-            wildcardSets = wildcardSets
-        )
-
-        return (1..repeatCount.coerceAtLeast(0)).map { index ->
-            compiledPrompt.generate(index)
-        }
-    }
-
     fun compile(
         basePrompt: String,
         wildcardSets: List<WildcardSet>
@@ -49,16 +34,6 @@ class PromptGenerator(
         private val wildcardsByToken: Map<String, WildcardSet>,
         private val random: Random
     ) {
-        fun generate(index: Int): GeneratedPrompt {
-            val replacements = chooseReplacements()
-            return GeneratedPrompt(
-                index = index,
-                basePrompt = basePrompt,
-                finalPrompt = applyReplacements(replacements),
-                replacements = replacements
-            )
-        }
-
         @Suppress("UNUSED_PARAMETER")
         fun generateFinalPrompt(index: Int): String {
             return applyReplacements(chooseReplacements())

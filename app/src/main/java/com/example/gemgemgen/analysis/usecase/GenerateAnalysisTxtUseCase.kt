@@ -37,25 +37,15 @@ class GenerateAnalysisTxtUseCase(
         selectedHints: List<String>,
         customHint: String? = null
     ): AnalysisTxtGenerationResult = withContext(dispatchers.io) {
-        if (sourcePrompt.isBlank()) {
-            throw AnalysisException("원본 프롬프트를 입력해주세요.")
-        }
         if (!targetSegment.isValid) {
             throw AnalysisException("변주 대상 구간을 먼저 지정해주세요.")
-        }
-        if (analysisReport.clarificationQuestion.isNotBlank()) {
-            throw AnalysisException("추가 요구사항에 답을 적어 주세요: ${analysisReport.clarificationQuestion}")
-        }
-        val editTarget = AnalysisEditPolicy.envelope(sourcePrompt, targetSegment, analysisReport)
-        require(editTarget.startIndex == targetSegment.startIndex && editTarget.endIndex == targetSegment.endIndex) {
-            "함께 수정할 구간이 아직 반영되지 않았습니다. 다시 분석해 주세요."
         }
         val credential = credentialResolver.resolveForRole(AnalysisModelRole.GENERATION)
         val normalizedCount = count.coerceAtLeast(1)
         val payload = AnalysisPromptBuilder.buildTxtPrompt(
             sourcePrompt = sourcePrompt,
             category = category,
-            targetSegment = editTarget,
+            targetSegment = targetSegment,
             analysisReport = analysisReport,
             count = normalizedCount,
             selectedHints = selectedHints,
@@ -68,12 +58,12 @@ class GenerateAnalysisTxtUseCase(
         )
         val candidates = if (category == AnalysisCategory.FREE_EDIT) {
             AnalysisResponseParser.parseEditCandidates(responseText).take(normalizedCount).map { edits ->
-                AnalysisEditPolicy.assemble(sourcePrompt, editTarget, edits, analysisReport)
+                AnalysisEditPolicy.assemble(sourcePrompt, targetSegment, edits, analysisReport)
             }
         } else {
             AnalysisResponseParser.parseTxtCandidates(responseText).take(normalizedCount).map { candidate ->
-                AnalysisEditPolicy.assemble(sourcePrompt, editTarget, listOf(AnalysisTextEdit(
-                    AnalysisSourceRange(editTarget.startIndex, editTarget.endIndex, editTarget.text), candidate
+                AnalysisEditPolicy.assemble(sourcePrompt, targetSegment, listOf(AnalysisTextEdit(
+                    AnalysisSourceRange(targetSegment.startIndex, targetSegment.endIndex, targetSegment.text), candidate
                 )), analysisReport)
             }
         }

@@ -5,11 +5,37 @@ import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 
+enum class GeminiAppControlBlockReason {
+    AutomationRunning,
+    AlreadyInProgress,
+    GeminiNotInstalled,
+    AccessibilityDisabled
+}
+
+enum class SelfAppControlBlockReason {
+    AutomationRunning,
+    AlreadyInProgress,
+    AccessibilityDisabled
+}
+
 /**
  * 자동화 화면의 모든 실행 인가 및 권한 정책을 집약한 도메인 정책 객체입니다.
  * UI State의 비즈니스 불변식 판정 책임을 온전히 도메인 레이어로 승격합니다.
  */
 object AutomationExecutionPolicy {
+
+    fun hasPromptTemplate(promptTemplate: String): Boolean =
+        promptTemplate.isNotBlank()
+
+    /**
+     * 메인 자동화 필수 요구사항(환경 및 프롬프트 템플릿) 충족 여부를 판정합니다.
+     */
+    fun hasRunRequirements(
+        environmentStatus: EnvironmentStatus,
+        targetApp: AutomationTargetApp,
+        promptTemplate: String
+    ): Boolean =
+        environmentStatus.isReadyFor(targetApp) && hasPromptTemplate(promptTemplate)
 
     /**
      * 메인 자동화 실행 가능 여부를 판정합니다.
@@ -23,44 +49,51 @@ object AutomationExecutionPolicy {
         remoteAutomationStatus: RemoteAutomationStatus,
         isVariationRunning: Boolean = false,
         isMaintenanceBusy: Boolean = false
-    ): Boolean = AutomationStartPolicy.canRun(
-        mode = mode,
-        environmentStatus = environmentStatus,
-        targetApp = targetApp,
-        promptTemplate = promptTemplate,
-        isRunning = isRunning,
-        remoteAutomationStatus = remoteAutomationStatus,
-        isVariationRunning = isVariationRunning,
-        isMaintenanceBusy = isMaintenanceBusy
-    )
-
-    /**
-     * 메인 자동화 필수 요구사항(환경 및 프롬프트 템플릿) 충족 여부를 판정합니다.
-     */
-    fun hasRunRequirements(
-        environmentStatus: EnvironmentStatus,
-        targetApp: AutomationTargetApp,
-        promptTemplate: String
-    ): Boolean = AutomationStartPolicy.hasRunRequirements(
-        environmentStatus = environmentStatus,
-        targetApp = targetApp,
-        promptTemplate = promptTemplate
-    )
+    ): Boolean = when (mode) {
+        AutomationMode.NORMAL ->
+            hasRunRequirements(environmentStatus, targetApp, promptTemplate) &&
+                !isRunning &&
+                !isVariationRunning &&
+                !isMaintenanceBusy
+        AutomationMode.SENDER ->
+            hasPromptTemplate(promptTemplate) &&
+                remoteAutomationStatus.canSend &&
+                !isRunning &&
+                !isVariationRunning &&
+                !isMaintenanceBusy
+        AutomationMode.RECEIVER -> false
+    }
 
     /**
      * 변주(Variation) 자동화 실행 가능 여부를 판정합니다.
      */
+    fun canRunVariation(
+        isReceiverMode: Boolean,
+        isRunning: Boolean,
+        isMaintenanceBusy: Boolean,
+        isGeminiInstalled: Boolean,
+        isAccessibilityServiceEnabled: Boolean,
+        isVariationRunning: Boolean = false
+    ): Boolean =
+        !isReceiverMode &&
+            !isRunning &&
+            !isVariationRunning &&
+            !isMaintenanceBusy &&
+            isGeminiInstalled &&
+            isAccessibilityServiceEnabled
+
     fun canRunVariation(
         mode: AutomationMode,
         environmentStatus: EnvironmentStatus,
         isRunning: Boolean,
         isMaintenanceBusy: Boolean,
         isVariationRunning: Boolean = false
-    ): Boolean = VariationStartPolicy.canRun(
-        mode = mode,
-        environmentStatus = environmentStatus,
+    ): Boolean = canRunVariation(
+        isReceiverMode = mode == AutomationMode.RECEIVER,
         isRunning = isRunning,
         isMaintenanceBusy = isMaintenanceBusy,
+        isGeminiInstalled = environmentStatus.isGeminiInstalled,
+        isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
         isVariationRunning = isVariationRunning
     )
 
@@ -68,12 +101,23 @@ object AutomationExecutionPolicy {
      * 변주(Variation) 버튼/인터랙션 활성화 가능 여부를 판정합니다.
      */
     fun canInteractWithVariation(
+        isReceiverMode: Boolean,
+        isRunning: Boolean,
+        isMaintenanceBusy: Boolean,
+        isVariationRunning: Boolean = false
+    ): Boolean =
+        !isReceiverMode &&
+            !isRunning &&
+            !isMaintenanceBusy &&
+            !isVariationRunning
+
+    fun canInteractWithVariation(
         mode: AutomationMode,
         isRunning: Boolean,
         isMaintenanceBusy: Boolean,
         isVariationRunning: Boolean = false
-    ): Boolean = VariationStartPolicy.canInteract(
-        mode = mode,
+    ): Boolean = canInteractWithVariation(
+        isReceiverMode = mode == AutomationMode.RECEIVER,
         isRunning = isRunning,
         isMaintenanceBusy = isMaintenanceBusy,
         isVariationRunning = isVariationRunning
@@ -83,16 +127,34 @@ object AutomationExecutionPolicy {
      * 변주(Variation) 실행 불가 사유를 반환합니다. 실행 가능한 경우 null을 반환합니다.
      */
     fun variationUnavailableReason(
+        isReceiverMode: Boolean,
+        isRunning: Boolean,
+        isMaintenanceBusy: Boolean,
+        isGeminiInstalled: Boolean,
+        isAccessibilityServiceEnabled: Boolean,
+        isVariationRunning: Boolean = false
+    ): String? = when {
+        isReceiverMode -> "수신 모드에서는 변주를 실행할 수 없습니다."
+        isRunning -> "자동화 실행 중에는 변주를 실행할 수 없습니다."
+        isVariationRunning -> "변주 자동화가 이미 실행 중입니다."
+        isMaintenanceBusy -> "유지보수 작업이 진행 중입니다."
+        !isGeminiInstalled -> "Gemini 앱을 먼저 설치해주세요."
+        !isAccessibilityServiceEnabled -> "접근성 서비스를 먼저 켜주세요."
+        else -> null
+    }
+
+    fun variationUnavailableReason(
         mode: AutomationMode,
         environmentStatus: EnvironmentStatus,
         isRunning: Boolean,
         isMaintenanceBusy: Boolean,
         isVariationRunning: Boolean = false
-    ): String? = VariationStartPolicy.unavailableReason(
-        mode = mode,
-        environmentStatus = environmentStatus,
+    ): String? = variationUnavailableReason(
+        isReceiverMode = mode == AutomationMode.RECEIVER,
         isRunning = isRunning,
         isMaintenanceBusy = isMaintenanceBusy,
+        isGeminiInstalled = environmentStatus.isGeminiInstalled,
+        isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
         isVariationRunning = isVariationRunning
     )
 
@@ -104,12 +166,25 @@ object AutomationExecutionPolicy {
         isAccessibilityServiceEnabled: Boolean,
         isAutomationRunning: Boolean,
         isClosingInProgress: Boolean
-    ): Boolean = GeminiAppControlPolicy.canClose(
+    ): Boolean = geminiBlockReason(
         isGeminiInstalled = isGeminiInstalled,
         isAccessibilityServiceEnabled = isAccessibilityServiceEnabled,
         isAutomationRunning = isAutomationRunning,
         isClosingInProgress = isClosingInProgress
-    )
+    ) == null
+
+    fun geminiBlockReason(
+        isGeminiInstalled: Boolean,
+        isAccessibilityServiceEnabled: Boolean,
+        isAutomationRunning: Boolean,
+        isClosingInProgress: Boolean
+    ): GeminiAppControlBlockReason? = when {
+        isAutomationRunning -> GeminiAppControlBlockReason.AutomationRunning
+        isClosingInProgress -> GeminiAppControlBlockReason.AlreadyInProgress
+        !isGeminiInstalled -> GeminiAppControlBlockReason.GeminiNotInstalled
+        !isAccessibilityServiceEnabled -> GeminiAppControlBlockReason.AccessibilityDisabled
+        else -> null
+    }
 
     /**
      * 자기 앱(GemGemGen) 종료 허용 여부를 판정합니다.
@@ -118,11 +193,22 @@ object AutomationExecutionPolicy {
         isAccessibilityServiceEnabled: Boolean,
         isAutomationRunning: Boolean,
         isClosingInProgress: Boolean
-    ): Boolean = SelfAppControlPolicy.canClose(
+    ): Boolean = selfAppBlockReason(
         isAccessibilityServiceEnabled = isAccessibilityServiceEnabled,
         isAutomationRunning = isAutomationRunning,
         isClosingInProgress = isClosingInProgress
-    )
+    ) == null
+
+    fun selfAppBlockReason(
+        isAccessibilityServiceEnabled: Boolean,
+        isAutomationRunning: Boolean,
+        isClosingInProgress: Boolean
+    ): SelfAppControlBlockReason? = when {
+        isAutomationRunning -> SelfAppControlBlockReason.AutomationRunning
+        isClosingInProgress -> SelfAppControlBlockReason.AlreadyInProgress
+        !isAccessibilityServiceEnabled -> SelfAppControlBlockReason.AccessibilityDisabled
+        else -> null
+    }
 
     /**
      * 디바이스 메모리 정리 버튼 활성화(실행 또는 예약) 가능 여부를 판정합니다.
@@ -154,3 +240,4 @@ object AutomationExecutionPolicy {
         isMaintenanceBusy = isMaintenanceBusy
     )
 }
+

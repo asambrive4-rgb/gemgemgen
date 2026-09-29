@@ -29,15 +29,13 @@ class AndroidGrokBillingGateway : GrokBillingGateway {
             }
             try {
                 val code = connection.responseCode
-                val body = if (code in 200..299) {
-                    connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                } else {
-                    connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                        .orEmpty()
-                }
+                val body = readResponseBody(connection, code)
 
                 if (code !in 200..299) {
-                    throw AnalysisException("Grok 크레딧 정보를 가져오지 못했습니다. ($code)")
+                    val detail = extractJsonErrorMessage(json, body)
+                    throw AnalysisException(
+                        "Grok 크레딧 정보를 가져오지 못했습니다. ($code)${if (detail.isNotBlank()) ": $detail" else ""}"
+                    )
                 }
 
                 val root = json.parseToJsonElement(body).jsonObject
@@ -49,9 +47,7 @@ class AndroidGrokBillingGateway : GrokBillingGateway {
                     ?: throw AnalysisException("Grok 크레딧 사용량 정보가 없습니다.")
 
                 GrokQuotaInfo(
-                    remainingPercent = GrokQuotaPolicy.remainingPercent(used = used, limit = limit),
-                    usedVal = used,
-                    limitVal = limit
+                    remainingPercent = GrokQuotaPolicy.remainingPercent(used = used, limit = limit)
                 )
             } finally {
                 connection.disconnect()
@@ -60,7 +56,12 @@ class AndroidGrokBillingGateway : GrokBillingGateway {
             throw error
         } catch (error: Exception) {
             throw AnalysisException(
-                "Grok 크레딧 조회 네트워크 오류: ${error.message ?: error.javaClass.simpleName}"
+                formatAnalysisNetworkError(
+                    error = error,
+                    serviceName = "Grok 크레딧 조회",
+                    serverLabel = "Grok 서버",
+                    timeoutMillis = READ_TIMEOUT_MS
+                )
             )
         }
     }

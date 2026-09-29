@@ -13,13 +13,11 @@ import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.PromptSnippet
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
-import com.example.gemgemgen.automation.domain.VariationStartPolicy
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.GetPromptSnippetCandidatesUseCase
 import com.example.gemgemgen.automation.usecase.GetWildcardTokenCandidatesUseCase
-import com.example.gemgemgen.automation.usecase.ManagePromptInstructionUseCase
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.PromptInstructionRepository
 import com.example.gemgemgen.automation.usecase.PromptSnippetRepository
@@ -42,7 +40,7 @@ import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
-import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
+import com.example.gemgemgen.environment.usecase.EnvironmentGateway
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
@@ -74,7 +72,7 @@ private data class AutomationInitialState(
 )
 
 class AutomationViewModel(
-    private val checkEnvironmentStatus: CheckEnvironmentStatusUseCase,
+    private val checkEnvironmentStatus: EnvironmentGateway,
     private val clipboardGateway: ClipboardGateway,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: ExecuteAutomationLoopUseCase,
@@ -90,7 +88,7 @@ class AutomationViewModel(
             }
         }
     ),
-    private val checkAutomationStart: CheckAutomationStartUseCase =
+    checkAutomationStart: CheckAutomationStartUseCase =
         CheckAutomationStartUseCase(OverlayPermissionGateway { true }),
     wildcardFileRepository: WildcardFileRepository? = null,
     private val getWildcardTokenCandidates: GetWildcardTokenCandidatesUseCase =
@@ -113,14 +111,12 @@ class AutomationViewModel(
         manageRemoteAutomation = manageRemoteAutomation,
         promptHistoryStore = promptHistoryStore
     ),
-    promptInstructionRepository: PromptInstructionRepository =
+    private val promptInstructionRepository: PromptInstructionRepository =
         object : PromptInstructionRepository {
             private var current = PromptInstructionConfig.DEFAULT
             override fun load(): PromptInstructionConfig = current
             override fun save(config: PromptInstructionConfig) { current = config }
         },
-    private val managePromptInstruction: ManagePromptInstructionUseCase =
-        ManagePromptInstructionUseCase(promptInstructionRepository),
     private val variationPromptRepository: VariationPromptRepository? = null,
     private val promptSnippetRepository: PromptSnippetRepository? = null,
     private val getPromptSnippetCandidates: GetPromptSnippetCandidatesUseCase =
@@ -135,7 +131,8 @@ class AutomationViewModel(
     private val promptEditor = PromptEditorCoordinator(
         clipboardGateway = clipboardGateway,
         scope = scope,
-        dispatchers = dispatchers
+        dispatchers = dispatchers,
+        onPromptTextChanged = promptWorkspace?.let { it::updateCurrentPrompt }
     )
     val promptTemplateTextFieldState: TextFieldState
         get() = promptEditor.textFieldState
@@ -205,11 +202,6 @@ class AutomationViewModel(
         promptWorkspace?.let { workspace ->
             workspace.segmentReplacer = ::replacePromptTemplateSegment
             scope.launch {
-                promptEditor.currentPromptText.collect { currentPrompt ->
-                    workspace.updateCurrentPrompt(currentPrompt)
-                }
-            }
-            scope.launch {
                 workspace.handoffEvents.collect { event ->
                     when (event) {
                         is PromptHandoffEvent.ReplaceEntirely -> {
@@ -224,56 +216,9 @@ class AutomationViewModel(
 
     // AutomationScreenActions 인터페이스 위임 구현
     override fun onRunAutomation() { runAutomation() }
-    override fun onCancelAutomation() { cancelAutomation() }
-    override fun onPairRemoteDevice(pairingCode: String) { pairRemoteDevice(pairingCode) }
-    override fun onDisconnectRemoteDevice() { disconnectRemoteDevice() }
-
     override fun onPromptTemplateChange(value: String) { promptEditor.onPromptTemplateChange(value, updateTextFieldState = true) }
-    override fun onImportPromptFromClipboard() { importPromptFromClipboard() }
-    override fun onCopyPromptToClipboard() { copyPromptToClipboard() }
-    override fun onApplySuggestion(candidate: WildcardTokenAutocomplete.Candidate) { applySuggestion(candidate) }
-
-    override fun onNavigatePromptHistoryBack() { navigatePromptHistoryBack() }
-    override fun onNavigatePromptHistoryForward() { navigatePromptHistoryForward() }
-
-    override fun onToggleParagraphSelectionMode() { toggleParagraphSelectionMode() }
-    override fun onSelectPromptParagraphAt(offset: Int) { selectPromptParagraphAt(offset) }
-    override fun onDeleteSelectedPromptParagraph() { deleteSelectedPromptParagraph() }
-    override fun onReplaceSelectedPromptParagraph(replacement: String) { replaceSelectedPromptParagraph(replacement) }
-    override fun onCancelParagraphSelection() { cancelParagraphSelection() }
-
-    override fun onToggleSearch(active: Boolean?) { toggleSearch(active) }
-    override fun onSetSearchQuery(query: String) { setSearchQuery(query) }
-    override fun onNavigateSearchNext() { navigateSearchNext() }
-    override fun onNavigateSearchPrevious() { navigateSearchPrevious() }
-    override fun onCloseSearch() { closeSearch() }
-
-    override fun onInsertTopInstruction() { insertTopInstruction() }
-    override fun onInsertBottomInstruction() { insertBottomInstruction() }
-    override fun onOpenInstructionConfigDialog(initialTab: InstructionTab) { openInstructionConfigDialog(initialTab) }
-    override fun onCloseInstructionConfigDialog() { closeInstructionConfigDialog() }
-    override fun onSaveInstructionConfig(config: PromptInstructionConfig) { saveInstructionConfig(config) }
-
     override fun onRunVariation(selectedText: String?) { runVariation(selectedText) }
-    override fun onOpenVariationPromptConfigDialog() { openVariationPromptConfigDialog() }
-    override fun onCloseVariationPromptConfigDialog() { closeVariationPromptConfigDialog() }
-    override fun onSaveVariationPromptConfig(config: VariationPromptConfig) { saveVariationPromptConfig(config) }
-
-    override fun onShowPromptSnippetDialog() { showPromptSnippetDialog() }
-    override fun onDismissPromptSnippetDialog() { dismissPromptSnippetDialog() }
-    override fun onAddPromptSnippet(shortcut: String, content: String) { addPromptSnippet(shortcut, content) }
-    override fun onUpdatePromptSnippet(id: String, shortcut: String, content: String) { updatePromptSnippet(id, shortcut, content) }
-    override fun onDeletePromptSnippet(id: String) { deletePromptSnippet(id) }
-
-    override fun onCloseGeminiApp() { closeGeminiApp() }
-    override fun onTerminateSelfApp() { terminateSelfApp() }
-    override fun onCleanDeviceMemory() { cleanDeviceMemory() }
-
-    override fun onRefreshStatus() { refreshStatus() }
-    override fun onShowSettings() { showSettings() }
-    override fun onHideSettings() { hideSettings() }
     override fun onConfirmAccessibilityPrompt() { confirmAccessibilityPrompt() }
-    override fun onDismissAccessibilityPromptToSettings() { dismissAccessibilityPromptToSettings() }
 
     override fun onSelectThemePalette(palette: com.example.gemgemgen.ui.theme.AppThemePalette) {
         themePaletteStore?.setPalette(palette)
@@ -291,13 +236,13 @@ class AutomationViewModel(
     fun onPromptTemplateFromEditor(value: String) =
         promptEditor.onPromptTemplateFromEditor(value)
 
-    fun toggleParagraphSelectionMode() = promptEditor.toggleParagraphSelectionMode()
+    override fun toggleParagraphSelectionMode() = promptEditor.toggleParagraphSelectionMode()
 
-    fun selectPromptParagraphAt(offset: Int) = promptEditor.selectPromptParagraphAt(offset)
+    override fun selectPromptParagraphAt(offset: Int) = promptEditor.selectPromptParagraphAt(offset)
 
-    fun deleteSelectedPromptParagraph() = promptEditor.deleteSelectedPromptParagraph()
+    override fun deleteSelectedPromptParagraph() = promptEditor.deleteSelectedPromptParagraph()
 
-    fun cancelParagraphSelection() = promptEditor.cancelParagraphSelection()
+    override fun cancelParagraphSelection() = promptEditor.cancelParagraphSelection()
 
     override fun onTargetAppSelected(targetApp: AutomationTargetApp) {
         _uiState.update {
@@ -308,26 +253,6 @@ class AutomationViewModel(
     override fun onFlowImageCountSelected(count: Int) {
         _uiState.update {
             if (it.isRunning) it else it.copy(flowImageCount = count)
-        }
-        persistLastRunSnapshot(flowImageCount = count)
-    }
-
-    private fun persistLastRunSnapshot(
-        repeatCountText: String = _uiState.value.repeatCountText,
-        flowImageCount: Int = _uiState.value.flowImageCount
-    ) {
-        val state = _uiState.value
-        scope.launch {
-            withContext(dispatchers.io) {
-                lastRunSnapshotStore.save(
-                    LastRunSnapshot(
-                        promptTemplate = state.promptTemplate,
-                        repeatCountText = repeatCountText,
-                        targetApp = state.selectedTargetApp,
-                        flowImageCount = flowImageCount
-                    )
-                )
-            }
         }
     }
 
@@ -346,7 +271,18 @@ class AutomationViewModel(
         val requested = RepeatCountParser.parse(normalized)
         val applied = (automation.updateRepeatCount(requested) ?: requested).toString()
         publishRepeatCountText(applied)
-        persistLastRunSnapshot(repeatCountText = applied)
+        scope.launch {
+            withContext(dispatchers.io) {
+                lastRunSnapshotStore.save(
+                    LastRunSnapshot(
+                        promptTemplate = state.promptTemplate,
+                        repeatCountText = applied,
+                        targetApp = state.selectedTargetApp,
+                        flowImageCount = state.flowImageCount
+                    )
+                )
+            }
+        }
     }
 
     private fun publishRepeatCountText(text: String) {
@@ -354,7 +290,7 @@ class AutomationViewModel(
         _automationBarUiState.update { it.copy(repeatCountText = text) }
     }
 
-    fun importPromptFromClipboard() = promptEditor.importPromptFromClipboard()
+    override fun importPromptFromClipboard() = promptEditor.importPromptFromClipboard()
 
     /** TextField 최신 값을 반영한 현재 원본 프롬프트. 분석 탭 가져오기 등에서 사용. */
     fun currentPromptTemplateText(): String = promptEditor.currentPromptTemplateText()
@@ -374,13 +310,13 @@ class AutomationViewModel(
         preferredStartIndex = preferredStartIndex
     )
 
-    fun copyPromptToClipboard() = promptEditor.copyPromptToClipboard()
+    override fun copyPromptToClipboard() = promptEditor.copyPromptToClipboard()
 
     /**
      * 프롬프트 템플릿 맨 앞에 상단 인스트럭션을 붙인다.
      * 문구가 설정되어 있지 않으면 설정 다이얼로그를 띄운다.
      */
-    fun insertTopInstruction() {
+    override fun insertTopInstruction() {
         val config = _uiState.value.promptInstructionConfig
         if (config.topInstruction.isBlank()) {
             openInstructionConfigDialog(InstructionTab.TOP)
@@ -393,7 +329,7 @@ class AutomationViewModel(
      * 프롬프트 템플릿 맨 뒤에 하단 인스트럭션을 붙인다.
      * 문구가 설정되어 있지 않으면 설정 다이얼로그를 띄워 입력을 유도한다.
      */
-    fun insertBottomInstruction() {
+    override fun insertBottomInstruction() {
         val config = _uiState.value.promptInstructionConfig
         val bottom = config.bottomInstruction
         if (bottom.isNullOrBlank()) {
@@ -403,7 +339,7 @@ class AutomationViewModel(
         promptEditor.insertBottomInstruction(bottom)
     }
 
-    fun openInstructionConfigDialog(initialTab: InstructionTab = InstructionTab.TOP) =
+    override fun openInstructionConfigDialog(initialTab: InstructionTab) =
         _uiState.update {
             it.copy(
                 showInstructionConfigDialog = true,
@@ -411,13 +347,13 @@ class AutomationViewModel(
             )
         }
 
-    fun closeInstructionConfigDialog() =
+    override fun closeInstructionConfigDialog() =
         _uiState.update { it.copy(showInstructionConfigDialog = false) }
 
-    fun saveInstructionConfig(config: PromptInstructionConfig) {
+    override fun saveInstructionConfig(config: PromptInstructionConfig) {
         scope.launch {
             withContext(dispatchers.io) {
-                managePromptInstruction.save(config)
+                promptInstructionRepository.save(config)
             }
         }
         _uiState.update {
@@ -428,13 +364,13 @@ class AutomationViewModel(
         }
     }
 
-    fun openVariationPromptConfigDialog() =
+    override fun openVariationPromptConfigDialog() =
         _uiState.update { it.copy(showVariationPromptConfigDialog = true) }
 
-    fun closeVariationPromptConfigDialog() =
+    override fun closeVariationPromptConfigDialog() =
         _uiState.update { it.copy(showVariationPromptConfigDialog = false) }
 
-    fun saveVariationPromptConfig(config: VariationPromptConfig) {
+    override fun saveVariationPromptConfig(config: VariationPromptConfig) {
         scope.launch {
             withContext(dispatchers.io) {
                 variationPromptRepository?.save(config)
@@ -480,7 +416,7 @@ class AutomationViewModel(
     /**
      * 추천 칩 탭 (Candidate 직접 전달): 커서 기준 현재 단어를 치환.
      */
-    fun applySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {
+    override fun applySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {
         val candidates = _uiState.value.allAutocompleteCandidates
         promptEditor.applySuggestion(
             candidate = candidate,
@@ -491,16 +427,9 @@ class AutomationViewModel(
     /** 와일드카드 폴더 및 상용구 목록으로 추천 후보를 다시 읽는다. */
     fun refreshWildcardTokenCandidates() {
         scope.launch {
-            val (wildcardCandidates, snippetCandidates, snippets) = withContext(dispatchers.io) {
-                val wildcards = loadWildcardTokenCandidates()
-                val loadedSnippets = getPromptSnippetCandidates.loadSnippets()
-                val snippetCands = getPromptSnippetCandidates.fromSnippets(loadedSnippets)
-                Triple(wildcards, snippetCands, loadedSnippets)
+            val (combined, snippets) = withContext(dispatchers.io) {
+                loadSortedCandidatesAndSnippets()
             }
-            val combined = (wildcardCandidates + snippetCandidates).sortedWith(
-                compareBy<WildcardTokenAutocomplete.Candidate> { it.name.length }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
-            )
             promptEditor.updateAutocompleteCandidates(combined)
             _uiState.update { state ->
                 state.copy(
@@ -511,15 +440,26 @@ class AutomationViewModel(
         }
     }
 
-    fun showPromptSnippetDialog() {
+    private fun loadSortedCandidatesAndSnippets(): Pair<List<WildcardTokenAutocomplete.Candidate>, List<PromptSnippet>> {
+        val wildcardCandidates = getWildcardTokenCandidates()
+        val snippets = getPromptSnippetCandidates.loadSnippets()
+        val snippetCandidates = getPromptSnippetCandidates.fromSnippets(snippets)
+        val combined = (wildcardCandidates + snippetCandidates).sortedWith(
+            compareBy<WildcardTokenAutocomplete.Candidate> { it.name.length }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+        )
+        return combined to snippets
+    }
+
+    override fun showPromptSnippetDialog() {
         _uiState.update { it.copy(showPromptSnippetDialog = true) }
     }
 
-    fun dismissPromptSnippetDialog() {
+    override fun dismissPromptSnippetDialog() {
         _uiState.update { it.copy(showPromptSnippetDialog = false) }
     }
 
-    fun addPromptSnippet(shortcut: String, content: String) {
+    override fun addPromptSnippet(shortcut: String, content: String) {
         scope.launch {
             withContext(dispatchers.io) {
                 val current = promptSnippetRepository?.load().orEmpty().toMutableList()
@@ -536,7 +476,7 @@ class AutomationViewModel(
         }
     }
 
-    fun deletePromptSnippet(id: String) {
+    override fun deletePromptSnippet(id: String) {
         scope.launch {
             withContext(dispatchers.io) {
                 val current = promptSnippetRepository?.load().orEmpty().toMutableList()
@@ -547,7 +487,7 @@ class AutomationViewModel(
         }
     }
 
-    fun updatePromptSnippet(id: String, shortcut: String, content: String) {
+    override fun updatePromptSnippet(id: String, shortcut: String, content: String) {
         scope.launch {
             withContext(dispatchers.io) {
                 val current = promptSnippetRepository?.load().orEmpty().toMutableList()
@@ -564,10 +504,10 @@ class AutomationViewModel(
         }
     }
 
-    fun replaceSelectedPromptParagraph(replacement: String) =
+    override fun replaceSelectedPromptParagraph(replacement: String) =
         promptEditor.replaceSelectedPromptParagraph(replacement)
 
-    fun closeGeminiApp() = executeMaintenance(
+    override fun closeGeminiApp() = executeMaintenance(
         canExecute = AutomationUiState::canCloseGemini,
         unavailableMessage = AutomationUiText::geminiRestartUnavailableMessage,
         startingText = AutomationUiText.geminiRestartStartingText(),
@@ -575,7 +515,7 @@ class AutomationViewModel(
         action = appMaintenance::restartGemini
     )
 
-    fun terminateSelfApp() = executeMaintenance(
+    override fun terminateSelfApp() = executeMaintenance(
         canExecute = AutomationUiState::canCloseSelfApp,
         unavailableMessage = AutomationUiText::selfAppTerminateUnavailableMessage,
         startingText = AutomationUiText.selfAppTerminateStartingText(),
@@ -583,7 +523,7 @@ class AutomationViewModel(
         action = appMaintenance::terminateSelf
     )
 
-    fun cleanDeviceMemory() {
+    override fun cleanDeviceMemory() {
         val state = _uiState.value
         if (!state.canCleanMemory) {
             _uiState.update {
@@ -657,25 +597,18 @@ class AutomationViewModel(
         }
     }
 
-    fun navigatePromptHistoryBack() =
+    override fun navigatePromptHistoryBack() =
         promptEditor.navigatePromptHistoryBack()
 
-    fun navigatePromptHistoryForward() =
+    override fun navigatePromptHistoryForward() =
         promptEditor.navigatePromptHistoryForward()
 
-    fun refreshStatus() {
+    override fun refreshStatus() {
         scope.launch {
-            val (report, wildcardCandidates, snippetCandidates, snippets) = withContext(dispatchers.io) {
-                val rep = checkEnvironmentStatus.check()
-                val wildcards = loadWildcardTokenCandidates()
-                val snips = getPromptSnippetCandidates.loadSnippets()
-                val snippetCands = getPromptSnippetCandidates.fromSnippets(snips)
-                StatusCandidatesBundle(rep, wildcards, snippetCands, snips)
+            val (report, combinedAndSnippets) = withContext(dispatchers.io) {
+                checkEnvironmentStatus.check() to loadSortedCandidatesAndSnippets()
             }
-            val combined = (wildcardCandidates + snippetCandidates).sortedWith(
-                compareBy<WildcardTokenAutocomplete.Candidate> { it.name.length }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
-            )
+            val (combined, snippets) = combinedAndSnippets
             promptEditor.updateAutocompleteCandidates(combined)
             _uiState.update {
                 it.copy(
@@ -688,10 +621,7 @@ class AutomationViewModel(
         }
     }
 
-    private fun loadWildcardTokenCandidates(): List<WildcardTokenAutocomplete.Candidate> =
-        getWildcardTokenCandidates()
-
-    fun showSettings() {
+    override fun showSettings() {
         _uiState.update { state ->
             val base = state.copy(remoteDisconnectMessage = "")
             if (!base.environmentStatus.isAccessibilityServiceEnabled) {
@@ -707,10 +637,10 @@ class AutomationViewModel(
         _uiState.update { it.copy(showAccessibilityPrompt = false) }
 
     /** 접근성 확인 팝업에서 「취소」: 전체 설정 다이얼로그로 진입. */
-    fun dismissAccessibilityPromptToSettings() =
+    override fun dismissAccessibilityPromptToSettings() =
         _uiState.update { it.copy(showAccessibilityPrompt = false, showSettings = true) }
 
-    fun hideSettings() =
+    override fun hideSettings() =
         _uiState.update { it.copy(showSettings = false, showAccessibilityPrompt = false) }
 
     fun runAutomation(): AutomationStartDecision {
@@ -786,13 +716,13 @@ class AutomationViewModel(
         }
     }
 
-    fun toggleSearch(active: Boolean? = null) = promptEditor.toggleSearch(active)
-    fun setSearchQuery(query: String) = promptEditor.setSearchQuery(query)
-    fun navigateSearchNext() = promptEditor.navigateSearchNext()
-    fun navigateSearchPrevious() = promptEditor.navigateSearchPrevious()
-    fun closeSearch() = promptEditor.closeSearch()
+    override fun toggleSearch(active: Boolean?) = promptEditor.toggleSearch(active)
+    override fun setSearchQuery(query: String) = promptEditor.setSearchQuery(query)
+    override fun navigateSearchNext() = promptEditor.navigateSearchNext()
+    override fun navigateSearchPrevious() = promptEditor.navigateSearchPrevious()
+    override fun closeSearch() = promptEditor.closeSearch()
 
-    fun cancelAutomation() {
+    override fun cancelAutomation() {
         _uiState.update { it.copy(isMemoryCleanupScheduled = false) }
         val wasRemoteRunActive = isRemoteRunActive
         isRemoteRunActive = false
@@ -817,7 +747,7 @@ class AutomationViewModel(
         manageRemoteAutomation.selectMode(mode)
     }
 
-    fun pairRemoteDevice(pairingCode: String) {
+    override fun pairRemoteDevice(pairingCode: String) {
         if (_uiState.value.automationMode != AutomationMode.SENDER) return
         scope.launch {
             val result = manageRemoteAutomation.pair(pairingCode)
@@ -833,7 +763,7 @@ class AutomationViewModel(
         }
     }
 
-    fun disconnectRemoteDevice() {
+    override fun disconnectRemoteDevice() {
         if (_uiState.value.isDisconnectingRemote) return
         if (_uiState.value.remoteAutomationStatus.automationState is AutomationRunState.Running) {
             _uiState.update {
@@ -862,7 +792,7 @@ class AutomationViewModel(
                 AutomationInitialState(
                     lastRunSnapshotStore.load(),
                     promptHistoryStore?.load().orEmpty(),
-                    managePromptInstruction.load(),
+                    promptInstructionRepository.load(),
                     variationPromptRepository?.load() ?: VariationPromptConfig.DEFAULT
                 )
             }
@@ -959,10 +889,3 @@ class AutomationViewModel(
     }
 
 }
-
-private data class StatusCandidatesBundle(
-    val report: com.example.gemgemgen.environment.domain.EnvironmentReport,
-    val wildcardCandidates: List<WildcardTokenAutocomplete.Candidate>,
-    val snippetCandidates: List<WildcardTokenAutocomplete.Candidate>,
-    val snippets: List<PromptSnippet>
-)

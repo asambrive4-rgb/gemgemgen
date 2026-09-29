@@ -13,8 +13,6 @@ import com.example.gemgemgen.analysis.android.AndroidGrokOAuthGateway
 import com.example.gemgemgen.analysis.android.RoutingAnalysisAiGateway
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
-import com.example.gemgemgen.analysis.usecase.AnalyzePromptForCategoryUseCase
-import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
@@ -44,14 +42,12 @@ import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.core.android.AndroidSoundAlertGateway
 import com.example.gemgemgen.core.PromptWorkspace
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
-import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardSetRepository
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
-import com.example.gemgemgen.wildcard.usecase.SaveWildcardFolderUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
 import com.example.gemgemgen.wildcard.ui.WildcardViewModel
 import com.example.gemgemgen.remote.android.AndroidRemoteAutomationGateway
@@ -98,7 +94,7 @@ class AndroidAppContainer(context: Context) {
     }
     private val environmentGateway by lazy { AndroidEnvironmentGateway(appContext) }
     private val wildcardFileRepository by lazy { AndroidWildcardFileRepository(appContext) }
-    private val wildcardSetRepository by lazy { AndroidWildcardSetRepository(appContext) }
+    private val wildcardSetRepository by lazy { AndroidWildcardSetRepository(wildcardFileRepository) }
     private val wildcardFolderRepository by lazy { AndroidWildcardFolderRepository(appContext) }
 
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
@@ -122,7 +118,7 @@ class AndroidAppContainer(context: Context) {
             manageRemoteAutomation = manageRemoteAutomation
         )
         AutomationViewModel(
-            checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentGateway),
+            checkEnvironmentStatus = environmentGateway,
             clipboardGateway = clipboardGateway,
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automation,
@@ -164,29 +160,26 @@ class AndroidAppContainer(context: Context) {
                 repository = wildcardFileRepository
             ),
             analysisKeyManager = analysisKeyManager,
-            saveWildcardFolder = SaveWildcardFolderUseCase(wildcardFolderRepository),
-            checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentGateway)
+            saveWildcardFolder = wildcardFolderRepository
         )
     }
 
     val analysisViewModelFactory: ViewModelProvider.Factory = factory<AnalysisViewModel> {
-        val analyzePrompt = AnalyzePromptForCategoryUseCase(
-            aiGateway = analysisAiGateway,
-            credentialResolver = analysisCredentialResolver
-        )
-        val copyResults = CopyAnalysisResultsUseCase(clipboardGateway)
         AnalysisViewModel(
-            resolveTarget = ResolveAnalysisTargetUseCase(analyzePrompt),
+            resolveTarget = ResolveAnalysisTargetUseCase(
+                aiGateway = analysisAiGateway,
+                credentialResolver = analysisCredentialResolver
+            ),
             generateTxtUseCase = GenerateAnalysisTxtUseCase(
                 aiGateway = analysisAiGateway,
                 credentialResolver = analysisCredentialResolver
             ),
             keyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository),
             grokAuth = grokAuthManager,
-            copyResults = copyResults,
+            clipboardGateway = clipboardGateway,
             saveWildcardFile = SaveAnalysisWildcardFileUseCase(
                 repository = wildcardFileRepository,
-                copyResults = copyResults
+                clipboardGateway = clipboardGateway
             ),
             promptWorkspace = promptWorkspace
         )

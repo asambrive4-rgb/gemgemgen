@@ -2,13 +2,12 @@
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.usecase.AnalysisException
-import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -18,7 +17,6 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
-import kotlinx.coroutines.delay
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -32,20 +30,6 @@ class AndroidGeminiAnalysisGateway(
         apiKey: String,
         modelId: String,
         payload: AnalysisPromptPayload
-    ): String {
-        return generateContent(
-            apiKey = apiKey,
-            modelId = modelId,
-            systemInstruction = payload.systemInstruction,
-            userPrompt = payload.userPrompt,
-            responseSchema = payload.responseSchema
-        )
-    }
-
-    override suspend fun generateTxt(
-        apiKey: String,
-        modelId: String,
-        payload: AnalysisTxtPromptPayload
     ): String {
         return generateContent(
             apiKey = apiKey,
@@ -115,17 +99,10 @@ class AndroidGeminiAnalysisGateway(
             responseSchema = responseSchema
         )
         return try {
-            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-                writer.write(body.toString())
-            }
+            writeRequestBody(connection, body.toString())
 
             val responseCode = connection.responseCode
-            val responseText = if (responseCode in 200..299) {
-                connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            } else {
-                connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                    .orEmpty()
-            }
+            val responseText = readResponseBody(connection, responseCode)
 
             if (responseCode !in 200..299) {
                 val isRetryable = responseCode == 503 ||
@@ -232,7 +209,7 @@ class AndroidGeminiAnalysisGateway(
     }
 
     internal fun formatHttpError(responseCode: Int, responseText: String, modelId: String): String {
-        val rawMessage = errorMessage(responseText)
+        val rawMessage = extractJsonErrorMessage(json, responseText)
         val lower = rawMessage.lowercase()
         return when {
             responseCode == 400 && (lower.contains("api key") || lower.contains("api_key")) ->
@@ -257,27 +234,13 @@ class AndroidGeminiAnalysisGateway(
     }
 
     internal fun formatNetworkError(error: Exception): String {
-        val timeoutSec = READ_TIMEOUT_MILLIS / 1000
-        return when (error) {
-            is java.net.SocketTimeoutException ->
-                "Gemini 응답 시간 초과(타임아웃): 모델이 제한 시간(${timeoutSec}초) 내에 응답을 마치지 못했습니다. 복잡한 추론 모델 대신 빠른 Flash-Lite 모델을 사용하거나 잠시 후 다시 시도해 주세요."
-            is java.net.UnknownHostException ->
-                "네트워크 연결 실패: 인터넷 연결이 끊겼거나 Google 서버 주소를 찾을 수 없습니다. Wi-Fi 또는 모바일 데이터 상태를 확인해 주세요."
-            is java.net.ConnectException ->
-                "Gemini 서버 연결 실패: Google 서버에 접속하지 못했습니다. 인터넷 상태나 방화벽/VPN 설정을 확인해 주세요."
-            is javax.net.ssl.SSLException ->
-                "보안 연결(SSL/TLS) 오류: Google 서버와의 안전한 통신 연결에 실패했습니다. 네트워크 환경 또는 시스템 날짜/시간을 확인해 주세요."
-            else -> {
-                val msg = error.message?.trim().orEmpty()
-                if (msg.contains("timeout", ignoreCase = true) || msg.contains("timed out", ignoreCase = true)) {
-                    "Gemini 응답 시간 초과(타임아웃): 모델 응답이 지연되고 있습니다 (${timeoutSec}초 초과). 잠시 후 다시 시도하거나 Flash-Lite 모델을 사용해 보세요."
-                } else if (msg.isNotBlank()) {
-                    "Gemini 통신 오류 (${error.javaClass.simpleName}): $msg"
-                } else {
-                    "Gemini 통신 중 알 수 없는 오류가 발생했습니다 (${error.javaClass.simpleName})."
-                }
-            }
-        }
+        return formatAnalysisNetworkError(
+            error = error,
+            serviceName = "Gemini",
+            serverLabel = "Google 서버",
+            timeoutMillis = READ_TIMEOUT_MILLIS,
+            timeoutGuidance = "복잡한 추론 모델 대신 빠른 Flash-Lite 모델을 사용하거나 잠시 후 다시 시도해 주세요."
+        )
     }
 
     private fun isThoughtPart(part: JsonElement): Boolean {
@@ -286,18 +249,6 @@ class AndroidGeminiAnalysisGateway(
         return runCatching {
             thoughtElement.jsonPrimitive.content.toBooleanStrictOrNull() == true
         }.getOrDefault(false)
-    }
-
-    private fun errorMessage(responseText: String): String {
-        return runCatching {
-            json.parseToJsonElement(responseText)
-                .jsonObject["error"]
-                ?.jsonObject
-                ?.get("message")
-                ?.jsonPrimitive
-                ?.content
-                .orEmpty()
-        }.getOrDefault("")
     }
 
     private fun List<JsonElement>?.orEmpty(): List<JsonElement> {

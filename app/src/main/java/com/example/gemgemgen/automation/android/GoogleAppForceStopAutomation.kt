@@ -1,4 +1,4 @@
-// 역할: Google 앱 상세 설정 화면에서 지연 시퀀스 순회로 강제 중지 버튼과 확인 팝업을 찾아 클릭하여 메모리를 확보합니다.
+// 역할: Google 앱 상세 설정 화면에서 공통 지연 순회와 상위 노드 클릭을 통해 강제 중지 버튼과 확인 팝업을 조작하여 메모리를 확보합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler
@@ -32,30 +32,6 @@ internal data class ForceStopNodeLabels(
         "OK"
     )
 )
-
-internal fun isForceStopButton(
-    viewIdResourceName: String?,
-    nodeLabel: String?,
-    labels: ForceStopNodeLabels
-): Boolean {
-    val idMatches = viewIdResourceName != null && labels.forceStopButtonIds.any { it == viewIdResourceName }
-    val labelMatches = nodeLabel != null && labels.forceStopButtonCandidates.any { candidate ->
-        candidate.isNotBlank() && nodeLabel.contains(candidate, ignoreCase = true)
-    }
-    return idMatches || labelMatches
-}
-
-internal fun isConfirmDialogButton(
-    viewIdResourceName: String?,
-    nodeLabel: String?,
-    labels: ForceStopNodeLabels
-): Boolean {
-    val idMatches = viewIdResourceName != null && labels.confirmDialogButtonIds.any { it == viewIdResourceName }
-    val labelMatches = nodeLabel != null && labels.confirmDialogCandidates.any { candidate ->
-        candidate.isNotBlank() && nodeLabel.contains(candidate, ignoreCase = true)
-    }
-    return idMatches || labelMatches
-}
 
 internal class GoogleAppForceStopAutomation(
     private val handler: Handler,
@@ -137,7 +113,7 @@ internal class GoogleAppForceStopAutomation(
                 if (forceStopNode != null) {
                     if (!forceStopNode.isEnabled) {
                         enter(Phase.CLOSE_SETTINGS)
-                    } else if (clickNodeOrParent(forceStopNode)) {
+                    } else if (AccessibilityNodeTraversal.clickNodeOrParent(forceStopNode, maxDepth = MAX_ANCESTOR_SEARCH_DEPTH)) {
                         enter(Phase.WAIT_CONFIRM_DIALOG)
                     } else {
                         retryOrFail("강제 중지 버튼을 누르지 못했습니다.") { checkPhase() }
@@ -151,7 +127,7 @@ internal class GoogleAppForceStopAutomation(
                 val nodes = allNodes()
                 val confirmNode = findConfirmDialogNode(nodes)
                 if (confirmNode != null) {
-                    if (clickNodeOrParent(confirmNode)) {
+                    if (AccessibilityNodeTraversal.clickNodeOrParent(confirmNode, maxDepth = MAX_ANCESTOR_SEARCH_DEPTH)) {
                         enter(Phase.CLOSE_SETTINGS)
                     } else {
                         retryOrFail("강제 중지 확인 버튼을 누르지 못했습니다.") { checkPhase() }
@@ -208,7 +184,7 @@ internal class GoogleAppForceStopAutomation(
 
     private fun allNodes(): Sequence<AccessibilityNodeInfo> {
         val roots = allRootsProvider().ifEmpty { listOfNotNull(rootProvider()) }
-        return roots.asSequence().flatMap(::flattenNodes)
+        return roots.asSequence().flatMap { root -> AccessibilityNodeTraversal.lazyTraverse(root) }
     }
 
     private fun findForceStopNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
@@ -253,18 +229,6 @@ internal class GoogleAppForceStopAutomation(
         return idOnlyMatch ?: labelMatch
     }
 
-    private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
-        var current: AccessibilityNodeInfo? = node
-        repeat(MAX_ANCESTOR_SEARCH_DEPTH) {
-            if (current == null) return@repeat
-            if (current?.isClickable == true) {
-                return current?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-            }
-            current = current?.parent
-        }
-        return false
-    }
-
     private fun hasLabel(node: AccessibilityNodeInfo, candidates: List<String>): Boolean {
         val value = nodeValue(node) ?: return false
         return candidates.any { candidate ->
@@ -284,18 +248,6 @@ internal class GoogleAppForceStopAutomation(
         return className.endsWith("Button") || node.isClickable
     }
 
-    private fun flattenNodes(root: AccessibilityNodeInfo): Sequence<AccessibilityNodeInfo> = sequence {
-        val stack = ArrayDeque<AccessibilityNodeInfo>()
-        stack.addLast(root)
-        while (stack.isNotEmpty()) {
-            val current = stack.removeLast()
-            yield(current)
-            for (index in current.childCount - 1 downTo 0) {
-                current.getChild(index)?.let(stack::addLast)
-            }
-        }
-    }
-
     private fun finish(result: MemoryCleanupResult) {
         if (!active) return
         active = false
@@ -304,7 +256,7 @@ internal class GoogleAppForceStopAutomation(
 
     private companion object {
         const val MAX_SETTINGS_BACKS = 3
-        const val MAX_ANCESTOR_SEARCH_DEPTH = 8
+        const val MAX_ANCESTOR_SEARCH_DEPTH = 5
         const val NO_DIALOG_FALLBACK_WAIT_MS = 1500L
     }
 }

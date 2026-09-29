@@ -97,18 +97,6 @@ object WildcardTokenAutocomplete {
     }
 
     /**
-     * 커서 기준 현재 단어에 대해 접두 매칭 토큰 문자열을 최대 [maxCount]개 반환.
-     */
-    fun suggestions(
-        text: String,
-        cursor: Int,
-        candidates: List<Candidate>,
-        maxCount: Int = MAX_SUGGESTIONS
-    ): List<String> {
-        return suggestCandidates(text, cursor, candidates, maxCount).map { it.token }
-    }
-
-    /**
      * 커서 위치의 단어를 [token]으로 교체.
      * 단어가 없으면 null.
      */

@@ -45,44 +45,44 @@ class WildcardTokenAutocompleteTest {
     }
 
     @Test
-    fun suggestions_prefixMatchKoreanAndEnglish() {
+    fun suggestCandidates_prefixMatchKoreanAndEnglish() {
         // 짧은 이름 우선 → 장면·장소(2) 후 장소명(3). 동길이면 이름 순(장면 < 장소).
         assertEquals(
             listOf("__장면__", "__장소__", "__장소명__"),
-            WildcardTokenAutocomplete.suggestions(
+            WildcardTokenAutocomplete.suggestCandidates(
                 text = "장",
                 cursor = 1,
                 candidates = candidates
-            )
+            ).map { it.token }
         )
         assertEquals(
             listOf("__top__"),
-            WildcardTokenAutocomplete.suggestions(
+            WildcardTokenAutocomplete.suggestCandidates(
                 text = "t",
                 cursor = 1,
                 candidates = candidates
-            )
+            ).map { it.token }
         )
     }
 
     @Test
-    fun suggestions_isCaseInsensitiveForEnglish() {
+    fun suggestCandidates_isCaseInsensitiveForEnglish() {
         assertEquals(
             listOf("__top__"),
-            WildcardTokenAutocomplete.suggestions(
+            WildcardTokenAutocomplete.suggestCandidates(
                 text = "T",
                 cursor = 1,
                 candidates = candidates
-            )
+            ).map { it.token }
         )
     }
 
     @Test
-    fun suggestions_limitsToMaxThree() {
+    fun suggestCandidates_limitsToMaxThree() {
         val many = (1..10).map { i ->
             Candidate(name = "a$i", token = "__a${i}__")
         }
-        val result = WildcardTokenAutocomplete.suggestions(
+        val result = WildcardTokenAutocomplete.suggestCandidates(
             text = "a",
             cursor = 1,
             candidates = many,
@@ -92,10 +92,10 @@ class WildcardTokenAutocompleteTest {
     }
 
     @Test
-    fun suggestions_hidesWhenWordIsCompleteToken() {
+    fun suggestCandidates_hidesWhenWordIsCompleteToken() {
         val text = "__장소__"
         assertTrue(
-            WildcardTokenAutocomplete.suggestions(
+            WildcardTokenAutocomplete.suggestCandidates(
                 text = text,
                 cursor = text.length,
                 candidates = candidates
@@ -104,23 +104,23 @@ class WildcardTokenAutocompleteTest {
     }
 
     @Test
-    fun suggestions_usesWordAtCursorOnly() {
+    fun suggestCandidates_usesWordAtCursorOnly() {
         // "배경은 장|" — 커서 앞 단어 "장"만 매칭
         val text = "배경은 장"
         assertEquals(
             listOf("__장면__", "__장소__", "__장소명__"),
-            WildcardTokenAutocomplete.suggestions(
+            WildcardTokenAutocomplete.suggestCandidates(
                 text = text,
                 cursor = text.length,
                 candidates = candidates
-            )
+            ).map { it.token }
         )
     }
 
     @Test
-    fun suggestions_emptyWhenCursorOnWhitespace() {
+    fun suggestCandidates_emptyWhenCursorOnWhitespace() {
         assertTrue(
-            WildcardTokenAutocomplete.suggestions(
+            WildcardTokenAutocomplete.suggestCandidates(
                 text = "한적한 ",
                 cursor = 4,
                 candidates = candidates

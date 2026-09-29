@@ -98,36 +98,4 @@ class CheckAutomationStartUseCaseTest {
             )
         )
     }
-
-    @Test
-    fun decide_requiresOverlayPermissionBeforeStarting() {
-        val useCase = CheckAutomationStartUseCase(
-            OverlayPermissionGateway { false }
-        )
-
-        assertEquals(
-            AutomationStartDecision.PermissionRequired,
-            useCase.decide(canRun = true, isStartInProgress = false)
-        )
-    }
-
-    @Test
-    fun decide_startsOnlyWhenRequirementsAreReadyAndNoStartIsInProgress() {
-        val useCase = CheckAutomationStartUseCase(
-            OverlayPermissionGateway { true }
-        )
-
-        assertEquals(
-            AutomationStartDecision.Started,
-            useCase.decide(canRun = true, isStartInProgress = false)
-        )
-        assertEquals(
-            AutomationStartDecision.Rejected,
-            useCase.decide(canRun = false, isStartInProgress = false)
-        )
-        assertEquals(
-            AutomationStartDecision.Rejected,
-            useCase.decide(canRun = true, isStartInProgress = true)
-        )
-    }
 }

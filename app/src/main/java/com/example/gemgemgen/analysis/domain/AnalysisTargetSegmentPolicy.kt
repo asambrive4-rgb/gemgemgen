@@ -29,8 +29,7 @@ object AnalysisTargetSegmentPolicy {
             endIndex = detected.endIndex,
             source = AnalysisTargetSource.AUTO,
             category = category,
-            confidence = detected.confidence,
-            reason = detected.reason
+            confidence = detected.confidence
         )
     }
 
@@ -61,20 +60,5 @@ object AnalysisTargetSegmentPolicy {
         val start = segment.startIndex.coerceIn(0, source.length)
         val end = segment.endIndex.coerceIn(start, source.length)
         return source.replaceRange(start, end, replacement)
-    }
-
-    /**
-     * Builds a segment describing [replacement] at the same start index as [previous].
-     */
-    fun segmentAfterReplacement(
-        previous: AnalysisTargetSegment,
-        replacement: String
-    ): AnalysisTargetSegment {
-        val start = previous.startIndex.coerceAtLeast(0)
-        return previous.copy(
-            text = replacement,
-            startIndex = start,
-            endIndex = start + replacement.length
-        )
     }
 }

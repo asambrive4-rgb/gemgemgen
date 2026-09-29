@@ -86,7 +86,7 @@ internal fun AutomationScreen(
                         repeatCountText = uiState.repeatCountText,
                         onRepeatCountChange = actions::onRepeatCountChange,
                         onRunMvp = actions::onRunAutomation,
-                        onCancelAutomation = actions::onCancelAutomation,
+                        onCancelAutomation = actions::cancelAutomation,
                         canRun = uiState.canRun,
                         isRunning = uiState.isRunning,
                         automationState = automationBarUiState.automationState,
@@ -135,7 +135,7 @@ internal fun AutomationScreen(
                             PromptSuggestionBar(
                                 suggestions = uiState.activeSuggestionCandidates,
                                 onSuggestionClick = { candidate ->
-                                    actions.onApplySuggestion(candidate)
+                                    actions.applySuggestion(candidate)
                                 }
                             )
                         }
@@ -154,7 +154,7 @@ internal fun AutomationScreen(
                 AutomationModePairDialog(
                     targetDeviceName = uiState.remoteAutomationStatus.discoveredDeviceName.ifBlank { "S25 FE" },
                     onConfirm = { code ->
-                        actions.onPairRemoteDevice(code)
+                        actions.pairRemoteDevice(code)
                         showPairDialog = false
                     },
                     onDismiss = {
@@ -168,16 +168,16 @@ internal fun AutomationScreen(
                     showDialog = true,
                     config = uiState.promptInstructionConfig,
                     initialTab = uiState.instructionConfigDialogInitialTab,
-                    onSave = actions::onSaveInstructionConfig,
-                    onDismiss = actions::onCloseInstructionConfigDialog
+                    onSave = actions::saveInstructionConfig,
+                    onDismiss = actions::closeInstructionConfigDialog
                 )
             }
             if (uiState.showVariationPromptConfigDialog) {
                 VariationPromptDialog(
                     showDialog = true,
                     config = uiState.variationPromptConfig,
-                    onSave = actions::onSaveVariationPromptConfig,
-                    onDismiss = actions::onCloseVariationPromptConfigDialog
+                    onSave = actions::saveVariationPromptConfig,
+                    onDismiss = actions::closeVariationPromptConfigDialog
                 )
             }
 
@@ -194,10 +194,10 @@ internal fun AutomationScreen(
                     snippets = uiState.promptSnippets,
                     currentPromptText = selectedText ?: promptTemplateState.text.toString(),
                     isSelectionPrompt = selectedText != null,
-                    onAddSnippet = actions::onAddPromptSnippet,
-                    onUpdateSnippet = actions::onUpdatePromptSnippet,
-                    onDeleteSnippet = actions::onDeletePromptSnippet,
-                    onDismiss = actions::onDismissPromptSnippetDialog
+                    onAddSnippet = actions::addPromptSnippet,
+                    onUpdateSnippet = actions::updatePromptSnippet,
+                    onDeleteSnippet = actions::deletePromptSnippet,
+                    onDismiss = actions::dismissPromptSnippetDialog
                 )
             }
         }

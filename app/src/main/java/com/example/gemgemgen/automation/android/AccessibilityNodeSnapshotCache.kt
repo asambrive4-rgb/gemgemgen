@@ -20,16 +20,6 @@ internal class AccessibilityNodeSnapshotCache(
     private var cachedWindowId: Int = -1
     private val cachedNamedNodes = mutableMapOf<String, CacheEntry>()
 
-    var cacheHitCount = 0L
-        private set
-    var cacheMissCount = 0L
-        private set
-
-    fun resetStats() {
-        cacheHitCount = 0L
-        cacheMissCount = 0L
-    }
-
     fun getOrFind(
         key: String,
         root: AccessibilityNodeInfo?,
@@ -52,7 +42,6 @@ internal class AccessibilityNodeSnapshotCache(
                 val isWindowMatching = runCatching { entry.node.windowId == windowId }.getOrDefault(false)
 
                 if (isTtlValid && isWindowMatching) {
-                    cacheHitCount++
                     return entry.node
                 } else {
                     cachedNamedNodes.remove(key)
@@ -60,7 +49,6 @@ internal class AccessibilityNodeSnapshotCache(
             }
         }
 
-        cacheMissCount++
         val result = find()
         if (result != null) {
             cachedNamedNodes[key] = CacheEntry(result, nowMillis)

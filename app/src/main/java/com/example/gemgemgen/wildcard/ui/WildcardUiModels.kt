@@ -1,10 +1,7 @@
 // 역할: 와일드카드 관리 화면 표시용 UI 상태와 다이얼로그 모델을 정의합니다.
 package com.example.gemgemgen.wildcard.ui
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
-import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
@@ -65,26 +62,6 @@ data class WildcardUiState(
         WildcardDynamicPromptComposer.selectableLines(editingText)
     }
 
-    val fileItems: List<WildcardFileUiItem> by lazy(LazyThreadSafetyMode.NONE) {
-        files.map { file ->
-            val isSelected = selectedFile?.id == file.id
-            WildcardFileUiItem(
-                file = file,
-                displayName = if (isSelected && hasUnsavedChanges) {
-                    "${file.fileName} *"
-                } else {
-                    file.fileName
-                },
-                isSelected = isSelected
-            )
-        }
-    }
-
-    val selectedFileDisplayName: String
-        get() = selectedFile?.let { file ->
-            if (hasUnsavedChanges) "${file.fileName} *" else file.fileName
-        } ?: "No file selected"
-
     private val classifyBusy: Boolean
         get() = classify.isBusy
 
@@ -136,7 +113,7 @@ data class WildcardUiState(
         get() = WildcardClassifyPolicy.canRequestClassify(
             canModifyFiles = canModifyFiles,
             hasSelectedFile = selectedFile != null,
-            hasSelectableLines = selectableLines.isNotEmpty(),
+            hasSelectableLines = editingText.isNotBlank(),
             isFileOperationInProgress = isFileOperationInProgress,
             isLineSelectionMode = isLineSelectionMode,
             isClassifyBusy = classifyBusy

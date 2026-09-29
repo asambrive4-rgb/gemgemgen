@@ -2,9 +2,7 @@
 package com.example.gemgemgen.analysis.usecase
 
 data class GrokQuotaInfo(
-    val remainingPercent: Int,
-    val usedVal: Long,
-    val limitVal: Long
+    val remainingPercent: Int
 )
 
 interface GrokBillingGateway {

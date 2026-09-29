@@ -14,8 +14,12 @@ class SharedPreferencesPromptSnippetRepository(
     private val preferences: SharedPreferences =
         context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
+    @Volatile private var cachedSnippets: List<PromptSnippet>? = null
+
     override fun load(): List<PromptSnippet> {
-        val jsonString = preferences.getString(KEY_SNIPPET_ITEMS, null) ?: return emptyList()
+        cachedSnippets?.let { return it }
+        val jsonString = preferences.getString(KEY_SNIPPET_ITEMS, null)
+            ?: return emptyList<PromptSnippet>().also { cachedSnippets = it }
         return runCatching {
             val jsonArray = JSONArray(jsonString)
             val items = mutableListOf<PromptSnippet>()
@@ -30,11 +34,12 @@ class SharedPreferencesPromptSnippetRepository(
                     )
                 )
             }
-            items
-        }.getOrDefault(emptyList())
+            items.toList()
+        }.getOrDefault(emptyList()).also { cachedSnippets = it }
     }
 
     override fun save(snippets: List<PromptSnippet>) {
+        cachedSnippets = snippets.toList()
         val jsonArray = JSONArray()
         snippets.forEach { item ->
             val obj = JSONObject().apply {

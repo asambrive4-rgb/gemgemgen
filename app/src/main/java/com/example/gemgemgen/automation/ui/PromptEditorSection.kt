@@ -102,15 +102,16 @@ internal fun PromptEditorSection(
     modifier: Modifier = Modifier
 ) {
     val effectiveCandidates = uiState.activeSuggestionCandidates
-    val lastNonEmptyCandidates = remember { mutableListOf<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>() }
-    if (effectiveCandidates.isNotEmpty()) {
-        lastNonEmptyCandidates.clear()
-        lastNonEmptyCandidates.addAll(effectiveCandidates)
+    val lastNonEmptyCandidates = remember {
+        mutableStateOf(emptyList<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>())
+    }
+    if (effectiveCandidates.isNotEmpty() && lastNonEmptyCandidates.value != effectiveCandidates) {
+        lastNonEmptyCandidates.value = effectiveCandidates
     }
     val displayedCandidates = if (effectiveCandidates.isNotEmpty()) {
         effectiveCandidates
     } else {
-        lastNonEmptyCandidates
+        lastNonEmptyCandidates.value
     }
     val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
 
@@ -155,7 +156,7 @@ internal fun PromptEditorSection(
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 IconButton(
-                    onClick = actions::onShowPromptSnippetDialog,
+                    onClick = actions::showPromptSnippetDialog,
                     modifier = Modifier
                         .size(36.dp)
                         .semantics { contentDescription = "상용구(텍스트 대치) 관리" }
@@ -169,7 +170,7 @@ internal fun PromptEditorSection(
                 }
 
                 IconButton(
-                    onClick = { actions.onToggleSearch() },
+                    onClick = { actions.toggleSearch() },
                     modifier = Modifier
                         .size(36.dp)
                         .semantics { contentDescription = "문구 찾기" }
@@ -191,12 +192,12 @@ internal fun PromptEditorSection(
         ) {
             PromptSearchBar(
                 query = uiState.searchQuery,
-                onQueryChange = actions::onSetSearchQuery,
+                onQueryChange = actions::setSearchQuery,
                 matchCount = uiState.searchMatches.size,
                 currentMatchIndex = uiState.activeSearchMatchIndex,
-                onNavigateNext = actions::onNavigateSearchNext,
-                onNavigatePrevious = actions::onNavigateSearchPrevious,
-                onClose = actions::onCloseSearch
+                onNavigateNext = actions::navigateSearchNext,
+                onNavigatePrevious = actions::navigateSearchPrevious,
+                onClose = actions::closeSearch
             )
         }
 
@@ -220,7 +221,7 @@ internal fun PromptEditorSection(
             PromptSuggestionBar(
                 suggestions = displayedCandidates,
                 onSuggestionClick = { candidate ->
-                    actions.onApplySuggestion(candidate)
+                    actions.applySuggestion(candidate)
                 }
             )
         }
@@ -236,15 +237,15 @@ internal fun PromptEditorSection(
             searchHighlightRanges = uiState.searchMatches,
             activeSearchMatchIndex = uiState.activeSearchMatchIndex,
             supportingText = uiState.paragraphSelectionMessage,
-            onParagraphOffsetSelected = actions::onSelectPromptParagraphAt,
-            onDeleteSelectedParagraph = actions::onDeleteSelectedPromptParagraph,
-            onReplaceSelectedParagraph = actions::onReplaceSelectedPromptParagraph
+            onParagraphOffsetSelected = actions::selectPromptParagraphAt,
+            onDeleteSelectedParagraph = actions::deleteSelectedPromptParagraph,
+            onReplaceSelectedParagraph = actions::replaceSelectedPromptParagraph
         )
 
         if (showPromptActions) {
             PromptActionRow(
                 isParagraphSelectionMode = uiState.isParagraphSelectionMode,
-                onToggleParagraphSelectionMode = actions::onToggleParagraphSelectionMode,
+                onToggleParagraphSelectionMode = actions::toggleParagraphSelectionMode,
                 canCloseGemini = uiState.canCloseGemini,
                 canCloseSelfApp = uiState.canCloseSelfApp,
                 canCleanMemory = uiState.canCleanMemory,
@@ -257,16 +258,16 @@ internal fun PromptEditorSection(
                 activeHistoryDotIndex = uiState.activeHistoryDotIndex,
                 canCopyPrompt = uiState.hasPromptTemplate,
                 isTargetSelectionEnabled = true,
-                onCloseGeminiApp = actions::onCloseGeminiApp,
-                onCleanDeviceMemory = actions::onCleanDeviceMemory,
-                onTerminateSelfApp = actions::onTerminateSelfApp,
-                onNavigateHistoryBack = actions::onNavigatePromptHistoryBack,
-                onNavigateHistoryForward = actions::onNavigatePromptHistoryForward,
-                onInsertTopInstruction = actions::onInsertTopInstruction,
-                onInsertBottomInstruction = actions::onInsertBottomInstruction,
-                onOpenInstructionConfigDialog = actions::onOpenInstructionConfigDialog,
-                onImportFromClipboard = actions::onImportPromptFromClipboard,
-                onCopyPromptToClipboard = actions::onCopyPromptToClipboard,
+                onCloseGeminiApp = actions::closeGeminiApp,
+                onCleanDeviceMemory = actions::cleanDeviceMemory,
+                onTerminateSelfApp = actions::terminateSelfApp,
+                onNavigateHistoryBack = actions::navigatePromptHistoryBack,
+                onNavigateHistoryForward = actions::navigatePromptHistoryForward,
+                onInsertTopInstruction = actions::insertTopInstruction,
+                onInsertBottomInstruction = actions::insertBottomInstruction,
+                onOpenInstructionConfigDialog = actions::openInstructionConfigDialog,
+                onImportFromClipboard = actions::importPromptFromClipboard,
+                onCopyPromptToClipboard = actions::copyPromptToClipboard,
                 showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                 isVariationButtonEnabled = uiState.canInteractWithVariation,
                 variationAutomationState = uiState.variationAutomationState,
@@ -280,7 +281,7 @@ internal fun PromptEditorSection(
                 onVariationPointerDown = {
                     variationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
                 },
-                onOpenVariationPromptConfigDialog = actions::onOpenVariationPromptConfigDialog
+                onOpenVariationPromptConfigDialog = actions::openVariationPromptConfigDialog
             )
         }
     }
@@ -669,7 +670,7 @@ internal fun PromptSuggestionBar(
             Surface(
                 onClick = { onSuggestionClick(candidate) },
                 shape = shape,
-                color = if (isSnippet) AppTheme.colors.snippetBackground else AppTheme.colors.card,
+                color = AppTheme.colors.card,
                 border = BorderStroke(1.5.dp, borderColor),
                 modifier = Modifier
                     .shadow(

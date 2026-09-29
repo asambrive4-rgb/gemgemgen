@@ -1,14 +1,11 @@
 // 역할: 자동화 화면과 플로팅 바에 표시되는 상태 메시지 및 버튼 문구를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
+import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
-import com.example.gemgemgen.automation.domain.GeminiAppControlPolicy
 import com.example.gemgemgen.automation.domain.PromptParagraphMessageKey
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
-import com.example.gemgemgen.automation.domain.SelfAppControlPolicy
-import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
-import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.remote.domain.AutomationMode
 
 object AutomationUiText {
@@ -49,10 +46,6 @@ object AutomationUiText {
 
     fun selfAppTerminateCanceledText(): String = "앱 종료를 취소했습니다."
 
-    fun unknownCloseErrorMessage(error: Throwable): String {
-        return error.message ?: "알 수 없는 오류가 발생했습니다."
-    }
-
     fun memoryCleanupStartingText(mode: AutomationMode = AutomationMode.NORMAL): String {
         return if (mode == AutomationMode.SENDER) "수신 기기 메모리 정리 중..." else "메모리 정리 중..."
     }
@@ -65,13 +58,8 @@ object AutomationUiText {
 
     fun memoryCleanupScheduleCanceledText(): String = "메모리 정리 예약이 취소되었습니다."
 
-    fun unknownMemoryCleanupErrorMessage(error: Throwable): String {
-        return error.message ?: "메모리 정리 중 알 수 없는 오류가 발생했습니다."
-    }
-
     fun memoryCleanupUnavailableMessage(state: AutomationUiState): String {
         return when {
-            state.isRunning -> "자동화 실행 중에는 메모리를 정리할 수 없습니다."
             state.isMaintenanceBusy -> "유지보수 작업이 이미 진행 중입니다."
             state.automationMode == AutomationMode.SENDER && !state.remoteAutomationStatus.canSend ->
                 "연결된 수신 기기를 찾지 못했습니다."
@@ -80,16 +68,6 @@ object AutomationUiText {
             !state.environmentStatus.isAccessibilityServiceEnabled ->
                 "접근성 서비스를 먼저 켜주세요."
             else -> "메모리 정리를 지금 실행할 수 없습니다."
-        }
-    }
-
-    fun memoryCleanupResultMessage(result: MemoryCleanupResult): String {
-        return when (result) {
-            MemoryCleanupResult.Success -> "메모리 정리를 완료했습니다."
-            MemoryCleanupResult.AccessibilityUnavailable ->
-                "접근성 서비스가 켜져 있지 않습니다."
-            MemoryCleanupResult.InProgress -> "메모리 정리가 이미 진행 중입니다."
-            is MemoryCleanupResult.Failure -> "메모리 정리 실패: ${result.message}"
         }
     }
 
@@ -127,22 +105,8 @@ object AutomationUiText {
         }
     }
 
-    fun geminiTerminateUnavailableMessage(reason: GeminiAppControlBlockReason?): String {
-        return when (reason) {
-            GeminiAppControlBlockReason.AutomationRunning ->
-                "자동화 중에는 Gemini를 종료할 수 없습니다."
-            GeminiAppControlBlockReason.AlreadyInProgress ->
-                "Gemini 종료가 이미 진행 중입니다."
-            GeminiAppControlBlockReason.GeminiNotInstalled ->
-                "Gemini 앱이 설치되어 있지 않습니다."
-            GeminiAppControlBlockReason.AccessibilityDisabled ->
-                "접근성 서비스를 먼저 켜주세요."
-            null -> "Gemini 종료를 지금 실행할 수 없습니다."
-        }
-    }
-
     private fun blockReasonFor(state: AutomationUiState): GeminiAppControlBlockReason? {
-        return GeminiAppControlPolicy.blockReason(
+        return AutomationExecutionPolicy.geminiBlockReason(
             isGeminiInstalled = state.environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = state.isRunning,
@@ -151,70 +115,11 @@ object AutomationUiText {
     }
 
     private fun selfBlockReasonFor(state: AutomationUiState): SelfAppControlBlockReason? {
-        return SelfAppControlPolicy.blockReason(
+        return AutomationExecutionPolicy.selfAppBlockReason(
             isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = state.isRunning,
             isClosingInProgress = state.isMaintenanceBusy
         )
     }
-
-    fun geminiRestartResultMessage(result: CloseGeminiAppResult): String {
-        return when (result) {
-            is CloseGeminiAppResult.Success -> {
-                if (result.closedCount <= 1) {
-                    "Gemini 앱을 재시작했습니다."
-                } else {
-                    "Gemini 앱 ${result.closedCount}개를 종료하고 재시작했습니다."
-                }
-            }
-            CloseGeminiAppResult.AccessibilityUnavailable ->
-                "접근성 서비스가 켜져 있지 않습니다."
-            CloseGeminiAppResult.RecentsUnavailable ->
-                "최근 앱 화면을 열지 못했습니다."
-            CloseGeminiAppResult.NotFound ->
-                "최근 앱에서 Gemini를 찾지 못했습니다."
-            is CloseGeminiAppResult.Failure ->
-                "Gemini 재시작 실패: ${result.message}"
-        }
-    }
-
-    fun geminiTerminateResultMessage(result: CloseGeminiAppResult): String {
-        return when (result) {
-            is CloseGeminiAppResult.Success -> {
-                if (result.closedCount <= 1) {
-                    "Gemini 앱을 종료했습니다."
-                } else {
-                    "Gemini 앱 ${result.closedCount}개를 종료했습니다."
-                }
-            }
-            CloseGeminiAppResult.AccessibilityUnavailable ->
-                "접근성 서비스가 켜져 있지 않습니다."
-            CloseGeminiAppResult.RecentsUnavailable ->
-                "최근 앱 화면을 열지 못했습니다."
-            CloseGeminiAppResult.NotFound ->
-                "최근 앱에서 Gemini를 찾지 못했습니다."
-            is CloseGeminiAppResult.Failure ->
-                "Gemini 종료 실패: ${result.message}"
-        }
-    }
-
-    fun selfAppTerminateResultMessage(result: CloseGeminiAppResult): String {
-        return when (result) {
-            is CloseGeminiAppResult.Success -> {
-                if (result.closedCount <= 1) {
-                    "앱을 종료했습니다."
-                } else {
-                    "앱 ${result.closedCount}개를 종료했습니다."
-                }
-            }
-            CloseGeminiAppResult.AccessibilityUnavailable ->
-                "접근성 서비스가 켜져 있지 않습니다."
-            CloseGeminiAppResult.RecentsUnavailable ->
-                "최근 앱 화면을 열지 못했습니다."
-            CloseGeminiAppResult.NotFound ->
-                "최근 앱에서 GemGemGen을 찾지 못했습니다."
-            is CloseGeminiAppResult.Failure ->
-                "앱 종료 실패: ${result.message}"
-        }
-    }
 }
+

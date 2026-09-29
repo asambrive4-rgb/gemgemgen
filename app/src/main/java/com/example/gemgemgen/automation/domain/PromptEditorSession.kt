@@ -15,7 +15,6 @@ enum class PromptParagraphMessageKey {
 
 data class PromptTextMutation(
     val session: PromptEditorSession,
-    val previousTextForUndo: String,
     val selectionStart: Int,
     val selectionEnd: Int
 )
@@ -30,7 +29,6 @@ sealed class PromptTypingChange {
     data object IgnoredEcho : PromptTypingChange()
     data object Unchanged : PromptTypingChange()
     data class UserEdit(
-        val previousText: String,
         val newText: String
     ) : PromptTypingChange()
 }
@@ -103,7 +101,6 @@ data class PromptEditorSession(
                 PromptParagraphActionResult.Mutated(
                     PromptTextMutation(
                         session = clearedSelection(newText),
-                        previousTextForUndo = text,
                         selectionStart = range.start + replacement.length,
                         selectionEnd = range.start + replacement.length
                     )
@@ -122,7 +119,6 @@ data class PromptEditorSession(
         return PromptParagraphActionResult.Mutated(
             PromptTextMutation(
                 session = clearedSelection(newText),
-                previousTextForUndo = text,
                 selectionStart = range.start,
                 selectionEnd = range.start
             )
@@ -131,14 +127,6 @@ data class PromptEditorSession(
 
     fun afterWholeReplace(newText: String): PromptEditorSession {
         return clearedSelection(newText)
-    }
-
-    fun afterUndo(restoredText: String): PromptEditorSession {
-        return clearedSelection(restoredText)
-    }
-
-    fun afterPaste(newText: String): PromptEditorSession {
-        return copy(text = newText)
     }
 
     private fun clearedSelection(newText: String): PromptEditorSession {
@@ -167,7 +155,6 @@ data class PromptEditorSession(
                 return PromptTypingChange.Unchanged
             }
             return PromptTypingChange.UserEdit(
-                previousText = previousText,
                 newText = newText
             )
         }

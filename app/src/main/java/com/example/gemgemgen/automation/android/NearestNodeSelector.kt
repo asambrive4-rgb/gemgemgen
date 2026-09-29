@@ -1,4 +1,4 @@
-// 역할: Iterable 및 Sequence 스트림 기반으로 GC 힙 객체 할당 없이 최단 거리 접근성 노드를 선택합니다.
+// 역할: Sequence 스트림 기반으로 GC 힙 객체 할당 없이 최단 거리 접근성 노드를 선택합니다.
 package com.example.gemgemgen.automation.android
 
 data class NodeBounds(
@@ -17,16 +17,6 @@ data class NodeBounds(
 object NearestNodeSelector {
     fun <T> nearestTo(
         anchor: NodeBounds,
-        candidates: Iterable<T>,
-        boundsOf: (T) -> NodeBounds
-    ): T? {
-        return candidates.minByOrNull { candidate ->
-            squaredDistance(anchor, boundsOf(candidate))
-        }
-    }
-
-    fun <T> nearestTo(
-        anchor: NodeBounds,
         candidates: Sequence<T>,
         boundsOf: (T) -> NodeBounds
     ): T? {
@@ -41,4 +31,3 @@ object NearestNodeSelector {
         return dx * dx + dy * dy
     }
 }
-

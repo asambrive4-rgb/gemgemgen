@@ -2,7 +2,6 @@
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.InputTransformation
@@ -61,20 +60,17 @@ fun AppMultilineTextField(
     placeholder: String = "",
     minLines: Int,
     maxLines: Int = 18,
-    initialScrollToBottom: Boolean = true,
-    scrollState: ScrollState = rememberScrollState(),
     paragraphSelectionEnabled: Boolean = false,
     highlightRange: TextHighlightRange? = null,
     selectedParagraphColor: Color = Color.Transparent,
     searchHighlightRanges: List<TextHighlightRange> = emptyList(),
     activeSearchMatchIndex: Int = -1,
-    searchHighlightColor: Color = Color(0x66FFEB3B),
-    activeSearchHighlightColor: Color = Color(0xFFFF9800),
     supportingText: String = "",
     onParagraphOffsetSelected: (Int) -> Unit = {},
     onDeleteSelectedParagraph: () -> Unit = {},
     onReplaceSelectedParagraph: (String) -> Unit = {}
 ) {
+    val scrollState = rememberScrollState()
     var deleteRequestId by remember { mutableIntStateOf(0) }
     var replaceRequestId by remember { mutableIntStateOf(0) }
     var replacementText by remember { mutableStateOf("") }
@@ -114,20 +110,18 @@ fun AppMultilineTextField(
         }
     }
 
-    if (initialScrollToBottom) {
-        var initialScrollDone by remember(state) { mutableStateOf(false) }
+    var initialScrollDone by remember(state) { mutableStateOf(false) }
 
-        LaunchedEffect(state, scrollState) {
-            if (initialScrollDone) return@LaunchedEffect
-            snapshotFlow {
-                val hasText = state.text.isNotEmpty()
-                val max = scrollState.maxValue
-                hasText to max
-            }.collect { (hasText, max) ->
-                if (hasText && max > 0 && !initialScrollDone) {
-                    scrollState.scrollTo(max)
-                    initialScrollDone = true
-                }
+    LaunchedEffect(state, scrollState) {
+        if (initialScrollDone) return@LaunchedEffect
+        snapshotFlow {
+            val hasText = state.text.isNotEmpty()
+            val max = scrollState.maxValue
+            hasText to max
+        }.collect { (hasText, max) ->
+            if (hasText && max > 0 && !initialScrollDone) {
+                scrollState.scrollTo(max)
+                initialScrollDone = true
             }
         }
     }
@@ -191,9 +185,7 @@ fun AppMultilineTextField(
         highlightRange,
         selectedParagraphColor,
         searchHighlightRanges,
-        activeSearchMatchIndex,
-        searchHighlightColor,
-        activeSearchHighlightColor
+        activeSearchMatchIndex
     ) {
         if (highlightRange == null && searchHighlightRanges.isEmpty()) {
             null
@@ -211,9 +203,9 @@ fun AppMultilineTextField(
                 searchHighlightRanges.forEachIndexed { index, range ->
                     if (range.endExclusive <= length) {
                         val color = if (index == activeSearchMatchIndex) {
-                            activeSearchHighlightColor
+                            ACTIVE_SEARCH_HIGHLIGHT_COLOR
                         } else {
-                            searchHighlightColor
+                            SEARCH_HIGHLIGHT_COLOR
                         }
                         addStyle(
                             spanStyle = SpanStyle(background = color),
@@ -276,6 +268,8 @@ fun AppMultilineTextField(
 }
 
 private const val TEXT_CHANGE_DEBOUNCE_MILLIS = 75L
+private val SEARCH_HIGHLIGHT_COLOR = Color(0x66FFEB3B)
+private val ACTIVE_SEARCH_HIGHLIGHT_COLOR = Color(0xFFFF9800)
 
 @OptIn(ExperimentalFoundationApi::class)
 private fun insertedTextFromChanges(

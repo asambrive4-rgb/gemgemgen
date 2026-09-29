@@ -17,20 +17,12 @@ internal class AndroidWildcardDocumentReader(
     private val context: Context
 ) {
     fun listDocuments(): List<WildcardDocument> {
-        val folderUri = WildcardFolderStore.getFolderUri(context)
+        val folderUri = AndroidWildcardFolderRepository.getFolderUri(context)
             ?: throw WildcardFileException("wildcard 폴더를 먼저 선택해주세요.")
         return listDocuments(folderUri)
     }
 
     fun listDocuments(folderUri: Uri): List<WildcardDocument> {
-        return listDocuments(folderUri, throwOnReadFailure = true)
-    }
-
-    fun listDocumentsOrEmpty(folderUri: Uri): List<WildcardDocument> {
-        return listDocuments(folderUri, throwOnReadFailure = false)
-    }
-
-    private fun listDocuments(folderUri: Uri, throwOnReadFailure: Boolean): List<WildcardDocument> {
         val resolver = context.contentResolver
         val childUri = DocumentsContract.buildChildDocumentsUriUsingTree(
             folderUri,
@@ -44,12 +36,7 @@ internal class AndroidWildcardDocumentReader(
         )
 
         val cursor = resolver.query(childUri, projection, null, null, null)
-        if (cursor == null) {
-            if (throwOnReadFailure) {
-                throw WildcardFileException("wildcard 폴더를 읽지 못했습니다. 폴더를 다시 선택해주세요.")
-            }
-            return emptyList()
-        }
+            ?: throw WildcardFileException("wildcard 폴더를 읽지 못했습니다. 폴더를 다시 선택해주세요.")
 
         cursor.use {
             val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
@@ -75,17 +62,8 @@ internal class AndroidWildcardDocumentReader(
     }
 
     fun readText(document: WildcardDocument): String {
-        return readText(document.documentUri) ?: throw WildcardFileException("${document.fileName} 파일을 열지 못했습니다.")
-    }
-
-    fun readTextOrEmpty(document: WildcardDocument): String {
-        return readText(document.documentUri).orEmpty()
-    }
-
-    private fun readText(documentUri: Uri): String? {
-        return context.contentResolver.openInputStream(documentUri)?.use { input ->
+        return context.contentResolver.openInputStream(document.documentUri)?.use { input ->
             input.bufferedReader(Charsets.UTF_8).use { it.readText() }
-        }
+        } ?: throw WildcardFileException("${document.fileName} 파일을 열지 못했습니다.")
     }
 }
-

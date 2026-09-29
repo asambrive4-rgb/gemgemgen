@@ -16,66 +16,66 @@ interface AutomationScreenActions {
     fun onFlowImageCountSelected(count: Int) {}
     fun onRepeatCountChange(value: String) {}
     fun onRunAutomation() {}
-    fun onCancelAutomation() {}
+    fun cancelAutomation() {}
     fun onAutomationModeSelected(mode: AutomationMode) {}
-    fun onPairRemoteDevice(pairingCode: String) {}
-    fun onDisconnectRemoteDevice() {}
+    fun pairRemoteDevice(pairingCode: String) {}
+    fun disconnectRemoteDevice() {}
 
     // 프롬프트 텍스트 편집 및 클립보드
     fun onPromptTemplateChange(value: String) {}
-    fun onImportPromptFromClipboard() {}
-    fun onCopyPromptToClipboard() {}
-    fun onApplySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {}
+    fun importPromptFromClipboard() {}
+    fun copyPromptToClipboard() {}
+    fun applySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {}
 
     // 히스토리 탐색
-    fun onNavigatePromptHistoryBack() {}
-    fun onNavigatePromptHistoryForward() {}
+    fun navigatePromptHistoryBack() {}
+    fun navigatePromptHistoryForward() {}
 
     // 문단 선택 모드
-    fun onToggleParagraphSelectionMode() {}
-    fun onSelectPromptParagraphAt(offset: Int) {}
-    fun onDeleteSelectedPromptParagraph() {}
-    fun onReplaceSelectedPromptParagraph(replacement: String) {}
-    fun onCancelParagraphSelection() {}
+    fun toggleParagraphSelectionMode() {}
+    fun selectPromptParagraphAt(offset: Int) {}
+    fun deleteSelectedPromptParagraph() {}
+    fun replaceSelectedPromptParagraph(replacement: String) {}
+    fun cancelParagraphSelection() {}
 
     // 검색 기능
-    fun onToggleSearch(active: Boolean? = null) {}
-    fun onSetSearchQuery(query: String) {}
-    fun onNavigateSearchNext() {}
-    fun onNavigateSearchPrevious() {}
-    fun onCloseSearch() {}
+    fun toggleSearch(active: Boolean? = null) {}
+    fun setSearchQuery(query: String) {}
+    fun navigateSearchNext() {}
+    fun navigateSearchPrevious() {}
+    fun closeSearch() {}
 
     // 인스트럭션 설정
-    fun onInsertTopInstruction() {}
-    fun onInsertBottomInstruction() {}
-    fun onOpenInstructionConfigDialog(initialTab: InstructionTab = InstructionTab.TOP) {}
-    fun onCloseInstructionConfigDialog() {}
-    fun onSaveInstructionConfig(config: PromptInstructionConfig) {}
+    fun insertTopInstruction() {}
+    fun insertBottomInstruction() {}
+    fun openInstructionConfigDialog(initialTab: InstructionTab = InstructionTab.TOP) {}
+    fun closeInstructionConfigDialog() {}
+    fun saveInstructionConfig(config: PromptInstructionConfig) {}
 
     // 변주 (Variation) 자동화
     fun onRunVariation(selectedText: String? = null) {}
-    fun onOpenVariationPromptConfigDialog() {}
-    fun onCloseVariationPromptConfigDialog() {}
-    fun onSaveVariationPromptConfig(config: VariationPromptConfig) {}
+    fun openVariationPromptConfigDialog() {}
+    fun closeVariationPromptConfigDialog() {}
+    fun saveVariationPromptConfig(config: VariationPromptConfig) {}
 
     // 상용구 (Prompt Snippet)
-    fun onShowPromptSnippetDialog() {}
-    fun onDismissPromptSnippetDialog() {}
-    fun onAddPromptSnippet(shortcut: String, content: String) {}
-    fun onUpdatePromptSnippet(id: String, shortcut: String, content: String) {}
-    fun onDeletePromptSnippet(id: String) {}
+    fun showPromptSnippetDialog() {}
+    fun dismissPromptSnippetDialog() {}
+    fun addPromptSnippet(shortcut: String, content: String) {}
+    fun updatePromptSnippet(id: String, shortcut: String, content: String) {}
+    fun deletePromptSnippet(id: String) {}
 
     // 유지보수 및 앱 제어
-    fun onCloseGeminiApp() {}
-    fun onTerminateSelfApp() {}
-    fun onCleanDeviceMemory() {}
+    fun closeGeminiApp() {}
+    fun terminateSelfApp() {}
+    fun cleanDeviceMemory() {}
 
     // 테마 및 환경 설정
-    fun onRefreshStatus() {}
-    fun onShowSettings() {}
-    fun onHideSettings() {}
+    fun refreshStatus() {}
+    fun showSettings() {}
+    fun hideSettings() {}
     fun onConfirmAccessibilityPrompt() {}
-    fun onDismissAccessibilityPromptToSettings() {}
+    fun dismissAccessibilityPromptToSettings() {}
     fun onSelectThemePalette(palette: AppThemePalette) {}
     fun onSelectThemeMode(mode: AppThemeMode) {}
     fun onSelectWildcardFolder() {}

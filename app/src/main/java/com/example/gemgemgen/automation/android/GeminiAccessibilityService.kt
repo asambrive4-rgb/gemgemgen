@@ -1,4 +1,4 @@
-// 역할: 메인 UI 스레드 블로킹 없는 최근 앱 제어, 제스처 주입 및 접근성 감시 패키지 등록(setServiceInfo) 최적화를 제공하는 인프라 서비스
+// 역할: 최근 앱 제어, 제스처 주입, 공통 노드 클릭 위임 및 접근성 감시 패키지 등록(setServiceInfo) 최적화를 제공하는 인프라 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -10,7 +10,6 @@ import android.content.Context
 import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -27,7 +26,6 @@ import com.example.gemgemgen.core.AppDefaults
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
@@ -46,7 +44,6 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var previousMemoryPackageRestriction: Array<String>? = null
     private var isAccessibilitySubscriptionConfigured: Boolean = false
     private var currentSubscribedPackageNames: Set<String>? = null
-    private var sessionObserverJob: Job? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
     private val geminiAutomation by lazy {
@@ -96,8 +93,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
-        sessionObserverJob?.cancel()
-        sessionObserverJob = null
         currentSubscribedPackageNames = null
         isAccessibilitySubscriptionConfigured = false
         serviceScope.cancel()
@@ -271,21 +266,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         return ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
     }
 
-    private fun registerSessionObserverIfNeeded() {
-        val useCase = ProcessAutomationHolder.current() ?: return
-        if (sessionObserverJob?.isActive == true) return
-        sessionObserverJob = serviceScope.launch {
-            var wasRunning = false
-            useCase.runState.collect { state ->
-                val isRunning = state is AutomationRunState.Running
-                if (wasRunning && !isRunning) {
-                    clearPackageRestriction()
-                }
-                wasRunning = isRunning
-            }
-        }
-    }
-
     private fun packageNamesFor(targetApp: AutomationTargetApp): Array<String> {
         return when (targetApp) {
             AutomationTargetApp.GEMINI -> arrayOf(
@@ -311,7 +291,6 @@ class GeminiAccessibilityService : AccessibilityService() {
             onStateChange: (AutomationRunState) -> Unit,
             onDone: () -> Unit
         ) {
-            service.registerSessionObserverIfNeeded()
             service.restrictPackagesTo(targetApp)
             delegate.sendPrompt(
                 prompt = prompt,
@@ -450,7 +429,7 @@ class GeminiAccessibilityService : AccessibilityService() {
             }
 
             val clicked = withContext(Dispatchers.Main.immediate) {
-                clickNodeOrParent(closeNode)
+                AccessibilityNodeTraversal.clickNodeOrParent(closeNode, MAX_CLICKABLE_PARENT_DEPTH)
             }
             if (!clicked) {
                 finishCloseAppAfterDismissingRecents(
@@ -526,22 +505,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
 
         return null
-    }
-
-    private fun clickNodeOrParent(
-        node: AccessibilityNodeInfo,
-        maxDepth: Int = MAX_CLICKABLE_PARENT_DEPTH
-    ): Boolean {
-        var current: AccessibilityNodeInfo? = node
-        repeat(maxDepth) {
-            if (current == null) return false
-            if (current?.isClickable == true) {
-                return current?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
-            }
-            current = current?.parent
-        }
-
-        return false
     }
 
     private fun finishCloseApp(result: CloseGeminiAppResult) {

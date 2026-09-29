@@ -1,4 +1,4 @@
-// 역할: AI 모델 시스템 지침 프롬프트의 텍스트 조립을 검증합니다.
+// 역할: AI 모델 시스템 지침 프롬프트의 기본 문구를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.SystemInstructionPrompt
@@ -17,19 +17,5 @@ class SystemInstructionPromptTest {
             lines.first()
         )
         assertTrue(SystemInstructionPrompt.text.contains("POST-DISTORTION ENVIRONMENTAL SEPARATION"))
-    }
-
-    @Test
-    fun prependTo_empty_returnsSiOnly() {
-        assertEquals(SystemInstructionPrompt.text, SystemInstructionPrompt.prependTo(""))
-    }
-
-    @Test
-    fun prependTo_existing_separatesWithOneBlankLine() {
-        val result = SystemInstructionPrompt.prependTo("hello")
-        assertEquals(
-            SystemInstructionPrompt.text + "\n\n" + "hello",
-            result
-        )
     }
 }

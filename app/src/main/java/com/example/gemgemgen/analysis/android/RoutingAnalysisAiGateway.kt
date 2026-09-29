@@ -2,7 +2,6 @@
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 
 /**
@@ -19,14 +18,6 @@ class RoutingAnalysisAiGateway(
         payload: AnalysisPromptPayload
     ): String {
         return delegate(modelId).analyze(apiKey, modelId, payload)
-    }
-
-    override suspend fun generateTxt(
-        apiKey: String,
-        modelId: String,
-        payload: AnalysisTxtPromptPayload
-    ): String {
-        return delegate(modelId).generateTxt(apiKey, modelId, payload)
     }
 
     private fun delegate(modelId: String): AnalysisAiGateway {

@@ -33,7 +33,6 @@ internal fun RepeatCountStepper(
     modifier: Modifier = Modifier
 ) {
     val currentVal = RepeatCountParser.parse(repeatCountText)
-    val buttonShape = RoundedCornerShape(8.dp)
 
     Row(
         modifier = modifier,
@@ -49,59 +48,11 @@ internal fun RepeatCountStepper(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clickable(enabled = currentVal > 1) {
-                            onRepeatCountChange((currentVal - 1).toString())
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .then(
-                                if (currentVal > 1) {
-                                    Modifier.shadow(
-                                        elevation = 2.dp,
-                                        shape = buttonShape,
-                                        ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
-                                        spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
-                                    )
-                                } else {
-                                    Modifier
-                                }
-                            )
-                            .clip(buttonShape)
-                            .background(
-                                color = if (currentVal > 1) {
-                                    AppTheme.colors.card
-                                } else {
-                                    AppTheme.colors.card.copy(alpha = 0.4f)
-                                }
-                            )
-                            .border(
-                                BorderStroke(
-                                    1.5.dp,
-                                    if (currentVal > 1) AppTheme.colors.cardBorder else AppTheme.colors.cardBorder.copy(alpha = 0.4f)
-                                ),
-                                buttonShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "—",
-                            color = if (currentVal > 1) {
-                                AppTheme.colors.primary
-                            } else {
-                                AppTheme.colors.textSecondary.copy(alpha = 0.4f)
-                            },
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+                StepperButton(
+                    symbol = "—",
+                    enabled = currentVal > 1,
+                    onClick = { onRepeatCountChange((currentVal - 1).toString()) }
+                )
 
                 Text(
                     text = repeatCountText,
@@ -114,60 +65,73 @@ internal fun RepeatCountStepper(
                     textAlign = TextAlign.Center
                 )
 
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clickable(enabled = currentVal < 999) {
-                            onRepeatCountChange((currentVal + 1).toString())
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .then(
-                                if (currentVal < 999) {
-                                    Modifier.shadow(
-                                         elevation = 2.dp,
-                                         shape = buttonShape,
-                                         ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
-                                         spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
-                                     )
-                                 } else {
-                                     Modifier
-                                 }
-                            )
-                            .clip(buttonShape)
-                            .background(
-                                color = if (currentVal < 999) {
-                                    AppTheme.colors.card
-                                } else {
-                                    AppTheme.colors.card.copy(alpha = 0.4f)
-                                }
-                            )
-                            .border(
-                                BorderStroke(
-                                    1.5.dp,
-                                    if (currentVal < 999) AppTheme.colors.cardBorder else AppTheme.colors.cardBorder.copy(alpha = 0.4f)
-                                ),
-                                buttonShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "＋",
-                            color = if (currentVal < 999) {
-                                AppTheme.colors.primary
-                            } else {
-                                AppTheme.colors.textSecondary.copy(alpha = 0.4f)
-                            },
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+                StepperButton(
+                    symbol = "＋",
+                    enabled = currentVal < 999,
+                    onClick = { onRepeatCountChange((currentVal + 1).toString()) }
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun StepperButton(
+    symbol: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val buttonShape = RoundedCornerShape(8.dp)
+
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .then(
+                    if (enabled) {
+                        Modifier.shadow(
+                            elevation = 2.dp,
+                            shape = buttonShape,
+                            ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
+                            spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
+                .clip(buttonShape)
+                .background(
+                    color = if (enabled) {
+                        AppTheme.colors.card
+                    } else {
+                        AppTheme.colors.card.copy(alpha = 0.4f)
+                    }
+                )
+                .border(
+                    BorderStroke(
+                        1.5.dp,
+                        if (enabled) AppTheme.colors.cardBorder else AppTheme.colors.cardBorder.copy(alpha = 0.4f)
+                    ),
+                    buttonShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = symbol,
+                color = if (enabled) {
+                    AppTheme.colors.primary
+                } else {
+                    AppTheme.colors.textSecondary.copy(alpha = 0.4f)
+                },
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

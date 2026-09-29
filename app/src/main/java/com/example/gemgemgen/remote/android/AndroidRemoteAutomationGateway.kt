@@ -151,9 +151,6 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
 
     override suspend fun disconnect(): RemoteActionResult = withContext(Dispatchers.IO) {
         val currentStatus = status.value
-        if (currentStatus.automationState is AutomationRunState.Running) {
-            return@withContext RemoteActionResult.Failure("원격 자동화를 중지한 뒤 연결을 끊어주세요.")
-        }
         when (currentStatus.mode) {
             AutomationMode.SENDER -> {
                 val target = endpoint

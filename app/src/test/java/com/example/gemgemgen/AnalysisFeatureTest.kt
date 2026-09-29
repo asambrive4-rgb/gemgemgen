@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름과 화면 액션 인터페이스(AnalysisScreenActions)를 검증합니다.
+// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름과 단일화된 화면 액션 인터페이스(AnalysisScreenActions)를 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -13,7 +13,6 @@ import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.analysis.ui.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
@@ -21,8 +20,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.AnalysisWildcardSaveResult
-import com.example.gemgemgen.analysis.usecase.AnalyzePromptForCategoryUseCase
-import com.example.gemgemgen.analysis.usecase.CopyAnalysisResultsUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
@@ -36,6 +33,7 @@ import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
+import com.example.gemgemgen.core.PromptWorkspace
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import kotlinx.coroutines.CoroutineScope
@@ -63,8 +61,22 @@ class AnalysisFeatureTest {
               {"exactText":"hide feet","replacement":"show feet"}
             ],"explanation":""}"""
         }
+        var automation = source
+        val promptWorkspace = PromptWorkspace().apply {
+            segmentReplacer = { expected: String, replacement: String, _: Int ->
+                val start = automation.indexOf(expected)
+                if (start < 0) null else {
+                    automation = automation.replaceRange(start, start + expected.length, replacement)
+                    start
+                }
+            }
+        }
         val gateway = FakeAnalysisAiGateway(analyzeResponse = analysis, generateResponse = edits)
-        val viewModel = analysisViewModel(gateway, FakeGeminiApiKeyRepository(activeKey = "test-credential"))
+        val viewModel = analysisViewModel(
+            aiGateway = gateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "test-credential"),
+            promptWorkspace = promptWorkspace
+        )
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(source)
         viewModel.onSourcePromptChange(source)
         viewModel.generate()
@@ -72,19 +84,11 @@ class AnalysisFeatureTest {
         assertEquals(listOf("full body|KEEP|show feet", "long shot|KEEP|show feet"),
             viewModel.uiState.value.generatedCandidates)
         assertEquals("waist-up|KEEP|hide feet", viewModel.uiState.value.targetSegment?.text)
-        var automation = source
-        val apply = { expected: String, replacement: String, _: Int ->
-            val start = automation.indexOf(expected)
-            if (start < 0) null else {
-                automation = automation.replaceRange(start, start + expected.length, replacement)
-                start
-            }
-        }
-        viewModel.applyCandidate(0, apply)
+        viewModel.applyCandidate(0)
         assertEquals("head|full body|KEEP|show feet|tail", automation)
-        viewModel.applyCandidate(1, apply)
+        viewModel.applyCandidate(1)
         assertEquals("head|long shot|KEEP|show feet|tail", automation)
-        viewModel.restoreOriginalPrompt(apply)
+        viewModel.restoreOriginalPrompt()
         assertEquals(source, automation)
         assertEquals(source, viewModel.sourcePromptTextFieldState.text.toString())
     }
@@ -108,8 +112,7 @@ class AnalysisFeatureTest {
     fun multilineWildcardCandidate_isRejectedBeforeCreatingFile() = runBlocking {
         val repository = FakeWildcardRepository()
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
-        val save = SaveAnalysisWildcardFileUseCase(repository,
-            CopyAnalysisResultsUseCase(FakeClipboard(), dispatchers), dispatchers)
+        val save = SaveAnalysisWildcardFileUseCase(repository, FakeClipboard(), dispatchers)
         val result = runCatching { save.save("test.txt", listOf("first\nsecond"), false) }
         assertTrue(result.exceptionOrNull() is IllegalArgumentException)
         assertTrue(repository.listFiles().isEmpty())
@@ -327,7 +330,7 @@ class AnalysisFeatureTest {
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         val useCase = SaveAnalysisWildcardFileUseCase(
             repository = repository,
-            copyResults = CopyAnalysisResultsUseCase(clipboard, dispatchers),
+            clipboardGateway = clipboard,
             dispatchers = dispatchers
         )
 
@@ -347,7 +350,7 @@ class AnalysisFeatureTest {
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         val useCase = SaveAnalysisWildcardFileUseCase(
             repository = repository,
-            copyResults = CopyAnalysisResultsUseCase(clipboard, dispatchers),
+            clipboardGateway = clipboard,
             dispatchers = dispatchers
         )
         val source = "red hair and blue dress"
@@ -355,7 +358,7 @@ class AnalysisFeatureTest {
             text = "red hair",
             startIndex = 0,
             endIndex = 8,
-            source = AnalysisTargetSource.MANUAL,
+            source = AnalysisTargetSource.AUTO,
             category = AnalysisCategory.WOMEN_HAIRSTYLE
         )
 
@@ -384,42 +387,46 @@ class AnalysisFeatureTest {
         val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         val resolve = ResolveAnalysisTargetUseCase(
-            AnalyzePromptForCategoryUseCase(
-                aiGateway = aiGateway,
-                credentialResolver = ResolveAnalysisCredentialUseCase(
-                    apiKeyRepository = keyRepository,
-                    grokAuth = ManageGrokAuthUseCase(
-                        gateway = FakeGrokAuthGateway(),
-                        repository = FakeGrokAuthRepository(),
-                        dispatchers = dispatchers
-                    ),
+            aiGateway = aiGateway,
+            credentialResolver = ResolveAnalysisCredentialUseCase(
+                apiKeyRepository = keyRepository,
+                grokAuth = ManageGrokAuthUseCase(
+                    gateway = FakeGrokAuthGateway(),
+                    repository = FakeGrokAuthRepository(),
                     dispatchers = dispatchers
                 ),
                 dispatchers = dispatchers
-            )
+            ),
+            dispatchers = dispatchers
         )
         val source = "red hair and blue dress"
         val category = AnalysisCategory.WOMEN_CLOTHING
 
-        val masked = resolve.analyzeAndMask(source, category)
+        val initial = resolve.ensureForGeneration(
+            source = source,
+            category = category,
+            existingTarget = null,
+            cache = null
+        )
+        assertTrue(initial.didAnalyze)
         assertEquals(1, aiGateway.analyzeCallCount)
         assertEquals(listOf(DEFAULT_ANALYSIS_MODEL), aiGateway.analyzeModelIds)
 
         val first = resolve.ensureForGeneration(
             source = source,
             category = category,
-            existingTarget = masked.targetSegment,
-            cache = masked.cache
+            existingTarget = initial.target,
+            cache = initial.cache
         )
         assertEquals(1, aiGateway.analyzeCallCount)
-        assertEquals(masked.targetSegment, first.target)
+        assertEquals(initial.target, first.target)
         assertFalse(first.didAnalyze)
 
         // 칩이 바뀌면 variationGoal 기준이 달라지므로 재분석
         val afterHintChange = resolve.ensureForGeneration(
             source = source,
             category = category,
-            existingTarget = masked.targetSegment,
+            existingTarget = initial.target,
             cache = first.cache,
             selectedHints = listOf("expand length and richness")
         )
@@ -466,11 +473,9 @@ class AnalysisFeatureTest {
             dispatchers = dispatchers
         )
         val resolve = ResolveAnalysisTargetUseCase(
-            AnalyzePromptForCategoryUseCase(
-                aiGateway = aiGateway,
-                credentialResolver = credentialResolver,
-                dispatchers = dispatchers
-            )
+            aiGateway = aiGateway,
+            credentialResolver = credentialResolver,
+            dispatchers = dispatchers
         )
         val source = "red hair and blue dress"
 
@@ -503,7 +508,6 @@ class AnalysisFeatureTest {
         val repository = FakeGeminiApiKeyRepository()
         val manager = ManageGeminiApiKeysUseCase(
             repository = repository,
-            clock = { 1L },
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         )
 
@@ -582,28 +586,36 @@ class AnalysisFeatureTest {
         )
         val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
         val clipboard = RecordingClipboard()
-        val viewModel = analysisViewModel(aiGateway, keyRepository, clipboard)
         val prompt = "red hair and blue dress"
+        var automationPrompt = "quality, $prompt"
+        val promptWorkspace = PromptWorkspace().apply {
+            segmentReplacer = { expectedSegment, replacement, _ ->
+                val start = automationPrompt.indexOf(expectedSegment)
+                if (start < 0) {
+                    null
+                } else {
+                    automationPrompt = automationPrompt.replaceRange(
+                        start,
+                        start + expectedSegment.length,
+                        replacement
+                    )
+                    start
+                }
+            }
+        }
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = keyRepository,
+            clipboardGateway = clipboard,
+            promptWorkspace = promptWorkspace
+        )
 
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
         viewModel.onSourcePromptChange(prompt)
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
         viewModel.generate()
 
-        var automationPrompt = "quality, $prompt"
-        viewModel.applyCandidate(0) { expectedSegment, replacement, _ ->
-            val start = automationPrompt.indexOf(expectedSegment)
-            if (start < 0) {
-                null
-            } else {
-                automationPrompt = automationPrompt.replaceRange(
-                    start,
-                    start + expectedSegment.length,
-                    replacement
-                )
-                start
-            }
-        }
+        viewModel.applyCandidate(0)
 
         assertEquals("검은 원피스", clipboard.writtenText)
         assertEquals(prompt, viewModel.sourcePromptTextFieldState.text.toString())
@@ -628,42 +640,45 @@ class AnalysisFeatureTest {
             """.trimIndent()
         )
         val clipboard = RecordingClipboard()
+        val original = "red hair and blue dress"
+        var automationPrompt = original
+        val promptWorkspace = PromptWorkspace().apply {
+            segmentReplacer = { expected: String, replacement: String, _: Int ->
+                val start = automationPrompt.indexOf(expected)
+                if (start < 0) {
+                    null
+                } else {
+                    automationPrompt = automationPrompt.replaceRange(
+                        start,
+                        start + expected.length,
+                        replacement
+                    )
+                    start
+                }
+            }
+        }
         val viewModel = analysisViewModel(
             aiGateway = aiGateway,
             keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
-            clipboardGateway = clipboard
+            clipboardGateway = clipboard,
+            promptWorkspace = promptWorkspace
         )
-        val original = "red hair and blue dress"
-        var automationPrompt = original
-        val replaceSegment = { expected: String, replacement: String, _: Int ->
-            val start = automationPrompt.indexOf(expected)
-            if (start < 0) {
-                null
-            } else {
-                automationPrompt = automationPrompt.replaceRange(
-                    start,
-                    start + expected.length,
-                    replacement
-                )
-                start
-            }
-        }
 
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
         viewModel.onSourcePromptChange(original)
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
         viewModel.generate()
 
-        viewModel.applyCandidate(0, replaceSegment)
+        viewModel.applyCandidate(0)
         automationPrompt = "quality, $automationPrompt"
-        viewModel.applyCandidate(1, replaceSegment)
+        viewModel.applyCandidate(1)
 
         assertEquals("quality, red hair and 흰 셔츠", automationPrompt)
         assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
         assertEquals("흰 셔츠", clipboard.writtenText)
         assertEquals(1, viewModel.uiState.value.selectedCandidateIndex)
 
-        viewModel.restoreOriginalPrompt(replaceSegment)
+        viewModel.restoreOriginalPrompt()
 
         assertEquals("quality, $original", automationPrompt)
         assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
@@ -678,9 +693,13 @@ class AnalysisFeatureTest {
             analyzeResponse = analysisJson(exactText = "blue dress"),
             generateResponse = """[{"text":"검은 원피스","explanation":""}]"""
         )
+        val promptWorkspace = PromptWorkspace().apply {
+            segmentReplacer = { _, _, _ -> null }
+        }
         val viewModel = analysisViewModel(
             aiGateway = aiGateway,
-            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            promptWorkspace = promptWorkspace
         )
         val original = "red hair and blue dress"
 
@@ -688,7 +707,7 @@ class AnalysisFeatureTest {
         viewModel.onSourcePromptChange(original)
         viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
         viewModel.generate()
-        viewModel.applyCandidate(0) { _, _, _ -> null }
+        viewModel.applyCandidate(0)
 
         assertEquals(original, viewModel.sourcePromptTextFieldState.text.toString())
         assertEquals(null, viewModel.uiState.value.selectedCandidateIndex)
@@ -730,12 +749,24 @@ class AnalysisFeatureTest {
             analyzeResponse = analysisJson(exactText = "blue dress"),
             generateResponse = """[{"text":"검은 원피스","explanation":""}]"""
         )
-        val viewModel = analysisViewModel(
-            aiGateway = aiGateway,
-            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
-        )
         val original = "red hair and blue dress"
         var automationPrompt = original
+        val promptWorkspace = PromptWorkspace().apply {
+            segmentReplacer = { expected, replacement, _ ->
+                val start = automationPrompt.indexOf(expected)
+                automationPrompt = automationPrompt.replaceRange(
+                    start,
+                    start + expected.length,
+                    replacement
+                )
+                start
+            }
+        }
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            promptWorkspace = promptWorkspace
+        )
         val directionId = viewModel.uiState.value.directions.first().id
 
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
@@ -746,15 +777,7 @@ class AnalysisFeatureTest {
         viewModel.onCustomHintChange("새로운 분위기")
         viewModel.onResultFileNameChange("custom.txt")
         viewModel.generate()
-        viewModel.applyCandidate(0) { expected, replacement, _ ->
-            val start = automationPrompt.indexOf(expected)
-            automationPrompt = automationPrompt.replaceRange(
-                start,
-                start + expected.length,
-                replacement
-            )
-            start
-        }
+        viewModel.applyCandidate(0)
 
         val apiKeysBeforeReset = viewModel.uiState.value.apiKeys
         val maskingProviderBeforeReset = viewModel.uiState.value.maskingProvider
@@ -1441,22 +1464,22 @@ class AnalysisFeatureTest {
         assertEquals("custom-results.txt", viewModel.uiState.value.resultFileName)
 
         // 6. 리셋 요청 액션
-        actions.onRequestResetSession()
+        actions.requestResetSession()
         assertTrue(viewModel.uiState.value.showResetConfirmation)
 
         // 7. 리셋 취소 액션
-        actions.onDismissResetSession()
+        actions.dismissResetSession()
         assertFalse(viewModel.uiState.value.showResetConfirmation)
 
         // 8. 리셋 확정 액션
-        actions.onConfirmResetSession()
+        actions.confirmResetSession()
         assertEquals("", viewModel.uiState.value.sourcePrompt)
         assertEquals(DEFAULT_ANALYSIS_CATEGORY, viewModel.uiState.value.selectedCategory)
 
         // 9. API 키 다이얼로그 열기/닫기 액션
-        actions.onShowKeyDialog()
+        actions.showKeyDialog()
         assertTrue(viewModel.uiState.value.showKeyDialog)
-        actions.onDismissKeyDialog()
+        actions.dismissKeyDialog()
         assertFalse(viewModel.uiState.value.showKeyDialog)
     }
 
@@ -1464,7 +1487,8 @@ class AnalysisFeatureTest {
         aiGateway: AnalysisAiGateway,
         keyRepository: GeminiApiKeyRepository,
         clipboardGateway: ClipboardGateway = FakeClipboard(),
-        grokAuthRepository: GrokAuthRepository = FakeGrokAuthRepository()
+        grokAuthRepository: GrokAuthRepository = FakeGrokAuthRepository(),
+        promptWorkspace: PromptWorkspace? = null
     ): AnalysisViewModel {
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         val grokAuth = ManageGrokAuthUseCase(
@@ -1477,17 +1501,12 @@ class AnalysisFeatureTest {
             grokAuth = grokAuth,
             dispatchers = dispatchers
         )
-        val analyzePrompt = AnalyzePromptForCategoryUseCase(
-            aiGateway = aiGateway,
-            credentialResolver = credentialResolver,
-            dispatchers = dispatchers
-        )
-        val copyResults = CopyAnalysisResultsUseCase(
-            clipboardGateway = clipboardGateway,
-            dispatchers = dispatchers
-        )
         return AnalysisViewModel(
-            resolveTarget = ResolveAnalysisTargetUseCase(analyzePrompt),
+            resolveTarget = ResolveAnalysisTargetUseCase(
+                aiGateway = aiGateway,
+                credentialResolver = credentialResolver,
+                dispatchers = dispatchers
+            ),
             generateTxtUseCase = GenerateAnalysisTxtUseCase(
                 aiGateway = aiGateway,
                 credentialResolver = credentialResolver,
@@ -1498,13 +1517,14 @@ class AnalysisFeatureTest {
                 dispatchers = dispatchers
             ),
             grokAuth = grokAuth,
-            copyResults = copyResults,
+            clipboardGateway = clipboardGateway,
             saveWildcardFile = SaveAnalysisWildcardFileUseCase(
                 repository = FakeWildcardRepository(),
-                copyResults = copyResults,
+                clipboardGateway = clipboardGateway,
                 dispatchers = dispatchers
             ),
             dispatchers = dispatchers,
+            promptWorkspace = promptWorkspace,
             coroutineScope = CoroutineScope(Dispatchers.Unconfined)
         )
     }
@@ -1581,7 +1601,7 @@ class AnalysisFeatureTest {
         override suspend fun generateTxt(
             apiKey: String,
             modelId: String,
-            payload: AnalysisTxtPromptPayload
+            payload: AnalysisPromptPayload
         ): String {
             generateCallCount++
             generateModelIds += modelId
@@ -1610,7 +1630,6 @@ class AnalysisFeatureTest {
                     label = "initial",
                     encryptedValue = "encrypted",
                     preview = "****${activeKey.takeLast(4)}",
-                    createdAtMillis = 0L,
                     isActive = true
                 )
             }
@@ -1620,8 +1639,7 @@ class AnalysisFeatureTest {
 
         override fun addKey(
             label: String,
-            rawKey: String,
-            createdAtMillis: Long
+            rawKey: String
         ): GeminiApiKeyRecord {
             val id = "key-${records.size + 1}"
             rawKeys[id] = rawKey
@@ -1630,7 +1648,6 @@ class AnalysisFeatureTest {
                 label = label,
                 encryptedValue = "encrypted-$id",
                 preview = "****${rawKey.takeLast(4)}",
-                createdAtMillis = createdAtMillis,
                 isActive = records.none { it.isActive }
             )
             records += record

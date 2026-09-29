@@ -52,7 +52,7 @@ internal fun AutomationApp(
     MainTabbedScreen(
         selectedTab = selectedTab,
         onSelectTab = onSelectTab,
-        onShowSettings = automationActions::onShowSettings,
+        onShowSettings = automationActions::showSettings,
         tabs = tabs
     )
 

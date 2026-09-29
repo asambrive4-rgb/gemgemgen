@@ -62,7 +62,7 @@ class ManageWildcardFilesUseCase(
     ): WildcardWorkspace = withContext(dispatchers.io) {
         val oldIndex = previousFiles.indexOfFirst { it.id == file.id }.coerceAtLeast(0)
         repository.deleteFile(file)
-        val files = repository.listFiles()
+        val files = previousFiles.filterNot { it.id == file.id }
         val nextFile = files.getOrNull(oldIndex) ?: files.lastOrNull()
         WildcardWorkspace(files = files, selectedFile = nextFile, selectedText = nextFile?.let(repository::readFile))
     }

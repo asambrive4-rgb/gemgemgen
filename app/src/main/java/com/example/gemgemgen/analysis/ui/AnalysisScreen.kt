@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 액션 인터페이스 기반 사용자 인터랙션을 화면에 표시합니다.
+// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 다이얼로그 호스트를 액션 인터페이스로 연결해 화면에 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -46,6 +46,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -71,9 +72,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
-import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.theme.appTextFieldColors
@@ -111,24 +110,23 @@ internal fun AnalysisScreen(
                     onRoleModelSelected = { role, modelId ->
                         actions.onRoleModelSelected(role, modelId)
                     },
-                    onShowKeyDialog = { actions.onShowKeyDialog() },
-                    onStartGrokLogin = { actions.onStartGrokLogin() },
-                    onLogoutGrok = { actions.onLogoutGrok() }
+                    onShowKeyDialog = { actions.showKeyDialog() },
+                    onStartGrokLogin = { actions.startGrokLogin() },
+                    onLogoutGrok = { actions.logoutGrok() }
                 )
 
                 SourcePromptAndMaskingRow(
                     sourcePromptState = sourcePromptState,
                     onSourcePromptChange = { actions.onSourcePromptChange(it) },
-                    onImportFromAutomation = { actions.onImportFromAutomation() },
+                    onImportFromAutomation = { actions.importSourcePromptFromAutomation() },
                     targetSegment = uiState.targetSegment,
-                    isAnalyzing = uiState.status == AnalysisStatus.ANALYZING,
-                    onClearTargetSegment = { actions.onClearTargetSegment() }
+                    onClearTargetSegment = { actions.clearTargetSegment() }
                 )
 
                 DirectionSection(
                     directions = uiState.directions,
                     selectedIds = uiState.selectedDirectionIds,
-                    onToggleDirection = { actions.onToggleDirection(it) }
+                    onToggleDirection = { actions.toggleDirection(it) }
                 )
 
                 CustomHintSection(
@@ -146,9 +144,9 @@ internal fun AnalysisScreen(
                 ResultSection(
                     uiState = uiState,
                     onResultFileNameChange = { actions.onResultFileNameChange(it) },
-                    onApplyCandidate = { actions.onApplyCandidate(it) },
-                    onCopyCandidate = { actions.onCopyCandidate(it) },
-                    onRestoreOriginalPrompt = { actions.onRestoreOriginalPrompt() }
+                    onApplyCandidate = { actions.applyCandidate(it) },
+                    onCopyCandidate = { actions.copyCandidate(it) },
+                    onRestoreOriginalPrompt = { actions.restoreOriginalPrompt() }
                 )
 
                 // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
@@ -166,11 +164,11 @@ internal fun AnalysisScreen(
                 StickyBottomActionPanel(
                     uiState = uiState,
                     onCategorySelected = { actions.onCategorySelected(it) },
-                    onGenerate = { actions.onGenerate() },
-                    onGenerateTxt = { actions.onGenerateTxt() },
-                    onCancelWork = { actions.onCancelWork() },
-                    onRequestResetSession = { actions.onRequestResetSession() },
-                    onCopyResults = { actions.onCopyResults() },
+                    onGenerate = { actions.generate() },
+                    onGenerateTxt = { actions.generateTxt() },
+                    onCancelWork = { actions.cancelActiveWork() },
+                    onRequestResetSession = { actions.requestResetSession() },
+                    onCopyResults = { actions.copyGeneratedResults() },
                     onSaveResults = { actions.onSaveResults() }
                 )
             }
@@ -178,29 +176,13 @@ internal fun AnalysisScreen(
     }
 
     val activeDialog = deriveActiveAnalysisDialog(uiState)
-    val dialogActions = AnalysisDialogActions(
-        onDismissKeyDialog = { actions.onDismissKeyDialog() },
-        onKeyLabelChange = { actions.onKeyLabelChange(it) },
-        onKeyValueChange = { actions.onKeyValueChange(it) },
-        onAddApiKey = { actions.onAddApiKey() },
-        onDeleteApiKey = { actions.onDeleteApiKey(it) },
-        onActivateApiKey = { actions.onActivateApiKey(it) },
-        onStartEditApiKey = { actions.onStartEditApiKey(it) },
-        onEditKeyLabelChange = { actions.onEditKeyLabelChange(it) },
-        onCancelEditApiKey = { actions.onCancelEditApiKey() },
-        onUpdateKeyLabel = { actions.onUpdateKeyLabel() },
-        onConfirmResetSession = { actions.onConfirmResetSession() },
-        onDismissResetSession = { actions.onDismissResetSession() },
-        onConfirmOverwrite = { actions.onConfirmOverwrite() },
-        onDismissOverwrite = { actions.onDismissOverwrite() },
-        onOpenGrokLoginUrl = { actions.onOpenGrokLoginUrl(it) },
-        onCancelGrokLogin = { actions.onCancelGrokLogin() }
-    )
-    AnalysisDialogHost(
-        activeDialog = activeDialog,
-        uiState = uiState,
-        actions = dialogActions
-    )
+    if (activeDialog !is AnalysisDialogType.None) {
+        AnalysisDialogHost(
+            activeDialog = activeDialog,
+            uiState = uiState,
+            actions = actions
+        )
+    }
 }
 
 @Composable
@@ -372,7 +354,6 @@ private fun SourcePromptAndMaskingRow(
     onSourcePromptChange: (String) -> Unit,
     onImportFromAutomation: () -> Unit,
     targetSegment: AnalysisTargetSegment?,
-    isAnalyzing: Boolean,
     onClearTargetSegment: () -> Unit
 ) {
     Row(
@@ -431,11 +412,7 @@ private fun SourcePromptAndMaskingRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = when {
-                        targetSegment == null -> "마스킹 결과"
-                        targetSegment.source == AnalysisTargetSource.MANUAL -> "수동 마스킹"
-                        else -> "자동 마스킹"
-                    },
+                    text = if (targetSegment == null) "마스킹 결과" else "자동 마스킹",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -453,8 +430,7 @@ private fun SourcePromptAndMaskingRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                targetSegment = targetSegment,
-                isAnalyzing = isAnalyzing
+                targetSegment = targetSegment
             )
         }
     }
@@ -548,6 +524,8 @@ private fun StickyBottomActionPanel(
             }
         }
 
+        val canResetSession = uiState.canResetSession
+        val canGenerate = uiState.canGenerate
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -555,19 +533,19 @@ private fun StickyBottomActionPanel(
         ) {
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = if (uiState.canResetSession) AppTheme.colors.card else AppTheme.colors.card.copy(alpha = 0.5f),
-                contentColor = if (uiState.canResetSession) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.5f),
+                color = if (canResetSession) AppTheme.colors.card else AppTheme.colors.card.copy(alpha = 0.5f),
+                contentColor = if (canResetSession) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.5f),
                 border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
                 modifier = Modifier
                     .size(PrimaryActionButtonHeight)
                     .shadow(
-                        elevation = if (uiState.canResetSession) 3.dp else 0.dp,
+                        elevation = if (canResetSession) 3.dp else 0.dp,
                         shape = RoundedCornerShape(14.dp),
                         ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
                         spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
                     )
                     .clickable(
-                        enabled = uiState.canResetSession,
+                        enabled = canResetSession,
                         onClick = onRequestResetSession
                     )
             ) {
@@ -599,7 +577,7 @@ private fun StickyBottomActionPanel(
             } else {
                 NeuButton(
                     onClick = onGenerateTxt,
-                    enabled = uiState.canGenerate,
+                    enabled = canGenerate,
                     isPrimary = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
@@ -614,16 +592,16 @@ private fun StickyBottomActionPanel(
                 }
                 Surface(
                     onClick = onGenerate,
-                    enabled = uiState.canGenerate,
+                    enabled = canGenerate,
                     shape = RoundedCornerShape(14.dp),
-                    color = if (uiState.canGenerate) AppTheme.colors.accent else AppTheme.colors.accent.copy(alpha = 0.5f),
-                    contentColor = if (uiState.canGenerate) AppTheme.colors.onPrimary else AppTheme.colors.onPrimary.copy(alpha = 0.5f),
+                    color = if (canGenerate) AppTheme.colors.accent else AppTheme.colors.accent.copy(alpha = 0.5f),
+                    contentColor = if (canGenerate) AppTheme.colors.onPrimary else AppTheme.colors.onPrimary.copy(alpha = 0.5f),
                     border = BorderStroke(1.dp, AppTheme.colors.accent),
                     modifier = Modifier
                         .weight(1f)
                         .height(PrimaryActionButtonHeight)
                         .shadow(
-                            elevation = if (uiState.canGenerate) 6.dp else 0.dp,
+                            elevation = if (canGenerate) 6.dp else 0.dp,
                             shape = RoundedCornerShape(14.dp),
                             ambientColor = AppTheme.colors.accent.copy(alpha = 0.4f),
                             spotColor = AppTheme.colors.accent.copy(alpha = 0.3f)
@@ -650,7 +628,6 @@ private fun StickyBottomActionPanel(
 @Composable
 private fun TargetSegmentBody(
     targetSegment: AnalysisTargetSegment?,
-    isAnalyzing: Boolean,
     modifier: Modifier = Modifier
 ) {
     val hasSegment = targetSegment != null
@@ -693,11 +670,7 @@ private fun TargetSegmentBody(
                 )
             } else {
                 Text(
-                    text = if (isAnalyzing) {
-                        "자동 마스킹 분석 중..."
-                    } else {
-                        "자동 분석 후 마스킹 구간이 여기에 표시됩니다."
-                    },
+                    text = "자동 분석 후 마스킹 구간이 여기에 표시됩니다.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth()
@@ -993,6 +966,7 @@ private fun TxtResultSection(
     onResultFileNameChange: (String) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
+    val joinedCandidates = remember(candidates) { candidates.joinToString(separator = "\n") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
         Text(
@@ -1001,7 +975,7 @@ private fun TxtResultSection(
             fontWeight = FontWeight.Bold
         )
         OutlinedTextField(
-            value = candidates.joinToString(separator = "\n"),
+            value = joinedCandidates,
             onValueChange = {},
             modifier = Modifier
                 .fillMaxWidth()

@@ -130,7 +130,7 @@ class AndroidWildcardFileRepository(
     }
 
     private fun currentFolderUri(): Uri {
-        return WildcardFolderStore.getFolderUri(context)
+        return AndroidWildcardFolderRepository.getFolderUri(context)
             ?: throw WildcardFileException("wildcard 폴더를 먼저 선택해주세요.")
     }
 
@@ -161,17 +161,17 @@ class AndroidWildcardFileRepository(
  */
 internal class AndroidWildcardDirectStorage {
     fun listFiles(): List<WildcardTextFile> {
-        val folder = ensureFolder()
-        return folder.listFiles()
-            ?.asSequence()
-            ?.filter { it.isFile }
-            ?.mapNotNull { file ->
-                if (WildcardFileParser.tokenFromFileName(file.name) == null) return@mapNotNull null
-                WildcardTextFile(id = file.name, fileName = file.name)
+        val now = System.currentTimeMillis()
+        cachedFolder?.let { cached ->
+            if (now - cachedFolderAtMs < FOLDER_CACHE_TTL_MS && cached.isDirectory) {
+                return parseWildcardFiles(cached)
             }
-            ?.sortedBy { it.fileName.lowercase() }
-            ?.toList()
-            .orEmpty()
+        }
+        val (resolved, files) = resolveDirectFolderWithFiles(now)
+        if (!resolved.isDirectory && !resolved.mkdirs() && !resolved.isDirectory) {
+            throw WildcardFileException("wildcard 폴더를 만들지 못했습니다.")
+        }
+        return files
     }
 
     fun readFile(file: WildcardTextFile): String {
@@ -243,16 +243,6 @@ internal class AndroidWildcardDirectStorage {
         return folder
     }
 
-    fun canReadFolder(): Boolean {
-        val folder = directFolder()
-        return folder.isDirectory && folder.canRead()
-    }
-
-    fun canWriteFolder(): Boolean {
-        val folder = directFolder()
-        return folder.isDirectory && folder.canWrite()
-    }
-
     private fun fileOnDisk(file: WildcardTextFile): File {
         validateFileName(file.id)
         if (file.id != file.fileName) {
@@ -284,24 +274,40 @@ internal class AndroidWildcardDirectStorage {
                 return cached
             }
         }
+        return resolveDirectFolderWithFiles(now).first
+    }
+
+    private fun resolveDirectFolderWithFiles(now: Long): Pair<File, List<WildcardTextFile>> {
         @Suppress("DEPRECATION")
         val externalRoot = Environment.getExternalStorageDirectory()
         val candidates = AppDefaults.WILDCARD_DIRECTORY_CANDIDATES.map { relativePath ->
             File(externalRoot, relativePath)
         }
-
-        val resolved = candidates.firstOrNull(::containsWildcardFile)
-            ?: candidates.firstOrNull { it.isDirectory }
-            ?: candidates.first()
-        cachedFolder = resolved
+        for (candidate in candidates) {
+            val files = parseWildcardFiles(candidate)
+            if (files.isNotEmpty()) {
+                cachedFolder = candidate
+                cachedFolderAtMs = now
+                return candidate to files
+            }
+        }
+        val fallback = candidates.firstOrNull { it.isDirectory } ?: candidates.first()
+        cachedFolder = fallback
         cachedFolderAtMs = now
-        return resolved
+        return fallback to emptyList()
     }
 
-    private fun containsWildcardFile(folder: File): Boolean {
-        return folder.listFiles()?.any { file ->
-            file.isFile && WildcardFileParser.tokenFromFileName(file.name) != null
-        } == true
+    private fun parseWildcardFiles(folder: File): List<WildcardTextFile> {
+        return folder.listFiles()
+            ?.asSequence()
+            ?.filter { it.isFile }
+            ?.mapNotNull { file ->
+                if (WildcardFileParser.tokenFromFileName(file.name) == null) return@mapNotNull null
+                WildcardTextFile(id = file.name, fileName = file.name)
+            }
+            ?.sortedBy { it.fileName.lowercase() }
+            ?.toList()
+            .orEmpty()
     }
 
     companion object {

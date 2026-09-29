@@ -1,4 +1,4 @@
-// 역할: 분석 화면에서 사용하는 API 키 등록, 인증, 알림 다이얼로그 표시를 총괄합니다.
+// 역할: 분석 화면의 API 키 관리, 인증, 알림 다이얼로그를 단일 호스트와 화면 액션 인터페이스로 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -49,7 +49,6 @@ import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 
 sealed interface AnalysisDialogType {
     data object None : AnalysisDialogType
@@ -88,60 +87,22 @@ fun deriveActiveAnalysisDialog(uiState: AnalysisUiState): AnalysisDialogType {
     }
 }
 
-internal data class AnalysisDialogActions(
-    val onDismissKeyDialog: () -> Unit,
-    val onKeyLabelChange: (String) -> Unit,
-    val onKeyValueChange: (String) -> Unit,
-    val onAddApiKey: () -> Unit,
-    val onDeleteApiKey: (String) -> Unit,
-    val onActivateApiKey: (String) -> Unit,
-    val onStartEditApiKey: (GeminiApiKeySummary) -> Unit,
-    val onEditKeyLabelChange: (String) -> Unit,
-    val onCancelEditApiKey: () -> Unit,
-    val onUpdateKeyLabel: () -> Unit,
-    val onConfirmResetSession: () -> Unit,
-    val onDismissResetSession: () -> Unit,
-    val onConfirmOverwrite: () -> Unit,
-    val onDismissOverwrite: () -> Unit,
-    val onOpenGrokLoginUrl: (String) -> Unit,
-    val onCancelGrokLogin: () -> Unit
-)
-
-enum class AnalysisDialogStage {
-    KEY_MANAGEMENT,
-    EDIT_KEY_LABEL,
-    RESET_SESSION,
-    OVERWRITE,
-    GROK_LOGIN
-}
-
-fun deriveAnalysisDialogStage(dialog: AnalysisDialogType): AnalysisDialogStage? {
-    return when (dialog) {
-        AnalysisDialogType.None -> null
-        AnalysisDialogType.KeyManagement -> AnalysisDialogStage.KEY_MANAGEMENT
-        is AnalysisDialogType.EditKeyLabel -> AnalysisDialogStage.EDIT_KEY_LABEL
-        AnalysisDialogType.ResetSession -> AnalysisDialogStage.RESET_SESSION
-        is AnalysisDialogType.Overwrite -> AnalysisDialogStage.OVERWRITE
-        is AnalysisDialogType.GrokLogin -> AnalysisDialogStage.GROK_LOGIN
-    }
-}
-
 @Composable
 internal fun AnalysisDialogHost(
     activeDialog: AnalysisDialogType,
     uiState: AnalysisUiState,
-    actions: AnalysisDialogActions
+    actions: AnalysisScreenActions
 ) {
-    val activeStage = deriveAnalysisDialogStage(activeDialog) ?: return
+    if (activeDialog is AnalysisDialogType.None) return
 
     val onDismissRequest: () -> Unit = {
         when (activeDialog) {
             AnalysisDialogType.None -> Unit
-            AnalysisDialogType.KeyManagement -> actions.onDismissKeyDialog()
-            is AnalysisDialogType.EditKeyLabel -> actions.onCancelEditApiKey()
-            AnalysisDialogType.ResetSession -> actions.onDismissResetSession()
-            is AnalysisDialogType.Overwrite -> actions.onDismissOverwrite()
-            is AnalysisDialogType.GrokLogin -> actions.onCancelGrokLogin()
+            AnalysisDialogType.KeyManagement -> actions.dismissKeyDialog()
+            is AnalysisDialogType.EditKeyLabel -> actions.cancelEditingApiKey()
+            AnalysisDialogType.ResetSession -> actions.dismissResetSession()
+            is AnalysisDialogType.Overwrite -> actions.dismissOverwrite()
+            is AnalysisDialogType.GrokLogin -> actions.cancelGrokLogin()
         }
     }
 
@@ -164,19 +125,21 @@ internal fun AnalysisDialogHost(
             tonalElevation = 6.dp
         ) {
             AnimatedContent(
-                targetState = activeStage,
+                targetState = activeDialog,
                 transitionSpec = {
                     fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
                 },
                 contentAlignment = Alignment.Center,
+                contentKey = { it::class },
                 label = "AnalysisDialogHostCrossfade"
-            ) { stage ->
-                when (stage) {
-                    AnalysisDialogStage.KEY_MANAGEMENT -> KeyManagementContent(uiState, actions)
-                    AnalysisDialogStage.EDIT_KEY_LABEL -> (activeDialog as? AnalysisDialogType.EditKeyLabel)?.let { EditKeyLabelContent(it, actions) }
-                    AnalysisDialogStage.RESET_SESSION -> ResetSessionContent(actions)
-                    AnalysisDialogStage.OVERWRITE -> (activeDialog as? AnalysisDialogType.Overwrite)?.let { OverwriteContent(it, actions) }
-                    AnalysisDialogStage.GROK_LOGIN -> (activeDialog as? AnalysisDialogType.GrokLogin)?.let { GrokLoginContent(it, actions) }
+            ) { targetDialog ->
+                when (targetDialog) {
+                    AnalysisDialogType.None -> Unit
+                    AnalysisDialogType.KeyManagement -> KeyManagementContent(uiState, actions)
+                    is AnalysisDialogType.EditKeyLabel -> EditKeyLabelContent(targetDialog, actions)
+                    AnalysisDialogType.ResetSession -> ResetSessionContent(actions)
+                    is AnalysisDialogType.Overwrite -> OverwriteContent(targetDialog, actions)
+                    is AnalysisDialogType.GrokLogin -> GrokLoginContent(targetDialog, actions)
                 }
             }
         }
@@ -186,7 +149,7 @@ internal fun AnalysisDialogHost(
 @Composable
 private fun KeyManagementContent(
     uiState: AnalysisUiState,
-    actions: AnalysisDialogActions
+    actions: AnalysisScreenActions
 ) {
     val focusManager = LocalFocusManager.current
     val canAddKey = uiState.keyValueInput.isNotBlank()
@@ -212,7 +175,7 @@ private fun KeyManagementContent(
         ) {
             OutlinedTextField(
                 value = uiState.keyLabelInput,
-                onValueChange = actions.onKeyLabelChange,
+                onValueChange = actions::onKeyLabelChange,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = appTextFieldColors(),
@@ -226,7 +189,7 @@ private fun KeyManagementContent(
             )
             OutlinedTextField(
                 value = uiState.keyValueInput,
-                onValueChange = actions.onKeyValueChange,
+                onValueChange = actions::onKeyValueChange,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = appTextFieldColors(),
@@ -235,7 +198,7 @@ private fun KeyManagementContent(
                 keyboardActions = KeyboardActions(
                     onDone = {
                         if (canAddKey) {
-                            actions.onAddApiKey()
+                            actions.addApiKey()
                         }
                     }
                 ),
@@ -243,7 +206,7 @@ private fun KeyManagementContent(
                 visualTransformation = PasswordVisualTransformation()
             )
             Button(
-                onClick = actions.onAddApiKey,
+                onClick = actions::addApiKey,
                 enabled = canAddKey,
                 modifier = Modifier.align(Alignment.End)
             ) {
@@ -284,17 +247,17 @@ private fun KeyManagementContent(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedButton(
-                                    onClick = { actions.onActivateApiKey(key.id) },
+                                    onClick = { actions.activateApiKey(key.id) },
                                     enabled = !key.isActive
                                 ) {
                                     Text(if (key.isActive) "활성" else "활성화")
                                 }
                                 OutlinedButton(
-                                    onClick = { actions.onStartEditApiKey(key) }
+                                    onClick = { actions.startEditingApiKey(key) }
                                 ) {
                                     Text("이름 수정")
                                 }
-                                TextButton(onClick = { actions.onDeleteApiKey(key.id) }) {
+                                TextButton(onClick = { actions.deleteApiKey(key.id) }) {
                                     Text("삭제")
                                 }
                             }
@@ -307,7 +270,7 @@ private fun KeyManagementContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onDismissKeyDialog) {
+            TextButton(onClick = actions::dismissKeyDialog) {
                 Text("닫기")
             }
         }
@@ -317,7 +280,7 @@ private fun KeyManagementContent(
 @Composable
 private fun EditKeyLabelContent(
     dialog: AnalysisDialogType.EditKeyLabel,
-    actions: AnalysisDialogActions
+    actions: AnalysisScreenActions
 ) {
     val canSave = dialog.currentLabel.isNotBlank()
     Column(
@@ -334,7 +297,7 @@ private fun EditKeyLabelContent(
         )
         OutlinedTextField(
             value = dialog.currentLabel,
-            onValueChange = actions.onEditKeyLabelChange,
+            onValueChange = actions::onEditingKeyLabelChange,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = appTextFieldColors(),
@@ -343,7 +306,7 @@ private fun EditKeyLabelContent(
             keyboardActions = KeyboardActions(
                 onDone = {
                     if (canSave) {
-                        actions.onUpdateKeyLabel()
+                        actions.updateApiKeyLabel()
                     }
                 }
             ),
@@ -354,12 +317,12 @@ private fun EditKeyLabelContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onCancelEditApiKey) {
+            TextButton(onClick = actions::cancelEditingApiKey) {
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
             Button(
-                onClick = actions.onUpdateKeyLabel,
+                onClick = actions::updateApiKeyLabel,
                 enabled = canSave
             ) {
                 Text("저장")
@@ -370,7 +333,7 @@ private fun EditKeyLabelContent(
 
 @Composable
 private fun ResetSessionContent(
-    actions: AnalysisDialogActions
+    actions: AnalysisScreenActions
 ) {
     Column(
         modifier = Modifier
@@ -394,11 +357,11 @@ private fun ResetSessionContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onDismissResetSession) {
+            TextButton(onClick = actions::dismissResetSession) {
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = actions.onConfirmResetSession) {
+            Button(onClick = actions::confirmResetSession) {
                 Text("비우기")
             }
         }
@@ -408,7 +371,7 @@ private fun ResetSessionContent(
 @Composable
 private fun OverwriteContent(
     dialog: AnalysisDialogType.Overwrite,
-    actions: AnalysisDialogActions
+    actions: AnalysisScreenActions
 ) {
     Column(
         modifier = Modifier
@@ -431,11 +394,11 @@ private fun OverwriteContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onDismissOverwrite) {
+            TextButton(onClick = actions::dismissOverwrite) {
                 Text("다른 파일명 입력")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = actions.onConfirmOverwrite) {
+            Button(onClick = actions::onConfirmOverwrite) {
                 Text("덮어쓰기")
             }
         }
@@ -445,7 +408,7 @@ private fun OverwriteContent(
 @Composable
 private fun GrokLoginContent(
     dialog: AnalysisDialogType.GrokLogin,
-    actions: AnalysisDialogActions
+    actions: AnalysisScreenActions
 ) {
     Column(
         modifier = Modifier
@@ -494,7 +457,7 @@ private fun GrokLoginContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onCancelGrokLogin) {
+            TextButton(onClick = actions::cancelGrokLogin) {
                 Text("취소")
             }
         }

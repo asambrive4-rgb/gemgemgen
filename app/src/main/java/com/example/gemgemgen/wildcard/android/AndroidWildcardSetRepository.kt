@@ -1,41 +1,30 @@
-// 역할: 메모리와 로컬 파일에 저장된 와일드카드 세트 목록을 동기화하여 제공합니다.
+// 역할: 와일드카드 파일 저장소를 통해 와일드카드 세트 목록을 로드하고 파싱합니다.
 package com.example.gemgemgen.wildcard.android
 
 import android.content.Context
-import android.net.Uri
 import com.example.gemgemgen.wildcard.domain.WildcardFileParser
 import com.example.gemgemgen.wildcard.domain.WildcardSet
+import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 
-class AndroidWildcardSetRepository(private val context: Context) : WildcardSetRepository {
-    private val documentReader = AndroidWildcardDocumentReader(context)
-    private val directStorage = AndroidWildcardDirectStorage()
+class AndroidWildcardSetRepository(
+    private val fileRepository: WildcardFileRepository
+) : WildcardSetRepository {
+    constructor(context: Context) : this(AndroidWildcardFileRepository(context))
 
-    override fun load(): List<WildcardSet> {
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
-            return loadDirectStorage()
-        }
-        val folderUri = WildcardFolderStore.getFolderUri(context) ?: return emptyList()
-        return load(folderUri)
-    }
+    override fun load(): List<WildcardSet> = loadSets(tokens = null)
 
-    override fun load(tokens: Set<String>): List<WildcardSet> {
-        if (tokens.isEmpty()) return emptyList()
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
-            return loadDirectStorage(tokens)
-        }
-        val folderUri = WildcardFolderStore.getFolderUri(context) ?: return emptyList()
-        return load(folderUri, tokens)
-    }
+    override fun load(tokens: Set<String>): List<WildcardSet> =
+        if (tokens.isEmpty()) emptyList() else loadSets(tokens)
 
-    private fun loadDirectStorage(tokens: Set<String>? = null): List<WildcardSet> {
-        return directStorage.listFiles()
+    private fun loadSets(tokens: Set<String>?): List<WildcardSet> {
+        return runCatching { fileRepository.listFiles() }
+            .getOrDefault(emptyList())
             .mapNotNull { file ->
                 val token = WildcardFileParser.tokenFromFileName(file.fileName)
                     ?: return@mapNotNull null
                 if (tokens != null && token !in tokens) return@mapNotNull null
-
-                val text = runCatching { directStorage.readFile(file) }.getOrDefault("")
+                val text = runCatching { fileRepository.readFile(file) }.getOrDefault("")
                 WildcardSet(
                     token = token,
                     fileName = file.fileName,
@@ -43,26 +32,4 @@ class AndroidWildcardSetRepository(private val context: Context) : WildcardSetRe
                 )
             }
     }
-
-    fun load(folderUri: Uri): List<WildcardSet> {
-        return load(folderUri, tokens = null)
-    }
-
-    private fun load(folderUri: Uri, tokens: Set<String>?): List<WildcardSet> {
-        return documentReader.listDocumentsOrEmpty(folderUri)
-            .mapNotNull { document ->
-                val token = WildcardFileParser.tokenFromFileName(document.fileName)
-                    ?: return@mapNotNull null
-                if (tokens != null && token !in tokens) return@mapNotNull null
-
-                val text = documentReader.readTextOrEmpty(document)
-
-                WildcardSet(
-                    token = token,
-                    fileName = document.fileName,
-                    items = WildcardFileParser.parseItems(text)
-                )
-            }
-    }
 }
-

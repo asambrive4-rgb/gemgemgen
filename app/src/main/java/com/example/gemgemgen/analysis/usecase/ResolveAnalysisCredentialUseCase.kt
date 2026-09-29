@@ -25,8 +25,6 @@ class ResolveAnalysisCredentialUseCase(
                 AnalysisProvider.GROK -> grokAuth.requireValidAccessToken()
             }
             ResolvedAnalysisCredential(
-                role = role,
-                provider = provider,
                 accessTokenOrApiKey = token,
                 modelId = modelId
             )
@@ -34,8 +32,6 @@ class ResolveAnalysisCredentialUseCase(
 }
 
 data class ResolvedAnalysisCredential(
-    val role: AnalysisModelRole,
-    val provider: AnalysisProvider,
     val accessTokenOrApiKey: String,
     val modelId: String
 )

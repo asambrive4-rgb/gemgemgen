@@ -54,12 +54,6 @@ class PromptHistoryStore(
         return updated
     }
 
-    @Synchronized
-    fun clear() {
-        cachedItems = emptyList()
-        repository.save(emptyList())
-    }
-
     companion object {
         const val DEFAULT_MAX_HISTORY_COUNT = PromptHistoryNavigator.MAX_HISTORY_COUNT
     }

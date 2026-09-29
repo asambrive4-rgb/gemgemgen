@@ -134,15 +134,13 @@ object AnalysisResponseParser {
         val exactText = obj["exactText"].stringOrBlank()
         if (exactText.isBlank()) return null
         val confidence = obj["confidence"].doubleOrNull() ?: 0.5
-        val reason = obj["reason"].stringOrBlank()
         val resolved = runCatching { AnalysisSourceLocator.resolve(sourcePrompt, parseRange(obj)) }
         return resolved.fold(
             onSuccess = {
-                AnalysisDetectedSegment(it.exactText, it.startIndex, it.endIndex, confidence, reason)
+                AnalysisDetectedSegment(it.exactText, it.startIndex, it.endIndex, confidence)
             },
             onFailure = {
-                AnalysisDetectedSegment(exactText, -1, -1, 0.1,
-                    it.message ?: reason.ifBlank { "수정 대상 문구를 원문에서 찾지 못했습니다." })
+                AnalysisDetectedSegment(exactText, -1, -1, 0.1)
             }
         )
     }

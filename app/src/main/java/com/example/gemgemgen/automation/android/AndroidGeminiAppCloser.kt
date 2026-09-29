@@ -1,4 +1,4 @@
-// 역할: 자동화 완료 후 백그라운드에 열려 있는 Gemini 앱 프로세스를 종료합니다.
+// 역할: 최근 앱 목록을 통해 Gemini 앱 또는 자기 앱(GemGemGen) 프로세스를 종료합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -38,5 +38,26 @@ class AndroidGeminiAppCloser(
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         )
         return true
+    }
+}
+
+/**
+ * 최근 앱에서 이 앱(GemGemGen) 카드만 닫아 프로세스를 종료한다.
+ * Gemini 종료와 동일한 접근성 경로를 사용한다.
+ */
+class AndroidSelfAppCloser(
+    private val context: Context
+) : GeminiAppCloser {
+    override suspend fun closeGeminiApp(): CloseGeminiAppResult {
+        val service = GeminiAccessibilityService.activeService
+            ?: return CloseGeminiAppResult.AccessibilityUnavailable
+
+        val taskTitle = context.applicationInfo
+            .loadLabel(context.packageManager)
+            .toString()
+        return service.closeAppFromRecents(
+            taskTitle = taskTitle,
+            closeDescription = "$taskTitle 앱 종료"
+        )
     }
 }

@@ -1,11 +1,10 @@
 // 역할: 와일드카드 단어들을 유사 의미별로 그룹화하도록 요청하는 AI 프롬프트를 조립합니다.
 package com.example.gemgemgen.wildcard.domain
 
-import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
+import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -13,7 +12,7 @@ object WildcardClassifyPromptBuilder {
     fun build(
         criteria: String,
         lines: List<String>
-    ): AnalysisTxtPromptPayload {
+    ): AnalysisPromptPayload {
         val numbered = lines.mapIndexed { index, line ->
             "${index + 1}. $line"
         }.joinToString(separator = "\n")
@@ -40,7 +39,7 @@ $numbered
 Classify all lines according to the criteria. Return JSON with groups[].name and groups[].items[].
         """.trimIndent()
 
-        return AnalysisTxtPromptPayload(
+        return AnalysisPromptPayload(
             systemInstruction = systemInstruction,
             userPrompt = userPrompt,
             responseSchema = classifyResponseSchema()

@@ -1502,7 +1502,7 @@ class AutomationViewModelTest {
             manageRemoteAutomation = resolvedRemote
         )
         return AutomationViewModel(
-            checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentStatusReader),
+            checkEnvironmentStatus = environmentStatusReader,
             clipboardGateway = clipboardGateway,
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automationRunner ?: automation(

@@ -6,13 +6,12 @@ data class GeminiApiKeyRecord(
     val label: String,
     val encryptedValue: String,
     val preview: String,
-    val createdAtMillis: Long,
     val isActive: Boolean
 )
 
 interface GeminiApiKeyRepository {
     fun listKeys(): List<GeminiApiKeyRecord>
-    fun addKey(label: String, rawKey: String, createdAtMillis: Long): GeminiApiKeyRecord
+    fun addKey(label: String, rawKey: String): GeminiApiKeyRecord
     fun deleteKey(id: String)
     fun activateKey(id: String)
     fun activeKeyValue(): String?

@@ -5,7 +5,6 @@ import com.example.gemgemgen.analysis.usecase.AnalysisException
 import com.example.gemgemgen.analysis.usecase.GrokAuthGateway
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession
 import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
-import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -53,7 +52,12 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             throw error
         } catch (error: Exception) {
             throw AnalysisException(
-                "Grok 로그인 네트워크 오류: ${error.message ?: error.javaClass.simpleName}"
+                formatAnalysisNetworkError(
+                    error = error,
+                    serviceName = "Grok 로그인",
+                    serverLabel = "xAI 인증 서버",
+                    timeoutMillis = READ_TIMEOUT_MS
+                )
             )
         }
     }
@@ -78,7 +82,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
                 "expired_token" ->
                     throw AnalysisException("로그인 코드가 만료되었습니다. 다시 시도해주세요.")
                 else -> throw AnalysisException(
-                    errorMessageFromOAuth(response.body)
+                    extractJsonErrorMessage(json, response.body)
                         .ifBlank { "Grok 로그인 확인에 실패했습니다. (${response.code})" }
                 )
             }
@@ -86,7 +90,12 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             throw error
         } catch (error: Exception) {
             throw AnalysisException(
-                "Grok 로그인 확인 네트워크 오류: ${error.message ?: error.javaClass.simpleName}"
+                formatAnalysisNetworkError(
+                    error = error,
+                    serviceName = "Grok 로그인 확인",
+                    serverLabel = "xAI 인증 서버",
+                    timeoutMillis = READ_TIMEOUT_MS
+                )
             )
         }
     }
@@ -110,7 +119,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             }
             if (response.code !in 200..299) {
                 throw AnalysisException(
-                    errorMessageFromOAuth(response.body)
+                    extractJsonErrorMessage(json, response.body)
                         .ifBlank { "Grok 세션 갱신에 실패했습니다. (${response.code})" }
                 )
             }
@@ -123,7 +132,12 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             throw error
         } catch (error: Exception) {
             throw AnalysisException(
-                "Grok 세션 갱신 네트워크 오류: ${error.message ?: error.javaClass.simpleName}"
+                formatAnalysisNetworkError(
+                    error = error,
+                    serviceName = "Grok 세션 갱신",
+                    serverLabel = "xAI 인증 서버",
+                    timeoutMillis = READ_TIMEOUT_MS
+                )
             )
         }
     }
@@ -223,22 +237,18 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             setRequestProperty("Accept", "application/json")
         }
-        OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
-            writer.write(body)
-        }
+        writeRequestBody(connection, body)
         return readResponse(connection)
     }
 
     private fun readResponse(connection: HttpURLConnection): HttpTextResponse {
-        val code = connection.responseCode
-        val stream = if (code in 200..299) {
-            connection.inputStream
-        } else {
-            connection.errorStream
+        return try {
+            val code = connection.responseCode
+            val body = readResponseBody(connection, code)
+            HttpTextResponse(code, body)
+        } finally {
+            connection.disconnect()
         }
-        val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        connection.disconnect()
-        return HttpTextResponse(code, body)
     }
 
     private fun formBody(vararg pairs: Pair<String, String>): String {
@@ -251,15 +261,6 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
     private fun parseOAuthError(body: String): String {
         return runCatching {
             json.parseToJsonElement(body).jsonObject.string("error").orEmpty()
-        }.getOrDefault("")
-    }
-
-    private fun errorMessageFromOAuth(body: String): String {
-        return runCatching {
-            val obj = json.parseToJsonElement(body).jsonObject
-            obj.string("error_description")
-                ?: obj.string("error")
-                ?: ""
         }.getOrDefault("")
     }
 

@@ -26,19 +26,16 @@ class AnalysisMaskingPolicyTest {
         AnalysisDirection(
             id = "dir1",
             title = "방향 1",
-            description = "설명 1",
             hint = "hint 1"
         ),
         AnalysisDirection(
             id = "dir2",
             title = "방향 2",
-            description = "설명 2",
             hint = "hint 2"
         ),
         AnalysisDirection(
             id = "dir3",
             title = "방향 3",
-            description = "설명 3",
             hint = "hint 3"
         )
     )

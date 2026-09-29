@@ -28,9 +28,7 @@ internal class GeminiPromptAutomation(
     )
 
     override fun onRunFinished() {
-        android.util.Log.i("GeminiPerf", "[Gemini Run Stats] " + nodeFinder.getPerformanceStats())
         nodeFinder.invalidateCache()
-        nodeFinder.resetPerformanceStats()
     }
 
     override suspend fun openNewChat(

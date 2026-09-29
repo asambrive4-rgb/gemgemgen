@@ -21,7 +21,6 @@ data class AnalysisRoleModelSetting(
 
 class ManageGeminiApiKeysUseCase(
     private val repository: GeminiApiKeyRepository,
-    private val clock: () -> Long = System::currentTimeMillis,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     suspend fun listKeys(): List<GeminiApiKeySummary> = withContext(dispatchers.io) {
@@ -37,8 +36,7 @@ class ManageGeminiApiKeysUseCase(
             }
             repository.addKey(
                 label = normalizedLabel,
-                rawKey = normalizedKey,
-                createdAtMillis = clock()
+                rawKey = normalizedKey
             )
             repository.listKeys().map { it.toSummary() }
         }
@@ -84,18 +82,6 @@ class ManageGeminiApiKeysUseCase(
     ): AnalysisRoleModelSetting = withContext(dispatchers.io) {
         repository.setRoleModel(role.storageValue, modelId)
         getRoleSetting(role)
-    }
-
-    /**
-     * 단계에 실제로 쓴 조합을 최근 사용으로 저장.
-     */
-    suspend fun rememberLastUsed(
-        role: AnalysisModelRole,
-        provider: AnalysisProvider,
-        modelId: String
-    ) = withContext(dispatchers.io) {
-        repository.setRoleProvider(role.storageValue, provider.storageValue)
-        repository.setRoleModel(role.storageValue, modelId)
     }
 
     private fun GeminiApiKeyRecord.toSummary(): GeminiApiKeySummary {

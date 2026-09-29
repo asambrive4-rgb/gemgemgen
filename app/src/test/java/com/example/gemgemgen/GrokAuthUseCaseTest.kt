@@ -2,7 +2,6 @@
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisException
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
@@ -102,7 +101,6 @@ class GrokAuthUseCaseTest {
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         )
         val credential = resolver.resolveForRole(AnalysisModelRole.GENERATION)
-        assertEquals(AnalysisProvider.GROK, credential.provider)
         assertEquals("grok-token", credential.accessTokenOrApiKey)
         assertEquals("grok-4.5", credential.modelId)
     }
@@ -159,7 +157,7 @@ class GrokAuthUseCaseTest {
         private val activeKey: String? = "gemini-key"
     ) : GeminiApiKeyRepository {
         override fun listKeys(): List<GeminiApiKeyRecord> = emptyList()
-        override fun addKey(label: String, rawKey: String, createdAtMillis: Long) =
+        override fun addKey(label: String, rawKey: String) =
             error("unused")
         override fun deleteKey(id: String) = Unit
         override fun activateKey(id: String) = Unit

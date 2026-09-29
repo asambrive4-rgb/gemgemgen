@@ -274,11 +274,6 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                     mainUiState.environmentStatus.canEditWildcardFiles
                 )
             }
-            LaunchedEffect(selectedTab, wildcardViewModel) {
-                if (selectedTab == MainTab.WILDCARD) {
-                    wildcardViewModel.onTabEntered()
-                }
-            }
             WildcardScreen(
                 uiState = wildcardUiState,
                 environmentStatus = mainUiState.environmentStatus,
@@ -349,13 +344,11 @@ private fun createAnalysisActions(
     }
 
     override fun onSaveResults() {
-        analysisViewModel.saveGeneratedResults()
-        onCompleteSave()
+        analysisViewModel.saveGeneratedResults(onSuccess = { onCompleteSave() })
     }
 
     override fun onConfirmOverwrite() {
-        analysisViewModel.confirmOverwrite()
-        onCompleteSave()
+        analysisViewModel.confirmOverwrite(onSuccess = { onCompleteSave() })
     }
 
     override fun onOpenGrokLoginUrl(url: String) {

@@ -4,7 +4,6 @@ package com.example.gemgemgen
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
-import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.ui.AutomationUiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,7 +36,7 @@ class AutomationUiTextTest {
         )
         assertEquals(
             "접근성 서비스를 먼저 켜주세요.",
-            AutomationUiText.geminiTerminateUnavailableMessage(
+            AutomationUiText.geminiRestartUnavailableMessage(
                 GeminiAppControlBlockReason.AccessibilityDisabled
             )
         )
@@ -66,19 +65,6 @@ class AutomationUiTextTest {
         )
         assertTrue(
             AutomationUiText.memoryCleanupScheduleCanceledText().contains("취소")
-        )
-    }
-
-    @Test
-    fun memoryCleanupResultMessages_includeOutcome() {
-        assertTrue(
-            AutomationUiText.memoryCleanupResultMessage(MemoryCleanupResult.Success)
-                .contains("메모리 정리")
-        )
-        assertTrue(
-            AutomationUiText.memoryCleanupResultMessage(
-                MemoryCleanupResult.Failure("failed")
-            ).contains("failed")
         )
     }
 }

@@ -2,7 +2,6 @@
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 
 interface AnalysisAiGateway {
     suspend fun analyze(
@@ -14,6 +13,6 @@ interface AnalysisAiGateway {
     suspend fun generateTxt(
         apiKey: String,
         modelId: String,
-        payload: AnalysisTxtPromptPayload
-    ): String
+        payload: AnalysisPromptPayload
+    ): String = analyze(apiKey, modelId, payload)
 }

@@ -1,11 +1,10 @@
-// 역할: 와일드카드 세트·단어 편집, 폴더 관리, AI 분류 다이얼로그 상태 및 화면 액션 인터페이스를 총괄하는 뷰모델입니다.
+// 역할: 와일드카드 세트·단어 편집, 폴더 관리, AI 분류 조율 및 화면 액션 처리를 총괄하는 뷰모델입니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
-import com.example.gemgemgen.environment.usecase.CheckEnvironmentStatusUseCase
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer
 import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
@@ -35,8 +34,7 @@ class WildcardViewModel(
     analysisKeyManager: ManageGeminiApiKeysUseCase? = null,
     classifyCoordinator: WildcardClassifyCoordinator? = null,
     coroutineScope: CoroutineScope? = null,
-    private val saveWildcardFolder: WildcardFolderRepository? = null,
-    private val checkEnvironmentStatus: CheckEnvironmentStatusUseCase? = null
+    private val saveWildcardFolder: WildcardFolderRepository? = null
 ) : ViewModel(), WildcardScreenActions {
     private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardUiState())
@@ -50,8 +48,6 @@ class WildcardViewModel(
             scope = scope,
             host = ClassifyHost()
         )
-
-    val classifyActions: WildcardClassifyActions get() = classifyCoordinator
 
     init {
         refreshFiles(openFirstFile = true)
@@ -80,7 +76,7 @@ class WildcardViewModel(
         }
     }
 
-    fun enterLineSelectionMode() {
+    override fun enterLineSelectionMode() {
         val state = uiState.value
         if (state.isFileOperationInProgress || state.isLineSelectionMode) return
         state.selectedFile ?: return showError("먼저 txt 파일을 선택하거나 새로 만들어주세요.")
@@ -89,14 +85,14 @@ class WildcardViewModel(
         }
     }
 
-    fun exitLineSelectionMode() {
+    override fun exitLineSelectionMode() {
         if (!uiState.value.isLineSelectionMode) return
         _uiState.update {
             it.copy(isLineSelectionMode = false, selectedLineIndices = emptySet(), message = "", error = "")
         }
     }
 
-    fun toggleLineSelection(index: Int) {
+    override fun toggleLineSelection(index: Int) {
         val state = uiState.value
         if (!state.isLineSelectionMode || state.isFileOperationInProgress || index !in state.selectableLines.indices) return
         _uiState.update {
@@ -105,19 +101,19 @@ class WildcardViewModel(
         }
     }
 
-    fun selectAllLines() {
+    override fun selectAllLines() {
         val state = uiState.value
         if (!state.isLineSelectionMode || state.isFileOperationInProgress || state.selectableLines.isEmpty()) return
         _uiState.update { it.copy(selectedLineIndices = state.selectableLines.indices.toSet(), message = "", error = "") }
     }
 
-    fun deselectAllLines() {
+    override fun deselectAllLines() {
         val state = uiState.value
         if (!state.isLineSelectionMode || state.isFileOperationInProgress) return
         _uiState.update { it.copy(selectedLineIndices = emptySet(), message = "", error = "") }
     }
 
-    fun composeDynamicPromptToClipboard() {
+    override fun composeDynamicPromptToClipboard() {
         val state = uiState.value
         if (state.isFileOperationInProgress || !state.isLineSelectionMode) return
         when (val result = WildcardDynamicPromptComposer.composeFromIndices(state.selectableLines, state.selectedLineIndices)) {
@@ -148,45 +144,12 @@ class WildcardViewModel(
     override fun confirmClassifyOverwrite() = classifyCoordinator.confirmClassifyOverwrite()
     override fun dismissClassifyOverwrite() = classifyCoordinator.dismissClassifyOverwrite()
 
-    // WildcardScreenActions 구현
+    // WildcardScreenActions 어댑터/오버라이드 지점
     override fun onRefresh() { refreshFiles(openFirstFile = true) }
     override fun onSelectFolder() { requestFolderSelection() }
-    override fun onFileClick(file: WildcardTextFile) { selectFile(file) }
-    override fun onRequestNewFile() { requestNewFile() }
-    override fun onCreateNewFile() { createNewFile() }
-    override fun onDismissNewFile() { dismissNewFileDialog() }
-    override fun onRequestRename() { requestRenameSelectedFile() }
-    override fun onConfirmRename() { renameSelectedFile() }
-    override fun onDismissRename() { dismissRenameDialog() }
-    override fun onRequestDelete() { requestDeleteSelectedFile() }
-    override fun onConfirmDelete() { confirmDeleteSelectedFile() }
-    override fun onDismissDelete() { dismissDeleteConfirm() }
-
-    override fun onTextChanged(text: String) { onTextChange(text) }
     override fun onSaveFile() { saveCurrent() }
-    override fun onPaste() { pasteFromClipboard() }
-    override fun onPasteBelow() { pasteBelowFromClipboard() }
-    override fun onCopy() { copyToClipboard() }
-    override fun onUndo() { undoClipboardEdit() }
-
-    override fun onEnterLineSelectionMode() { enterLineSelectionMode() }
-    override fun onExitLineSelectionMode() { exitLineSelectionMode() }
-    override fun onToggleLineSelection(index: Int) { toggleLineSelection(index) }
-    override fun onSelectAllLines() { selectAllLines() }
-    override fun onDeselectAllLines() { deselectAllLines() }
-    override fun onComposeDynamicPrompt() { composeDynamicPromptToClipboard() }
-
     override fun onConfirmPendingSave() { confirmPendingWithSave() }
     override fun onConfirmPendingDiscard() { confirmPendingWithDiscard() }
-    override fun onCancelPending() { cancelPendingAction() }
-
-    fun onTabEntered() {
-        val state = uiState.value
-        val file = state.selectedFile ?: return
-        if (state.hasUnsavedChanges || state.editingText.isNotEmpty() || state.savedText.isNotEmpty()) return
-        if (state.isFileOperationInProgress) return
-        openFile(file, keepMessage = true)
-    }
 
     fun refreshFiles(openFirstFile: Boolean = false, keepMessage: Boolean = false) {
         launchFileOperation(errorMessage = "파일 목록을 불러오지 못했습니다.", onError = ::showFileListError) {
@@ -227,15 +190,20 @@ class WildcardViewModel(
         saveWildcardFolder?.getFolderUri()
 
     fun decideWildcardFolderAction(
-        hasAllFilesAccess: Boolean = checkEnvironmentStatus?.check()?.status?.hasAllFilesAccess ?: false,
-        isWildcardDirectoryAccessible: Boolean = checkEnvironmentStatus?.check()?.status?.isWildcardDirectoryAccessible ?: false
+        hasAllFilesAccess: Boolean = false,
+        isWildcardDirectoryAccessible: Boolean = false
     ): WildcardFolderAction = WildcardFolderAccessPolicy.decideAction(
         hasAllFilesAccess = hasAllFilesAccess,
         isWildcardDirectoryAccessible = isWildcardDirectoryAccessible
     )
 
     fun saveWildcardFolder(folderUri: String): FolderSelectionResult {
-        val result = saveWildcardFolder?.save(folderUri) ?: FolderSelectionResult.Success
+        val normalized = folderUri.trim()
+        val result = if (normalized.isBlank()) {
+            FolderSelectionResult.Failure("폴더 경로가 비어 있습니다.")
+        } else {
+            saveWildcardFolder?.save(normalized) ?: FolderSelectionResult.Success
+        }
         when (result) {
             FolderSelectionResult.Success -> {
                 onFolderChanged()
@@ -281,7 +249,7 @@ class WildcardViewModel(
         return false
     }
 
-    fun selectFile(file: WildcardTextFile) {
+    override fun selectFile(file: WildcardTextFile) {
         val state = uiState.value
         if (state.isFileOperationInProgress || state.selectedFile?.id == file.id) return
         if (state.hasUnsavedChanges) {
@@ -293,13 +261,13 @@ class WildcardViewModel(
         openFile(file)
     }
 
-    fun onTextChange(value: String) {
+    override fun onTextChange(value: String) {
         _uiState.update { it.copy(editor = it.editor.edit(value), message = "", error = "") }
     }
 
     fun saveCurrent(): Boolean = saveCurrent(afterSave = null)
 
-    fun requestNewFile() {
+    override fun requestNewFile() {
         val state = uiState.value
         if (state.isFileOperationInProgress) return
         if (!state.canModifyFiles) return showError("새 파일을 만들려면 wildcard 폴더를 다시 선택해주세요.")
@@ -316,11 +284,11 @@ class WildcardViewModel(
         _uiState.update { it.copy(newFileName = name, error = "") }
     }
 
-    fun dismissNewFileDialog() {
+    override fun dismissNewFileDialog() {
         _uiState.update { it.copy(showNewFileDialog = false, newFileName = "", error = "") }
     }
 
-    fun createNewFile() {
+    override fun createNewFile() {
         val input = uiState.value.newFileName
         if (input.isBlank()) return showError("파일명을 입력해주세요.")
         launchFileOperation(errorMessage = "새 파일을 만들지 못했습니다.") {
@@ -341,7 +309,7 @@ class WildcardViewModel(
         }
     }
 
-    fun requestRenameSelectedFile() {
+    override fun requestRenameSelectedFile() {
         val state = uiState.value
         if (state.isFileOperationInProgress) return
         if (!state.canModifyFiles) return showError("파일 이름을 수정하려면 wildcard 폴더를 다시 선택해주세요.")
@@ -356,11 +324,11 @@ class WildcardViewModel(
         _uiState.update { it.copy(renameFileName = name, error = "") }
     }
 
-    fun dismissRenameDialog() {
+    override fun dismissRenameDialog() {
         _uiState.update { it.copy(showRenameDialog = false, renameFileName = "", error = "") }
     }
 
-    fun renameSelectedFile() {
+    override fun renameSelectedFile() {
         val file = uiState.value.selectedFile ?: return showError("수정할 파일을 선택해주세요.")
         val newName = uiState.value.renameFileName
         if (newName.isBlank()) return showError("파일 이름을 입력해주세요.")
@@ -380,7 +348,7 @@ class WildcardViewModel(
         }
     }
 
-    fun requestDeleteSelectedFile() {
+    override fun requestDeleteSelectedFile() {
         val state = uiState.value
         if (state.isFileOperationInProgress) return
         if (!state.canModifyFiles) return showError("파일을 삭제하려면 wildcard 폴더를 다시 선택해주세요.")
@@ -388,11 +356,11 @@ class WildcardViewModel(
         _uiState.update { it.copy(showDeleteConfirm = true, message = "", error = "") }
     }
 
-    fun dismissDeleteConfirm() {
+    override fun dismissDeleteConfirm() {
         _uiState.update { it.copy(showDeleteConfirm = false) }
     }
 
-    fun confirmDeleteSelectedFile() {
+    override fun confirmDeleteSelectedFile() {
         val file = uiState.value.selectedFile ?: return showError("삭제할 파일을 선택해주세요.")
         launchFileOperation(
             errorMessage = "파일을 삭제하지 못했습니다.",
@@ -421,8 +389,8 @@ class WildcardViewModel(
         }
     }
 
-    fun pasteFromClipboard() = pasteInternal { current, undo -> wildcardClipboard.paste(current, undo) }
-    fun pasteBelowFromClipboard() = pasteInternal { current, undo -> wildcardClipboard.pasteBelow(current, undo) }
+    override fun pasteFromClipboard() = pasteInternal { current, undo -> wildcardClipboard.paste(current, undo) }
+    override fun pasteBelowFromClipboard() = pasteInternal { current, undo -> wildcardClipboard.pasteBelow(current, undo) }
 
     private fun pasteInternal(action: suspend (String, List<String>) -> WildcardClipboardPasteResult) {
         if (uiState.value.isFileOperationInProgress || !ensureCanModifyFiles() || !ensureFileSelected()) return
@@ -435,7 +403,7 @@ class WildcardViewModel(
         }
     }
 
-    fun copyToClipboard() {
+    override fun copyToClipboard() {
         if (uiState.value.isFileOperationInProgress) return
         val text = uiState.value.editingText.takeIf { it.isNotEmpty() } ?: return showError("복사할 내용이 없습니다.")
         scope.launch {
@@ -444,7 +412,7 @@ class WildcardViewModel(
         }
     }
 
-    fun undoClipboardEdit() {
+    override fun undoClipboardEdit() {
         if (uiState.value.isFileOperationInProgress) return
         val result = wildcardClipboard.undo(uiState.value.undoStack) ?: return showError("되돌릴 붙여넣기 기록이 없습니다.")
         _uiState.update {
@@ -466,7 +434,7 @@ class WildcardViewModel(
         return runPendingAction(action, onSelectFolder)
     }
 
-    fun cancelPendingAction() = clearPendingAction()
+    override fun cancelPendingAction() = clearPendingAction()
 
     private fun saveCurrent(afterSave: (suspend () -> Unit)?): Boolean {
         val state = uiState.value

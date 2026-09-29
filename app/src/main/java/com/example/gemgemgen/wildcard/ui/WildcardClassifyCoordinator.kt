@@ -4,7 +4,6 @@ package com.example.gemgemgen.wildcard.ui
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
-import com.example.gemgemgen.analysis.usecase.AnalysisException
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyPolicy

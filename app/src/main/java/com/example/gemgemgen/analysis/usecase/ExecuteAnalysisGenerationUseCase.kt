@@ -1,12 +1,11 @@
-// 역할: AI 프롬프트 분석 전제조건 검사, 타겟 구간 확정, 텍스트 생성 및 모델 최근 사용 기록을 조율합니다.
+// 역할: AI 프롬프트 분석 전제조건 검사, 타겟 구간 확정 및 텍스트 생성을 조율합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason
-import com.example.gemgemgen.analysis.domain.AnalysisStartPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.CancellationException
@@ -42,20 +41,17 @@ sealed interface ExecuteAnalysisGenerationResult {
         val candidates: List<String>,
         val targetSegment: AnalysisTargetSegment,
         val cache: AnalysisReportCache,
-        val targetChanged: Boolean,
         val warning: String,
         val didAnalyze: Boolean
     ) : ExecuteAnalysisGenerationResult
     data class Failure(
-        val message: String,
-        val cause: Throwable? = null
+        val message: String
     ) : ExecuteAnalysisGenerationResult
 }
 
 class ExecuteAnalysisGenerationUseCase(
     private val resolveTarget: ResolveAnalysisTargetUseCase,
     private val generateTxtUseCase: GenerateAnalysisTxtUseCase,
-    private val keyManager: ManageGeminiApiKeysUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     suspend fun execute(
@@ -71,7 +67,7 @@ class ExecuteAnalysisGenerationUseCase(
             selectedHints = request.selectedHints,
             customHint = request.customHint
         )
-        val blockedReason = AnalysisStartPolicy.evaluatePreconditions(
+        val blockedReason = AnalysisSessionPolicy.evaluateStartBlockReason(
             source = request.sourcePrompt,
             category = request.category,
             needsMaskingAnalysis = needsMaskingAnalysis,
@@ -98,7 +94,8 @@ class ExecuteAnalysisGenerationUseCase(
                 existingTarget = request.targetSegment,
                 cache = request.cache,
                 selectedHints = request.selectedHints,
-                customHint = request.customHint
+                customHint = request.customHint,
+                needsAnalyze = needsMaskingAnalysis
             )
             coroutineContext.ensureActive()
 
@@ -121,24 +118,10 @@ class ExecuteAnalysisGenerationUseCase(
             )
             coroutineContext.ensureActive()
 
-            if (ensured.didAnalyze) {
-                keyManager.rememberLastUsed(
-                    role = AnalysisModelRole.MASKING,
-                    provider = request.maskingProvider,
-                    modelId = request.maskingModel
-                )
-            }
-            keyManager.rememberLastUsed(
-                role = AnalysisModelRole.GENERATION,
-                provider = request.generationProvider,
-                modelId = request.generationModel
-            )
-
             ExecuteAnalysisGenerationResult.Success(
                 candidates = result.candidates,
                 targetSegment = ensured.target,
                 cache = ensured.cache,
-                targetChanged = ensured.targetChanged,
                 warning = result.warning,
                 didAnalyze = ensured.didAnalyze
             )
@@ -146,8 +129,7 @@ class ExecuteAnalysisGenerationUseCase(
             throw e
         } catch (e: Exception) {
             ExecuteAnalysisGenerationResult.Failure(
-                message = e.message ?: request.failureFallback,
-                cause = e
+                message = e.message ?: request.failureFallback
             )
         }
     }

@@ -1,14 +1,17 @@
-// 역할: Gemini 분석 통신 게이트웨이의 요청 및 응답 처리를 검증합니다.
+// 역할: Gemini 분석 통신 게이트웨이 및 공통 HTTP/오류 변환 헬퍼의 처리를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.android.AndroidGeminiAnalysisGateway
+import com.example.gemgemgen.analysis.android.extractJsonErrorMessage
 import com.example.gemgemgen.analysis.usecase.AnalysisException
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class AndroidGeminiAnalysisGatewayTest {
     private val gateway = AndroidGeminiAnalysisGateway()
+    private val json = Json { ignoreUnknownKeys = true }
 
     @Test
     fun `일반 응답에서 텍스트를 정상 추출한다`() {
@@ -139,5 +142,21 @@ class AndroidGeminiAnalysisGatewayTest {
     fun `UnknownHostException 발생 시 네트워크 연결 점검 안내를 제공한다`() {
         val msg = gateway.formatNetworkError(java.net.UnknownHostException("generativelanguage.googleapis.com"))
         assertEquals("네트워크 연결 실패: 인터넷 연결이 끊겼거나 Google 서버 주소를 찾을 수 없습니다. Wi-Fi 또는 모바일 데이터 상태를 확인해 주세요.", msg)
+    }
+
+    @Test
+    fun `공통 JSON 오류 추출 헬퍼가 객체 및 문자열 형태의 오류를 모두 처리한다`() {
+        assertEquals(
+            "Invalid token",
+            extractJsonErrorMessage(json, """{"error_description": "Invalid token", "error": "invalid_grant"}""")
+        )
+        assertEquals(
+            "Rate limit exceeded",
+            extractJsonErrorMessage(json, """{"error": {"message": "Rate limit exceeded"}}""")
+        )
+        assertEquals(
+            "Bad request",
+            extractJsonErrorMessage(json, """{"error": "Bad request"}""")
+        )
     }
 }

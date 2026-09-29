@@ -14,8 +14,7 @@ class CandidateAutomationSessionTest {
         endIndex: Int = 5,
         source: AnalysisTargetSource = AnalysisTargetSource.AUTO,
         category: AnalysisCategory = AnalysisCategory.LOCATION,
-        confidence: Double = 0.95,
-        reason: String = "단어 감지"
+        confidence: Double = 0.95
     ): AnalysisTargetSegment {
         return AnalysisTargetSegment(
             text = text,
@@ -23,8 +22,7 @@ class CandidateAutomationSessionTest {
             endIndex = endIndex,
             source = source,
             category = category,
-            confidence = confidence,
-            reason = reason
+            confidence = confidence
         )
     }
 
@@ -106,8 +104,7 @@ class CandidateAutomationSessionTest {
             endIndex = 5,
             source = AnalysisTargetSource.AUTO,
             category = AnalysisCategory.LOCATION,
-            confidence = 0.95,
-            reason = "기본 감지"
+            confidence = 0.95
         )
         val session = CandidateAutomationSession(
             originalSource = "맛있는 사과를 먹는다",
@@ -120,10 +117,9 @@ class CandidateAutomationSessionTest {
             text = "사과",
             startIndex = 3,
             endIndex = 5,
-            source = AnalysisTargetSource.MANUAL,
+            source = AnalysisTargetSource.AUTO,
             category = AnalysisCategory.WOMEN_CLOTHING,
-            confidence = 0.5,
-            reason = "사용자 직접 지정"
+            confidence = 0.5
         )
         assertTrue(session.matches("맛있는 사과를 먹는다", differentMetadataSegment))
     }

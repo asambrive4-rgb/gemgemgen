@@ -1,4 +1,4 @@
-// 역할: 와일드카드 화면의 생성, 이름 변경, 삭제, 분류 다이얼로그 팝업을 총괄 표시합니다.
+// 역할: 와일드카드 화면의 활성 다이얼로그 상태를 판별하고 파일 관리·AI 분류 팝업을 통합 표시합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -7,14 +7,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -40,7 +37,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -121,84 +117,35 @@ fun deriveActiveWildcardDialog(uiState: WildcardUiState): WildcardDialogType {
     }
 }
 
-internal data class WildcardDialogActions(
-    val onNewFileNameChange: (String) -> Unit,
-    val onCreateNewFile: () -> Unit,
-    val onDismissNewFile: () -> Unit,
-    val onRenameFileNameChange: (String) -> Unit,
-    val onConfirmRename: () -> Unit,
-    val onDismissRename: () -> Unit,
-    val onConfirmDelete: () -> Unit,
-    val onDismissDelete: () -> Unit,
-    val onConfirmPendingSave: () -> Unit,
-    val onConfirmPendingDiscard: () -> Unit,
-    val onCancelPending: () -> Unit,
-    val onClassifyCriteriaChange: (String) -> Unit,
-    val onClassifyProviderSelected: (AnalysisProvider) -> Unit,
-    val onClassifyModelSelected: (String) -> Unit,
-    val onRunClassify: () -> Unit,
-    val onDismissClassifyCriteria: () -> Unit,
-    val onClassifyFileNameChange: (Int, String) -> Unit,
-    val onToggleClassifyFileNameEdit: (Int) -> Unit,
-    val onSaveClassifyResult: () -> Unit,
-    val onDismissClassifyPreview: () -> Unit,
-    val onConfirmClassifyOverwrite: () -> Unit,
-    val onDismissClassifyOverwrite: () -> Unit
-)
-
-enum class WildcardDialogStage {
-    NEW_FILE,
-    RENAME_FILE,
-    DELETE_CONFIRM,
-    UNSAVED_CHANGES,
-    CLASSIFY_LOADING,
-    CLASSIFY_CRITERIA,
-    CLASSIFY_PREVIEW,
-    CLASSIFY_OVERWRITE
-}
-
-fun deriveWildcardDialogStage(dialog: WildcardDialogType): WildcardDialogStage? {
-    return when (dialog) {
-        WildcardDialogType.None -> null
-        is WildcardDialogType.NewFile -> WildcardDialogStage.NEW_FILE
-        is WildcardDialogType.RenameFile -> WildcardDialogStage.RENAME_FILE
-        is WildcardDialogType.DeleteConfirm -> WildcardDialogStage.DELETE_CONFIRM
-        WildcardDialogType.UnsavedChanges -> WildcardDialogStage.UNSAVED_CHANGES
-        WildcardDialogType.ClassifyLoading -> WildcardDialogStage.CLASSIFY_LOADING
-        is WildcardDialogType.ClassifyCriteria -> WildcardDialogStage.CLASSIFY_CRITERIA
-        is WildcardDialogType.ClassifyPreview -> WildcardDialogStage.CLASSIFY_PREVIEW
-        is WildcardDialogType.ClassifyOverwrite -> WildcardDialogStage.CLASSIFY_OVERWRITE
-    }
-}
-
 @Composable
 internal fun WildcardDialogHost(
     activeDialog: WildcardDialogType,
-    actions: WildcardDialogActions
+    actions: WildcardScreenActions
 ) {
-    val activeStage = deriveWildcardDialogStage(activeDialog) ?: return
+    if (activeDialog is WildcardDialogType.None) return
 
     val onDismissRequest: () -> Unit = {
         when (activeDialog) {
             WildcardDialogType.None -> Unit
-            is WildcardDialogType.NewFile -> actions.onDismissNewFile()
-            is WildcardDialogType.RenameFile -> actions.onDismissRename()
-            is WildcardDialogType.DeleteConfirm -> actions.onDismissDelete()
-            WildcardDialogType.UnsavedChanges -> actions.onCancelPending()
+            is WildcardDialogType.NewFile -> actions.dismissNewFileDialog()
+            is WildcardDialogType.RenameFile -> actions.dismissRenameDialog()
+            is WildcardDialogType.DeleteConfirm -> actions.dismissDeleteConfirm()
+            WildcardDialogType.UnsavedChanges -> actions.cancelPendingAction()
             WildcardDialogType.ClassifyLoading -> Unit // 로딩 중 dismiss 방지
-            is WildcardDialogType.ClassifyCriteria -> actions.onDismissClassifyCriteria()
-            is WildcardDialogType.ClassifyPreview -> actions.onDismissClassifyPreview()
-            is WildcardDialogType.ClassifyOverwrite -> actions.onDismissClassifyOverwrite()
+            is WildcardDialogType.ClassifyCriteria -> actions.dismissClassifyCriteriaDialog()
+            is WildcardDialogType.ClassifyPreview -> actions.dismissClassifyPreview()
+            is WildcardDialogType.ClassifyOverwrite -> actions.dismissClassifyOverwrite()
         }
     }
 
     val focusManager = LocalFocusManager.current
+    val isDismissible = activeDialog !is WildcardDialogType.ClassifyLoading
 
     Dialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(
-            dismissOnBackPress = activeStage != WildcardDialogStage.CLASSIFY_LOADING,
-            dismissOnClickOutside = activeStage != WildcardDialogStage.CLASSIFY_LOADING,
+            dismissOnBackPress = isDismissible,
+            dismissOnClickOutside = isDismissible,
             usePlatformDefaultWidth = false
         )
     ) {
@@ -215,22 +162,42 @@ internal fun WildcardDialogHost(
             tonalElevation = 6.dp
         ) {
             AnimatedContent(
-                targetState = activeStage,
+                targetState = activeDialog,
+                contentKey = { it::class },
                 transitionSpec = {
                     fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
                 },
                 contentAlignment = Alignment.Center,
                 label = "WildcardDialogHostCrossfade"
-            ) { stage ->
-                when (stage) {
-                    WildcardDialogStage.NEW_FILE -> (activeDialog as? WildcardDialogType.NewFile)?.let { NewFileContent(it, actions) }
-                    WildcardDialogStage.RENAME_FILE -> (activeDialog as? WildcardDialogType.RenameFile)?.let { RenameFileContent(it, actions) }
-                    WildcardDialogStage.DELETE_CONFIRM -> (activeDialog as? WildcardDialogType.DeleteConfirm)?.let { DeleteConfirmContent(it, actions) }
-                    WildcardDialogStage.UNSAVED_CHANGES -> UnsavedChangesContent(actions)
-                    WildcardDialogStage.CLASSIFY_LOADING -> ClassifyLoadingContent()
-                    WildcardDialogStage.CLASSIFY_CRITERIA -> (activeDialog as? WildcardDialogType.ClassifyCriteria)?.let { ClassifyCriteriaContent(it, actions) }
-                    WildcardDialogStage.CLASSIFY_PREVIEW -> (activeDialog as? WildcardDialogType.ClassifyPreview)?.let { ClassifyPreviewContent(it, actions) }
-                    WildcardDialogStage.CLASSIFY_OVERWRITE -> (activeDialog as? WildcardDialogType.ClassifyOverwrite)?.let { ClassifyOverwriteContent(it, actions) }
+            ) { targetDialog ->
+                when (targetDialog) {
+                    WildcardDialogType.None -> Unit
+                    is WildcardDialogType.NewFile -> FileNameInputDialogContent(
+                        title = "새 txt 파일",
+                        fileName = targetDialog.fileName,
+                        placeholder = "예: hair",
+                        error = targetDialog.error,
+                        confirmLabel = "생성",
+                        onFileNameChange = actions::onNewFileNameChange,
+                        onConfirm = actions::createNewFile,
+                        onDismiss = actions::dismissNewFileDialog
+                    )
+                    is WildcardDialogType.RenameFile -> FileNameInputDialogContent(
+                        title = "파일 이름 수정",
+                        fileName = targetDialog.fileName,
+                        placeholder = "예: new_hair",
+                        error = targetDialog.error,
+                        confirmLabel = "변경",
+                        onFileNameChange = actions::onRenameFileNameChange,
+                        onConfirm = actions::renameSelectedFile,
+                        onDismiss = actions::dismissRenameDialog
+                    )
+                    is WildcardDialogType.DeleteConfirm -> DeleteConfirmContent(targetDialog, actions)
+                    WildcardDialogType.UnsavedChanges -> UnsavedChangesContent(actions)
+                    WildcardDialogType.ClassifyLoading -> ClassifyLoadingContent()
+                    is WildcardDialogType.ClassifyCriteria -> ClassifyCriteriaContent(targetDialog, actions)
+                    is WildcardDialogType.ClassifyPreview -> ClassifyPreviewContent(targetDialog, actions)
+                    is WildcardDialogType.ClassifyOverwrite -> ClassifyOverwriteContent(targetDialog, actions)
                 }
             }
         }
@@ -238,11 +205,17 @@ internal fun WildcardDialogHost(
 }
 
 @Composable
-private fun NewFileContent(
-    dialog: WildcardDialogType.NewFile,
-    actions: WildcardDialogActions
+private fun FileNameInputDialogContent(
+    title: String,
+    fileName: String,
+    placeholder: String,
+    error: String,
+    confirmLabel: String,
+    onFileNameChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val canCreate = dialog.fileName.isNotBlank()
+    val canConfirm = fileName.isNotBlank()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -250,15 +223,15 @@ private fun NewFileContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "새 txt 파일",
+            text = title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                value = dialog.fileName,
-                onValueChange = actions.onNewFileNameChange,
+                value = fileName,
+                onValueChange = onFileNameChange,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -266,17 +239,17 @@ private fun NewFileContent(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(
                     onDone = {
-                        if (canCreate) {
-                            actions.onCreateNewFile()
+                        if (canConfirm) {
+                            onConfirm()
                         }
                     }
                 ),
                 label = { Text("파일명") },
-                placeholder = { Text("예: hair") }
+                placeholder = { Text(placeholder) }
             )
-            if (dialog.error.isNotBlank()) {
+            if (error.isNotBlank()) {
                 Text(
-                    text = dialog.error,
+                    text = error,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -286,78 +259,15 @@ private fun NewFileContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onDismissNewFile) {
+            TextButton(onClick = onDismiss) {
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
             TextButton(
-                onClick = actions.onCreateNewFile,
-                enabled = canCreate
+                onClick = onConfirm,
+                enabled = canConfirm
             ) {
-                Text("생성")
-            }
-        }
-    }
-}
-
-@Composable
-private fun RenameFileContent(
-    dialog: WildcardDialogType.RenameFile,
-    actions: WildcardDialogActions
-) {
-    val canRename = dialog.fileName.isNotBlank()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "파일 이름 수정",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = dialog.fileName,
-                onValueChange = actions.onRenameFileNameChange,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = appTextFieldColors(),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (canRename) {
-                            actions.onConfirmRename()
-                        }
-                    }
-                ),
-                label = { Text("파일명") },
-                placeholder = { Text("예: new_hair") }
-            )
-            if (dialog.error.isNotBlank()) {
-                Text(
-                    text = dialog.error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = actions.onDismissRename) {
-                Text("취소")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(
-                onClick = actions.onConfirmRename,
-                enabled = canRename
-            ) {
-                Text("변경")
+                Text(confirmLabel)
             }
         }
     }
@@ -366,7 +276,7 @@ private fun RenameFileContent(
 @Composable
 private fun DeleteConfirmContent(
     dialog: WildcardDialogType.DeleteConfirm,
-    actions: WildcardDialogActions
+    actions: WildcardScreenActions
 ) {
     Column(
         modifier = Modifier
@@ -389,11 +299,11 @@ private fun DeleteConfirmContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onDismissDelete) {
+            TextButton(onClick = actions::dismissDeleteConfirm) {
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = actions.onConfirmDelete) {
+            TextButton(onClick = actions::confirmDeleteSelectedFile) {
                 Text("삭제")
             }
         }
@@ -402,7 +312,7 @@ private fun DeleteConfirmContent(
 
 @Composable
 private fun UnsavedChangesContent(
-    actions: WildcardDialogActions
+    actions: WildcardScreenActions
 ) {
     Column(
         modifier = Modifier
@@ -426,15 +336,15 @@ private fun UnsavedChangesContent(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = actions.onConfirmPendingSave) {
+            TextButton(onClick = actions::onConfirmPendingSave) {
                 Text("Save")
             }
             Spacer(modifier = Modifier.width(4.dp))
-            TextButton(onClick = actions.onConfirmPendingDiscard) {
+            TextButton(onClick = actions::onConfirmPendingDiscard) {
                 Text("Discard")
             }
             Spacer(modifier = Modifier.width(4.dp))
-            TextButton(onClick = actions.onCancelPending) {
+            TextButton(onClick = actions::cancelPendingAction) {
                 Text("Cancel")
             }
         }
@@ -472,7 +382,7 @@ private fun ClassifyLoadingContent() {
 @Composable
 private fun ClassifyCriteriaContent(
     dialog: WildcardDialogType.ClassifyCriteria,
-    actions: WildcardDialogActions
+    actions: WildcardScreenActions
 ) {
     Column(
         modifier = Modifier
@@ -506,15 +416,15 @@ private fun ClassifyCriteriaContent(
             ModelSelectorChips(
                 selectedProvider = dialog.provider,
                 selectedModelId = dialog.modelId,
-                onSelectProvider = actions.onClassifyProviderSelected,
-                onSelectModel = actions.onClassifyModelSelected,
+                onSelectProvider = actions::onClassifyProviderSelected,
+                onSelectModel = actions::onClassifyModelSelected,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             )
 
             OutlinedTextField(
                 value = dialog.criteria,
-                onValueChange = actions.onClassifyCriteriaChange,
+                onValueChange = actions::onClassifyCriteriaChange,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 96.dp),
@@ -540,12 +450,12 @@ private fun ClassifyCriteriaContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onDismissClassifyCriteria) {
+            TextButton(onClick = actions::dismissClassifyCriteriaDialog) {
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
             TextButton(
-                onClick = actions.onRunClassify,
+                onClick = actions::runClassify,
                 enabled = dialog.canRun
             ) {
                 Text("분류 실행")
@@ -557,13 +467,13 @@ private fun ClassifyCriteriaContent(
 @Composable
 private fun ClassifyPreviewContent(
     dialog: WildcardDialogType.ClassifyPreview,
-    actions: WildcardDialogActions
+    actions: WildcardScreenActions
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
             text = "분류 미리보기",
@@ -586,7 +496,7 @@ private fun ClassifyPreviewContent(
             )
             OutlinedTextField(
                 value = dialog.criteria,
-                onValueChange = actions.onClassifyCriteriaChange,
+                onValueChange = actions::onClassifyCriteriaChange,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 72.dp),
@@ -597,7 +507,7 @@ private fun ClassifyPreviewContent(
                 placeholder = { Text("기준을 수정한 뒤 다시 분류") }
             )
             OutlinedButton(
-                onClick = actions.onRunClassify,
+                onClick = actions::runClassify,
                 enabled = dialog.canRerun,
                 modifier = Modifier.fillMaxWidth(),
                 border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
@@ -720,12 +630,12 @@ private fun ClassifyPreviewContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onDismissClassifyPreview) {
+            TextButton(onClick = actions::dismissClassifyPreview) {
                 Text("닫기")
             }
             Spacer(modifier = Modifier.width(8.dp))
             TextButton(
-                onClick = actions.onSaveClassifyResult,
+                onClick = { actions.saveClassifyResult() },
                 enabled = dialog.canSave
             ) {
                 Text("파일로 저장")
@@ -737,7 +647,7 @@ private fun ClassifyPreviewContent(
 @Composable
 private fun ClassifyOverwriteContent(
     dialog: WildcardDialogType.ClassifyOverwrite,
-    actions: WildcardDialogActions
+    actions: WildcardScreenActions
 ) {
     Column(
         modifier = Modifier
@@ -761,14 +671,13 @@ private fun ClassifyOverwriteContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions.onDismissClassifyOverwrite) {
+            TextButton(onClick = actions::dismissClassifyOverwrite) {
                 Text("취소")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = actions.onConfirmClassifyOverwrite) {
+            TextButton(onClick = actions::confirmClassifyOverwrite) {
                 Text("덮어쓰기")
             }
         }
     }
 }
-

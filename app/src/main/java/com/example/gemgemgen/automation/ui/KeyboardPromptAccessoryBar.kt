@@ -58,7 +58,7 @@ internal fun KeyboardPromptAccessoryBar(
                 },
                 onCancelAutomation = {
                     actions.onClearFocus()
-                    actions.onCancelAutomation()
+                    actions.cancelAutomation()
                 },
                 isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
             )
@@ -86,18 +86,18 @@ internal fun KeyboardPromptAccessoryBar(
                 ParagraphSelectionModeButton(
                     selected = uiState.isParagraphSelectionMode,
                     enabled = true,
-                    onClick = actions::onToggleParagraphSelectionMode
+                    onClick = actions::toggleParagraphSelectionMode
                 )
             }
 
             PromptEditorActionGroup(
                 isTargetSelectionEnabled = true,
                 canCopyPrompt = uiState.hasPromptTemplate,
-                onInsertTopInstruction = actions::onInsertTopInstruction,
-                onInsertBottomInstruction = actions::onInsertBottomInstruction,
-                onOpenInstructionConfigDialog = actions::onOpenInstructionConfigDialog,
-                onImportFromClipboard = actions::onImportPromptFromClipboard,
-                onCopyPromptToClipboard = actions::onCopyPromptToClipboard,
+                onInsertTopInstruction = actions::insertTopInstruction,
+                onInsertBottomInstruction = actions::insertBottomInstruction,
+                onOpenInstructionConfigDialog = actions::openInstructionConfigDialog,
+                onImportFromClipboard = actions::importPromptFromClipboard,
+                onCopyPromptToClipboard = actions::copyPromptToClipboard,
                 showInsertButtons = false,
                 showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                 isVariationButtonEnabled = uiState.canInteractWithVariation,
@@ -112,7 +112,7 @@ internal fun KeyboardPromptAccessoryBar(
                 onVariationPointerDown = {
                     keyboardVariationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
                 },
-                onOpenVariationPromptConfigDialog = actions::onOpenVariationPromptConfigDialog
+                onOpenVariationPromptConfigDialog = actions::openVariationPromptConfigDialog
             )
         }
     }

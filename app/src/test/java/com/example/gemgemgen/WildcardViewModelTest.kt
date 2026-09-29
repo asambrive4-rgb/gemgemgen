@@ -1,16 +1,10 @@
 // 역할: 와일드카드 뷰모델의 파일 탐색, 편집, 화면 액션 인터페이스 및 폴더 관리 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.automation.android.*
-import com.example.gemgemgen.automation.domain.*
-import com.example.gemgemgen.automation.usecase.*
-import com.example.gemgemgen.core.*
-import com.example.gemgemgen.environment.android.*
-import com.example.gemgemgen.environment.domain.*
-import com.example.gemgemgen.environment.usecase.*
-import com.example.gemgemgen.ui.*
-import com.example.gemgemgen.wildcard.ui.*
+import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.*
+import com.example.gemgemgen.wildcard.ui.*
 import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -88,19 +82,6 @@ class WildcardViewModelTest {
         assertEquals("black hair", viewModel.uiState.value.editingText)
         assertEquals("black hair", viewModel.uiState.value.savedText)
         assertTrue(viewModel.uiState.value.undoStack.isEmpty())
-    }
-
-    @Test
-    fun onTabEntered_maintainsPreservedCleanSelection() {
-        val viewModel = viewModel(
-            fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
-        )
-        viewModel.trimForInactiveTab()
-        assertEquals("black hair", viewModel.uiState.value.editingText)
-
-        viewModel.onTabEntered()
-
-        assertEquals("black hair", viewModel.uiState.value.editingText)
     }
 
     @Test
@@ -213,19 +194,6 @@ class WildcardViewModelTest {
 
         assertTrue(viewModel.uiState.value.showRenameDialog)
         assertEquals("파일 이름을 입력해주세요.", viewModel.uiState.value.error)
-    }
-
-    @Test
-    fun uiState_exposesDisplayValuesForScreen() {
-        val viewModel = viewModel(
-            fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
-        )
-
-        viewModel.onTextChange("silver hair")
-
-        assertEquals("hair.txt *", viewModel.uiState.value.selectedFileDisplayName)
-        assertEquals("hair.txt *", viewModel.uiState.value.fileItems.single().displayName)
-        assertTrue(viewModel.uiState.value.fileItems.single().isSelected)
     }
 
     @Test
@@ -365,30 +333,32 @@ class WildcardViewModelTest {
 
     @Test
     fun decideWildcardFolderAction_delegatesBasedOnEnvironmentStatus() {
-        val directEnv = EnvironmentReport(status = EnvironmentStatus(hasAllFilesAccess = true, isWildcardDirectoryAccessible = true))
-        val directVm = viewModel(environmentGateway = FakeEnvironmentGateway(directEnv))
-        assertEquals(WildcardFolderAction.OpenDirectFolder, directVm.decideWildcardFolderAction())
-
-        val settingsEnv = EnvironmentReport(status = EnvironmentStatus(hasAllFilesAccess = false, isWildcardDirectoryAccessible = false))
-        val settingsVm = viewModel(environmentGateway = FakeEnvironmentGateway(settingsEnv))
-        assertEquals(WildcardFolderAction.OpenStorageSettings, settingsVm.decideWildcardFolderAction())
-
-        val safEnv = EnvironmentReport(status = EnvironmentStatus(hasAllFilesAccess = false, isWildcardDirectoryAccessible = true))
-        val safVm = viewModel(environmentGateway = FakeEnvironmentGateway(safEnv))
-        assertEquals(WildcardFolderAction.LaunchSafPicker, safVm.decideWildcardFolderAction())
+        val vm = viewModel()
+        assertEquals(
+            WildcardFolderAction.OpenDirectFolder,
+            vm.decideWildcardFolderAction(hasAllFilesAccess = true, isWildcardDirectoryAccessible = true)
+        )
+        assertEquals(
+            WildcardFolderAction.OpenStorageSettings,
+            vm.decideWildcardFolderAction(hasAllFilesAccess = false, isWildcardDirectoryAccessible = false)
+        )
+        assertEquals(
+            WildcardFolderAction.LaunchSafPicker,
+            vm.decideWildcardFolderAction(hasAllFilesAccess = false, isWildcardDirectoryAccessible = true)
+        )
     }
 
     @Test
-    fun saveWildcardFolderUseCase_validatesBlankFolder() {
+    fun saveWildcardFolder_validatesBlankFolder() {
         val repo = FakeWildcardFolderRepository()
-        val useCase = SaveWildcardFolderUseCase(repo)
+        val viewModel = viewModel(folderRepository = repo)
 
-        val blankResult = useCase.save("   ")
+        val blankResult = viewModel.saveWildcardFolder("   ")
         assertTrue(blankResult is FolderSelectionResult.Failure)
         assertEquals("폴더 경로가 비어 있습니다.", (blankResult as FolderSelectionResult.Failure).reason)
         assertEquals(0, repo.saveCallCount)
 
-        val validResult = useCase.save("content://test")
+        val validResult = viewModel.saveWildcardFolder("content://test")
         assertEquals(FolderSelectionResult.Success, validResult)
         assertEquals("content://test", repo.lastSavedUri)
         assertEquals(1, repo.saveCallCount)
@@ -404,7 +374,7 @@ class WildcardViewModelTest {
         val actions: WildcardScreenActions = viewModel
         val hairFile = viewModel.uiState.value.files.first { it.fileName == "hair.txt" }
 
-        actions.onFileClick(hairFile)
+        actions.selectFile(hairFile)
 
         assertEquals("hair.txt", viewModel.uiState.value.selectedFile?.fileName)
         assertEquals("black hair", viewModel.uiState.value.editingText)
@@ -416,7 +386,7 @@ class WildcardViewModelTest {
         val viewModel = viewModel(fileManager = fileManager)
         val actions: WildcardScreenActions = viewModel
 
-        actions.onTextChanged("blonde hair")
+        actions.onTextChange("blonde hair")
         assertTrue(viewModel.uiState.value.hasUnsavedChanges)
 
         actions.onSaveFile()
@@ -430,16 +400,16 @@ class WildcardViewModelTest {
         val viewModel = viewModel(fileManager = fileManager)
         val actions: WildcardScreenActions = viewModel
 
-        actions.onEnterLineSelectionMode()
+        actions.enterLineSelectionMode()
         assertTrue(viewModel.uiState.value.isLineSelectionMode)
 
-        actions.onToggleLineSelection(0)
+        actions.toggleLineSelection(0)
         assertEquals(setOf(0), viewModel.uiState.value.selectedLineIndices)
 
-        actions.onSelectAllLines()
+        actions.selectAllLines()
         assertEquals(setOf(0, 1), viewModel.uiState.value.selectedLineIndices)
 
-        actions.onExitLineSelectionMode()
+        actions.exitLineSelectionMode()
         assertFalse(viewModel.uiState.value.isLineSelectionMode)
     }
 
@@ -459,8 +429,7 @@ class WildcardViewModelTest {
         clipboardText: String = "",
         clipboardGateway: FakeClipboardGateway = FakeClipboardGateway(clipboardText),
         canModifyFiles: Boolean = true,
-        folderRepository: WildcardFolderRepository? = null,
-        environmentGateway: EnvironmentGateway? = null
+        folderRepository: WildcardFolderRepository? = null
     ): WildcardViewModel {
         return WildcardViewModel(
             manageWildcardFiles = ManageWildcardFilesUseCase(
@@ -472,8 +441,7 @@ class WildcardViewModelTest {
                 dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
             ),
             coroutineScope = CoroutineScope(Dispatchers.Unconfined),
-            saveWildcardFolder = folderRepository,
-            checkEnvironmentStatus = environmentGateway?.let { CheckEnvironmentStatusUseCase(it) }
+            saveWildcardFolder = folderRepository
         ).also {
             it.onFolderAccessChanged(canModifyFiles)
         }
@@ -574,11 +542,5 @@ class WildcardViewModelTest {
         }
 
         override fun getFolderUri(): String? = storedFolderUri
-    }
-
-    private class FakeEnvironmentGateway(
-        var report: EnvironmentReport = EnvironmentReport()
-    ) : EnvironmentGateway {
-        override fun check(): EnvironmentReport = report
     }
 }

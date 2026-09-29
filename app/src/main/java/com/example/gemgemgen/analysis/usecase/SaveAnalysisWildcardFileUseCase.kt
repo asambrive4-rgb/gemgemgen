@@ -4,6 +4,7 @@ package com.example.gemgemgen.analysis.usecase
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.WildcardFileName
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import kotlinx.coroutines.withContext
@@ -27,7 +28,7 @@ sealed class AnalysisSaveAndReplaceResult {
 
 class SaveAnalysisWildcardFileUseCase(
     private val repository: WildcardFileRepository,
-    private val copyResults: CopyAnalysisResultsUseCase,
+    private val clipboardGateway: ClipboardGateway,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     suspend fun save(
@@ -81,7 +82,7 @@ class SaveAnalysisWildcardFileUseCase(
                 savedFileName = saveResult.fileName
             )
             try {
-                copyResults.copyText(replacedSource)
+                withContext(dispatchers.io) { clipboardGateway.writeText(replacedSource) }
                 AnalysisSaveAndReplaceResult.Success(
                     fileName = saveResult.fileName,
                     replacedSource = replacedSource,
@@ -98,3 +99,4 @@ class SaveAnalysisWildcardFileUseCase(
         }
     }
 }
+

@@ -16,7 +16,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTextEdit
 import com.example.gemgemgen.analysis.domain.AnalysisVisualContext
-import com.example.gemgemgen.analysis.domain.AnalysisVisualRules
+
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
@@ -219,7 +219,7 @@ class AnalysisPrecisionEditingTest {
             val generation = AnalysisPromptBuilder.buildTxtPrompt(source, category, target.copy(category = category),
                 report, 2, emptyList())
             listOf(analysis.systemInstruction, generation.systemInstruction).forEach { text ->
-                assertTrue(text.contains(AnalysisVisualRules.instructions))
+                assertTrue(text.contains(AnalysisPromptBuilder.sharedVisualRules))
                 val rule = AnalysisCategoryRules.ruleFor(category)
                 assertTrue(text.contains(rule.required))
                 assertTrue(text.contains(rule.avoid))

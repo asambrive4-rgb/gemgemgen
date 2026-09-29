@@ -51,7 +51,6 @@ class PromptEditorSessionTest {
 
         assertEquals("인물\n새 장소\n보조 설명\n조명", mutation.session.text)
         assertFalse(mutation.session.isParagraphSelectionMode)
-        assertEquals("인물\n장소\n조명", mutation.previousTextForUndo)
         assertEquals("인물\n새 장소\n보조 설명".length, mutation.selectionStart)
     }
 
@@ -118,7 +117,7 @@ class PromptEditorSessionTest {
             )
         )
         assertEquals(
-            PromptTypingChange.UserEdit(previousText = "a", newText = "ab"),
+            PromptTypingChange.UserEdit(newText = "ab"),
             PromptEditorSession.classifyTypingChange(
                 previousText = "a",
                 newText = "ab",

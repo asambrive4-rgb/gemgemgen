@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuCard
-import com.example.gemgemgen.ui.theme.OnRemoteStartGreenDark
 import com.example.gemgemgen.ui.theme.RemoteStartGreen
 
 @Composable

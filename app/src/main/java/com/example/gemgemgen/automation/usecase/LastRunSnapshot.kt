@@ -12,6 +12,11 @@ data class LastRunSnapshot(
     val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT
 )
 
+interface LastRunSnapshotRepository {
+    fun load(): LastRunSnapshot?
+    fun save(snapshot: LastRunSnapshot)
+}
+
 class LastRunSnapshotStore(
     private val repository: LastRunSnapshotRepository
 ) {

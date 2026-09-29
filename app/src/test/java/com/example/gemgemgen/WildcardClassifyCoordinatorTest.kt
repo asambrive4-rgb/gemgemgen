@@ -4,7 +4,6 @@ package com.example.gemgemgen
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.domain.AnalysisTxtPromptPayload
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
@@ -247,8 +246,7 @@ class WildcardClassifyCoordinatorTest {
         repo: FakeWildcardRepo = FakeWildcardRepo()
     ): WildcardClassifyCoordinator {
         val fakeAiGateway = object : AnalysisAiGateway {
-            override suspend fun analyze(apiKey: String, modelId: String, payload: AnalysisPromptPayload): String = ""
-            override suspend fun generateTxt(apiKey: String, modelId: String, payload: AnalysisTxtPromptPayload): String = aiResponseText
+            override suspend fun analyze(apiKey: String, modelId: String, payload: AnalysisPromptPayload): String = aiResponseText
         }
         val keyRepository = FakeKeyRepo(activeKey = "fake-key")
         val fakeGrokGateway = object : GrokAuthGateway {
@@ -304,12 +302,12 @@ class WildcardClassifyCoordinatorTest {
         init {
             if (activeKey != null) {
                 rawKeys["k1"] = activeKey
-                records += GeminiApiKeyRecord("k1", "key1", "enc", "preview", 0L, isActive = true)
+                records += GeminiApiKeyRecord("k1", "key1", "enc", "preview", isActive = true)
             }
         }
 
         override fun listKeys(): List<GeminiApiKeyRecord> = records
-        override fun addKey(label: String, rawKey: String, createdAtMillis: Long): GeminiApiKeyRecord = error("unused")
+        override fun addKey(label: String, rawKey: String): GeminiApiKeyRecord = error("unused")
         override fun deleteKey(id: String) = Unit
         override fun activateKey(id: String) = Unit
         override fun activeKeyValue(): String? = records.firstOrNull { it.isActive }?.let { rawKeys[it.id] }

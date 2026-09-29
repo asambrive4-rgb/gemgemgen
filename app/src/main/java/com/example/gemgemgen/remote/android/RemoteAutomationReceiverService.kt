@@ -28,7 +28,6 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteExecutionConditions
 import com.example.gemgemgen.remote.usecase.ExecuteRemoteAutomationUseCase
 import com.example.gemgemgen.remote.usecase.CheckRemoteExecutionUseCase
-import com.example.gemgemgen.remote.usecase.ManageReceivedAutomationUseCase
 import com.example.gemgemgen.ui.MainActivity
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -58,7 +57,6 @@ class RemoteAutomationReceiverService : Service() {
     private lateinit var environmentGateway: AndroidEnvironmentGateway
     private var serverSocket: ServerSocket? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
-    private val manageReceivedAutomation = ManageReceivedAutomationUseCase()
     private val sessionMutex = Mutex()
     @Volatile private var activeSession: ReceiverSession? = null
     private val pairingCode = "%04d".format(SecureRandom().nextInt(10_000))
@@ -257,8 +255,6 @@ class RemoteAutomationReceiverService : Service() {
         socket.soTimeout = 0
         val states = Channel<AutomationRunState>(Channel.UNLIMITED)
         val executionJob = sessionMutex.withLock {
-            manageReceivedAutomation.acceptLatest(requestId)
-
             val previousSession = activeSession
             previousSession?.executionJob?.cancelAndJoin()
             withContext(Dispatchers.Main.immediate) {
@@ -302,7 +298,7 @@ class RemoteAutomationReceiverService : Service() {
         try {
             while (true) {
                 val state = states.receive()
-                if (manageReceivedAutomation.canPublish(requestId)) {
+                if (activeSession?.requestId == requestId) {
                     RemoteAutomationStateHub.update {
                         it.copy(automationState = state, message = stateMessage(state))
                     }
@@ -314,10 +310,8 @@ class RemoteAutomationReceiverService : Service() {
             executionJob.cancel()
             states.close()
             sessionMutex.withLock {
-                if (manageReceivedAutomation.finishIfCurrent(requestId)) {
-                    if (activeSession?.requestId == requestId) {
-                        activeSession = null
-                    }
+                if (activeSession?.requestId == requestId) {
+                    activeSession = null
                 }
             }
         }
@@ -326,10 +320,9 @@ class RemoteAutomationReceiverService : Service() {
     private suspend fun handleCancel(message: RemoteProtocolMessage.CancelRequest) {
         if (!isAuthenticated(message.senderId, message.token)) return
         sessionMutex.withLock {
-            if (!manageReceivedAutomation.stopIfCurrent(message.requestId)) return
-            val session = activeSession?.takeIf { it.requestId == message.requestId }
+            val session = activeSession?.takeIf { it.requestId == message.requestId } ?: return
             activeSession = null
-            session?.executionJob?.cancelAndJoin()
+            session.executionJob.cancelAndJoin()
             withContext(Dispatchers.Main.immediate) {
                 executeRemoteAutomation.cancel()
             }
