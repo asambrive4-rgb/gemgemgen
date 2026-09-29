@@ -106,47 +106,6 @@ class AppMaintenanceUseCaseTest {
     }
 
     @Test
-    fun terminateGemini_success_returnsSuccessMessage() = runBlocking {
-        val closer = FakeGeminiCloser(CloseGeminiAppResult.Success(closedCount = 1))
-        val useCase = AppMaintenanceUseCase(
-            geminiRestartCloser = closer,
-            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        )
-
-        val result = useCase.terminateGemini()
-
-        assertTrue(result is MaintenanceResult.Success)
-        assertEquals("Gemini 앱을 종료했습니다.", (result as MaintenanceResult.Success).message)
-    }
-
-    @Test
-    fun terminateGemini_successMultiple_returnsCountInMessage() = runBlocking {
-        val closer = FakeGeminiCloser(CloseGeminiAppResult.Success(closedCount = 2))
-        val useCase = AppMaintenanceUseCase(
-            geminiRestartCloser = closer,
-            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        )
-
-        val result = useCase.terminateGemini()
-
-        assertTrue(result is MaintenanceResult.Success)
-        assertEquals("Gemini 앱 2개를 종료했습니다.", (result as MaintenanceResult.Success).message)
-    }
-
-    @Test
-    fun terminateGemini_accessibilityUnavailable_returnsUnavailable() = runBlocking {
-        val closer = FakeGeminiCloser(CloseGeminiAppResult.AccessibilityUnavailable)
-        val useCase = AppMaintenanceUseCase(
-            geminiRestartCloser = closer,
-            memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
-        )
-
-        val result = useCase.terminateGemini()
-
-        assertEquals(MaintenanceResult.Unavailable, result)
-    }
-
-    @Test
     fun terminateSelf_success_returnsSuccessMessage() = runBlocking {
         val closer = FakeGeminiCloser(CloseGeminiAppResult.Success(closedCount = 1))
         val useCase = AppMaintenanceUseCase(
@@ -266,30 +225,21 @@ class AppMaintenanceUseCaseTest {
     @Test
     fun customClosers_delegateToRespectiveCloser() = runBlocking {
         val restartCloser = FakeGeminiCloser(CloseGeminiAppResult.Success(1))
-        val terminateCloser = FakeGeminiCloser(CloseGeminiAppResult.Success(2))
         val selfCloser = FakeGeminiCloser(CloseGeminiAppResult.Success(3))
         val memoryGateway = FakeMemoryGateway(MemoryCleanupResult.Success)
 
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = restartCloser,
-            geminiTerminateCloser = terminateCloser,
             selfAppCloser = selfCloser,
             memoryCleanupGateway = memoryGateway
         )
 
         useCase.restartGemini()
         assertEquals(1, restartCloser.callCount)
-        assertEquals(0, terminateCloser.callCount)
-        assertEquals(0, selfCloser.callCount)
-
-        useCase.terminateGemini()
-        assertEquals(1, restartCloser.callCount)
-        assertEquals(1, terminateCloser.callCount)
         assertEquals(0, selfCloser.callCount)
 
         useCase.terminateSelf()
         assertEquals(1, restartCloser.callCount)
-        assertEquals(1, terminateCloser.callCount)
         assertEquals(1, selfCloser.callCount)
     }
 

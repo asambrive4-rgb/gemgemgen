@@ -123,24 +123,6 @@ internal class FlowAccessibilityNodeFinder(
         }
     }
 
-    /**
-     * 현재 옵션 패널에서 선택되어 있는 이미지 생성 개수(1~4)를 반환한다.
-     */
-    fun findSelectedImageCount(): Int? {
-        val root = rootProvider() ?: return null
-        return nodesSequence(root).firstNotNullOfOrNull { node ->
-            if (!node.isSelected) return@firstNotNullOfOrNull null
-            val desc = node.contentDescription?.toString()?.trim() ?: return@firstNotNullOfOrNull null
-            when {
-                desc.startsWith("x1", ignoreCase = true) -> 1
-                desc.startsWith("x2", ignoreCase = true) -> 2
-                desc.startsWith("x3", ignoreCase = true) -> 3
-                desc.startsWith("x4", ignoreCase = true) -> 4
-                else -> null
-            }
-        }
-    }
-
     fun findOptionPanelToggle(): AccessibilityNodeInfo? {
         val root = rootProvider() ?: return null
         return nodesSequence(root).firstOrNull { node ->

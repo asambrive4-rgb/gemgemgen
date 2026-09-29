@@ -231,7 +231,6 @@ class AutomationViewModel(
     override fun onPromptTemplateChange(value: String) { promptEditor.onPromptTemplateChange(value, updateTextFieldState = true) }
     override fun onImportPromptFromClipboard() { importPromptFromClipboard() }
     override fun onCopyPromptToClipboard() { copyPromptToClipboard() }
-    override fun onPastePromptFromClipboard() { pastePromptFromClipboard() }
     override fun onApplySuggestion(candidate: WildcardTokenAutocomplete.Candidate) { applySuggestion(candidate) }
 
     override fun onNavigatePromptHistoryBack() { navigatePromptHistoryBack() }
@@ -267,7 +266,6 @@ class AutomationViewModel(
     override fun onDeletePromptSnippet(id: String) { deletePromptSnippet(id) }
 
     override fun onCloseGeminiApp() { closeGeminiApp() }
-    override fun onTerminateGeminiApp() { terminateGeminiApp() }
     override fun onTerminateSelfApp() { terminateSelfApp() }
     override fun onCleanDeviceMemory() { cleanDeviceMemory() }
 
@@ -377,8 +375,6 @@ class AutomationViewModel(
     )
 
     fun copyPromptToClipboard() = promptEditor.copyPromptToClipboard()
-
-    fun pastePromptFromClipboard() = promptEditor.pastePromptFromClipboard()
 
     /**
      * 프롬프트 템플릿 맨 앞에 상단 인스트럭션을 붙인다.
@@ -496,11 +492,10 @@ class AutomationViewModel(
     fun refreshWildcardTokenCandidates() {
         scope.launch {
             val (wildcardCandidates, snippetCandidates, snippets) = withContext(dispatchers.io) {
-                Triple(
-                    loadWildcardTokenCandidates(),
-                    loadSnippetCandidates(),
-                    promptSnippetRepository?.load().orEmpty()
-                )
+                val wildcards = loadWildcardTokenCandidates()
+                val loadedSnippets = getPromptSnippetCandidates.loadSnippets()
+                val snippetCands = getPromptSnippetCandidates.fromSnippets(loadedSnippets)
+                Triple(wildcards, snippetCands, loadedSnippets)
             }
             val combined = (wildcardCandidates + snippetCandidates).sortedWith(
                 compareBy<WildcardTokenAutocomplete.Candidate> { it.name.length }
@@ -578,14 +573,6 @@ class AutomationViewModel(
         startingText = AutomationUiText.geminiRestartStartingText(),
         canceledText = AutomationUiText.geminiRestartCanceledText(),
         action = appMaintenance::restartGemini
-    )
-
-    fun terminateGeminiApp() = executeMaintenance(
-        canExecute = AutomationUiState::canCloseGemini,
-        unavailableMessage = AutomationUiText::geminiTerminateUnavailableMessage,
-        startingText = AutomationUiText.geminiTerminateStartingText(),
-        canceledText = AutomationUiText.geminiTerminateCanceledText(),
-        action = appMaintenance::terminateGemini
     )
 
     fun terminateSelfApp() = executeMaintenance(
@@ -681,8 +668,8 @@ class AutomationViewModel(
             val (report, wildcardCandidates, snippetCandidates, snippets) = withContext(dispatchers.io) {
                 val rep = checkEnvironmentStatus.check()
                 val wildcards = loadWildcardTokenCandidates()
-                val snippetCands = loadSnippetCandidates()
-                val snips = promptSnippetRepository?.load().orEmpty()
+                val snips = getPromptSnippetCandidates.loadSnippets()
+                val snippetCands = getPromptSnippetCandidates.fromSnippets(snips)
                 StatusCandidatesBundle(rep, wildcards, snippetCands, snips)
             }
             val combined = (wildcardCandidates + snippetCandidates).sortedWith(
@@ -703,9 +690,6 @@ class AutomationViewModel(
 
     private fun loadWildcardTokenCandidates(): List<WildcardTokenAutocomplete.Candidate> =
         getWildcardTokenCandidates()
-
-    private fun loadSnippetCandidates(): List<WildcardTokenAutocomplete.Candidate> =
-        getPromptSnippetCandidates()
 
     fun showSettings() {
         _uiState.update { state ->

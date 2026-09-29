@@ -31,7 +31,8 @@ class SaveWildcardClassifyResultUseCase(
             return@withContext WildcardClassifySaveResult.InvalidFileName(invalid.groupName)
         }
 
-        val existingNames = repository.listFiles().map { it.fileName }.toSet()
+        val existingFiles = repository.listFiles()
+        val existingNames = existingFiles.map { it.fileName }.toSet()
         val conflicts = plans.mapNotNull { plan ->
             val fileName = plan.fileName ?: return@mapNotNull null
             if (existingNames.any { it.equals(fileName, ignoreCase = true) }) fileName else null
@@ -44,7 +45,7 @@ class SaveWildcardClassifyResultUseCase(
         val saved = ArrayList<String>()
         for (plan in plans) {
             val fileName = checkNotNull(plan.fileName)
-            val existing = repository.listFiles()
+            val existing = existingFiles
                 .firstOrNull { it.fileName.equals(fileName, ignoreCase = true) }
             val target = existing ?: repository.createFile(fileName)
             try {

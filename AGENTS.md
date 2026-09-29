@@ -9,6 +9,7 @@ LLM 코딩 에이전트가 이 프로젝트에서 **필요한 부분만 정확�
 다만 단순한 오타 수정, 명백한 한 줄 변경, 충분히 정보가 주어진 작업에서는 사소한 확인 질문 때문에 멈추지 마세요. 필요한 가정을 짧게 말하고 진행하세요.
 
 아키텍처, 책임 분리, 유스케이스, 도메인 규칙, 의존성 방향, 리팩터링, 코드 리뷰와 관련된 작업을 할 때는 `docs/clean-architecture.mini.md`를 먼저 확인하고 그 기준을 따르세요.  
+불필요한 코드·죽은 코드(Dead Code)·중복 구현 정리, 코드 다이어트, 복잡한 로직 단순화, 다차원 코드 품질/구조 검토와 관련된 작업을 할 때는 프로젝트 전용 스킬인 `clean-code`(`.agents/skills/clean-code/SKILL.md`), `code-simplification`(`.agents/skills/code-simplification/SKILL.md`), `code-review-and-quality`(`.agents/skills/code-review-and-quality/SKILL.md`)를 확인하고 활용하세요.  
 UI, UX, 디자인 시스템, 색상 테마, 컴포넌트 스타일링, 화면 일관화와 관련된 작업을 할 때는 `docs/디자인.md`를 먼저 확인하고 그 기준을 따르세요.  
 화면 전환, 다이얼로그 깜빡임 방지, Hold Screen, Single Dialog Host, 탭 전환 최적화와 관련된 작업을 할 때는 `docs/flicker-free-ui-guidelines.md`를 먼저 확인하고 그 기준을 따르세요.  
 모바일 가상 키보드(IME), 입력창 포커스 제어, 자동완성 칩, 하단 고정 바 및 터치 인터랙션과 관련된 작업을 할 때는 `docs/mobile-interaction-ux-guidelines.md`를 먼저 확인하고 그 기준을 따르세요.

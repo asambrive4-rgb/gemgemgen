@@ -134,7 +134,11 @@ class PromptEditorCoordinator(
             }
         }
         if (_editorUiState.value.isSearchActive && _editorUiState.value.searchQuery.isNotEmpty()) {
-            recalculateSearchMatches(query = _editorUiState.value.searchQuery, text = value)
+            recalculateSearchMatches(
+                query = _editorUiState.value.searchQuery,
+                text = value,
+                moveCursor = false
+            )
         }
     }
 
@@ -195,7 +199,12 @@ class PromptEditorCoordinator(
         selectSearchMatch(state.searchMatches[prevIndex])
     }
 
-    private fun recalculateSearchMatches(query: String, text: String, resetToFirst: Boolean = false) {
+    private fun recalculateSearchMatches(
+        query: String,
+        text: String,
+        resetToFirst: Boolean = false,
+        moveCursor: Boolean = true
+    ) {
         if (query.isEmpty() || text.isEmpty()) {
             _editorUiState.update {
                 it.copy(searchMatches = emptyList(), activeSearchMatchIndex = -1)
@@ -233,7 +242,7 @@ class PromptEditorCoordinator(
             )
         }
 
-        if (currentIndex in matches.indices) {
+        if (moveCursor && currentIndex in matches.indices) {
             selectSearchMatch(matches[currentIndex])
         }
     }
@@ -365,40 +374,6 @@ class PromptEditorCoordinator(
         scope.launch {
             withContext(dispatchers.io) {
                 clipboardGateway.writeText(text)
-            }
-        }
-    }
-
-    fun pastePromptFromClipboard() {
-        syncPromptTemplateFromTextField()
-        scope.launch {
-            val text = withContext(dispatchers.io) {
-                clipboardGateway.readText()
-            }
-            if (text.isEmpty()) return@launch
-
-            val selection = textFieldState.selection
-            val start = selection.min
-            val end = selection.max
-
-            textFieldState.edit {
-                replace(start, end, text)
-                this.selection = TextRange(start + text.length)
-            }
-
-            val newText = textFieldState.text.toString()
-            promptTemplateValue = newText
-            promptHistoryNavigator.onUserTyping(newText)
-            promptEditorSession = promptEditorSession.afterPaste(newText)
-            _editorUiState.update {
-                it.copy(
-                    promptTemplate = newText,
-                    canNavigateHistoryBack = promptHistoryNavigator.canNavigateBack,
-                    canNavigateHistoryForward = promptHistoryNavigator.canNavigateForward,
-                    isHistoryIndicatorVisible = promptHistoryNavigator.isIndicatorVisible,
-                    historyDotCount = promptHistoryNavigator.dotCount,
-                    activeHistoryDotIndex = promptHistoryNavigator.activeDotIndex
-                )
             }
         }
     }
@@ -603,6 +578,14 @@ class PromptEditorCoordinator(
     }
 
     private var currentAutocompleteCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
+    private var lastSuggestionText: String? = null
+    private var lastSuggestionCursor: Int = -1
+    private var lastSuggestionSelectionStart: Int = -1
+    private var lastSuggestionSelectionEnd: Int = -1
+    private var lastSuggestionCandidates: List<WildcardTokenAutocomplete.Candidate>? = null
+    private var lastSuggestionParagraphMode: Boolean = false
+    private var lastSuggestionIsRunning: Boolean = false
+    private var lastSuggestionResult: List<WildcardTokenAutocomplete.Candidate> = emptyList()
 
     fun updateAutocompleteCandidates(
         candidates: List<WildcardTokenAutocomplete.Candidate>,
@@ -621,7 +604,18 @@ class PromptEditorCoordinator(
         isParagraphSelectionMode: Boolean = _editorUiState.value.isParagraphSelectionMode,
         isRunning: Boolean = false
     ): List<WildcardTokenAutocomplete.Candidate> {
-        return Companion.computeActiveSuggestions(
+        if (
+            lastSuggestionText == text &&
+            lastSuggestionCursor == cursor &&
+            lastSuggestionSelectionStart == selectionStart &&
+            lastSuggestionSelectionEnd == selectionEnd &&
+            lastSuggestionCandidates === candidates &&
+            lastSuggestionParagraphMode == isParagraphSelectionMode &&
+            lastSuggestionIsRunning == isRunning
+        ) {
+            return lastSuggestionResult
+        }
+        val computed = Companion.computeActiveSuggestions(
             text = text,
             cursor = cursor,
             selectionMin = selectionStart,
@@ -630,6 +624,15 @@ class PromptEditorCoordinator(
             isParagraphSelectionMode = isParagraphSelectionMode,
             isRunning = isRunning
         )
+        lastSuggestionText = text
+        lastSuggestionCursor = cursor
+        lastSuggestionSelectionStart = selectionStart
+        lastSuggestionSelectionEnd = selectionEnd
+        lastSuggestionCandidates = candidates
+        lastSuggestionParagraphMode = isParagraphSelectionMode
+        lastSuggestionIsRunning = isRunning
+        lastSuggestionResult = computed
+        return computed
     }
 
     fun refreshActiveSuggestions(isRunning: Boolean = false) {

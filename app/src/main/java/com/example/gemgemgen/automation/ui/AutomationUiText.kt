@@ -43,13 +43,9 @@ object AutomationUiText {
 
     fun geminiRestartStartingText(): String = "Gemini 재시작 중..."
 
-    fun geminiTerminateStartingText(): String = "Gemini 종료 중..."
-
     fun selfAppTerminateStartingText(): String = "앱 종료 중..."
 
     fun geminiRestartCanceledText(): String = "Gemini 재시작을 취소했습니다."
-
-    fun geminiTerminateCanceledText(): String = "Gemini 종료를 취소했습니다."
 
     fun selfAppTerminateCanceledText(): String = "앱 종료를 취소했습니다."
 
@@ -99,10 +95,6 @@ object AutomationUiText {
 
     fun geminiRestartUnavailableMessage(state: AutomationUiState): String {
         return geminiRestartUnavailableMessage(blockReasonFor(state))
-    }
-
-    fun geminiTerminateUnavailableMessage(state: AutomationUiState): String {
-        return geminiTerminateUnavailableMessage(blockReasonFor(state))
     }
 
     fun selfAppTerminateUnavailableMessage(state: AutomationUiState): String {

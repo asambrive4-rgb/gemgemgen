@@ -25,7 +25,6 @@ interface AutomationScreenActions {
     fun onPromptTemplateChange(value: String) {}
     fun onImportPromptFromClipboard() {}
     fun onCopyPromptToClipboard() {}
-    fun onPastePromptFromClipboard() {}
     fun onApplySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {}
 
     // 히스토리 탐색
@@ -68,10 +67,8 @@ interface AutomationScreenActions {
 
     // 유지보수 및 앱 제어
     fun onCloseGeminiApp() {}
-    fun onTerminateGeminiApp() {}
     fun onTerminateSelfApp() {}
     fun onCleanDeviceMemory() {}
-    fun onOpenGeminiAccountPicker() {}
 
     // 테마 및 환경 설정
     fun onRefreshStatus() {}

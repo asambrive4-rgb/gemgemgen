@@ -44,6 +44,7 @@ class WildcardViewModelTest {
         viewModel.createNewFile()
 
         assertEquals("hair.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals(listOf("hair.txt"), viewModel.uiState.value.files.map { it.fileName })
         assertEquals("", fileManager.contentOf("hair.txt"))
     }
 
@@ -179,6 +180,7 @@ class WildcardViewModelTest {
 
         assertFalse(viewModel.uiState.value.showRenameDialog)
         assertEquals("new_hair.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals(listOf("new_hair.txt"), viewModel.uiState.value.files.map { it.fileName })
         assertEquals("black hair", viewModel.uiState.value.editingText)
         assertEquals("black hair", fileManager.contentOf("new_hair.txt"))
         assertEquals("", fileManager.contentOf("hair.txt"))

@@ -12,9 +12,6 @@ import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUse
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
 import com.example.gemgemgen.automation.usecase.ManageImeUseCase
 import com.example.gemgemgen.automation.usecase.ImeSettings
-import com.example.gemgemgen.automation.usecase.LastRunSnapshot
-import com.example.gemgemgen.automation.usecase.LastRunSnapshotRepository
-import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
@@ -23,7 +20,6 @@ import com.example.gemgemgen.automation.usecase.PromptHistoryRepository
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.TargetAppLauncher
 import com.example.gemgemgen.core.AppDispatchers
-import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
@@ -291,8 +287,6 @@ class CoordinateAutomationExecutionUseCaseTest {
                 },
                 nullKeyboardCandidates = listOf("com.example/.NullKeyboard")
             ),
-            lastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
-            clipboardGateway = FakeClipboardGateway(),
             wildcardSetRepository = NoOpWildcardSetRepository,
             promptGatewayProvider = PromptAutomationGatewayProvider { promptGateway },
             targetAppLauncher = TargetAppLauncher { true },
@@ -322,22 +316,6 @@ class CoordinateAutomationExecutionUseCaseTest {
         override fun load(): List<PromptHistoryItem> = items
         override fun save(items: List<PromptHistoryItem>) {
             this.items = items
-        }
-    }
-
-    private class FakeLastRunSnapshotStorage : LastRunSnapshotRepository {
-        var snapshot: LastRunSnapshot? = null
-        override fun load(): LastRunSnapshot? = snapshot
-        override fun save(snapshot: LastRunSnapshot) {
-            this.snapshot = snapshot
-        }
-    }
-
-    private class FakeClipboardGateway : ClipboardGateway {
-        var text: String = ""
-        override fun readText(): String = text
-        override fun writeText(text: String) {
-            this.text = text
         }
     }
 

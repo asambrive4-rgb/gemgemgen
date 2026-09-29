@@ -44,60 +44,6 @@ class AutomationViewModelTest {
     }
 
     @Test
-    fun pastePromptFromClipboard_insertsTextAtCursorPosition() {
-        val viewModel = viewModel(clipboardText = "INSERT")
-        viewModel.onPromptTemplateChange("beforeafter")
-        viewModel.promptTemplateTextFieldState.edit {
-            selection = TextRange(6)
-        }
-
-        viewModel.pastePromptFromClipboard()
-
-        assertEquals("beforeINSERTafter", viewModel.uiState.value.promptTemplate)
-        assertEquals(
-            "beforeINSERTafter",
-            viewModel.promptTemplateTextFieldState.text.toString()
-        )
-        assertEquals(TextRange(12), viewModel.promptTemplateTextFieldState.selection)
-    }
-
-    @Test
-    fun pastePromptFromClipboard_replacesSelectedText() {
-        val viewModel = viewModel(clipboardText = "REPLACE")
-        viewModel.onPromptTemplateChange("beforeTargetafter")
-        viewModel.promptTemplateTextFieldState.edit {
-            selection = TextRange(6, 12)
-        }
-
-        viewModel.pastePromptFromClipboard()
-
-        assertEquals("beforeREPLACEafter", viewModel.uiState.value.promptTemplate)
-        assertEquals(
-            "beforeREPLACEafter",
-            viewModel.promptTemplateTextFieldState.text.toString()
-        )
-        assertEquals(TextRange(13), viewModel.promptTemplateTextFieldState.selection)
-    }
-
-    @Test
-    fun pastePromptFromClipboard_withEmptyClipboardDoesNothing() {
-        val viewModel = viewModel(clipboardText = "")
-        viewModel.onPromptTemplateChange("original")
-        viewModel.promptTemplateTextFieldState.edit {
-            selection = TextRange(4)
-        }
-
-        viewModel.pastePromptFromClipboard()
-
-        assertEquals("original", viewModel.uiState.value.promptTemplate)
-        assertEquals(
-            "original",
-            viewModel.promptTemplateTextFieldState.text.toString()
-        )
-        assertEquals(TextRange(4), viewModel.promptTemplateTextFieldState.selection)
-    }
-
-    @Test
     fun insertTopInstruction_prependsWithBlankLineBeforeExistingBody() {
         val viewModel = viewModel()
         viewModel.onPromptTemplateChange("user body")
@@ -609,7 +555,6 @@ class AutomationViewModelTest {
         val viewModel = viewModel(
             lastRunSnapshotStore = snapshotStore,
             automationRunner = automation(
-                lastRunSnapshotStore = snapshotStore,
                 service = holdingService
             )
         )
@@ -658,12 +603,6 @@ class AutomationViewModelTest {
                 )
             ),
             automationRunner = automation(
-                lastRunSnapshotStore = LastRunSnapshotStore(
-                    FakeLastRunSnapshotStorage(
-                        promptTemplate = "base __hair__",
-                        repeatCountText = "1"
-                    )
-                ),
                 service = service,
                 loadWildcards = {
                     prepareStarted.countDown()
@@ -753,23 +692,6 @@ class AutomationViewModelTest {
         assertTrue(!viewModel.uiState.value.isMaintenanceBusy)
         assertEquals(
             "Gemini 앱 2개를 종료하고 재시작했습니다.",
-            viewModel.uiState.value.maintenanceMessage
-        )
-    }
-
-    @Test
-    fun terminateGeminiApp_updatesResultMessageWithoutRestartText() {
-        val closer = FakeGeminiAppCloser(CloseGeminiAppResult.Success(closedCount = 2))
-        val viewModel = viewModel(
-            terminateGeminiCloser = closer
-        )
-
-        viewModel.terminateGeminiApp()
-
-        assertEquals(1, closer.closeCount)
-        assertTrue(!viewModel.uiState.value.isMaintenanceBusy)
-        assertEquals(
-            "Gemini 앱 2개를 종료했습니다.",
             viewModel.uiState.value.maintenanceMessage
         )
     }
@@ -1559,7 +1481,6 @@ class AutomationViewModelTest {
         automationRunner: ExecuteAutomationLoopUseCase? = null,
         appMaintenance: AppMaintenanceUseCase? = null,
         closeGeminiCloser: GeminiAppCloser? = null,
-        terminateGeminiCloser: GeminiAppCloser? = null,
         terminateSelfCloser: GeminiAppCloser? = null,
         cleanMemoryGateway: MemoryCleanupGateway? = null,
         promptHistoryStore: PromptHistoryStore? = null,
@@ -1576,7 +1497,6 @@ class AutomationViewModelTest {
         )
         val resolvedMaintenance = appMaintenance ?: AppMaintenanceUseCase(
             geminiRestartCloser = closeGeminiCloser ?: FakeGeminiAppCloser(),
-            geminiTerminateCloser = terminateGeminiCloser ?: FakeGeminiAppCloser(),
             selfAppCloser = terminateSelfCloser ?: FakeGeminiAppCloser(),
             memoryCleanupGateway = cleanMemoryGateway ?: FakeMemoryCleanupGateway(),
             manageRemoteAutomation = resolvedRemote
@@ -1586,8 +1506,6 @@ class AutomationViewModelTest {
             clipboardGateway = clipboardGateway,
             lastRunSnapshotStore = lastRunSnapshotStore,
             automation = automationRunner ?: automation(
-                lastRunSnapshotStore = lastRunSnapshotStore,
-                clipboardGateway = clipboardGateway,
                 dispatchers = dispatchers
             ),
             appMaintenance = resolvedMaintenance,
@@ -1603,8 +1521,6 @@ class AutomationViewModelTest {
     }
 
     private fun automation(
-        lastRunSnapshotStore: LastRunSnapshotStore = LastRunSnapshotStore(FakeLastRunSnapshotStorage()),
-        clipboardGateway: ClipboardGateway = FakeClipboardGateway(),
         service: PromptAutomationGateway = FakePromptAutomationGateway(),
         loadWildcards: () -> List<WildcardSet> = { emptyList() },
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined)
@@ -1622,8 +1538,6 @@ class AutomationViewModelTest {
                 },
                 nullKeyboardCandidates = listOf(NULL_IME_ID)
             ),
-            lastRunSnapshotStore = lastRunSnapshotStore,
-            clipboardGateway = clipboardGateway,
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcards),
             promptGatewayProvider = PromptAutomationGatewayProvider { service },
             targetAppLauncher = TargetAppLauncher { true },

@@ -72,12 +72,12 @@ class AndroidEnvironmentGateway(
                 isAccessibilityServiceEnabled = accessibilityStatus.isEnabled(),
                 hasWriteSecureSettingsPermission = secureSettingsPermission.isGranted(),
                 isWildcardDirectoryAccessible = if (hasAllFilesAccess) {
-                    directFolder != null && wildcardDirectStorage.canReadFolder()
+                    directFolder != null && directFolder.isDirectory && directFolder.canRead()
                 } else {
                     wildcardFolderUri != null && wildcardDirectoryStatus.canRead(wildcardFolderUri)
                 },
                 isWildcardDirectoryWritable = if (hasAllFilesAccess) {
-                    directFolder != null && wildcardDirectStorage.canWriteFolder()
+                    directFolder != null && directFolder.isDirectory && directFolder.canWrite()
                 } else {
                     wildcardFolderUri != null && wildcardDirectoryStatus.canWrite(wildcardFolderUri)
                 },

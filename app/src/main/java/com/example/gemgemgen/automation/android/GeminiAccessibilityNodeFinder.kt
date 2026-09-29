@@ -100,16 +100,6 @@ internal class GeminiAccessibilityNodeFinder(
         }
     }
 
-    fun hasMoreOptions(): Boolean {
-        val root = rootProvider() ?: return false
-        return findNodesByText(root, MORE_OPTIONS_DESCRIPTION).any { it.matchesTextOrDescription(MORE_OPTIONS_DESCRIPTION) }
-    }
-
-    fun findNewChatWithMoreOptions(): AccessibilityNodeInfo? {
-        if (!hasMoreOptions()) return null
-        return findNodeByTextOrDescription(NEW_CHAT_DESCRIPTION)
-    }
-
     fun findNewChatNearestToSearch(): AccessibilityNodeInfo? {
         val root = rootProvider() ?: return null
         val searchNode = findNodeByTextOrDescription("채팅 검색") ?: return null
@@ -232,7 +222,6 @@ internal class GeminiAccessibilityNodeFinder(
 
     internal companion object {
         const val NEW_CHAT_DESCRIPTION = "새 채팅"
-        const val MORE_OPTIONS_DESCRIPTION = "옵션 더보기"
         val INPUT_KEYWORDS = listOf("프롬프트", "메시지")
         val SEND_KEYWORDS = listOf("보내기", "전송")
         val SEND_VIEW_IDS = listOf(

@@ -61,10 +61,11 @@ data class WildcardUiState(
     val hasUnsavedChanges: Boolean
         get() = editor.hasUnsavedChanges
 
-    val selectableLines: List<String> =
+    val selectableLines: List<String> by lazy(LazyThreadSafetyMode.NONE) {
         WildcardDynamicPromptComposer.selectableLines(editingText)
+    }
 
-    val fileItems: List<WildcardFileUiItem> =
+    val fileItems: List<WildcardFileUiItem> by lazy(LazyThreadSafetyMode.NONE) {
         files.map { file ->
             val isSelected = selectedFile?.id == file.id
             WildcardFileUiItem(
@@ -77,6 +78,7 @@ data class WildcardUiState(
                 isSelected = isSelected
             )
         }
+    }
 
     val selectedFileDisplayName: String
         get() = selectedFile?.let { file ->

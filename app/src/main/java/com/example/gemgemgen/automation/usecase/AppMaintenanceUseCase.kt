@@ -43,16 +43,12 @@ sealed interface MaintenanceResult {
 
 class AppMaintenanceUseCase(
     private val geminiRestartCloser: GeminiAppCloser,
-    private val geminiTerminateCloser: GeminiAppCloser = geminiRestartCloser,
     private val selfAppCloser: GeminiAppCloser = geminiRestartCloser,
     private val memoryCleanupGateway: MemoryCleanupGateway,
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase? = null
 ) {
     suspend fun restartGemini(): MaintenanceResult =
         closeApp(geminiRestartCloser, "Gemini 앱을 재시작했습니다.", "Gemini 앱 %d개를 종료하고 재시작했습니다.", "Gemini 재시작 실패: %s", "최근 앱에서 Gemini를 찾지 못했습니다.")
-
-    suspend fun terminateGemini(): MaintenanceResult =
-        closeApp(geminiTerminateCloser, "Gemini 앱을 종료했습니다.", "Gemini 앱 %d개를 종료했습니다.", "Gemini 종료 실패: %s", "최근 앱에서 Gemini를 찾지 못했습니다.")
 
     suspend fun terminateSelf(): MaintenanceResult =
         closeApp(selfAppCloser, "앱을 종료했습니다.", "앱 %d개를 종료했습니다.", "앱 종료 실패: %s", "최근 앱에서 GemGemGen을 찾지 못했습니다.")

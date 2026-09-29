@@ -2,7 +2,6 @@
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
@@ -11,7 +10,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.runtime.getValue
 import com.example.gemgemgen.core.AppDefaults
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -57,7 +55,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -270,8 +267,6 @@ internal fun PromptEditorSection(
                 onOpenInstructionConfigDialog = actions::onOpenInstructionConfigDialog,
                 onImportFromClipboard = actions::onImportPromptFromClipboard,
                 onCopyPromptToClipboard = actions::onCopyPromptToClipboard,
-                onPasteFromClipboard = actions::onPastePromptFromClipboard,
-                onOpenGeminiAccountPicker = actions::onOpenGeminiAccountPicker,
                 showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                 isVariationButtonEnabled = uiState.canInteractWithVariation,
                 variationAutomationState = uiState.variationAutomationState,
@@ -317,8 +312,6 @@ internal fun PromptActionRow(
     onOpenInstructionConfigDialog: (InstructionTab) -> Unit,
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
-    onPasteFromClipboard: () -> Unit,
-    onOpenGeminiAccountPicker: () -> Unit = {},
     showVariationButton: Boolean = true,
     isVariationButtonEnabled: Boolean = true,
     variationAutomationState: AutomationRunState = AutomationRunState.Idle,
@@ -331,7 +324,7 @@ internal fun PromptActionRow(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        // 1행: 시스템 & 디바이스 관리 바 (앱 종료, 리셋, 메모리 정리 ── 계정 뱃지)
+        // 1행: 시스템 & 디바이스 관리 바 (앱 종료, 리셋, 메모리 정리 ── 문단 편집)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -403,43 +396,13 @@ internal fun PromptActionRow(
                 }
             }
 
-            // 우측: [문단 편집 섬] + [계정 관리 뱃지 섬]
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                ActionIsland {
-                    ParagraphSelectionModeButton(
-                        selected = isParagraphSelectionMode,
-                        enabled = isTargetSelectionEnabled,
-                        onClick = onToggleParagraphSelectionMode
-                    )
-                }
-
-                ActionIsland {
-                    PebbleButton(
-                        onClick = onOpenGeminiAccountPicker,
-                        enabled = !isMaintenanceBusy,
-                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
-                        modifier = Modifier.semantics { contentDescription = "Gemini ID 목록 열기" }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = null,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = "ID",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
+            // 우측: [문단 편집 섬]
+            ActionIsland {
+                ParagraphSelectionModeButton(
+                    selected = isParagraphSelectionMode,
+                    enabled = isTargetSelectionEnabled,
+                    onClick = onToggleParagraphSelectionMode
+                )
             }
         }
 
@@ -784,21 +747,9 @@ private fun PebbleButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
     content: @Composable RowScope.() -> Unit
 ) {
-    val animatedBorderColor by animateColorAsState(
-        targetValue = if (enabled) borderColor else borderColor.copy(alpha = 0.45f),
-        animationSpec = tween(durationMillis = 150),
-        label = "PebbleBorder"
-    )
-    val animatedContainerColor by animateColorAsState(
-        targetValue = if (enabled) containerColor else containerColor.copy(alpha = 0.65f),
-        animationSpec = tween(durationMillis = 150),
-        label = "PebbleContainer"
-    )
-    val animatedContentColor by animateColorAsState(
-        targetValue = if (enabled) contentColor else contentColor.copy(alpha = 0.4f),
-        animationSpec = tween(durationMillis = 150),
-        label = "PebbleContent"
-    )
+    val resolvedBorderColor = if (enabled) borderColor else borderColor.copy(alpha = 0.45f)
+    val resolvedContainerColor = if (enabled) containerColor else containerColor.copy(alpha = 0.65f)
+    val resolvedContentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.4f)
 
     val shape = RoundedCornerShape(10.dp)
     val pointerDownModifier = if (enabled) {
@@ -828,9 +779,9 @@ private fun PebbleButton(
                 onLongClick = onLongClick
             ),
         shape = shape,
-        color = animatedContainerColor,
-        contentColor = animatedContentColor,
-        border = BorderStroke(if (isHighlighted) 1.5.dp else 1.2.dp, animatedBorderColor)
+        color = resolvedContainerColor,
+        contentColor = resolvedContentColor,
+        border = BorderStroke(if (isHighlighted) 1.5.dp else 1.2.dp, resolvedBorderColor)
     ) {
         Row(
             modifier = Modifier.padding(contentPadding),

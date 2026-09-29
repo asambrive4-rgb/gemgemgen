@@ -257,12 +257,11 @@ class GeminiAccessibilityService : AccessibilityService() {
             return
         }
         val info = serviceInfo ?: return
-        info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+        info.eventTypes = 0
         info.packageNames = packageNames
-        info.notificationTimeout = 50
+        info.notificationTimeout = 0L
         info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-            AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         setServiceInfo(info)
         currentSubscribedPackageNames = requestedSet
         isAccessibilitySubscriptionConfigured = true

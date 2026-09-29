@@ -1,4 +1,4 @@
-// 역할: Google 앱 상세 설정 화면에서 강제 중지 버튼과 확인 팝업을 클릭하여 메모리를 확보합니다.
+// 역할: Google 앱 상세 설정 화면에서 지연 시퀀스 순회로 강제 중지 버튼과 확인 팝업을 찾아 클릭하여 메모리를 확보합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler
@@ -206,51 +206,51 @@ internal class GoogleAppForceStopAutomation(
         return labels.settingsPackageNames.any { it.equals(currentPackage, ignoreCase = true) }
     }
 
-    private fun allNodes(): List<AccessibilityNodeInfo> {
+    private fun allNodes(): Sequence<AccessibilityNodeInfo> {
         val roots = allRootsProvider().ifEmpty { listOfNotNull(rootProvider()) }
-        return roots.flatMap(::flattenNodes)
+        return roots.asSequence().flatMap(::flattenNodes)
     }
 
-    private fun findForceStopNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        // 1순위: ID와 라벨 일치
-        val exactMatch = nodes.firstOrNull { node ->
+    private fun findForceStopNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        var labelMatch: AccessibilityNodeInfo? = null
+        var idOnlyMatch: AccessibilityNodeInfo? = null
+        for (node in nodes) {
             val idMatches = node.viewIdResourceName != null && labels.forceStopButtonIds.contains(node.viewIdResourceName)
-            idMatches && hasLabel(node, labels.forceStopButtonCandidates)
+            val hasCandidateLabel = hasLabel(node, labels.forceStopButtonCandidates)
+            if (idMatches && hasCandidateLabel) {
+                return node
+            }
+            if (labelMatch == null && hasCandidateLabel && isButtonLike(node)) {
+                labelMatch = node
+            }
+            if (idOnlyMatch == null && idMatches) {
+                idOnlyMatch = node
+            }
         }
-        if (exactMatch != null) return exactMatch
-
-        // 2순위: 라벨 일치 및 버튼 형태
-        val labelMatch = nodes.firstOrNull { node ->
-            hasLabel(node, labels.forceStopButtonCandidates) && isButtonLike(node)
-        }
-        if (labelMatch != null) return labelMatch
-
-        // 3순위: ID만 일치
-        return nodes.firstOrNull { node ->
-            node.viewIdResourceName != null && labels.forceStopButtonIds.contains(node.viewIdResourceName)
-        }
+        return labelMatch ?: idOnlyMatch
     }
 
-    private fun findConfirmDialogNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        // 1순위: 팝업 확인 버튼 ID + 라벨 일치
-        val exactMatch = nodes.firstOrNull { node ->
+    private fun findConfirmDialogNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        var idOnlyMatch: AccessibilityNodeInfo? = null
+        var labelMatch: AccessibilityNodeInfo? = null
+        for (node in nodes) {
             val idMatches = node.viewIdResourceName != null && labels.confirmDialogButtonIds.contains(node.viewIdResourceName)
-            idMatches && hasLabel(node, labels.confirmDialogCandidates)
+            val hasCandidateLabel = hasLabel(node, labels.confirmDialogCandidates)
+            if (idMatches && hasCandidateLabel) {
+                return node
+            }
+            if (idOnlyMatch == null && idMatches) {
+                idOnlyMatch = node
+            }
+            if (labelMatch == null) {
+                val isCancel = node.viewIdResourceName == "android:id/button2" ||
+                    nodeValue(node)?.equals("취소", ignoreCase = true) == true
+                if (!isCancel && hasCandidateLabel && isButtonLike(node)) {
+                    labelMatch = node
+                }
+            }
         }
-        if (exactMatch != null) return exactMatch
-
-        // 2순위: AlertDialog positive button ID 일치
-        val idMatch = nodes.firstOrNull { node ->
-            node.viewIdResourceName != null && labels.confirmDialogButtonIds.contains(node.viewIdResourceName)
-        }
-        if (idMatch != null) return idMatch
-
-        // 3순위: 라벨 일치 및 버튼 형태 (취소 버튼 제외)
-        return nodes.firstOrNull { node ->
-            val isCancel = node.viewIdResourceName == "android:id/button2" ||
-                nodeValue(node)?.equals("취소", ignoreCase = true) == true
-            !isCancel && hasLabel(node, labels.confirmDialogCandidates) && isButtonLike(node)
-        }
+        return idOnlyMatch ?: labelMatch
     }
 
     private fun clickNodeOrParent(node: AccessibilityNodeInfo): Boolean {
@@ -284,18 +284,16 @@ internal class GoogleAppForceStopAutomation(
         return className.endsWith("Button") || node.isClickable
     }
 
-    private fun flattenNodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
-        val nodes = mutableListOf<AccessibilityNodeInfo>()
-
-        fun visit(node: AccessibilityNodeInfo) {
-            nodes += node
-            for (index in 0 until node.childCount) {
-                node.getChild(index)?.let(::visit)
+    private fun flattenNodes(root: AccessibilityNodeInfo): Sequence<AccessibilityNodeInfo> = sequence {
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        while (stack.isNotEmpty()) {
+            val current = stack.removeLast()
+            yield(current)
+            for (index in current.childCount - 1 downTo 0) {
+                current.getChild(index)?.let(stack::addLast)
             }
         }
-
-        visit(root)
-        return nodes
     }
 
     private fun finish(result: MemoryCleanupResult) {

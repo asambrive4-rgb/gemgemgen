@@ -59,53 +59,67 @@ import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 
 class AndroidAppContainer(context: Context) {
     private val appContext = context.applicationContext
-    private val lastRunSnapshotStore = LastRunSnapshotStore(
-        SharedPreferencesLastRunSnapshotRepository(appContext)
-    )
-    private val promptHistoryStore = PromptHistoryStore(
-        SharedPreferencesPromptHistoryRepository(appContext)
-    )
-    private val clipboardGateway = AndroidClipboardGateway(appContext)
-    private val recordAutomationStart = RecordAutomationHistoryUseCase(
-        lastRunSnapshotStore = lastRunSnapshotStore,
-        promptHistoryStore = promptHistoryStore
-    )
-    private val geminiApiKeyRepository = AndroidEncryptedGeminiApiKeyRepository(appContext)
-    private val analysisAiGateway = RoutingAnalysisAiGateway(
-        gemini = AndroidGeminiAnalysisGateway(),
-        grok = AndroidGrokAnalysisGateway()
-    )
-    private val grokAuthManager = ManageGrokAuthUseCase(
-        gateway = AndroidGrokOAuthGateway(),
-        repository = AndroidEncryptedGrokAuthRepository(appContext),
-        billingGateway = AndroidGrokBillingGateway()
-    )
-    private val analysisCredentialResolver = ResolveAnalysisCredentialUseCase(
-        apiKeyRepository = geminiApiKeyRepository,
-        grokAuth = grokAuthManager
-    )
+    private val lastRunSnapshotStore by lazy {
+        LastRunSnapshotStore(
+            SharedPreferencesLastRunSnapshotRepository(appContext)
+        )
+    }
+    private val promptHistoryStore by lazy {
+        PromptHistoryStore(
+            SharedPreferencesPromptHistoryRepository(appContext)
+        )
+    }
+    private val clipboardGateway by lazy { AndroidClipboardGateway(appContext) }
+    private val recordAutomationStart by lazy {
+        RecordAutomationHistoryUseCase(
+            lastRunSnapshotStore = lastRunSnapshotStore,
+            promptHistoryStore = promptHistoryStore
+        )
+    }
+    private val geminiApiKeyRepository by lazy { AndroidEncryptedGeminiApiKeyRepository(appContext) }
+    private val analysisAiGateway by lazy {
+        RoutingAnalysisAiGateway(
+            gemini = AndroidGeminiAnalysisGateway(),
+            grok = AndroidGrokAnalysisGateway()
+        )
+    }
+    private val grokAuthManager by lazy {
+        ManageGrokAuthUseCase(
+            gateway = AndroidGrokOAuthGateway(),
+            repository = AndroidEncryptedGrokAuthRepository(appContext),
+            billingGateway = AndroidGrokBillingGateway()
+        )
+    }
+    private val analysisCredentialResolver by lazy {
+        ResolveAnalysisCredentialUseCase(
+            apiKeyRepository = geminiApiKeyRepository,
+            grokAuth = grokAuthManager
+        )
+    }
+    private val environmentGateway by lazy { AndroidEnvironmentGateway(appContext) }
+    private val wildcardFileRepository by lazy { AndroidWildcardFileRepository(appContext) }
+    private val wildcardSetRepository by lazy { AndroidWildcardSetRepository(appContext) }
+    private val wildcardFolderRepository by lazy { AndroidWildcardFolderRepository(appContext) }
 
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
     val promptWorkspace = PromptWorkspace()
-    val promptInstructionRepository = SharedPreferencesPromptInstructionRepository(appContext)
-    val variationPromptRepository = SharedPreferencesVariationPromptRepository(appContext)
-    val promptSnippetRepository = SharedPreferencesPromptSnippetRepository(appContext)
+    val promptInstructionRepository by lazy { SharedPreferencesPromptInstructionRepository(appContext) }
+    val variationPromptRepository by lazy { SharedPreferencesVariationPromptRepository(appContext) }
+    val promptSnippetRepository by lazy { SharedPreferencesPromptSnippetRepository(appContext) }
 
     val automationViewModelFactory: ViewModelProvider.Factory = factory<AutomationViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
-        val environmentGateway = AndroidEnvironmentGateway(appContext)
         val checkAutomationStart = CheckAutomationStartUseCase(environmentGateway)
         val manageRemoteAutomation = ManageRemoteAutomationUseCase(
             gateway = AndroidRemoteAutomationGateway(appContext),
             automationHistoryRecorder = recordAutomationStart,
-            wildcardSetRepository = AndroidWildcardSetRepository(appContext)
+            wildcardSetRepository = wildcardSetRepository
         )
         val executeAutomation = CoordinateAutomationExecutionUseCase(
             checkAutomationStart = checkAutomationStart,
             automationHistoryRecorder = recordAutomationStart,
             automation = automation,
-            manageRemoteAutomation = manageRemoteAutomation,
-            promptHistoryStore = promptHistoryStore
+            manageRemoteAutomation = manageRemoteAutomation
         )
         AutomationViewModel(
             checkEnvironmentStatus = CheckEnvironmentStatusUseCase(environmentGateway),
@@ -114,14 +128,13 @@ class AndroidAppContainer(context: Context) {
             automation = automation,
             appMaintenance = AppMaintenanceUseCase(
                 geminiRestartCloser = AndroidGeminiAppCloser(appContext),
-                geminiTerminateCloser = AndroidGeminiAppCloser(appContext, relaunchAfterClose = false),
                 selfAppCloser = AndroidSelfAppCloser(appContext),
                 memoryCleanupGateway = AndroidMemoryCleanupGateway(appContext),
                 manageRemoteAutomation = manageRemoteAutomation
             ),
             checkAutomationStart = checkAutomationStart,
             executeAutomation = executeAutomation,
-            wildcardFileRepository = AndroidWildcardFileRepository(appContext),
+            wildcardFileRepository = wildcardFileRepository,
             manageRemoteAutomation = manageRemoteAutomation,
             soundAlertGateway = AndroidSoundAlertGateway(appContext),
             promptHistoryStore = promptHistoryStore,
@@ -139,9 +152,6 @@ class AndroidAppContainer(context: Context) {
     }
 
     val wildcardViewModelFactory: ViewModelProvider.Factory = factory<WildcardViewModel> {
-        val wildcardFileRepository = AndroidWildcardFileRepository(appContext)
-        val wildcardFolderRepository = AndroidWildcardFolderRepository(appContext)
-        val environmentGateway = AndroidEnvironmentGateway(appContext)
         val analysisKeyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository)
         WildcardViewModel(
             manageWildcardFiles = ManageWildcardFilesUseCase(wildcardFileRepository),
@@ -175,7 +185,7 @@ class AndroidAppContainer(context: Context) {
             grokAuth = grokAuthManager,
             copyResults = copyResults,
             saveWildcardFile = SaveAnalysisWildcardFileUseCase(
-                repository = AndroidWildcardFileRepository(appContext),
+                repository = wildcardFileRepository,
                 copyResults = copyResults
             ),
             promptWorkspace = promptWorkspace

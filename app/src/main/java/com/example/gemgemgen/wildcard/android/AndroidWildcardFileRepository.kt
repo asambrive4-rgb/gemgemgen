@@ -278,15 +278,24 @@ internal class AndroidWildcardDirectStorage {
     }
 
     private fun directFolder(): File {
+        val now = System.currentTimeMillis()
+        cachedFolder?.let { cached ->
+            if (now - cachedFolderAtMs < FOLDER_CACHE_TTL_MS && cached.isDirectory) {
+                return cached
+            }
+        }
         @Suppress("DEPRECATION")
         val externalRoot = Environment.getExternalStorageDirectory()
         val candidates = AppDefaults.WILDCARD_DIRECTORY_CANDIDATES.map { relativePath ->
             File(externalRoot, relativePath)
         }
 
-        return candidates.firstOrNull(::containsWildcardFile)
+        val resolved = candidates.firstOrNull(::containsWildcardFile)
             ?: candidates.firstOrNull { it.isDirectory }
             ?: candidates.first()
+        cachedFolder = resolved
+        cachedFolderAtMs = now
+        return resolved
     }
 
     private fun containsWildcardFile(folder: File): Boolean {
@@ -296,6 +305,10 @@ internal class AndroidWildcardDirectStorage {
     }
 
     companion object {
+        private const val FOLDER_CACHE_TTL_MS = 2_000L
+        @Volatile private var cachedFolder: File? = null
+        @Volatile private var cachedFolderAtMs: Long = 0L
+
         fun hasAllFilesAccess(): Boolean {
             return try {
                 Environment.isExternalStorageManager()
@@ -305,4 +318,3 @@ internal class AndroidWildcardDirectStorage {
         }
     }
 }
-

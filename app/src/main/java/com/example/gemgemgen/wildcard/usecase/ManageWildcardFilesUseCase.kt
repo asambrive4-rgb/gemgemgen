@@ -40,14 +40,20 @@ class ManageWildcardFilesUseCase(
 
     suspend fun createFile(fileName: String): WildcardWorkspace = withContext(dispatchers.io) {
         val normalized = WildcardFileName.normalize(fileName) ?: throw WildcardFileException("파일명을 입력해주세요.")
-        ensureFileNameAvailable(normalized)
-        WildcardWorkspace(files = repository.listFiles(), selectedFile = repository.createFile(normalized), selectedText = "")
+        val existingFiles = ensureFileNameAvailable(normalized)
+        val created = repository.createFile(normalized)
+        val updatedFiles = (existingFiles + created).sortedBy { it.fileName.lowercase() }
+        WildcardWorkspace(files = updatedFiles, selectedFile = created, selectedText = "")
     }
 
     suspend fun renameFile(file: WildcardTextFile, newName: String): WildcardWorkspace = withContext(dispatchers.io) {
         val normalized = WildcardFileName.normalize(newName) ?: throw WildcardFileException("파일 이름을 입력해주세요.")
-        ensureFileNameAvailable(normalized, excludingFileId = file.id)
-        WildcardWorkspace(files = repository.listFiles(), selectedFile = repository.renameFile(file, normalized))
+        val existingFiles = ensureFileNameAvailable(normalized, excludingFileId = file.id)
+        val renamed = repository.renameFile(file, normalized)
+        val updatedFiles = existingFiles
+            .map { if (it.id == file.id) renamed else it }
+            .sortedBy { it.fileName.lowercase() }
+        WildcardWorkspace(files = updatedFiles, selectedFile = renamed)
     }
 
     suspend fun deleteFile(
@@ -61,8 +67,13 @@ class ManageWildcardFilesUseCase(
         WildcardWorkspace(files = files, selectedFile = nextFile, selectedText = nextFile?.let(repository::readFile))
     }
 
-    private fun ensureFileNameAvailable(fileName: String, excludingFileId: String? = null) {
-        val exists = repository.listFiles().any { it.id != excludingFileId && it.fileName.equals(fileName, ignoreCase = true) }
+    private fun ensureFileNameAvailable(
+        fileName: String,
+        excludingFileId: String? = null
+    ): List<WildcardTextFile> {
+        val existingFiles = repository.listFiles()
+        val exists = existingFiles.any { it.id != excludingFileId && it.fileName.equals(fileName, ignoreCase = true) }
         if (exists) throw WildcardFileException("이미 같은 이름의 파일이 있습니다.")
+        return existingFiles
     }
 }

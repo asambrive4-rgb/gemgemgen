@@ -7,7 +7,6 @@ import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.core.AppDispatchers
-import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.WildcardSet
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import kotlinx.coroutines.CancellationException
@@ -29,8 +28,6 @@ data class AutomationRunRequest(
 
 class ExecuteAutomationLoopUseCase(
     private val manageImeUseCase: ManageImeUseCase,
-    @Suppress("UNUSED_PARAMETER") lastRunSnapshotStore: LastRunSnapshotStore? = null,
-    @Suppress("UNUSED_PARAMETER") clipboardGateway: ClipboardGateway? = null,
     wildcardSetRepository: WildcardSetRepository,
     private val promptGatewayProvider: PromptAutomationGatewayProvider,
     private val targetAppLauncher: TargetAppLauncher,
@@ -38,7 +35,6 @@ class ExecuteAutomationLoopUseCase(
     private val dispatchers: AppDispatchers = AppDispatchers(),
     promptGenerator: PromptGenerator = PromptGenerator(),
     private val generateFinalPrompt: ((String, List<WildcardSet>, Int) -> String)? = null,
-    @Suppress("UNUSED_PARAMETER") promptHistoryStore: PromptHistoryStore? = null,
     private val runPreparer: PrepareAutomationRunUseCase = PrepareAutomationRunUseCase(
         wildcardSetRepository = wildcardSetRepository,
         dispatchers = dispatchers,

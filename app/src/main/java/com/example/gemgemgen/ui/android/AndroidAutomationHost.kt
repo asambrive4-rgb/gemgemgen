@@ -25,6 +25,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import com.example.gemgemgen.analysis.ui.AnalysisScreen
 import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
@@ -35,6 +36,7 @@ import com.example.gemgemgen.core.android.AndroidExternalBrowserLauncher
 import com.example.gemgemgen.ui.AutomationApp
 import com.example.gemgemgen.ui.MainTab
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
+import com.example.gemgemgen.wildcard.ui.WildcardScreen
 import com.example.gemgemgen.wildcard.ui.WildcardScreenActions
 import com.example.gemgemgen.wildcard.ui.WildcardViewModel
 import com.example.gemgemgen.remote.domain.AutomationMode
@@ -57,23 +59,18 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.AUTOMATION) }
     val wildcardStoreOwner = remember { TabViewModelStoreOwner() }
     val analysisStoreOwner = remember { TabViewModelStoreOwner() }
-    val analysisViewModel: AnalysisViewModel = viewModel(
-        viewModelStoreOwner = analysisStoreOwner,
-        factory = container.analysisViewModelFactory
-    )
-    val analysisUiState by analysisViewModel.uiState.collectAsStateWithLifecycle()
-    val analysisPromptState = analysisViewModel.sourcePromptTextFieldState
-    val wildcardViewModel: WildcardViewModel = viewModel(
-        viewModelStoreOwner = wildcardStoreOwner,
-        factory = container.wildcardViewModelFactory
-    )
-    val wildcardUiState by wildcardViewModel.uiState.collectAsStateWithLifecycle()
     val floatingBarController = remember(activity) {
         activity?.let(::FloatingAutomationBarController)
     }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { }
+
+    fun getOrCreateAnalysisViewModel(): AnalysisViewModel =
+        analysisStoreOwner.getOrCreate(AnalysisViewModel::class.java, container.analysisViewModelFactory)
+
+    fun getOrCreateWildcardViewModel(): WildcardViewModel =
+        wildcardStoreOwner.getOrCreate(WildcardViewModel::class.java, container.wildcardViewModelFactory)
 
     DisposableEffect(Unit) {
         onDispose {
@@ -86,13 +83,13 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
-            wildcardViewModel.saveWildcardFolder(uri.toString())
+            getOrCreateWildcardViewModel().saveWildcardFolder(uri.toString())
             automationViewModel.refreshStatus()
         }
     }
 
     fun launchWildcardFolderPicker() {
-        val initialUri = wildcardViewModel.getInitialWildcardFolderUri()?.let { android.net.Uri.parse(it) }
+        val initialUri = getOrCreateWildcardViewModel().getInitialWildcardFolderUri()?.let { android.net.Uri.parse(it) }
         wildcardFolderLauncher.launch(initialUri)
     }
 
@@ -101,7 +98,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectSafWildcardFolder() {
-        if (!wildcardViewModel.requestFolderSelection()) {
+        if (!getOrCreateWildcardViewModel().requestFolderSelection()) {
             selectedTab = MainTab.WILDCARD
             return
         }
@@ -109,6 +106,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectWildcardFolder() {
+        val wildcardViewModel = getOrCreateWildcardViewModel()
         when (wildcardViewModel.decideWildcardFolderAction(
             hasAllFilesAccess = mainUiState.environmentStatus.hasAllFilesAccess,
             isWildcardDirectoryAccessible = mainUiState.environmentStatus.isWildcardDirectoryAccessible
@@ -127,11 +125,15 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     fun trimInactiveTabs(exceptTab: MainTab? = null) {
         if (exceptTab != MainTab.ANALYSIS) {
             // 결과·설정·타겟 구간 및 진행 중 AI 작업은 유지하고 일시적 다이얼로그 상태만 정리.
-            analysisViewModel.trimForInactiveTab()
+            analysisStoreOwner
+                .getIfInitialized(AnalysisViewModel::class.java, container.analysisViewModelFactory)
+                ?.trimForInactiveTab()
         }
         if (exceptTab != MainTab.WILDCARD) {
             // 미저장 여부와 무관하게 ViewModel과 텍스트 본문은 보존하고, 무거운 Undo 버퍼만 정리하여 재진입 시 0ms 즉시 표시
-            wildcardViewModel.trimForInactiveTab()
+            wildcardStoreOwner
+                .getIfInitialized(WildcardViewModel::class.java, container.wildcardViewModelFactory)
+                ?.trimForInactiveTab()
         }
     }
 
@@ -184,9 +186,14 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     DisposableEffect(lifecycleOwner) {
+        var hasResumedOnce = false
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                automationViewModel.refreshStatus()
+                if (hasResumedOnce) {
+                    automationViewModel.refreshStatus()
+                } else {
+                    hasResumedOnce = true
+                }
                 // 멀티윈도우에서는 RESUME만으로 포커스가 안 풀릴 수 있어 force clear.
                 clearInputFocus()
             }
@@ -217,30 +224,12 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         onDispose { floatingBarController?.hide() }
     }
 
-    LaunchedEffect(
-        wildcardViewModel,
-        mainUiState.environmentStatus.canEditWildcardFiles
-    ) {
-        wildcardViewModel.onFolderAccessChanged(
-            mainUiState.environmentStatus.canEditWildcardFiles
-        )
-    }
-
-    LaunchedEffect(selectedTab, wildcardViewModel) {
-        if (selectedTab == MainTab.WILDCARD) {
-            wildcardViewModel.onTabEntered()
-        }
-    }
-
     AutomationApp(
         selectedTab = selectedTab,
         onSelectTab = ::selectMainTab,
         mainUiState = mainUiState,
         automationBarUiState = automationBarUiState,
         promptTemplateState = automationViewModel.promptTemplateTextFieldState,
-        analysisUiState = analysisUiState,
-        analysisPromptState = analysisPromptState,
-        wildcardUiState = wildcardUiState,
         automationActions = remember(automationViewModel, platformNavigator, clearInputFocus) {
             createAutomationActions(
                 automationViewModel = automationViewModel,
@@ -253,19 +242,48 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 selectAutomationMode = ::selectAutomationMode
             )
         },
-        analysisActions = remember(analysisViewModel, platformNavigator, browserLauncher, clearInputFocus) {
-            createAnalysisActions(
-                analysisViewModel = analysisViewModel,
-                platformNavigator = platformNavigator,
-                browserLauncher = browserLauncher,
-                clearInputFocus = clearInputFocus,
-                onCompleteSave = { selectMainTab(MainTab.AUTOMATION) }
+        analysisContent = {
+            val analysisViewModel = remember(analysisStoreOwner) { getOrCreateAnalysisViewModel() }
+            val analysisUiState by analysisViewModel.uiState.collectAsStateWithLifecycle()
+            val analysisActions = remember(analysisViewModel, platformNavigator, browserLauncher, clearInputFocus) {
+                createAnalysisActions(
+                    analysisViewModel = analysisViewModel,
+                    platformNavigator = platformNavigator,
+                    browserLauncher = browserLauncher,
+                    clearInputFocus = clearInputFocus,
+                    onCompleteSave = { selectMainTab(MainTab.AUTOMATION) }
+                )
+            }
+            AnalysisScreen(
+                uiState = analysisUiState,
+                sourcePromptState = analysisViewModel.sourcePromptTextFieldState,
+                actions = analysisActions
             )
         },
-        wildcardActions = remember(wildcardViewModel) {
-            createWildcardActions(
-                wildcardViewModel = wildcardViewModel,
-                selectWildcardFolder = ::selectWildcardFolder
+        wildcardContent = {
+            val wildcardViewModel = remember(wildcardStoreOwner) { getOrCreateWildcardViewModel() }
+            val wildcardUiState by wildcardViewModel.uiState.collectAsStateWithLifecycle()
+            val wildcardActions = remember(wildcardViewModel) {
+                createWildcardActions(
+                    wildcardViewModel = wildcardViewModel,
+                    selectWildcardFolder = ::selectWildcardFolder
+                )
+            }
+            LaunchedEffect(wildcardViewModel, mainUiState.environmentStatus.canEditWildcardFiles) {
+                wildcardViewModel.onFolderAccessChanged(
+                    mainUiState.environmentStatus.canEditWildcardFiles
+                )
+            }
+            LaunchedEffect(selectedTab, wildcardViewModel) {
+                if (selectedTab == MainTab.WILDCARD) {
+                    wildcardViewModel.onTabEntered()
+                }
+            }
+            WildcardScreen(
+                uiState = wildcardUiState,
+                environmentStatus = mainUiState.environmentStatus,
+                environmentSetupInfo = mainUiState.environmentSetupInfo,
+                actions = wildcardActions
             )
         }
     )

@@ -42,7 +42,23 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
     override val status = RemoteAutomationStateHub.status
 
     init {
-        selectMode(store.mode())
+        val initialMode = store.mode()
+        if (initialMode == AutomationMode.NORMAL) {
+            RemoteAutomationStateHub.update {
+                it.copy(
+                    mode = AutomationMode.NORMAL,
+                    isReceiverRunning = false,
+                    receiverPairingCode = "",
+                    discoveredDeviceName = "",
+                    isPaired = false,
+                    connectionMessage = "",
+                    message = "",
+                    automationState = AutomationRunState.Idle
+                )
+            }
+        } else {
+            selectMode(initialMode)
+        }
     }
 
     override fun selectMode(mode: AutomationMode) {
