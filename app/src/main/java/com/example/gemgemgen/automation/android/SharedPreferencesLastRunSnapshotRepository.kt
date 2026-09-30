@@ -22,22 +22,14 @@ class SharedPreferencesLastRunSnapshotRepository(
     override fun load(): LastRunSnapshot? {
         if (isLoaded) return cachedSnapshot
 
-        val promptTemplate = preferences.getString(KEY_PROMPT_TEMPLATE, "").orEmpty()
-        val repeatCountText = preferences.getString(KEY_REPEAT_COUNT_TEXT, "").orEmpty()
-        if (promptTemplate.isBlank() && repeatCountText.isBlank()) {
-            isLoaded = true
-            cachedSnapshot = null
-            return null
-        }
-
         val snapshot = LastRunSnapshot(
-            promptTemplate = promptTemplate,
-            repeatCountText = repeatCountText,
+            promptTemplate = preferences.getString(KEY_PROMPT_TEMPLATE, "").orEmpty(),
+            repeatCountText = preferences.getString(KEY_REPEAT_COUNT_TEXT, "").orEmpty(),
             targetApp = AutomationTargetApp.fromStorageValue(
                 preferences.getString(KEY_TARGET_APP, "").orEmpty()
             ),
             flowImageCount = preferences.getInt(KEY_FLOW_IMAGE_COUNT, AppDefaults.DEFAULT_FLOW_IMAGE_COUNT)
-        )
+        ).takeIf { it.hasRestorablePrompt() }
         cachedSnapshot = snapshot
         isLoaded = true
         return snapshot

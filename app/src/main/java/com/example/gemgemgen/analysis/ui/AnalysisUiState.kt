@@ -12,12 +12,11 @@ import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
+import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
+import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
-
-const val DEFAULT_ANALYSIS_RESULT_FILE_NAME = com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
-val DEFAULT_ANALYSIS_CATEGORY: AnalysisCategory = com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 
 data class AnalysisUiState(
     val sourcePrompt: String = "",
@@ -62,12 +61,6 @@ data class AnalysisUiState(
     /** 자동 마스킹 모델을 통한 분석이 필요한지 여부 (캐시 미스 등) */
     val needsMaskingAnalysis: Boolean = true
 ) {
-    val hasGeminiCredential: Boolean
-        get() = apiKeys.any { it.isActive }
-
-    val hasGrokCredential: Boolean
-        get() = isGrokLoggedIn
-
     val hasMaskingCredential: Boolean
         get() = hasCredentialFor(maskingProvider)
 
@@ -101,16 +94,7 @@ data class AnalysisUiState(
         get() = startBlockedReason?.let { AnalysisUiText.startBlockedMessage(it) }
 
     val canGenerate: Boolean
-        get() = AnalysisSessionPolicy.canGenerate(
-            source = sourcePrompt,
-            category = selectedCategory,
-            needsMaskingAnalysis = needsMaskingAnalysis,
-            maskingProvider = maskingProvider,
-            hasMaskingCredential = hasMaskingCredential,
-            generationProvider = generationProvider,
-            hasGenerationCredential = hasGenerationCredential,
-            status = status
-        )
+        get() = !isBusy && startBlockedReason == null
 
     val canCopyOrSave: Boolean
         get() = AnalysisSessionPolicy.canCopyOrSave(
@@ -123,23 +107,7 @@ data class AnalysisUiState(
         get() = apiKeys.firstOrNull { it.isActive }?.preview.orEmpty()
 
     val canResetSession: Boolean
-        get() = AnalysisSessionPolicy.canResetSession(
-            sourcePrompt = sourcePrompt,
-            selectedCategory = selectedCategory,
-            targetSegment = targetSegment,
-            generatedCandidatesCount = generatedCandidates.size,
-            selectedDirectionIdsCount = selectedDirectionIds.size,
-            customHint = customHint,
-            txtCount = txtCount,
-            resultFileName = resultFileName,
-            selectedCandidateIndex = selectedCandidateIndex,
-            hasAppliedCandidateToAutomation = hasAppliedCandidateToAutomation,
-            hasPendingOverwrite = pendingOverwriteFileName != null,
-            error = error,
-            message = message,
-            warning = warning,
-            isBusy = isBusy
-        )
+        get() = AnalysisSessionPolicy.canResetSession(this)
 
     fun providerFor(role: AnalysisModelRole): AnalysisProvider {
         return when (role) {
@@ -157,8 +125,8 @@ data class AnalysisUiState(
 
     private fun hasCredentialFor(provider: AnalysisProvider): Boolean {
         return when (provider) {
-            AnalysisProvider.GEMINI -> hasGeminiCredential
-            AnalysisProvider.GROK -> hasGrokCredential
+            AnalysisProvider.GEMINI -> apiKeys.any { it.isActive }
+            AnalysisProvider.GROK -> isGrokLoggedIn
         }
     }
 }

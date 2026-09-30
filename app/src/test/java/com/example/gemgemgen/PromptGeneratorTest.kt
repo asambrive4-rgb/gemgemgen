@@ -25,7 +25,7 @@ class PromptGeneratorTest {
             basePrompt = "plain prompt",
             wildcardSets = emptyList()
         )
-        val generated = (1..3).map { compiledPrompt.generateFinalPrompt(it) }
+        val generated = (1..3).map { compiledPrompt.generateFinalPrompt() }
 
         assertEquals(3, generated.size)
         assertEquals(listOf("plain prompt", "plain prompt", "plain prompt"), generated)
@@ -42,7 +42,7 @@ class PromptGeneratorTest {
                     items = listOf("red")
                 )
             )
-        ).generateFinalPrompt(index = 1)
+        ).generateFinalPrompt()
 
         assertEquals("red dress with red ribbon", generated)
     }
@@ -52,7 +52,7 @@ class PromptGeneratorTest {
         val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "portrait with __hair__",
             wildcardSets = emptyList()
-        ).generateFinalPrompt(index = 1)
+        ).generateFinalPrompt()
 
         assertEquals("portrait with __hair__", generated)
     }
@@ -68,7 +68,7 @@ class PromptGeneratorTest {
                     items = emptyList()
                 )
             )
-        ).generateFinalPrompt(index = 1)
+        ).generateFinalPrompt()
 
         assertEquals("portrait with __hair__", generated)
     }
@@ -87,8 +87,8 @@ class PromptGeneratorTest {
         )
 
         val generated = listOf(
-            compiledPrompt.generateFinalPrompt(index = 1),
-            compiledPrompt.generateFinalPrompt(index = 2)
+            compiledPrompt.generateFinalPrompt(),
+            compiledPrompt.generateFinalPrompt()
         )
 
         assertEquals(
@@ -102,7 +102,7 @@ class PromptGeneratorTest {
         val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "a <cat|dog> on the sofa",
             wildcardSets = emptyList()
-        ).generateFinalPrompt(index = 1)
+        ).generateFinalPrompt()
 
         assertTrue(
             generated == "a cat on the sofa" ||
@@ -118,7 +118,7 @@ class PromptGeneratorTest {
             basePrompt = "wear a <red|blue|green> dress",
             wildcardSets = emptyList()
         )
-        val results = (1..30).map { compiledPrompt.generateFinalPrompt(it) }.toSet()
+        val results = (1..30).map { compiledPrompt.generateFinalPrompt() }.toSet()
 
         assertTrue(results.contains("wear a red dress"))
         assertTrue(results.contains("wear a blue dress"))
@@ -131,7 +131,7 @@ class PromptGeneratorTest {
         val generated = PromptGenerator(Random(0)).compile(
             basePrompt = "tag <red> and value",
             wildcardSets = emptyList()
-        ).generateFinalPrompt(index = 1)
+        ).generateFinalPrompt()
 
         assertEquals("tag <red> and value", generated)
     }
@@ -142,7 +142,7 @@ class PromptGeneratorTest {
             basePrompt = "prefix< A | >suffix",
             wildcardSets = emptyList()
         )
-        val results = (1..40).map { compiledPrompt.generateFinalPrompt(it) }.toSet()
+        val results = (1..40).map { compiledPrompt.generateFinalPrompt() }.toSet()
 
         assertTrue(results.contains("prefixAsuffix"))
         assertTrue(results.contains("prefixsuffix"))
@@ -154,7 +154,7 @@ class PromptGeneratorTest {
             basePrompt = "<a|b> and <a|b>",
             wildcardSets = emptyList()
         )
-        val results = (1..50).map { compiledPrompt.generateFinalPrompt(it) }.toSet()
+        val results = (1..50).map { compiledPrompt.generateFinalPrompt() }.toSet()
 
         // 위치마다 독립 선택이므로 혼합 결과도 나와야 한다.
         assertTrue(results.any { it == "a and b" || it == "b and a" })
@@ -172,7 +172,7 @@ class PromptGeneratorTest {
                 )
             )
         )
-        val generated = (1..20).map { compiledPrompt.generateFinalPrompt(it) }.toSet()
+        val generated = (1..20).map { compiledPrompt.generateFinalPrompt() }.toSet()
 
         // 와일드카드 먼저 → <crimson|navy> → 둘 중 하나
         assertTrue(generated.all { it == "crimson shirt" || it == "navy shirt" })
@@ -190,7 +190,7 @@ class PromptGeneratorTest {
                     items = listOf("short black hair")
                 )
             )
-        ).generateFinalPrompt(index = 1)
+        ).generateFinalPrompt()
 
         assertTrue(
             generated == "short black hair with smile face" ||

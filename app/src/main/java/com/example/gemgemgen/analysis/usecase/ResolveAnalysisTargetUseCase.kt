@@ -8,25 +8,14 @@ import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisPromptBuilder
 import com.example.gemgemgen.analysis.domain.AnalysisReport
+import com.example.gemgemgen.analysis.domain.AnalysisReportCache
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
-import com.example.gemgemgen.analysis.domain.MaskingAnalysisCacheSnapshot
 import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.withContext
 
 class AnalysisException(message: String) : RuntimeException(message)
-
-data class AnalysisReportCache(
-    override val sourcePrompt: String,
-    override val category: AnalysisCategory,
-    override val targetSegment: AnalysisTargetSegment?,
-    val report: AnalysisReport,
-    /** Goal 추론에 쓰인 방향 칩 hint 목록 (순서 유지) */
-    override val selectedHints: List<String> = emptyList(),
-    /** Goal 추론에 쓰인 사용자 추가 요구사항 */
-    override val customHint: String = ""
-) : MaskingAnalysisCacheSnapshot
 
 data class EnsureTargetResult(
     val target: AnalysisTargetSegment,

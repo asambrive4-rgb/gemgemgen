@@ -32,9 +32,11 @@ import com.example.gemgemgen.automation.android.FloatingAutomationBarController
 import com.example.gemgemgen.automation.ui.AutomationScreenActions
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.ui.AutomationViewModel
-import com.example.gemgemgen.core.android.AndroidExternalBrowserLauncher
 import com.example.gemgemgen.ui.AutomationApp
 import com.example.gemgemgen.ui.MainTab
+import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
+import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
+import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
 import com.example.gemgemgen.wildcard.ui.WildcardScreen
 import com.example.gemgemgen.wildcard.ui.WildcardScreenActions
@@ -48,8 +50,9 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val windowInfo = LocalWindowInfo.current
-    val browserLauncher = remember(context) { AndroidExternalBrowserLauncher(context) }
     val platformNavigator = remember(context) { AndroidHostPlatformNavigator(context) }
+    val wildcardFolderRepository = remember(context) { AndroidWildcardFolderRepository(context.applicationContext) }
+    val wildcardDirectStorage = remember { AndroidWildcardDirectStorage() }
     val clearInputFocus = remember(focusManager) {
         { focusManager.clearFocus(force = true) }
     }
@@ -72,6 +75,9 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     fun getOrCreateWildcardViewModel(): WildcardViewModel =
         wildcardStoreOwner.getOrCreate(WildcardViewModel::class.java, container.wildcardViewModelFactory)
 
+    fun getInitializedWildcardViewModel(): WildcardViewModel? =
+        wildcardStoreOwner.getIfInitialized(WildcardViewModel::class.java, container.wildcardViewModelFactory)
+
     DisposableEffect(Unit) {
         onDispose {
             wildcardStoreOwner.clear()
@@ -83,13 +89,21 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         if (uri != null) {
-            getOrCreateWildcardViewModel().saveWildcardFolder(uri.toString())
+            val initializedVm = getInitializedWildcardViewModel()
+            if (initializedVm != null) {
+                initializedVm.saveWildcardFolder(uri.toString())
+            } else {
+                wildcardFolderRepository.save(uri.toString())
+            }
             automationViewModel.refreshStatus()
+            automationViewModel.refreshAutocompleteCandidates()
         }
     }
 
     fun launchWildcardFolderPicker() {
-        val initialUri = getOrCreateWildcardViewModel().getInitialWildcardFolderUri()?.let { android.net.Uri.parse(it) }
+        val initialUri = (getInitializedWildcardViewModel()?.getInitialWildcardFolderUri()
+            ?: wildcardFolderRepository.getFolderUri())
+            ?.let { android.net.Uri.parse(it) }
         wildcardFolderLauncher.launch(initialUri)
     }
 
@@ -98,7 +112,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectSafWildcardFolder() {
-        if (!getOrCreateWildcardViewModel().requestFolderSelection()) {
+        val initializedVm = getInitializedWildcardViewModel()
+        if (initializedVm != null && !initializedVm.requestFolderSelection()) {
             selectedTab = MainTab.WILDCARD
             return
         }
@@ -106,16 +121,20 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     }
 
     fun selectWildcardFolder() {
-        val wildcardViewModel = getOrCreateWildcardViewModel()
-        when (wildcardViewModel.decideWildcardFolderAction(
-            hasAllFilesAccess = mainUiState.environmentStatus.hasAllFilesAccess,
-            isWildcardDirectoryAccessible = mainUiState.environmentStatus.isWildcardDirectoryAccessible
-        )) {
+        when (
+            WildcardFolderAccessPolicy.decideAction(
+                hasAllFilesAccess = mainUiState.environmentStatus.hasAllFilesAccess,
+                isWildcardDirectoryAccessible = mainUiState.environmentStatus.isWildcardDirectoryAccessible
+            )
+        ) {
             WildcardFolderAction.OpenDirectFolder -> {
-                if (!wildcardViewModel.requestFolderSelection()) return
-                wildcardViewModel.onFolderChanged()
+                val initializedVm = getInitializedWildcardViewModel()
+                if (initializedVm != null && !initializedVm.requestFolderSelection()) return
+                runCatching { wildcardDirectStorage.ensureFolder() }
+                initializedVm?.onFolderChanged()
                 selectedTab = MainTab.WILDCARD
                 automationViewModel.refreshStatus()
+                automationViewModel.refreshAutocompleteCandidates()
             }
             WildcardFolderAction.OpenStorageSettings -> openWildcardStorageSettings()
             WildcardFolderAction.LaunchSafPicker -> selectSafWildcardFolder()
@@ -131,9 +150,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
         if (exceptTab != MainTab.WILDCARD) {
             // 미저장 여부와 무관하게 ViewModel과 텍스트 본문은 보존하고, 무거운 Undo 버퍼만 정리하여 재진입 시 0ms 즉시 표시
-            wildcardStoreOwner
-                .getIfInitialized(WildcardViewModel::class.java, container.wildcardViewModelFactory)
-                ?.trimForInactiveTab()
+            getInitializedWildcardViewModel()?.trimForInactiveTab()
         }
     }
 
@@ -146,7 +163,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
         // 와일드카드 탭에서 파일 추가/이름변경 후 돌아와도 추천 목록이 갱신되게 한다.
         if (tab == MainTab.AUTOMATION) {
-            automationViewModel.refreshWildcardTokenCandidates()
+            automationViewModel.refreshAutocompleteCandidates()
         }
         selectedTab = tab
     }
@@ -245,11 +262,10 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         analysisContent = {
             val analysisViewModel = remember(analysisStoreOwner) { getOrCreateAnalysisViewModel() }
             val analysisUiState by analysisViewModel.uiState.collectAsStateWithLifecycle()
-            val analysisActions = remember(analysisViewModel, platformNavigator, browserLauncher, clearInputFocus) {
+            val analysisActions = remember(analysisViewModel, platformNavigator, clearInputFocus) {
                 createAnalysisActions(
                     analysisViewModel = analysisViewModel,
                     platformNavigator = platformNavigator,
-                    browserLauncher = browserLauncher,
                     clearInputFocus = clearInputFocus,
                     onCompleteSave = { selectMainTab(MainTab.AUTOMATION) }
                 )
@@ -335,7 +351,6 @@ private fun createAutomationActions(
 private fun createAnalysisActions(
     analysisViewModel: AnalysisViewModel,
     platformNavigator: AndroidHostPlatformNavigator,
-    browserLauncher: AndroidExternalBrowserLauncher,
     clearInputFocus: () -> Unit,
     onCompleteSave: () -> Unit
 ): AnalysisScreenActions = object : AnalysisScreenActions by analysisViewModel {
@@ -352,7 +367,7 @@ private fun createAnalysisActions(
     }
 
     override fun onOpenGrokLoginUrl(url: String) {
-        platformNavigator.openUrlPreferFirefox(browserLauncher, url)
+        platformNavigator.openUrlPreferFirefox(url)
     }
 }
 

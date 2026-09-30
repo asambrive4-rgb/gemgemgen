@@ -13,6 +13,28 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
+internal val analysisJson = Json { ignoreUnknownKeys = true }
+
+internal data class AnalysisHttpResponse(
+    val code: Int,
+    val body: String
+)
+
+internal fun executeHttpRequest(
+    connection: HttpURLConnection,
+    requestBody: String? = null
+): AnalysisHttpResponse {
+    return try {
+        if (requestBody != null) {
+            writeRequestBody(connection, requestBody)
+        }
+        val code = connection.responseCode
+        AnalysisHttpResponse(code, readResponseBody(connection, code))
+    } finally {
+        connection.disconnect()
+    }
+}
+
 internal fun writeRequestBody(connection: HttpURLConnection, body: String) {
     OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
         writer.write(body)
@@ -31,7 +53,10 @@ internal fun readResponseBody(
     return stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
 }
 
-internal fun extractJsonErrorMessage(json: Json, responseText: String): String {
+internal fun extractJsonErrorMessage(responseText: String): String =
+    extractJsonErrorMessage(analysisJson, responseText)
+
+internal fun extractJsonErrorMessage(json: Json = analysisJson, responseText: String): String {
     return runCatching {
         val root = json.parseToJsonElement(responseText).jsonObject
         val errorDescription = (root["error_description"] as? JsonPrimitive)?.contentOrNull

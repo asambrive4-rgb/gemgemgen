@@ -83,8 +83,4 @@ interface AutomationScreenActions {
     fun onOpenWildcardStorageSettings() {}
     fun onOpenAccessibilitySettings() {}
     fun onClearFocus() {}
-
-    companion object {
-        val Empty = object : AutomationScreenActions {}
-    }
 }

@@ -1,11 +1,6 @@
 // 역할: 접근성 권한, 배터리 최적화 예외, 키보드 및 테마 설정 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,12 +11,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,13 +32,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
+import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
@@ -59,7 +50,7 @@ enum class SettingsDialogStage {
 @Composable
 internal fun SettingsDialogHost(
     uiState: AutomationUiState,
-    actions: AutomationScreenActions = AutomationScreenActions.Empty,
+    actions: AutomationScreenActions,
     modifier: Modifier = Modifier
 ) {
     val activeStage = when {
@@ -75,43 +66,25 @@ internal fun SettingsDialogHost(
         }
     }
 
-    Dialog(
+    AppDialogHostShell(
+        activeDialog = activeStage,
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = modifier
-                .padding(24.dp)
-                .imePadding()
-                .widthIn(min = 280.dp, max = 560.dp)
-                .fillMaxWidth()
-                .wrapContentHeight(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
-        ) {
-            AnimatedContent(
-                targetState = activeStage,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
-                },
-                contentAlignment = Alignment.Center,
-                label = "SettingsDialogHostCrossfade"
-            ) { stage ->
-                when (stage) {
-                    SettingsDialogStage.ACCESSIBILITY_PROMPT -> {
-                        AccessibilityPromptDialogContent(
-                            onConfirm = { actions.onConfirmAccessibilityPrompt() },
-                            onDismissToSettings = { actions.dismissAccessibilityPromptToSettings() }
-                        )
-                    }
-                    SettingsDialogStage.SETTINGS -> {
-                        StatusSettingsDialogContent(
-                            uiState = uiState,
-                            actions = actions
-                        )
-                    }
-                }
+        modifier = modifier,
+        contentKey = { it },
+        label = "SettingsDialogHostCrossfade"
+    ) { stage ->
+        when (stage) {
+            SettingsDialogStage.ACCESSIBILITY_PROMPT -> {
+                AccessibilityPromptDialogContent(
+                    onConfirm = { actions.onConfirmAccessibilityPrompt() },
+                    onDismissToSettings = { actions.dismissAccessibilityPromptToSettings() }
+                )
+            }
+            SettingsDialogStage.SETTINGS -> {
+                StatusSettingsDialogContent(
+                    uiState = uiState,
+                    actions = actions
+                )
             }
         }
     }
@@ -159,7 +132,7 @@ private fun AccessibilityPromptDialogContent(
 @Composable
 private fun StatusSettingsDialogContent(
     uiState: AutomationUiState,
-    actions: AutomationScreenActions = AutomationScreenActions.Empty,
+    actions: AutomationScreenActions,
     modifier: Modifier = Modifier
 ) {
     val status = uiState.environmentStatus

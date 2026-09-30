@@ -1,11 +1,6 @@
 // 역할: 와일드카드 화면의 활성 다이얼로그 상태를 판별하고 파일 관리·AI 분류 팝업을 통합 표시합니다.
 package com.example.gemgemgen.wildcard.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,14 +8,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -31,26 +25,21 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.ui.ModelSelectorChips
+import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
+import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.AppTheme
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.ImeAction
-import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
@@ -81,33 +70,34 @@ sealed interface WildcardDialogType {
 }
 
 fun deriveActiveWildcardDialog(uiState: WildcardUiState): WildcardDialogType {
-    val classifyPreview = uiState.classifyPreview
+    val classify = uiState.classify
+    val classifyPreview = classify.classifyPreview
     return when {
-        uiState.classifyOverwriteConflicts.isNotEmpty() ->
-            WildcardDialogType.ClassifyOverwrite(uiState.classifyOverwriteConflicts)
-        uiState.isClassifying ->
+        classify.classifyOverwriteConflicts.isNotEmpty() ->
+            WildcardDialogType.ClassifyOverwrite(classify.classifyOverwriteConflicts)
+        classify.isClassifying ->
             WildcardDialogType.ClassifyLoading
         classifyPreview != null ->
             WildcardDialogType.ClassifyPreview(
                 result = classifyPreview,
-                criteria = uiState.classifyCriteria,
-                saveEntries = uiState.classifySaveEntries,
+                criteria = classify.classifyCriteria,
+                saveEntries = classify.classifySaveEntries,
                 canSave = uiState.canSaveClassifyResult,
                 canRerun = uiState.canRerunClassifyFromPreview,
                 error = uiState.error
             )
-        uiState.showClassifyCriteriaDialog ->
+        classify.showClassifyCriteriaDialog ->
             WildcardDialogType.ClassifyCriteria(
-                criteria = uiState.classifyCriteria,
-                provider = uiState.classifyProvider,
-                modelId = uiState.classifyModelId,
+                criteria = classify.classifyCriteria,
+                provider = classify.classifyProvider,
+                modelId = classify.classifyModelId,
                 error = uiState.error,
                 canRun = uiState.canRunClassify
             )
         uiState.pendingAction != null ->
             WildcardDialogType.UnsavedChanges
         uiState.showDeleteConfirm ->
-            WildcardDialogType.DeleteConfirm(uiState.selectedFile?.fileName.orEmpty())
+            WildcardDialogType.DeleteConfirm(uiState.editor.selectedFile?.fileName.orEmpty())
         uiState.showRenameDialog ->
             WildcardDialogType.RenameFile(uiState.renameFileName, uiState.error)
         uiState.showNewFileDialog ->
@@ -138,68 +128,46 @@ internal fun WildcardDialogHost(
         }
     }
 
-    val focusManager = LocalFocusManager.current
-    val isDismissible = activeDialog !is WildcardDialogType.ClassifyLoading
-
-    Dialog(
+    AppDialogHostShell(
+        activeDialog = activeDialog,
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(
-            dismissOnBackPress = isDismissible,
-            dismissOnClickOutside = isDismissible,
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier
-                .padding(24.dp)
-                .imePadding()
-                .widthIn(min = 280.dp, max = 560.dp)
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .clearFocusOnOutsideTap { focusManager.clearFocus(force = true) },
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
-        ) {
-            AnimatedContent(
-                targetState = activeDialog,
-                contentKey = { it::class },
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
-                },
-                contentAlignment = Alignment.Center,
-                label = "WildcardDialogHostCrossfade"
-            ) { targetDialog ->
-                when (targetDialog) {
-                    WildcardDialogType.None -> Unit
-                    is WildcardDialogType.NewFile -> FileNameInputDialogContent(
-                        title = "새 txt 파일",
-                        fileName = targetDialog.fileName,
-                        placeholder = "예: hair",
-                        error = targetDialog.error,
-                        confirmLabel = "생성",
-                        onFileNameChange = actions::onNewFileNameChange,
-                        onConfirm = actions::createNewFile,
-                        onDismiss = actions::dismissNewFileDialog
-                    )
-                    is WildcardDialogType.RenameFile -> FileNameInputDialogContent(
-                        title = "파일 이름 수정",
-                        fileName = targetDialog.fileName,
-                        placeholder = "예: new_hair",
-                        error = targetDialog.error,
-                        confirmLabel = "변경",
-                        onFileNameChange = actions::onRenameFileNameChange,
-                        onConfirm = actions::renameSelectedFile,
-                        onDismiss = actions::dismissRenameDialog
-                    )
-                    is WildcardDialogType.DeleteConfirm -> DeleteConfirmContent(targetDialog, actions)
-                    WildcardDialogType.UnsavedChanges -> UnsavedChangesContent(actions)
-                    WildcardDialogType.ClassifyLoading -> ClassifyLoadingContent()
-                    is WildcardDialogType.ClassifyCriteria -> ClassifyCriteriaContent(targetDialog, actions)
-                    is WildcardDialogType.ClassifyPreview -> ClassifyPreviewContent(targetDialog, actions)
-                    is WildcardDialogType.ClassifyOverwrite -> ClassifyOverwriteContent(targetDialog, actions)
-                }
-            }
+        isDismissible = activeDialog !is WildcardDialogType.ClassifyLoading,
+        label = "WildcardDialogHostCrossfade"
+    ) { targetDialog ->
+        when (targetDialog) {
+            WildcardDialogType.None -> Unit
+            is WildcardDialogType.NewFile -> FileNameInputDialogContent(
+                title = "새 txt 파일",
+                fileName = targetDialog.fileName,
+                placeholder = "예: hair",
+                error = targetDialog.error,
+                confirmLabel = "생성",
+                onFileNameChange = actions::onNewFileNameChange,
+                onConfirm = actions::createNewFile,
+                onDismiss = actions::dismissNewFileDialog
+            )
+            is WildcardDialogType.RenameFile -> FileNameInputDialogContent(
+                title = "파일 이름 수정",
+                fileName = targetDialog.fileName,
+                placeholder = "예: new_hair",
+                error = targetDialog.error,
+                confirmLabel = "변경",
+                onFileNameChange = actions::onRenameFileNameChange,
+                onConfirm = actions::renameSelectedFile,
+                onDismiss = actions::dismissRenameDialog
+            )
+            is WildcardDialogType.DeleteConfirm -> AppConfirmDialogContent(
+                title = "파일 삭제",
+                message = "${targetDialog.fileName} 파일을 삭제할까요?",
+                confirmLabel = "삭제",
+                onConfirm = actions::confirmDeleteSelectedFile,
+                onDismiss = actions::dismissDeleteConfirm
+            )
+            WildcardDialogType.UnsavedChanges -> UnsavedChangesContent(actions)
+            WildcardDialogType.ClassifyLoading -> ClassifyLoadingContent()
+            is WildcardDialogType.ClassifyCriteria -> ClassifyCriteriaContent(targetDialog, actions)
+            is WildcardDialogType.ClassifyPreview -> ClassifyPreviewContent(targetDialog, actions)
+            is WildcardDialogType.ClassifyOverwrite -> ClassifyOverwriteContent(targetDialog, actions)
         }
     }
 }
@@ -268,43 +236,6 @@ private fun FileNameInputDialogContent(
                 enabled = canConfirm
             ) {
                 Text(confirmLabel)
-            }
-        }
-    }
-}
-
-@Composable
-private fun DeleteConfirmContent(
-    dialog: WildcardDialogType.DeleteConfirm,
-    actions: WildcardScreenActions
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "파일 삭제",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "${dialog.fileName} 파일을 삭제할까요?",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = actions::dismissDeleteConfirm) {
-                Text("취소")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = actions::confirmDeleteSelectedFile) {
-                Text("삭제")
             }
         }
     }
@@ -473,7 +404,7 @@ private fun ClassifyPreviewContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
             text = "분류 미리보기",

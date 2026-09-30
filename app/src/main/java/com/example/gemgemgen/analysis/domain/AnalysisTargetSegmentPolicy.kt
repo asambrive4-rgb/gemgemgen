@@ -27,7 +27,6 @@ object AnalysisTargetSegmentPolicy {
             text = detected.exactText,
             startIndex = detected.startIndex,
             endIndex = detected.endIndex,
-            source = AnalysisTargetSource.AUTO,
             category = category,
             confidence = detected.confidence
         )
@@ -45,20 +44,8 @@ object AnalysisTargetSegmentPolicy {
     ): String {
         if (segment == null) return source
         val token = WildcardFileParser.tokenFromFileName(savedFileName) ?: return source
-        return replaceSegmentWithText(source, segment, token)
-    }
-
-    /**
-     * Replaces [segment] span in [source] with [replacement].
-     * Does not validate that the span still matches [segment].text.
-     */
-    fun replaceSegmentWithText(
-        source: String,
-        segment: AnalysisTargetSegment,
-        replacement: String
-    ): String {
         val start = segment.startIndex.coerceIn(0, source.length)
         val end = segment.endIndex.coerceIn(start, source.length)
-        return source.replaceRange(start, end, replacement)
+        return source.replaceRange(start, end, token)
     }
 }

@@ -1,13 +1,16 @@
 // 역할: 프롬프트 원문, 카테고리, 방향 힌트 추출 및 변경에 따른 마스킹 분석 필요 여부와 캐시 유효성을 판정합니다.
 package com.example.gemgemgen.analysis.domain
 
-interface MaskingAnalysisCacheSnapshot {
-    val sourcePrompt: String
-    val category: AnalysisCategory
-    val targetSegment: AnalysisTargetSegment?
-    val selectedHints: List<String>
-    val customHint: String
-}
+data class AnalysisReportCache(
+    val sourcePrompt: String,
+    val category: AnalysisCategory,
+    val targetSegment: AnalysisTargetSegment? = null,
+    val report: AnalysisReport = AnalysisReport(),
+    /** Goal 추론에 쓰인 방향 칩 hint 목록 (순서 유지) */
+    val selectedHints: List<String> = emptyList(),
+    /** Goal 추론에 쓰인 사용자 추가 요구사항 */
+    val customHint: String = ""
+)
 
 data class AnalysisDirectionInput(
     val selectedHints: List<String>,
@@ -39,7 +42,7 @@ object AnalysisMaskingPolicy {
         source: String,
         category: AnalysisCategory?,
         targetSegment: AnalysisTargetSegment?,
-        cache: MaskingAnalysisCacheSnapshot?,
+        cache: AnalysisReportCache?,
         selectedHints: List<String>,
         customHint: String
     ): Boolean {
@@ -56,7 +59,7 @@ object AnalysisMaskingPolicy {
         source: String,
         category: AnalysisCategory?,
         targetSegment: AnalysisTargetSegment?,
-        cache: MaskingAnalysisCacheSnapshot?,
+        cache: AnalysisReportCache?,
         directions: List<AnalysisDirection>,
         selectedDirectionIds: Set<String>,
         customHint: String

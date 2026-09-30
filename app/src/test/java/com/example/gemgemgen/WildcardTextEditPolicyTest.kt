@@ -8,11 +8,11 @@ import org.junit.Test
 
 class WildcardTextEditPolicyTest {
     @Test
-    fun paste_replacesTextAndStoresPreviousText() {
-        val result = WildcardTextEditPolicy.paste(
+    fun replaceText_replacesTextAndStoresPreviousText() {
+        val result = WildcardTextEditPolicy.replaceText(
             currentText = "black hair",
             undoStack = emptyList(),
-            pastedText = "silver hair"
+            newText = "silver hair"
         )
 
         assertEquals("silver hair", result.text)
@@ -43,11 +43,11 @@ class WildcardTextEditPolicyTest {
     }
 
     @Test
-    fun paste_keepsMostRecentFiveUndoItems() {
-        val result = WildcardTextEditPolicy.paste(
+    fun replaceText_keepsMostRecentFiveUndoItems() {
+        val result = WildcardTextEditPolicy.replaceText(
             currentText = "current",
             undoStack = listOf("one", "two", "three", "four", "five"),
-            pastedText = "next"
+            newText = "next"
         )
 
         assertEquals(listOf("current", "one", "two", "three", "four"), result.undoStack)

@@ -6,7 +6,6 @@ import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.usecase.AnalysisException
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -20,7 +19,6 @@ import kotlinx.serialization.json.jsonPrimitive
  * 구조화 출력은 기존 파서가 기대하는 JSON 텍스트를 시스템 지시로 강제한다.
  */
 class AndroidGrokAnalysisGateway : AnalysisAiGateway {
-    private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun analyze(
         apiKey: String,
@@ -84,39 +82,32 @@ class AndroidGrokAnalysisGateway : AnalysisAiGateway {
                 put("temperature", JsonPrimitive(0.2))
             }
 
-            try {
-                writeRequestBody(connection, body.toString())
+            val (responseCode, responseText) = executeHttpRequest(connection, body.toString())
 
-                val responseCode = connection.responseCode
-                val responseText = readResponseBody(connection, responseCode)
-
-                if (responseCode == 401 || responseCode == 403) {
-                    val raw = extractJsonErrorMessage(json, responseText)
-                    throw AnalysisException(
-                        "Grok 인증/권한 오류입니다 ($responseCode). 로그인 상태를 확인하거나 Gemini로 전환해 주세요.${if (raw.isNotBlank()) " ($raw)" else ""}"
-                    )
-                }
-                if (responseCode == 429) {
-                    throw AnalysisException(
-                        "Grok 요청 한도(Rate Limit)에 도달했습니다 (429). 잠시 후 다시 시도해 주세요."
-                    )
-                }
-                if (responseCode == 503) {
-                    throw AnalysisException(
-                        "Grok 서버가 현재 과부하 상태이거나 점검 중입니다 (503). 잠시 후 다시 시도해 주세요."
-                    )
-                }
-                if (responseCode !in 200..299) {
-                    val raw = extractJsonErrorMessage(json, responseText)
-                    throw AnalysisException(
-                        "Grok 요청에 실패했습니다 (응답 코드 $responseCode)${if (raw.isNotBlank()) ": $raw" else "."}"
-                    )
-                }
-
-                stripCodeFence(extractMessageText(responseText))
-            } finally {
-                connection.disconnect()
+            if (responseCode == 401 || responseCode == 403) {
+                val raw = extractJsonErrorMessage(responseText)
+                throw AnalysisException(
+                    "Grok 인증/권한 오류입니다 ($responseCode). 로그인 상태를 확인하거나 Gemini로 전환해 주세요.${if (raw.isNotBlank()) " ($raw)" else ""}"
+                )
             }
+            if (responseCode == 429) {
+                throw AnalysisException(
+                    "Grok 요청 한도(Rate Limit)에 도달했습니다 (429). 잠시 후 다시 시도해 주세요."
+                )
+            }
+            if (responseCode == 503) {
+                throw AnalysisException(
+                    "Grok 서버가 현재 과부하 상태이거나 점검 중입니다 (503). 잠시 후 다시 시도해 주세요."
+                )
+            }
+            if (responseCode !in 200..299) {
+                val raw = extractJsonErrorMessage(responseText)
+                throw AnalysisException(
+                    "Grok 요청에 실패했습니다 (응답 코드 $responseCode)${if (raw.isNotBlank()) ": $raw" else "."}"
+                )
+            }
+
+            stripCodeFence(extractMessageText(responseText))
         } catch (error: AnalysisException) {
             throw error
         } catch (error: Exception) {
@@ -132,7 +123,7 @@ class AndroidGrokAnalysisGateway : AnalysisAiGateway {
     }
 
     private fun extractMessageText(responseText: String): String {
-        val root = json.parseToJsonElement(responseText).jsonObject
+        val root = analysisJson.parseToJsonElement(responseText).jsonObject
         val choices = root["choices"]?.jsonArray.orEmpty()
         val first = choices.firstOrNull()?.jsonObject
             ?: throw AnalysisException("Grok 응답에 후보가 없습니다.")

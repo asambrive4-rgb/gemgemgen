@@ -11,14 +11,16 @@ import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.analysis.domain.AnalysisReportCache
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
+import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
+import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.usecase.AnalysisGenerationStep
-import com.example.gemgemgen.analysis.usecase.AnalysisReportCache
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.ApplyCandidateResult
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationRequest
@@ -77,80 +79,48 @@ class AnalysisViewModel(
     val sourcePromptTextFieldState = TextFieldState()
 
     init {
-        refreshKeys()
-        refreshRoleSettings()
-        refreshGrokStatus()
+        loadInitialState()
     }
 
     override fun onSourcePromptChange(value: String) {
-        if (!sourcePromptTextFieldState.text.contentEquals(value)) {
-            sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(value)
-        }
-        val state = _uiState.value
-        if (lastObservedSourcePrompt == value && state.sourcePrompt == value) return
-        lastObservedSourcePrompt = value
-
-        // 분석 캐시는 항상 무효화. 실제 원문은 TextField + currentSourcePrompt() 가 기준.
-        analysisCache = null
-
-        val nextSegment = state.targetSegment?.takeIf {
-            AnalysisTargetSegmentPolicy.isStillValid(value, it)
-        }
-        val shouldClearCandidates = state.generatedCandidates.isNotEmpty()
-        val nextNeedsMasking = computeNeedsMaskingAnalysis(
-            source = value,
-            category = state.selectedCategory,
-            targetSegment = nextSegment,
-            cache = null,
-            state = state
-        )
-
-        // 핫패스: canGenerate 경계·구간 무효·결과 정리가 없으면 화면 state 방출 생략
-        val needsUiUpdate = (state.sourcePrompt.isBlank() != value.isBlank()) ||
-            (state.needsMaskingAnalysis != nextNeedsMasking) ||
-            (nextSegment != state.targetSegment) ||
-            shouldClearCandidates
-        if (!needsUiUpdate) return
-
-        applyPromptStateUpdate(
-            value = value,
-            segment = state.targetSegment,
-            nextSegment = nextSegment,
-            nextNeedsMasking = nextNeedsMasking,
-            clearCandidates = shouldClearCandidates
-        )
-    }
-
-    override fun importSourcePromptFromAutomation() {
-        importSourcePromptFromAutomation(promptWorkspace?.currentPrompt?.value.orEmpty())
+        applySourcePromptEdit(value = value, forceStateSync = false)
     }
 
     /**
      * 자동화 탭에 입력된 원본 프롬프트로 분석 원문을 통째로 교체한다.
      * 비어 있으면 원문은 유지하고 안내만 표시한다.
      */
-    fun importSourcePromptFromAutomation(text: String) {
+    override fun importSourcePromptFromAutomation() {
+        val text = promptWorkspace?.currentPrompt?.value.orEmpty()
         if (text.isBlank()) {
             showError("자동화에 입력된 텍스트가 없습니다.")
             return
         }
-        replaceSourcePrompt(text)
+        applySourcePromptEdit(value = text, forceStateSync = true)
     }
 
-    private fun replaceSourcePrompt(value: String) {
-        if (sourcePromptTextFieldState.text.toString() != value) {
+    private fun applySourcePromptEdit(
+        value: String,
+        forceStateSync: Boolean
+    ) {
+        if (!sourcePromptTextFieldState.text.contentEquals(value)) {
             sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(value)
         }
+        val state = _uiState.value
+        if (!forceStateSync && lastObservedSourcePrompt == value && state.sourcePrompt == value) return
         lastObservedSourcePrompt = value
 
+        // 분석 캐시는 항상 무효화. 실제 원문은 TextField + currentSourcePrompt() 가 기준.
         analysisCache = null
-        val state = _uiState.value
-        val hasNoPendingState = state.sourcePrompt == value &&
-            state.targetSegment == null &&
-            state.generatedCandidates.isEmpty() &&
-            state.error.isEmpty() &&
-            state.warning.isEmpty()
-        if (hasNoPendingState) return
+
+        if (forceStateSync) {
+            val hasNoPendingState = state.sourcePrompt == value &&
+                state.targetSegment == null &&
+                state.generatedCandidates.isEmpty() &&
+                state.error.isEmpty() &&
+                state.warning.isEmpty()
+            if (hasNoPendingState) return
+        }
 
         val nextSegment = state.targetSegment?.takeIf {
             AnalysisTargetSegmentPolicy.isStillValid(value, it)
@@ -164,34 +134,27 @@ class AnalysisViewModel(
             state = state
         )
 
-        applyPromptStateUpdate(
-            value = value,
-            segment = state.targetSegment,
-            nextSegment = nextSegment,
-            nextNeedsMasking = nextNeedsMasking,
-            clearCandidates = clearCandidates
-        )
-    }
+        if (!forceStateSync) {
+            // 핫패스: canGenerate 경계·구간 무효·결과 정리가 없으면 화면 state 방출 생략
+            val needsUiUpdate = (state.sourcePrompt.isBlank() != value.isBlank()) ||
+                (state.needsMaskingAnalysis != nextNeedsMasking) ||
+                (nextSegment != state.targetSegment) ||
+                clearCandidates
+            if (!needsUiUpdate) return
+        }
 
-    private fun applyPromptStateUpdate(
-        value: String,
-        segment: AnalysisTargetSegment?,
-        nextSegment: AnalysisTargetSegment?,
-        nextNeedsMasking: Boolean,
-        clearCandidates: Boolean
-    ) {
-        _uiState.update { state ->
-            state.copy(
+        _uiState.update { current ->
+            current.copy(
                 sourcePrompt = value,
                 targetSegment = nextSegment,
                 needsMaskingAnalysis = nextNeedsMasking,
-                generatedCandidates = if (clearCandidates) emptyList() else state.generatedCandidates,
-                resultPresentation = if (clearCandidates) AnalysisResultPresentation.NONE else state.resultPresentation,
-                selectedCandidateIndex = state.selectedCandidateIndex.takeUnless { clearCandidates },
+                generatedCandidates = if (clearCandidates) emptyList() else current.generatedCandidates,
+                resultPresentation = if (clearCandidates) AnalysisResultPresentation.NONE else current.resultPresentation,
+                selectedCandidateIndex = current.selectedCandidateIndex.takeUnless { clearCandidates },
                 error = "",
-                message = if (nextSegment != segment) "" else state.message,
+                message = if (nextSegment != state.targetSegment) "" else current.message,
                 warning = "",
-                status = if (state.status == AnalysisStatus.ERROR) AnalysisStatus.IDLE else state.status
+                status = if (current.status == AnalysisStatus.ERROR) AnalysisStatus.IDLE else current.status
             )
         }
     }
@@ -288,10 +251,8 @@ class AnalysisViewModel(
             customHint = directionInput.customHint,
             maskingProvider = snapshot.maskingProvider,
             hasMaskingCredential = snapshot.hasMaskingCredential,
-            maskingModel = snapshot.maskingModel,
             generationProvider = snapshot.generationProvider,
             hasGenerationCredential = snapshot.hasGenerationCredential,
-            generationModel = snapshot.generationModel,
             failureFallback = failureFallback
         )
 
@@ -501,24 +462,7 @@ class AnalysisViewModel(
     override fun requestResetSession() {
         val state = _uiState.value
         val source = currentSourcePrompt()
-        val canReset = AnalysisSessionPolicy.canResetSession(
-            sourcePrompt = source,
-            selectedCategory = state.selectedCategory,
-            targetSegment = state.targetSegment,
-            generatedCandidatesCount = state.generatedCandidates.size,
-            selectedDirectionIdsCount = state.selectedDirectionIds.size,
-            customHint = state.customHint,
-            txtCount = state.txtCount,
-            resultFileName = state.resultFileName,
-            selectedCandidateIndex = state.selectedCandidateIndex,
-            hasAppliedCandidateToAutomation = state.hasAppliedCandidateToAutomation,
-            hasPendingOverwrite = state.pendingOverwriteFileName != null,
-            error = state.error,
-            message = state.message,
-            warning = state.warning,
-            isBusy = state.isBusy
-        )
-        if (!canReset) return
+        if (!AnalysisSessionPolicy.canResetSession(state, sourcePrompt = source)) return
         _uiState.update { it.copy(sourcePrompt = source, showResetConfirmation = true) }
     }
 
@@ -742,54 +686,44 @@ class AnalysisViewModel(
 
     override fun addApiKey() {
         val state = _uiState.value
-        scope.launch {
-            try {
-                analysisCache = null
-                val keys = keyManager.addKey(
+        updateApiKeys(
+            fallbackErrorMessage = "API 키 추가에 실패했습니다.",
+            action = {
+                keyManager.addKey(
                     label = state.keyLabelInput,
                     rawKey = state.keyValueInput
                 )
-                _uiState.update {
-                    it.copy(
-                        apiKeys = keys,
-                        keyLabelInput = "",
-                        keyValueInput = "",
-                        message = "API 키를 추가했습니다.",
-                        error = ""
-                    )
-                }
-            } catch (error: RuntimeException) {
-                showError(error.message ?: "API 키 추가에 실패했습니다.")
+            },
+            onSuccess = { current, keys ->
+                current.copy(
+                    apiKeys = keys,
+                    keyLabelInput = "",
+                    keyValueInput = "",
+                    message = "API 키를 추가했습니다.",
+                    error = ""
+                )
             }
-        }
+        )
     }
 
     override fun deleteApiKey(id: String) {
-        scope.launch {
-            try {
-                analysisCache = null
-                val keys = keyManager.deleteKey(id)
-                _uiState.update {
-                    it.copy(apiKeys = keys, message = "API 키를 삭제했습니다.", error = "")
-                }
-            } catch (error: RuntimeException) {
-                showError(error.message ?: "API 키 삭제에 실패했습니다.")
+        updateApiKeys(
+            fallbackErrorMessage = "API 키 삭제에 실패했습니다.",
+            action = { keyManager.deleteKey(id) },
+            onSuccess = { current, keys ->
+                current.copy(apiKeys = keys, message = "API 키를 삭제했습니다.", error = "")
             }
-        }
+        )
     }
 
     override fun activateApiKey(id: String) {
-        scope.launch {
-            try {
-                analysisCache = null
-                val keys = keyManager.activateKey(id)
-                _uiState.update {
-                    it.copy(apiKeys = keys, message = "활성 API 키를 선택했습니다.", error = "")
-                }
-            } catch (error: RuntimeException) {
-                showError(error.message ?: "API 키 선택에 실패했습니다.")
+        updateApiKeys(
+            fallbackErrorMessage = "API 키 선택에 실패했습니다.",
+            action = { keyManager.activateKey(id) },
+            onSuccess = { current, keys ->
+                current.copy(apiKeys = keys, message = "활성 API 키를 선택했습니다.", error = "")
             }
-        }
+        )
     }
 
     override fun startEditingApiKey(key: GeminiApiKeySummary) {
@@ -817,23 +751,42 @@ class AnalysisViewModel(
     override fun updateApiKeyLabel() {
         val state = _uiState.value
         val keyToEdit = state.editingApiKey ?: return
-        scope.launch {
-            try {
-                val keys = keyManager.updateKeyLabel(
+        updateApiKeys(
+            invalidateCache = false,
+            fallbackErrorMessage = "API 키 이름 수정에 실패했습니다.",
+            action = {
+                keyManager.updateKeyLabel(
                     id = keyToEdit.id,
                     newLabel = state.editingKeyLabelInput
                 )
-                _uiState.update {
-                    it.copy(
-                        apiKeys = keys,
-                        editingApiKey = null,
-                        editingKeyLabelInput = "",
-                        message = "API 키 이름을 수정했습니다.",
-                        error = ""
-                    )
+            },
+            onSuccess = { current, keys ->
+                current.copy(
+                    apiKeys = keys,
+                    editingApiKey = null,
+                    editingKeyLabelInput = "",
+                    message = "API 키 이름을 수정했습니다.",
+                    error = ""
+                )
+            }
+        )
+    }
+
+    private fun updateApiKeys(
+        invalidateCache: Boolean = true,
+        fallbackErrorMessage: String,
+        action: suspend () -> List<GeminiApiKeySummary>,
+        onSuccess: (AnalysisUiState, List<GeminiApiKeySummary>) -> AnalysisUiState
+    ) {
+        scope.launch {
+            try {
+                if (invalidateCache) {
+                    analysisCache = null
                 }
+                val keys = action()
+                _uiState.update { onSuccess(it, keys) }
             } catch (error: RuntimeException) {
-                showError(error.message ?: "API 키 이름 수정에 실패했습니다.")
+                showError(error.message ?: fallbackErrorMessage)
             }
         }
     }
@@ -947,17 +900,26 @@ class AnalysisViewModel(
         }
     }
 
-    private fun refreshRoleSettings() {
+    private fun loadInitialState() {
         scope.launch {
+            val keys = keyManager.listKeys()
             val masking = keyManager.getRoleSetting(AnalysisModelRole.MASKING)
             val generation = keyManager.getRoleSetting(AnalysisModelRole.GENERATION)
+            val status = grokAuth.status()
             _uiState.update {
                 it.copy(
+                    apiKeys = keys,
                     maskingProvider = masking.provider,
                     maskingModel = masking.modelId,
                     generationProvider = generation.provider,
-                    generationModel = generation.modelId
+                    generationModel = generation.modelId,
+                    isGrokLoggedIn = status.isLoggedIn,
+                    grokAccountPreview = status.accountPreview,
+                    grokRemainingPercent = if (status.isLoggedIn) it.grokRemainingPercent else null
                 )
+            }
+            if (status.isLoggedIn) {
+                refreshGrokQuotaIfLoggedIn()
             }
         }
     }
@@ -985,34 +947,11 @@ class AnalysisViewModel(
         }
     }
 
-    private fun refreshGrokStatus() {
-        scope.launch {
-            val status = grokAuth.status()
-            _uiState.update {
-                it.copy(
-                    isGrokLoggedIn = status.isLoggedIn,
-                    grokAccountPreview = status.accountPreview,
-                    grokRemainingPercent = if (status.isLoggedIn) it.grokRemainingPercent else null
-                )
-            }
-            if (status.isLoggedIn) {
-                refreshGrokQuotaIfLoggedIn()
-            }
-        }
-    }
-
     private suspend fun refreshGrokQuotaIfLoggedIn() {
         if (!_uiState.value.isGrokLoggedIn) return
         val quota = grokAuth.fetchQuota()
         _uiState.update {
             it.copy(grokRemainingPercent = quota?.remainingPercent)
-        }
-    }
-
-    private fun refreshKeys() {
-        scope.launch {
-            val keys = keyManager.listKeys()
-            _uiState.update { it.copy(apiKeys = keys) }
         }
     }
 

@@ -80,6 +80,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -96,7 +97,7 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 internal fun PromptEditorSection(
     uiState: AutomationUiState,
     promptTemplateState: TextFieldState,
-    actions: AutomationScreenActions = AutomationScreenActions.Empty,
+    actions: AutomationScreenActions,
     showPromptActions: Boolean = true,
     showWildcardSuggestions: Boolean = true,
     modifier: Modifier = Modifier
@@ -113,7 +114,6 @@ internal fun PromptEditorSection(
     } else {
         lastNonEmptyCandidates.value
     }
-    val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -141,8 +141,8 @@ internal fun PromptEditorSection(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AutomationTargetApp.entries.forEach { targetApp ->
-                        TargetAppButton(
-                            targetApp = targetApp,
+                        PebbleRadioChip(
+                            label = targetApp.displayName,
                             selected = uiState.selectedTargetApp == targetApp,
                             enabled = !uiState.isRunning,
                             onClick = { actions.onTargetAppSelected(targetApp) }
@@ -244,6 +244,7 @@ internal fun PromptEditorSection(
 
         if (showPromptActions) {
             PromptActionRow(
+                promptTemplateState = promptTemplateState,
                 isParagraphSelectionMode = uiState.isParagraphSelectionMode,
                 onToggleParagraphSelectionMode = actions::toggleParagraphSelectionMode,
                 canCloseGemini = uiState.canCloseGemini,
@@ -257,7 +258,6 @@ internal fun PromptEditorSection(
                 historyDotCount = uiState.historyDotCount,
                 activeHistoryDotIndex = uiState.activeHistoryDotIndex,
                 canCopyPrompt = uiState.hasPromptTemplate,
-                isTargetSelectionEnabled = true,
                 onCloseGeminiApp = actions::closeGeminiApp,
                 onCleanDeviceMemory = actions::cleanDeviceMemory,
                 onTerminateSelfApp = actions::terminateSelfApp,
@@ -271,15 +271,9 @@ internal fun PromptEditorSection(
                 showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                 isVariationButtonEnabled = uiState.canInteractWithVariation,
                 variationAutomationState = uiState.variationAutomationState,
-                onRunVariation = {
-                    val selectedText = variationSelectedTextAtPress.value
-                        ?: promptTemplateState.selectedTextOrNull()
-                    variationSelectedTextAtPress.value = null
+                onRunVariation = { selectedText ->
                     actions.onClearFocus()
                     actions.onRunVariation(selectedText)
-                },
-                onVariationPointerDown = {
-                    variationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
                 },
                 onOpenVariationPromptConfigDialog = actions::openVariationPromptConfigDialog
             )
@@ -289,6 +283,7 @@ internal fun PromptEditorSection(
 
 @Composable
 internal fun PromptActionRow(
+    promptTemplateState: TextFieldState,
     isParagraphSelectionMode: Boolean = false,
     onToggleParagraphSelectionMode: () -> Unit = {},
     canCloseGemini: Boolean,
@@ -302,7 +297,6 @@ internal fun PromptActionRow(
     historyDotCount: Int,
     activeHistoryDotIndex: Int,
     canCopyPrompt: Boolean,
-    isTargetSelectionEnabled: Boolean,
     onCloseGeminiApp: () -> Unit,
     onCleanDeviceMemory: () -> Unit,
     onTerminateSelfApp: () -> Unit,
@@ -316,8 +310,7 @@ internal fun PromptActionRow(
     showVariationButton: Boolean = true,
     isVariationButtonEnabled: Boolean = true,
     variationAutomationState: AutomationRunState = AutomationRunState.Idle,
-    onRunVariation: () -> Unit = {},
-    onVariationPointerDown: (() -> Unit)? = null,
+    onRunVariation: (String?) -> Unit = {},
     onOpenVariationPromptConfigDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -401,7 +394,6 @@ internal fun PromptActionRow(
             ActionIsland {
                 ParagraphSelectionModeButton(
                     selected = isParagraphSelectionMode,
-                    enabled = isTargetSelectionEnabled,
                     onClick = onToggleParagraphSelectionMode
                 )
             }
@@ -419,7 +411,7 @@ internal fun PromptActionRow(
             ) {
                 PebbleButton(
                     onClick = onNavigateHistoryBack,
-                    enabled = canNavigateHistoryBack && isTargetSelectionEnabled,
+                    enabled = canNavigateHistoryBack,
                     contentPadding = PaddingValues(0.dp),
                     modifier = Modifier
                         .size(37.dp)
@@ -459,7 +451,7 @@ internal fun PromptActionRow(
 
                 PebbleButton(
                     onClick = onNavigateHistoryForward,
-                    enabled = canNavigateHistoryForward && isTargetSelectionEnabled,
+                    enabled = canNavigateHistoryForward,
                     contentPadding = PaddingValues(0.dp),
                     modifier = Modifier
                         .size(37.dp)
@@ -475,7 +467,7 @@ internal fun PromptActionRow(
 
             // 우측: 상단 삽입 + 하단 삽입 + 변주 + 복사 + 가져오기
             PromptEditorActionGroup(
-                isTargetSelectionEnabled = isTargetSelectionEnabled,
+                promptTemplateState = promptTemplateState,
                 canCopyPrompt = canCopyPrompt,
                 onInsertTopInstruction = onInsertTopInstruction,
                 onInsertBottomInstruction = onInsertBottomInstruction,
@@ -486,7 +478,6 @@ internal fun PromptActionRow(
                 isVariationButtonEnabled = isVariationButtonEnabled,
                 variationAutomationState = variationAutomationState,
                 onRunVariation = onRunVariation,
-                onVariationPointerDown = onVariationPointerDown,
                 onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
             )
         }
@@ -495,7 +486,7 @@ internal fun PromptActionRow(
 
 @Composable
 internal fun PromptEditorActionGroup(
-    isTargetSelectionEnabled: Boolean,
+    promptTemplateState: TextFieldState,
     canCopyPrompt: Boolean,
     onInsertTopInstruction: () -> Unit,
     onInsertBottomInstruction: () -> Unit,
@@ -506,17 +497,17 @@ internal fun PromptEditorActionGroup(
     showVariationButton: Boolean = true,
     isVariationButtonEnabled: Boolean = true,
     variationAutomationState: AutomationRunState = AutomationRunState.Idle,
-    onRunVariation: () -> Unit = {},
-    onVariationPointerDown: (() -> Unit)? = null,
+    onRunVariation: (String?) -> Unit = {},
     onOpenVariationPromptConfigDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
+
     ActionIsland(modifier = modifier) {
         if (showInsertButtons) {
             PebbleButton(
                 onClick = onInsertTopInstruction,
                 onLongClick = { onOpenInstructionConfigDialog(InstructionTab.TOP) },
-                enabled = isTargetSelectionEnabled,
                 contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                 modifier = Modifier.semantics { contentDescription = "상단 삽입" }
             ) {
@@ -531,7 +522,6 @@ internal fun PromptEditorActionGroup(
             PebbleButton(
                 onClick = onInsertBottomInstruction,
                 onLongClick = { onOpenInstructionConfigDialog(InstructionTab.BOTTOM) },
-                enabled = isTargetSelectionEnabled,
                 contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                 modifier = Modifier.semantics { contentDescription = "하단 삽입" }
             ) {
@@ -546,8 +536,15 @@ internal fun PromptEditorActionGroup(
 
         if (showVariationButton) {
             PebbleButton(
-                onClick = onRunVariation,
-                onPointerDown = onVariationPointerDown,
+                onClick = {
+                    val selectedText = variationSelectedTextAtPress.value
+                        ?: promptTemplateState.selectedTextOrNull()
+                    variationSelectedTextAtPress.value = null
+                    onRunVariation(selectedText)
+                },
+                onPointerDown = {
+                    variationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
+                },
                 onLongClick = onOpenVariationPromptConfigDialog,
                 enabled = isVariationButtonEnabled,
                 isHighlighted = true,
@@ -794,29 +791,24 @@ private fun PebbleButton(
 }
 
 @Composable
-private fun TargetAppButton(
-    targetApp: AutomationTargetApp,
+private fun PebbleRadioChip(
+    label: String,
     selected: Boolean,
     enabled: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    height: Dp = 32.dp,
+    selectedElevation: Dp = 3.dp,
+    textStyle: TextStyle = MaterialTheme.typography.labelMedium
 ) {
-    val containerColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.card
-    }
-    val contentColor = if (selected) {
-        AppTheme.colors.onPrimary
-    } else {
-        AppTheme.colors.textSecondary
-    }
+    val containerColor = if (selected) AppTheme.colors.primary else AppTheme.colors.card
+    val contentColor = if (selected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary
     val shape = RoundedCornerShape(10.dp)
 
     Surface(
         modifier = Modifier
-            .height(32.dp)
+            .height(height)
             .shadow(
-                elevation = if (selected) 3.dp else 0.dp,
+                elevation = if (selected) selectedElevation else 0.dp,
                 shape = shape,
                 ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
                 spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
@@ -830,19 +822,15 @@ private fun TargetAppButton(
         shape = shape,
         color = containerColor,
         contentColor = contentColor,
-        border = if (selected) {
-            BorderStroke(1.5.dp, AppTheme.colors.primary)
-        } else {
-            null
-        }
+        border = if (selected) BorderStroke(1.5.dp, AppTheme.colors.primary) else null
     ) {
         Box(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = targetApp.displayName,
-                style = MaterialTheme.typography.labelMedium,
+                text = label,
+                style = textStyle,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
             )
         }
@@ -897,69 +885,16 @@ private fun FlowImageCountRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             AppDefaults.FLOW_IMAGE_COUNT_OPTIONS.forEach { count ->
-                FlowImageCountChip(
-                    count = count,
+                PebbleRadioChip(
+                    label = "${count}장",
                     selected = selectedCount == count,
                     enabled = enabled,
-                    onClick = { onCountSelected(count) }
+                    onClick = { onCountSelected(count) },
+                    height = 30.dp,
+                    selectedElevation = 2.dp,
+                    textStyle = MaterialTheme.typography.labelSmall
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun FlowImageCountChip(
-    count: Int,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    val containerColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.card
-    }
-    val contentColor = if (selected) {
-        AppTheme.colors.onPrimary
-    } else {
-        AppTheme.colors.textSecondary
-    }
-    val shape = RoundedCornerShape(10.dp)
-
-    Surface(
-        modifier = Modifier
-            .height(30.dp)
-            .shadow(
-                elevation = if (selected) 2.dp else 0.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
-            .selectable(
-                selected = selected,
-                enabled = enabled,
-                role = Role.RadioButton,
-                onClick = onClick
-            ),
-        shape = shape,
-        color = containerColor,
-        contentColor = contentColor,
-        border = if (selected) {
-            BorderStroke(1.5.dp, AppTheme.colors.primary)
-        } else {
-            null
-        }
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "${count}장",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-            )
         }
     }
 }
@@ -970,7 +905,7 @@ private fun PromptParagraphRange.toHighlightRange(): TextHighlightRange =
 @Composable
 internal fun ParagraphSelectionModeButton(
     selected: Boolean,
-    enabled: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     val containerColor = if (selected) {

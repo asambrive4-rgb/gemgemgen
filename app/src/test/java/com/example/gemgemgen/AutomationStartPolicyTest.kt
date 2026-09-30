@@ -45,31 +45,6 @@ class AutomationStartPolicyTest {
     }
 
     @Test
-    fun hasRunRequirements_checksEnvironmentReadinessAndPrompt() {
-        assertTrue(
-            AutomationExecutionPolicy.hasRunRequirements(
-                environmentStatus = readyEnvironment,
-                targetApp = AutomationTargetApp.GEMINI,
-                promptTemplate = "test prompt"
-            )
-        )
-        assertFalse(
-            AutomationExecutionPolicy.hasRunRequirements(
-                environmentStatus = unreadyEnvironment,
-                targetApp = AutomationTargetApp.GEMINI,
-                promptTemplate = "test prompt"
-            )
-        )
-        assertFalse(
-            AutomationExecutionPolicy.hasRunRequirements(
-                environmentStatus = readyEnvironment,
-                targetApp = AutomationTargetApp.GEMINI,
-                promptTemplate = "   "
-            )
-        )
-    }
-
-    @Test
     fun canRun_inNormalMode_checksRequirementsAndRunningState() {
         // Ready and not running -> true
         assertTrue(

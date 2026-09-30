@@ -19,10 +19,6 @@ internal class AndroidWildcardDocumentReader(
     fun listDocuments(): List<WildcardDocument> {
         val folderUri = AndroidWildcardFolderRepository.getFolderUri(context)
             ?: throw WildcardFileException("wildcard 폴더를 먼저 선택해주세요.")
-        return listDocuments(folderUri)
-    }
-
-    fun listDocuments(folderUri: Uri): List<WildcardDocument> {
         val resolver = context.contentResolver
         val childUri = DocumentsContract.buildChildDocumentsUriUsingTree(
             folderUri,

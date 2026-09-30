@@ -93,7 +93,6 @@ internal class FlowAccessibilityNodeFinder(
     internal companion object {
         const val NANO_BANANA_PRO = "Nano Banana Pro"
         val SEND_DESCRIPTIONS = listOf("생성", "Generate", "만들기", "Create")
-        val SEND_DESCRIPTIONS_SET = SEND_DESCRIPTIONS.map { it.trim().lowercase() }.toSet()
         val MODEL_KEYWORDS = listOf("Nano Banana", "Banana", "Imagen")
         val OPTION_TOGGLE_KEYWORDS = listOf("이미지", "Image")
     }

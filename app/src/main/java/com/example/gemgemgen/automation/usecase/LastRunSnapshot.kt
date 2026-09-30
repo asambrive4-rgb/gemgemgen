@@ -10,7 +10,10 @@ data class LastRunSnapshot(
     val repeatCountText: String,
     val targetApp: AutomationTargetApp,
     val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT
-)
+) {
+    fun hasRestorablePrompt(): Boolean =
+        promptTemplate.isNotBlank() || repeatCountText.isNotBlank()
+}
 
 interface LastRunSnapshotRepository {
     fun load(): LastRunSnapshot?
@@ -22,15 +25,10 @@ class LastRunSnapshotStore(
 ) {
     fun load(): LastRunSnapshot? {
         val snapshot = repository.load() ?: return null
-        val promptTemplate = snapshot.promptTemplate
-        val repeatCountText = snapshot.repeatCountText
-        if (promptTemplate.isBlank() && repeatCountText.isBlank()) return null
+        if (!snapshot.hasRestorablePrompt()) return null
 
-        return LastRunSnapshot(
-            promptTemplate = promptTemplate,
-            repeatCountText = RepeatCountParser.normalizeInput(repeatCountText),
-            targetApp = snapshot.targetApp,
-            flowImageCount = snapshot.flowImageCount
+        return snapshot.copy(
+            repeatCountText = RepeatCountParser.normalizeInput(snapshot.repeatCountText)
         )
     }
 

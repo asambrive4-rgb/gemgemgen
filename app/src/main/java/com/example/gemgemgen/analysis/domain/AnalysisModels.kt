@@ -18,15 +18,10 @@ enum class AnalysisResultPresentation {
     TXT
 }
 
-enum class AnalysisTargetSource {
-    AUTO
-}
-
 data class AnalysisTargetSegment(
     val text: String,
     val startIndex: Int,
     val endIndex: Int,
-    val source: AnalysisTargetSource,
     val category: AnalysisCategory,
     val confidence: Double = 1.0,
     /** 연쇄 보완을 포함한 치환 범위 안에서 실제 편집이 허용된 구간들. */

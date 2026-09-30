@@ -1,7 +1,7 @@
 // 역할: AI 모델의 응답 텍스트를 파싱하여 카테고리별 분석 결과 세그먼트로 변환합니다.
 package com.example.gemgemgen.analysis.domain
 
-import kotlinx.serialization.json.Json
+import com.example.gemgemgen.analysis.android.analysisJson
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -12,8 +12,6 @@ import kotlinx.serialization.json.jsonPrimitive
 class AnalysisParseException(message: String) : RuntimeException(message)
 
 object AnalysisResponseParser {
-    private val json = Json { ignoreUnknownKeys = true }
-
     fun parseReport(jsonText: String, sourcePrompt: String): AnalysisReport {
         val root = parseObject(jsonText)
         val targetSegment = root["targetSegment"]?.jsonObjectOrNull()?.let {
@@ -55,7 +53,7 @@ object AnalysisResponseParser {
     }
 
     fun parseEditCandidates(jsonText: String): List<List<AnalysisTextEdit>> {
-        val items = runCatching { json.parseToJsonElement(jsonText).jsonArray }.getOrElse {
+        val items = runCatching { analysisJson.parseToJsonElement(jsonText).jsonArray }.getOrElse {
             throw AnalysisParseException("편집 후보 목록이 올바른 JSON 배열이 아닙니다.")
         }
         return items.map { item ->
@@ -97,7 +95,7 @@ object AnalysisResponseParser {
 
     fun parseTxtCandidates(jsonText: String): List<String> {
         val root = try {
-            json.parseToJsonElement(jsonText)
+            analysisJson.parseToJsonElement(jsonText)
         } catch (error: RuntimeException) {
             throw AnalysisParseException(
                 "AI 응답을 JSON 형식으로 해석하지 못했습니다. (후보 목록 형식이 올바르지 않습니다.)"
@@ -119,7 +117,7 @@ object AnalysisResponseParser {
 
     private fun parseObject(jsonText: String): JsonObject {
         return try {
-            json.parseToJsonElement(jsonText).jsonObject
+            analysisJson.parseToJsonElement(jsonText).jsonObject
         } catch (error: RuntimeException) {
             throw AnalysisParseException(
                 "AI 응답을 JSON 형식으로 해석하지 못했습니다. (모델 응답이 올바른 형식이 아니거나 중간에 끊겼을 수 있습니다.)"

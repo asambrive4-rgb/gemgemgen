@@ -12,8 +12,7 @@ enum class AnalysisCategory(val label: String) {
     WOMEN_POSE("여성 자세"),
     MEN_POSE("남성 자세"),
     WOMEN_EXPRESSION("여성 표정"),
-    WOMEN_HAIRSTYLE("여성 헤어스타일"),
-    WAKA("와카");
+    WOMEN_HAIRSTYLE("여성 헤어스타일");
 
     /**
      * 저장 기본 파일명: 라벨에서 공백을 제거해 토큰 호환 이름(`__이름__`)을 만든다.
@@ -160,12 +159,6 @@ object AnalysisCategoryRules {
             avoid = "추상적 인상, 무관한 메이크업이나 안면 특징 묘사, 길고 서술형 문장",
             variables = "머리 기장, 파마 여부, 컬러 및 톤, 앞머리 스타일, 가르마 등을 간결하게 변형",
             output = "짧고 직관적인 헤어스타일 지시문"
-        ),
-        AnalysisCategory.WAKA to AnalysisCategoryRule(
-            goal = "와일드카드 텍스트 치환용 항목",
-            required = "",
-            avoid = "",
-            variables = ""
         )
     )
 

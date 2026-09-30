@@ -11,6 +11,8 @@ import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.remote.usecase.RemoteAutomationGateway
+import com.example.gemgemgen.wildcard.domain.WildcardSet
+import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
@@ -43,18 +45,17 @@ class ManageRemoteAutomationUseCaseTest {
                 isPaired = true
             )
         )
-        val recorder = RecordingAutomationHistoryRecorder()
+        val recordedRequests = mutableListOf<AutomationRunRequest>()
         val useCase = ManageRemoteAutomationUseCase(
             gateway = gateway,
             requestIdProvider = { "request-1" },
-            automationHistoryRecorder = recorder
+            automationHistoryRecorder = AutomationHistoryRecorder { recordedRequests += it }
         )
 
         assertEquals(
             RemoteActionResult.Success,
             useCase.start(
-                AutomationRunRequest("prompt", "3", AutomationTargetApp.GEMINI),
-                onStateChange = {}
+                AutomationRunRequest("prompt", "3", AutomationTargetApp.GEMINI)
             )
         )
         assertEquals(
@@ -63,7 +64,7 @@ class ManageRemoteAutomationUseCaseTest {
         )
         assertEquals(
             listOf(AutomationRunRequest("prompt", "3", AutomationTargetApp.GEMINI)),
-            recorder.recordedRequests
+            recordedRequests
         )
     }
 
@@ -76,26 +77,21 @@ class ManageRemoteAutomationUseCaseTest {
                 isPaired = true
             )
         )
-        val expectedWildcard = com.example.gemgemgen.wildcard.domain.WildcardSet(
+        val expectedWildcard = WildcardSet(
             token = "__flower__",
             fileName = "flower.txt",
             items = listOf("rose", "tulip")
         )
-        val fakeRepo = object : com.example.gemgemgen.wildcard.usecase.WildcardSetRepository {
-            override fun load(): List<com.example.gemgemgen.wildcard.domain.WildcardSet> =
-                listOf(expectedWildcard)
-        }
         val useCase = ManageRemoteAutomationUseCase(
             gateway = gateway,
-            wildcardSetRepository = fakeRepo,
+            wildcardSetRepository = WildcardSetRepository { listOf(expectedWildcard) },
             requestIdProvider = { "request-wildcard-1" }
         )
 
         assertEquals(
             RemoteActionResult.Success,
             useCase.start(
-                AutomationRunRequest("draw a __flower__", "2", AutomationTargetApp.CHATGPT),
-                onStateChange = {}
+                AutomationRunRequest("draw a __flower__", "2", AutomationTargetApp.CHATGPT)
             )
         )
         assertEquals(
@@ -105,7 +101,7 @@ class ManageRemoteAutomationUseCaseTest {
     }
 
     @Test
-    fun forceStop_stopsLocallyAndIgnoresLateStateFromStoppedRequest() = runBlocking {
+    fun forceStop_stopsActiveRequestAndUpdatesStatus() = runBlocking {
         val gateway = FakeRemoteAutomationGateway(
             initialStatus = RemoteAutomationStatus(
                 mode = AutomationMode.SENDER,
@@ -115,19 +111,16 @@ class ManageRemoteAutomationUseCaseTest {
             holdSend = true
         )
         val useCase = ManageRemoteAutomationUseCase(gateway) { "request-1" }
-        val states = mutableListOf<AutomationRunState>()
         val startJob = launch {
             useCase.start(
-                AutomationRunRequest("prompt", "3", AutomationTargetApp.GEMINI),
-                states::add
+                AutomationRunRequest("prompt", "3", AutomationTargetApp.GEMINI)
             )
         }
         gateway.sendStarted.await()
 
-        useCase.forceStop(states::add)
-        gateway.sentStateCallback?.invoke(AutomationRunState.Success)
+        useCase.forceStop()
 
-        assertEquals(listOf(AutomationRunState.Stopped), states)
+        assertEquals(AutomationRunState.Stopped, useCase.status.value.automationState)
         assertEquals("request-1", gateway.forceStoppedRequestId)
         startJob.cancelAndJoin()
     }
@@ -179,7 +172,6 @@ class ManageRemoteAutomationUseCaseTest {
         val sendStarted = CompletableDeferred<Unit>()
         var pairedCode = ""
         var sentRequest: RemoteAutomationRequest? = null
-        var sentStateCallback: ((AutomationRunState) -> Unit)? = null
         var forceStoppedRequestId: String? = null
         var disconnectCalled = false
 
@@ -197,28 +189,17 @@ class ManageRemoteAutomationUseCaseTest {
             return RemoteActionResult.Success
         }
 
-        override suspend fun send(
-            request: RemoteAutomationRequest,
-            onStateChange: (AutomationRunState) -> Unit
-        ) {
+        override suspend fun send(request: RemoteAutomationRequest) {
             sentRequest = request
-            sentStateCallback = onStateChange
             sendStarted.complete(Unit)
             if (holdSend) awaitCancellation()
         }
 
         override fun forceStop(requestId: String?) {
             forceStoppedRequestId = requestId
+            status.value = status.value.copy(automationState = AutomationRunState.Stopped)
         }
 
         override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
-    }
-
-    private class RecordingAutomationHistoryRecorder : AutomationHistoryRecorder {
-        val recordedRequests = mutableListOf<AutomationRunRequest>()
-
-        override suspend fun record(request: AutomationRunRequest) {
-            recordedRequests += request
-        }
     }
 }

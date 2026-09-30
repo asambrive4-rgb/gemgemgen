@@ -21,9 +21,9 @@ import org.junit.Test
 class WildcardClassifyTest {
     @Test
     fun fileName_stripsWhitespaceAndDangerousChars() {
-        assertEquals("캐주얼톤.txt", WildcardClassifyFileName.fromGroupName("캐주얼 톤"))
-        assertEquals("a_b.txt", WildcardClassifyFileName.fromGroupName("a/b"))
-        assertEquals(null, WildcardClassifyFileName.fromGroupName("   "))
+        assertEquals("캐주얼톤.txt", WildcardClassifyFileName.normalizeUserInput("캐주얼 톤"))
+        assertEquals("a_b.txt", WildcardClassifyFileName.normalizeUserInput("a/b"))
+        assertEquals(null, WildcardClassifyFileName.normalizeUserInput("   "))
         assertEquals("custom.txt", WildcardClassifyFileName.normalizeUserInput("custom.txt"))
         assertEquals("custom.txt", WildcardClassifyFileName.normalizeUserInput("custom"))
     }

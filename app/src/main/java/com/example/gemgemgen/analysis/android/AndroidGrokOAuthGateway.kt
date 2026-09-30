@@ -8,7 +8,6 @@ import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -16,7 +15,6 @@ import kotlinx.serialization.json.jsonPrimitive
  * xAI device-code OAuth (progrok / Hermes / OpenClaw 계열 public client).
  */
 class AndroidGrokOAuthGateway : GrokAuthGateway {
-    private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun startDeviceLogin(): GrokDeviceLoginChallenge {
         return try {
@@ -32,7 +30,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             if (response.code !in 200..299) {
                 throw AnalysisException("Grok 로그인 시작에 실패했습니다. (${response.code})")
             }
-            val root = json.parseToJsonElement(response.body).jsonObject
+            val root = analysisJson.parseToJsonElement(response.body).jsonObject
             val deviceCode = root.string("device_code")
                 ?: throw AnalysisException("Grok 로그인 응답이 올바르지 않습니다.")
             val userCode = root.string("user_code")
@@ -82,7 +80,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
                 "expired_token" ->
                     throw AnalysisException("로그인 코드가 만료되었습니다. 다시 시도해주세요.")
                 else -> throw AnalysisException(
-                    extractJsonErrorMessage(json, response.body)
+                    extractJsonErrorMessage(response.body)
                         .ifBlank { "Grok 로그인 확인에 실패했습니다. (${response.code})" }
                 )
             }
@@ -119,7 +117,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             }
             if (response.code !in 200..299) {
                 throw AnalysisException(
-                    extractJsonErrorMessage(json, response.body)
+                    extractJsonErrorMessage(response.body)
                         .ifBlank { "Grok 세션 갱신에 실패했습니다. (${response.code})" }
                 )
             }
@@ -143,7 +141,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
     }
 
     private fun parseTokenResponse(body: String, tokenEndpoint: String): GrokAuthSession {
-        val root = json.parseToJsonElement(body).jsonObject
+        val root = analysisJson.parseToJsonElement(body).jsonObject
         val accessToken = root.string("access_token")
             ?: throw AnalysisException("Grok 토큰 응답이 올바르지 않습니다.")
         val refreshToken = root.string("refresh_token")
@@ -172,7 +170,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
                 ),
                 Charsets.UTF_8
             )
-            json.parseToJsonElement(payload).jsonObject.string("email")
+            analysisJson.parseToJsonElement(payload).jsonObject.string("email")
         }.getOrNull()
     }
 
@@ -186,7 +184,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
         if (response.code !in 200..299) {
             throw AnalysisException("Grok 로그인 서버 정보를 가져오지 못했습니다.")
         }
-        val root = json.parseToJsonElement(response.body).jsonObject
+        val root = analysisJson.parseToJsonElement(response.body).jsonObject
         val tokenEndpoint = requireTrustedEndpoint(
             root.string("token_endpoint"),
             "token_endpoint"
@@ -216,19 +214,17 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
         return url
     }
 
-    private data class HttpTextResponse(val code: Int, val body: String)
-
-    private fun get(url: String): HttpTextResponse {
+    private fun get(url: String): AnalysisHttpResponse {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
             setRequestProperty("Accept", "application/json")
         }
-        return readResponse(connection)
+        return executeHttpRequest(connection)
     }
 
-    private fun postForm(url: String, body: String): HttpTextResponse {
+    private fun postForm(url: String, body: String): AnalysisHttpResponse {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = CONNECT_TIMEOUT_MS
@@ -237,18 +233,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             setRequestProperty("Accept", "application/json")
         }
-        writeRequestBody(connection, body)
-        return readResponse(connection)
-    }
-
-    private fun readResponse(connection: HttpURLConnection): HttpTextResponse {
-        return try {
-            val code = connection.responseCode
-            val body = readResponseBody(connection, code)
-            HttpTextResponse(code, body)
-        } finally {
-            connection.disconnect()
-        }
+        return executeHttpRequest(connection, body)
     }
 
     private fun formBody(vararg pairs: Pair<String, String>): String {
@@ -260,7 +245,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
 
     private fun parseOAuthError(body: String): String {
         return runCatching {
-            json.parseToJsonElement(body).jsonObject.string("error").orEmpty()
+            analysisJson.parseToJsonElement(body).jsonObject.string("error").orEmpty()
         }.getOrDefault("")
     }
 

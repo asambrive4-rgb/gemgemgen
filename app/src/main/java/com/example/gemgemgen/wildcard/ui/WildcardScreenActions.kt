@@ -36,8 +36,4 @@ interface WildcardScreenActions : WildcardClassifyActions {
     fun onConfirmPendingSave() {}
     fun onConfirmPendingDiscard() {}
     fun cancelPendingAction() {}
-
-    companion object {
-        val Empty = object : WildcardScreenActions {}
-    }
 }

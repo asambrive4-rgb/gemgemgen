@@ -1,4 +1,4 @@
-// 역할: 네트워크 소켓을 열어 원격 기기와 통신하고 명령을 수신합니다.
+// 역할: 네트워크 소켓과 NSD 탐색을 통해 원격 수신 기기와 통신하고 진행 상태를 상태 허브로 전파합니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
@@ -107,22 +107,13 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
     override suspend fun pair(pairingCode: String): RemoteActionResult = withContext(Dispatchers.IO) {
         val target = endpoint
             ?: return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
-        val result = runCatching {
-            openSocket(target).use { socket ->
-                val writer = PrintWriter(socket.getOutputStream(), true)
-                val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                writer.println(
-                    RemoteAutomationProtocol.encode(
-                        RemoteProtocolMessage.PairRequest(
-                            senderId = store.installationId(),
-                            pairingCode = pairingCode
-                        )
-                    )
-                )
-                RemoteAutomationProtocol.decode(reader.readLine().orEmpty())
-                    as? RemoteProtocolMessage.PairResult
-            }
-        }.getOrNull()
+        val result = decodeOnce<RemoteProtocolMessage.PairResult>(
+            target = target,
+            request = RemoteProtocolMessage.PairRequest(
+                senderId = store.installationId(),
+                pairingCode = pairingCode
+            )
+        )
 
         if (result?.success == true && result.token.isNotBlank()) {
             store.savePairedReceiver(
@@ -158,22 +149,13 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                 if (target == null || paired == null || !currentStatus.isPaired) {
                     return@withContext RemoteActionResult.Failure("연결된 기기가 없습니다.")
                 }
-                val result = runCatching {
-                    openSocket(target).use { socket ->
-                        val writer = PrintWriter(socket.getOutputStream(), true)
-                        val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                        writer.println(
-                            RemoteAutomationProtocol.encode(
-                                RemoteProtocolMessage.DisconnectRequest(
-                                    senderId = store.installationId(),
-                                    token = paired.token
-                                )
-                            )
-                        )
-                        RemoteAutomationProtocol.decode(reader.readLine().orEmpty())
-                            as? RemoteProtocolMessage.DisconnectResult
-                    }
-                }.getOrNull()
+                val result = decodeOnce<RemoteProtocolMessage.DisconnectResult>(
+                    target = target,
+                    request = RemoteProtocolMessage.DisconnectRequest(
+                        senderId = store.installationId(),
+                        token = paired.token
+                    )
+                )
 
                 if (result?.success == true) {
                     store.saveUserDisconnected(true)
@@ -213,15 +195,13 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
     }
 
     override suspend fun send(
-        request: RemoteAutomationRequest,
-        onStateChange: (AutomationRunState) -> Unit
+        request: RemoteAutomationRequest
     ) = withContext(Dispatchers.IO) {
         val target = endpoint
         val paired = store.pairedReceiver()
         if (target == null || paired == null || paired.receiverId != target.receiverId) {
             val failure = AutomationRunState.Failure("연결된 수신 기기를 찾지 못했습니다.")
             RemoteAutomationStateHub.update { it.copy(automationState = failure) }
-            onStateChange(failure)
             return@withContext
         }
 
@@ -252,7 +232,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                         as? RemoteProtocolMessage.StateUpdate
                         ?: continue
                     if (update.requestId != request.requestId) continue
-                    emitState(request.requestId, update.state, onStateChange)
+                    emitState(request.requestId, update.state)
                     if (update.state.isTerminal()) {
                         receivedTerminal = true
                         break
@@ -261,8 +241,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                 if (!receivedTerminal && isCurrentRequest(request.requestId)) {
                     emitState(
                         request.requestId,
-                        AutomationRunState.Failure("S25 FE가 상태 전송을 종료했습니다."),
-                        onStateChange
+                        AutomationRunState.Failure("S25 FE가 상태 전송을 종료했습니다.")
                     )
                 }
             }
@@ -275,8 +254,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                     AutomationRunState.Failure(
                         error.message?.let { "S25 FE 연결이 끊어졌습니다: $it" }
                             ?: "S25 FE 연결이 끊어졌습니다."
-                    ),
-                    onStateChange
+                    )
                 )
             }
         } finally {
@@ -304,19 +282,15 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         val target = endpoint ?: return
         val paired = store.pairedReceiver() ?: return
         scope.launch(Dispatchers.IO) {
-            runCatching {
-                openSocket(target).use { socket ->
-                    PrintWriter(socket.getOutputStream(), true).println(
-                        RemoteAutomationProtocol.encode(
-                            RemoteProtocolMessage.CancelRequest(
-                                senderId = store.installationId(),
-                                token = paired.token,
-                                requestId = cancelRequestId
-                            )
-                        )
-                    )
-                }
-            }
+            requestOnce(
+                target = target,
+                request = RemoteProtocolMessage.CancelRequest(
+                    senderId = store.installationId(),
+                    token = paired.token,
+                    requestId = cancelRequestId
+                ),
+                readResponse = false
+            )
         }
     }
 
@@ -326,44 +300,60 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         val paired = store.pairedReceiver()
             ?: return@withContext RemoteActionResult.Failure("수신 기기와 먼저 페어링해주세요.")
 
-        runCatching {
-            openSocket(target).use { socket ->
-                socket.soTimeout = 15_000
-                val writer = PrintWriter(socket.getOutputStream(), true)
-                val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-                writer.println(
-                    RemoteAutomationProtocol.encode(
-                        RemoteProtocolMessage.CleanMemoryRequest(
-                            senderId = store.installationId(),
-                            token = paired.token
-                        )
-                    )
-                )
-                val responseLine = reader.readLine()
-                    ?: return@withContext RemoteActionResult.Failure("수신 기기 응답이 없습니다.")
-                val message = RemoteAutomationProtocol.decode(responseLine) as? RemoteProtocolMessage.CleanMemoryResult
+        requestOnce(
+            target = target,
+            request = RemoteProtocolMessage.CleanMemoryRequest(
+                senderId = store.installationId(),
+                token = paired.token
+            ),
+            timeoutMillis = 15_000
+        ).fold(
+            onSuccess = { responseLine ->
+                val line = responseLine
+                ?: return@withContext RemoteActionResult.Failure("수신 기기 응답이 없습니다.")
+                val message = RemoteAutomationProtocol.decode(line) as? RemoteProtocolMessage.CleanMemoryResult
                     ?: return@withContext RemoteActionResult.Failure("수신 기기 응답 형식이 올바르지 않습니다.")
                 if (message.success) {
                     RemoteActionResult.Success
                 } else {
                     RemoteActionResult.Failure(message.message.ifBlank { "수신 기기 메모리 정리에 실패했습니다." })
                 }
+            },
+            onFailure = { error ->
+                RemoteActionResult.Failure("수신 기기 통신 실패: ${error.message ?: "알 수 없는 오류"}")
             }
-        }.getOrElse { error ->
-            RemoteActionResult.Failure("수신 기기 통신 실패: ${error.message ?: "알 수 없는 오류"}")
+        )
+    }
+
+    private fun requestOnce(
+        target: RemoteEndpoint,
+        request: RemoteProtocolMessage,
+        timeoutMillis: Int = RemoteAutomationProtocol.SOCKET_TIMEOUT_MS,
+        readResponse: Boolean = true
+    ): Result<String?> = runCatching {
+        openSocket(target, timeoutMillis = timeoutMillis).use { socket ->
+            PrintWriter(socket.getOutputStream(), true).println(RemoteAutomationProtocol.encode(request))
+            if (readResponse) {
+                BufferedReader(InputStreamReader(socket.getInputStream())).readLine()
+            } else {
+                null
+            }
         }
     }
 
+    private inline fun <reified T : RemoteProtocolMessage> decodeOnce(
+        target: RemoteEndpoint,
+        request: RemoteProtocolMessage
+    ): T? = requestOnce(target, request).getOrNull()?.let { RemoteAutomationProtocol.decode(it) as? T }
+
     private fun emitState(
         requestId: String,
-        state: AutomationRunState,
-        onStateChange: (AutomationRunState) -> Unit
+        state: AutomationRunState
     ) {
         if (!isCurrentRequest(requestId)) return
         RemoteAutomationStateHub.update { current ->
             current.copy(automationState = state)
         }
-        onStateChange(state)
     }
 
     private fun beginRequest(requestId: String) {

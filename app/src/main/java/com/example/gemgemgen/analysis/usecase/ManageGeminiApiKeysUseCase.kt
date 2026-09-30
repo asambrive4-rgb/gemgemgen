@@ -27,35 +27,34 @@ class ManageGeminiApiKeysUseCase(
         repository.listKeys().map { it.toSummary() }
     }
 
-    suspend fun addKey(label: String, rawKey: String): List<GeminiApiKeySummary> =
-        withContext(dispatchers.io) {
-            val normalizedLabel = label.trim().ifBlank { "Gemini API 키" }
-            val normalizedKey = rawKey.trim()
-            if (normalizedKey.isBlank()) {
-                throw AnalysisException("API 키를 입력해주세요.")
-            }
-            repository.addKey(
-                label = normalizedLabel,
-                rawKey = normalizedKey
-            )
-            repository.listKeys().map { it.toSummary() }
+    suspend fun addKey(label: String, rawKey: String): List<GeminiApiKeySummary> = mutateKeys {
+        val normalizedLabel = label.trim().ifBlank { "Gemini API 키" }
+        val normalizedKey = rawKey.trim()
+        if (normalizedKey.isBlank()) {
+            throw AnalysisException("API 키를 입력해주세요.")
         }
-
-    suspend fun deleteKey(id: String): List<GeminiApiKeySummary> = withContext(dispatchers.io) {
-        repository.deleteKey(id)
-        repository.listKeys().map { it.toSummary() }
+        repository.addKey(
+            label = normalizedLabel,
+            rawKey = normalizedKey
+        )
     }
 
-    suspend fun activateKey(id: String): List<GeminiApiKeySummary> =
-        withContext(dispatchers.io) {
-            repository.activateKey(id)
-            repository.listKeys().map { it.toSummary() }
-        }
+    suspend fun deleteKey(id: String): List<GeminiApiKeySummary> = mutateKeys {
+        repository.deleteKey(id)
+    }
 
-    suspend fun updateKeyLabel(id: String, newLabel: String): List<GeminiApiKeySummary> =
+    suspend fun activateKey(id: String): List<GeminiApiKeySummary> = mutateKeys {
+        repository.activateKey(id)
+    }
+
+    suspend fun updateKeyLabel(id: String, newLabel: String): List<GeminiApiKeySummary> = mutateKeys {
+        val normalizedLabel = newLabel.trim().ifBlank { "Gemini API 키" }
+        repository.updateKeyLabel(id, normalizedLabel)
+    }
+
+    private suspend fun mutateKeys(action: () -> Unit): List<GeminiApiKeySummary> =
         withContext(dispatchers.io) {
-            val normalizedLabel = newLabel.trim().ifBlank { "Gemini API 키" }
-            repository.updateKeyLabel(id, normalizedLabel)
+            action()
             repository.listKeys().map { it.toSummary() }
         }
 

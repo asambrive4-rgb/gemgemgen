@@ -35,7 +35,6 @@ import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationHistoryUseCase
 import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
-import com.example.gemgemgen.automation.usecase.ResolveVariationPromptUseCase
 import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
 import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
@@ -48,7 +47,6 @@ import com.example.gemgemgen.wildcard.android.AndroidWildcardSetRepository
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
-import com.example.gemgemgen.wildcard.usecase.WildcardClipboardUseCase
 import com.example.gemgemgen.wildcard.ui.WildcardViewModel
 import com.example.gemgemgen.remote.android.AndroidRemoteAutomationGateway
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
@@ -142,8 +140,7 @@ class AndroidAppContainer(context: Context) {
             runVariationPrompt = RunVariationPromptUseCase(
                 gatewayProvider = ActiveVariationPromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
-            ),
-            resolveVariationPrompt = ResolveVariationPromptUseCase()
+            )
         )
     }
 
@@ -151,7 +148,7 @@ class AndroidAppContainer(context: Context) {
         val analysisKeyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository)
         WildcardViewModel(
             manageWildcardFiles = ManageWildcardFilesUseCase(wildcardFileRepository),
-            wildcardClipboard = WildcardClipboardUseCase(clipboardGateway),
+            clipboardGateway = clipboardGateway,
             classifyWildcardLines = ClassifyWildcardLinesUseCase(
                 aiGateway = analysisAiGateway,
                 credentialResolver = analysisCredentialResolver

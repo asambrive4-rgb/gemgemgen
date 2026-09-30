@@ -51,7 +51,7 @@ class GenerateAnalysisTxtUseCase(
             selectedHints = selectedHints,
             customHint = customHint
         )
-        val responseText = aiGateway.generateTxt(
+        val responseText = aiGateway.analyze(
             apiKey = credential.accessTokenOrApiKey,
             modelId = credential.modelId,
             payload = payload

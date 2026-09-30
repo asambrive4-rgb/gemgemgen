@@ -6,7 +6,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisDetectedSegment
 import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -19,7 +18,6 @@ class AnalysisTargetSegmentPolicyTest {
         text = "red hair",
         startIndex = 0,
         endIndex = 8,
-        source = AnalysisTargetSource.AUTO,
         category = AnalysisCategory.WOMEN_HAIRSTYLE
     )
 
@@ -60,7 +58,6 @@ class AnalysisTargetSegmentPolicyTest {
         )
         checkNotNull(segment)
         assertEquals("blue dress", segment.text)
-        assertEquals(AnalysisTargetSource.AUTO, segment.source)
         assertEquals(0.9, segment.confidence, 0.0)
     }
 
@@ -100,15 +97,5 @@ class AnalysisTargetSegmentPolicyTest {
             savedFileName = "hair.txt"
         )
         assertEquals(source, replaced)
-    }
-
-    @Test
-    fun replaceSegmentWithText_replacesSpanWithFragment() {
-        val replaced = AnalysisTargetSegmentPolicy.replaceSegmentWithText(
-            source = source,
-            segment = hairSegment,
-            replacement = "black wavy hair"
-        )
-        assertEquals("black wavy hair and blue dress", replaced)
     }
 }

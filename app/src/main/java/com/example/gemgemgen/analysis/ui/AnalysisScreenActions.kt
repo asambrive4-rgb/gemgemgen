@@ -46,8 +46,4 @@ interface AnalysisScreenActions {
     fun cancelEditingApiKey() {}
     fun updateApiKeyLabel() {}
     fun onClearFocus() {}
-
-    companion object {
-        val Empty = object : AnalysisScreenActions {}
-    }
 }

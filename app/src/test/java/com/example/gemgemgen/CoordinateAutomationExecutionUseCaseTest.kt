@@ -3,7 +3,6 @@ package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
-import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
@@ -16,8 +15,6 @@ import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGatewayProvider
-import com.example.gemgemgen.automation.usecase.PromptHistoryRepository
-import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.TargetAppLauncher
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
@@ -27,7 +24,7 @@ import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.remote.usecase.RemoteAutomationGateway
-import com.example.gemgemgen.wildcard.usecase.NoOpWildcardSetRepository
+import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -106,10 +103,8 @@ class CoordinateAutomationExecutionUseCaseTest {
     }
 
     @Test
-    fun executeRemote_recordsHistoryAndDelegatesToManageRemoteAutomation() = runBlocking {
-        val historyRepo = FakePromptHistoryRepository()
-        val historyStore = PromptHistoryStore(historyRepo)
-        val (useCase, context) = createUseCase(promptHistoryStore = historyStore, isRemotePaired = true)
+    fun executeRemote_delegatesToManageRemoteAutomation() = runBlocking {
+        val (useCase, context) = createUseCase(isRemotePaired = true)
 
         val request = AutomationRunRequest(
             promptTemplate = "remote prompt",
@@ -117,30 +112,10 @@ class CoordinateAutomationExecutionUseCaseTest {
             targetApp = AutomationTargetApp.GEMINI
         )
 
-        val result = useCase.executeRemote(request) {}
+        val result = useCase.executeRemote(request)
 
         assertEquals(RemoteActionResult.Success, result)
-        val recordedHistory = historyRepo.load()
-        assertEquals(1, recordedHistory.size)
-        assertEquals("remote prompt", recordedHistory.first().prompt)
-        assertEquals(AutomationTargetApp.GEMINI, recordedHistory.first().targetApp)
         assertEquals("remote prompt", context.remoteGateway.sentRequest?.promptTemplate)
-    }
-
-    @Test
-    fun executeRemote_withoutHistoryStore_delegatesSuccessfully() = runBlocking {
-        val (useCase, context) = createUseCase(promptHistoryStore = null, isRemotePaired = true)
-
-        val request = AutomationRunRequest(
-            promptTemplate = "prompt without history",
-            repeatCountText = "1",
-            targetApp = AutomationTargetApp.GEMINI
-        )
-
-        val result = useCase.executeRemote(request) {}
-
-        assertEquals(RemoteActionResult.Success, result)
-        assertEquals("prompt without history", context.remoteGateway.sentRequest?.promptTemplate)
     }
 
     @Test
@@ -238,8 +213,7 @@ class CoordinateAutomationExecutionUseCaseTest {
 
     private fun createUseCase(
         isOverlayGranted: Boolean = true,
-        isRemotePaired: Boolean = true,
-        promptHistoryStore: PromptHistoryStore? = null
+        isRemotePaired: Boolean = true
     ): Pair<CoordinateAutomationExecutionUseCase, TestContext> {
         val checkAutomationStart = CheckAutomationStartUseCase(OverlayPermissionGateway { isOverlayGranted })
         val startRecorder = FakeAutomationHistoryRecorder()
@@ -254,7 +228,7 @@ class CoordinateAutomationExecutionUseCaseTest {
         )
         val manageRemoteAutomation = ManageRemoteAutomationUseCase(
             gateway = remoteGateway,
-            automationHistoryRecorder = startRecorder,
+            automationHistoryRecorder = AutomationHistoryRecorder {},
             requestIdProvider = { "test-request-id" }
         )
 
@@ -262,8 +236,7 @@ class CoordinateAutomationExecutionUseCaseTest {
             checkAutomationStart = checkAutomationStart,
             automationHistoryRecorder = startRecorder,
             automation = localAutomation,
-            manageRemoteAutomation = manageRemoteAutomation,
-            promptHistoryStore = promptHistoryStore
+            manageRemoteAutomation = manageRemoteAutomation
         )
 
         return useCase to TestContext(
@@ -287,7 +260,7 @@ class CoordinateAutomationExecutionUseCaseTest {
                 },
                 nullKeyboardCandidates = listOf("com.example/.NullKeyboard")
             ),
-            wildcardSetRepository = NoOpWildcardSetRepository,
+            wildcardSetRepository = WildcardSetRepository { emptyList() },
             promptGatewayProvider = PromptAutomationGatewayProvider { promptGateway },
             targetAppLauncher = TargetAppLauncher { true },
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
@@ -308,14 +281,6 @@ class CoordinateAutomationExecutionUseCaseTest {
         override suspend fun record(request: AutomationRunRequest) {
             callCount++
             recordedRequest = request
-        }
-    }
-
-    private class FakePromptHistoryRepository : PromptHistoryRepository {
-        private var items = listOf<PromptHistoryItem>()
-        override fun load(): List<PromptHistoryItem> = items
-        override fun save(items: List<PromptHistoryItem>) {
-            this.items = items
         }
     }
 
@@ -346,10 +311,7 @@ class CoordinateAutomationExecutionUseCaseTest {
         override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
         override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
 
-        override suspend fun send(
-            request: RemoteAutomationRequest,
-            onStateChange: (AutomationRunState) -> Unit
-        ) {
+        override suspend fun send(request: RemoteAutomationRequest) {
             sentRequest = request
         }
 

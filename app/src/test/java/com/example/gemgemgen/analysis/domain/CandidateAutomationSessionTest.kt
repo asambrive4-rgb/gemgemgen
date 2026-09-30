@@ -12,7 +12,6 @@ class CandidateAutomationSessionTest {
         text: String = "사과",
         startIndex: Int = 3,
         endIndex: Int = 5,
-        source: AnalysisTargetSource = AnalysisTargetSource.AUTO,
         category: AnalysisCategory = AnalysisCategory.LOCATION,
         confidence: Double = 0.95
     ): AnalysisTargetSegment {
@@ -20,7 +19,6 @@ class CandidateAutomationSessionTest {
             text = text,
             startIndex = startIndex,
             endIndex = endIndex,
-            source = source,
             category = category,
             confidence = confidence
         )
@@ -102,7 +100,6 @@ class CandidateAutomationSessionTest {
             text = "사과",
             startIndex = 3,
             endIndex = 5,
-            source = AnalysisTargetSource.AUTO,
             category = AnalysisCategory.LOCATION,
             confidence = 0.95
         )
@@ -117,7 +114,6 @@ class CandidateAutomationSessionTest {
             text = "사과",
             startIndex = 3,
             endIndex = 5,
-            source = AnalysisTargetSource.AUTO,
             category = AnalysisCategory.WOMEN_CLOTHING,
             confidence = 0.5
         )

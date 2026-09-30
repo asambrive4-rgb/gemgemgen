@@ -1,4 +1,4 @@
-// 역할: 와일드카드 텍스트 파일의 편집 상태, 수정 여부, 커서 위치를 관리합니다.
+// 역할: 와일드카드 텍스트 파일의 편집 상태, 수정 여부, 선택 가능한 줄 목록을 관리합니다.
 package com.example.gemgemgen.wildcard.domain
 
 data class WildcardEditorSession(
@@ -7,6 +7,10 @@ data class WildcardEditorSession(
     val editingText: String = "",
     val undoStack: List<String> = emptyList()
 ) {
+    val selectableLines: List<String> by lazy(LazyThreadSafetyMode.NONE) {
+        WildcardFileParser.parseItems(editingText)
+    }
+
     val hasUnsavedChanges: Boolean
         get() = selectedFile != null && savedText != editingText
 

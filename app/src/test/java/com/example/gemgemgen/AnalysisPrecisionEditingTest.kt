@@ -13,7 +13,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisSourceRange
 import com.example.gemgemgen.analysis.domain.AnalysisSourceLocator
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTextEdit
 import com.example.gemgemgen.analysis.domain.AnalysisVisualContext
 
@@ -30,7 +29,7 @@ class AnalysisPrecisionEditingTest {
     private val conflict = range("발과 바닥은 보이지 않는다.")
     private val protected = range("System Instruction\r\nKeep identity.\r\n\r\n")
     private val target = AnalysisTargetSegment(primary.exactText, primary.startIndex, primary.endIndex,
-        AnalysisTargetSource.AUTO, AnalysisCategory.FREE_EDIT)
+        AnalysisCategory.FREE_EDIT)
     private val report = AnalysisReport(
         visualContext = AnalysisVisualContext(visibleScope = "상반신"),
         targetVisualContext = AnalysisVisualContext(visibleScope = "전신"),
@@ -50,7 +49,7 @@ class AnalysisPrecisionEditingTest {
         ), report)
         assertEquals("전신 촬영.\r\n파란 옷과 헤어 유지.\r\n발과 지지면이 보인다.", candidate)
         assertEquals(protected.exactText + candidate,
-            AnalysisTargetSegmentPolicy.replaceSegmentWithText(source, envelope, candidate))
+            source.replaceRange(envelope.startIndex, envelope.endIndex, candidate))
     }
 
     @Test fun tightening_deletesObsoleteFootwearInstruction() {
@@ -184,7 +183,7 @@ class AnalysisPrecisionEditingTest {
         ]}]""").single()
         val candidate = AnalysisEditPolicy.assemble(original, envelope, edits, parsed)
         assertEquals("😀 처음\r\n전신 촬영.\r\n발과 지지면이 보임.",
-            AnalysisTargetSegmentPolicy.replaceSegmentWithText(original, envelope, candidate))
+            original.replaceRange(envelope.startIndex, envelope.endIndex, candidate))
     }
 
     @Test fun whitespaceDifferences_resolveToOriginalTextWithoutNormalizingSource() {
@@ -225,9 +224,12 @@ class AnalysisPrecisionEditingTest {
                 assertTrue(text.contains(rule.avoid))
             }
             assertTrue(generation.systemInstruction.contains("Target visual context:"))
+            val targetProps = analysis.responseSchema["properties"]!!.jsonObject["targetSegment"]!!.jsonObject["properties"]!!.jsonObject
+            assertEquals(false, targetProps.containsKey("reason"))
             val fields = generation.responseSchema["items"]!!.jsonObject["properties"]!!.jsonObject
             assertEquals(category == AnalysisCategory.FREE_EDIT, fields.containsKey("edits"))
             assertEquals(category != AnalysisCategory.FREE_EDIT, fields.containsKey("text"))
+            assertEquals(false, fields.containsKey("explanation"))
         }
     }
 }

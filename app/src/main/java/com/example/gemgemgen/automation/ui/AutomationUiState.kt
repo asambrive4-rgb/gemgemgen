@@ -15,6 +15,7 @@ import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 
 data class AutomationUiState(
     val promptTemplate: String = "",
+    val editor: PromptEditorUiState = PromptEditorUiState(promptTemplate = promptTemplate),
     val selectedTargetApp: AutomationTargetApp = AutomationTargetApp.GEMINI,
     val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
     val repeatCountText: String = AppDefaults.DEFAULT_REPEAT_COUNT.toString(),
@@ -27,27 +28,11 @@ data class AutomationUiState(
     val showAccessibilityPrompt: Boolean = false,
     val isDisconnectingRemote: Boolean = false,
     val remoteDisconnectMessage: String = "",
-    val isParagraphSelectionMode: Boolean = false,
-    val selectedParagraphRange: PromptParagraphRange? = null,
-    val paragraphSelectionMessage: String = "",
-    val canNavigateHistoryBack: Boolean = false,
-    val canNavigateHistoryForward: Boolean = false,
-    val isHistoryIndicatorVisible: Boolean = false,
-    val historyDotCount: Int = 0,
-    val activeHistoryDotIndex: Int = 0,
     val maintenanceState: MaintenanceState = MaintenanceState(),
     /** 등록된 프롬프트 상용구(스니펫) 목록 */
     val promptSnippets: List<com.example.gemgemgen.automation.domain.PromptSnippet> = emptyList(),
-    /** 와일드카드 토큰 및 상용구가 모두 포함된 통합 자동완성 후보 목록 */
-    val allAutocompleteCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
-    /** 현재 커서 및 입력 상태에 따라 활성화된 추천 후보 목록 */
-    val activeSuggestionCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList(),
     /** 상용구(텍스트 대치) 관리 다이얼로그 표시 여부 */
     val showPromptSnippetDialog: Boolean = false,
-    val isSearchActive: Boolean = false,
-    val searchQuery: String = "",
-    val searchMatches: List<com.example.gemgemgen.ui.TextHighlightRange> = emptyList(),
-    val activeSearchMatchIndex: Int = -1,
     val selectedThemePalette: com.example.gemgemgen.ui.theme.AppThemePalette = com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
     val selectedThemeMode: com.example.gemgemgen.ui.theme.AppThemeMode = com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT,
     val promptInstructionConfig: com.example.gemgemgen.automation.domain.PromptInstructionConfig =
@@ -60,18 +45,24 @@ data class AutomationUiState(
     val showVariationPromptConfigDialog: Boolean = false,
     val isMemoryCleanupScheduled: Boolean = false
 ) {
+    val isParagraphSelectionMode: Boolean get() = editor.isParagraphSelectionMode
+    val selectedParagraphRange: PromptParagraphRange? get() = editor.selectedParagraphRange
+    val paragraphSelectionMessage: String get() = editor.paragraphSelectionMessage
+    val canNavigateHistoryBack: Boolean get() = editor.canNavigateHistoryBack
+    val canNavigateHistoryForward: Boolean get() = editor.canNavigateHistoryForward
+    val isHistoryIndicatorVisible: Boolean get() = editor.isHistoryIndicatorVisible
+    val historyDotCount: Int get() = editor.historyDotCount
+    val activeHistoryDotIndex: Int get() = editor.activeHistoryDotIndex
+    val activeSuggestionCandidates: List<WildcardTokenAutocomplete.Candidate> get() = editor.activeSuggestionCandidates
+    val isSearchActive: Boolean get() = editor.isSearchActive
+    val searchQuery: String get() = editor.searchQuery
+    val searchMatches: List<com.example.gemgemgen.ui.TextHighlightRange> get() = editor.searchMatches
+    val activeSearchMatchIndex: Int get() = editor.activeSearchMatchIndex
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()
 
     val isRunning: Boolean
         get() = automationState is AutomationRunState.Running
-
-    val hasRunRequirements: Boolean
-        get() = AutomationExecutionPolicy.hasRunRequirements(
-            environmentStatus = environmentStatus,
-            targetApp = selectedTargetApp,
-            promptTemplate = promptTemplate
-        )
 
     val canRun: Boolean
         get() = AutomationExecutionPolicy.canRun(

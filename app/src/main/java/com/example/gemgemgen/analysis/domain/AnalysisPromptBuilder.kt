@@ -120,11 +120,7 @@ Find the target segment, analyze the visual constraints, and set variationGoal f
             .takeIf { it.isNotEmpty() }
             ?.joinToString(separator = "\n") { "* $it" }
             ?: "* NONE"
-        val hintText = selectedHints
-            .takeIf { it.isNotEmpty() }
-            ?.mapIndexed { index, hint -> "Option ${index + 1}: \"$hint\"" }
-            ?.joinToString(separator = "\n")
-            .orEmpty()
+        val hintText = formatDirectionHints(selectedHints, emptyValue = "")
         val layoutText = spatialLayoutText(analysisReport.spatialLayout)
         val variationGoal = analysisReport.variationGoal.trim().ifBlank {
             AnalysisCategoryRules.ruleFor(category).goal
@@ -133,7 +129,7 @@ Find the target segment, analyze the visual constraints, and set variationGoal f
         val rule = AnalysisCategoryRules.ruleFor(category)
         val outputRules = if (category == AnalysisCategory.FREE_EDIT) {
             """
-Return each candidate as an edits array and explanation, not a full rewritten text.
+Return each candidate as an edits array, not a full rewritten text.
 Each edit has exactText (source phrase to locate) and replacement. The app locates it; do not calculate start/end character indices. If the same phrase repeats, include more context or give its 1-based occurrence in Original prompt.
 Use an empty replacement for deletion. For additions, quote an existing anchor phrase in exactText and return that phrase plus the added text in replacement. Do not use an empty exactText or guessed numeric insertion position. Combine overlapping changes into one edit.
 Only edit within [${targetSegment.startIndex}, ${targetSegment.endIndex}). Preserve all intervening unedited text; the app assembles it verbatim.
@@ -203,8 +199,11 @@ Generate exactly $count unique candidates as a JSON array following the system o
         )
     }
 
-    private fun formatDirectionHints(selectedHints: List<String>): String {
-        if (selectedHints.isEmpty()) return "NONE"
+    private fun formatDirectionHints(
+        selectedHints: List<String>,
+        emptyValue: String = "NONE"
+    ): String {
+        if (selectedHints.isEmpty()) return emptyValue
         return selectedHints
             .mapIndexed { index, hint -> "Option ${index + 1}: \"$hint\"" }
             .joinToString(separator = "\n")
@@ -241,29 +240,15 @@ Generate exactly $count unique candidates as a JSON array following the system o
                     "properties" to obj(
                         "exactText" to stringSchema("Exact substring from the original prompt."),
                         "occurrence" to integerSchema("1-based occurrence when exactText repeats; otherwise omit."),
-                        "confidence" to numberSchema("0.0 to 1.0 confidence."),
-                        "reason" to stringSchema("Korean reason.")
+                        "confidence" to numberSchema("0.0 to 1.0 confidence.")
                     ),
-                    "required" to arr("exactText", "confidence", "reason")
+                    "required" to arr("exactText", "confidence")
                 ),
-                "visualContext" to obj(
-                    "type" to "object",
-                    "properties" to obj(
-                        "viewpoint" to stringSchema("Subject viewing angle in Korean."),
-                        "distance" to stringSchema("Camera distance in Korean."),
-                        "visibleScope" to stringSchema("Visible crop/scope in Korean."),
-                        "cameraAngle" to stringSchema("Camera angle in Korean."),
-                        "visibleElements" to stringArraySchema(),
-                        "hiddenOrUnclearElements" to stringArraySchema()
-                    ),
-                    "required" to arr(
-                        "viewpoint",
-                        "distance",
-                        "visibleScope",
-                        "cameraAngle",
-                        "visibleElements",
-                        "hiddenOrUnclearElements"
-                    )
+                "visualContext" to visualContextSchema(
+                    viewpointDesc = "Subject viewing angle in Korean.",
+                    distanceDesc = "Camera distance in Korean.",
+                    visibleScopeDesc = "Visible crop/scope in Korean.",
+                    cameraAngleDesc = "Camera angle in Korean."
                 ),
                 "spatialLayout" to obj(
                     "type" to "object",
@@ -295,17 +280,11 @@ Generate exactly $count unique candidates as a JSON array following the system o
                     "One clear Korean sentence: the variation goal for replacement fragments, " +
                         "based on visual analysis, selected direction chips, and custom user direction."
                 ),
-                "targetVisualContext" to obj(
-                    "type" to "object",
-                    "properties" to obj(
-                        "viewpoint" to stringSchema("Target view after requested changes."),
-                        "distance" to stringSchema("Target camera distance."),
-                        "visibleScope" to stringSchema("Target crop after expansion or tightening."),
-                        "cameraAngle" to stringSchema("Target angle."),
-                        "visibleElements" to stringArraySchema(),
-                        "hiddenOrUnclearElements" to stringArraySchema()
-                    ),
-                    "required" to arr("viewpoint", "distance", "visibleScope", "cameraAngle", "visibleElements", "hiddenOrUnclearElements")
+                "targetVisualContext" to visualContextSchema(
+                    viewpointDesc = "Target view after requested changes.",
+                    distanceDesc = "Target camera distance.",
+                    visibleScopeDesc = "Target crop after expansion or tightening.",
+                    cameraAngleDesc = "Target angle."
                 ),
                 "cascadingTrace" to obj(
                     "type" to "object",
@@ -337,6 +316,31 @@ Generate exactly $count unique candidates as a JSON array following the system o
         )
     }
 
+    private fun visualContextSchema(
+        viewpointDesc: String,
+        distanceDesc: String,
+        visibleScopeDesc: String,
+        cameraAngleDesc: String
+    ): JsonObject = obj(
+        "type" to "object",
+        "properties" to obj(
+            "viewpoint" to stringSchema(viewpointDesc),
+            "distance" to stringSchema(distanceDesc),
+            "visibleScope" to stringSchema(visibleScopeDesc),
+            "cameraAngle" to stringSchema(cameraAngleDesc),
+            "visibleElements" to stringArraySchema(),
+            "hiddenOrUnclearElements" to stringArraySchema()
+        ),
+        "required" to arr(
+            "viewpoint",
+            "distance",
+            "visibleScope",
+            "cameraAngle",
+            "visibleElements",
+            "hiddenOrUnclearElements"
+        )
+    )
+
     private fun sourceRangeSchema(): JsonObject = obj(
         "type" to "object",
         "properties" to obj(
@@ -359,10 +363,9 @@ Generate exactly $count unique candidates as a JSON array following the system o
                 "items" to obj(
                     "type" to "object",
                     "properties" to obj(
-                        "edits" to obj("type" to "array", "items" to editSchema),
-                        "explanation" to stringSchema("Short Korean explanation.")
+                        "edits" to obj("type" to "array", "items" to editSchema)
                     ),
-                    "required" to arr("edits", "explanation")
+                    "required" to arr("edits")
                 )
             )
         }
@@ -371,10 +374,9 @@ Generate exactly $count unique candidates as a JSON array following the system o
             "items" to obj(
                 "type" to "object",
                 "properties" to obj(
-                    "text" to stringSchema("Korean wildcard candidate fragment only."),
-                    "explanation" to stringSchema("Short Korean explanation.")
+                    "text" to stringSchema("Korean wildcard candidate fragment only.")
                 ),
-                "required" to arr("text", "explanation")
+                "required" to arr("text")
             )
         )
     }

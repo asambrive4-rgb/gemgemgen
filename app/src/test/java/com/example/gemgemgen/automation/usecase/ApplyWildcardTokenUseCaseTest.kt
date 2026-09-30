@@ -52,19 +52,6 @@ class ApplyWildcardTokenUseCaseTest {
     }
 
     @Test
-    fun invoke_returnsNullWhenBlocked() {
-        val result = useCase(
-            text = "장",
-            selectionStart = 1,
-            selectionEnd = 1,
-            candidate = placeCandidate,
-            candidates = candidates,
-            isBlocked = true
-        )
-        assertNull(result)
-    }
-
-    @Test
     fun invoke_returnsNullInParagraphSelectionMode() {
         val result = useCase(
             text = "장",

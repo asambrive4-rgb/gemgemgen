@@ -1,19 +1,34 @@
-// 역할: GPU 레이어 캐싱과 볼드 테두리를 적용한 뉴모피즘 카드, 버튼, 인셋 베드 및 칩 UI 요소를 제공합니다.
+// 역할: GPU 레이어 캐싱과 볼드 테두리를 적용한 뉴모피즘 카드, 버튼, 인셋 베드, 칩 및 공통 다이얼로그 셸 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,10 +38,14 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 
 /**
  * 3D 조약돌 카드 (Extruded Pebble Card)
@@ -177,8 +196,6 @@ fun NeuButton(
 
 /**
  * 3D 뉴모피즘 텍스트 입력창 전용 컬러 체계.
- * 배경은 캔버스와 뚜렷하게 대비되는 순백의 클린 베드(inputBackground),
- * 테두리는 흐리지 않고 선명한 팔레트 테두리(inputBorder)와 활성 포커스(primary)를 적용합니다.
  */
 @Composable
 fun appTextFieldColors(
@@ -205,3 +222,103 @@ fun appTextFieldColors(
     unfocusedSupportingTextColor = AppTheme.colors.textSecondary,
 )
 
+/**
+ * 단일 다이얼로그 호스트(Single Dialog Host) 공통 외곽 셸.
+ * 크로스페이드 전환 애니메이션, 키보드 인셋, 외부 탭 시 포커스 해제를 일관되게 제공합니다.
+ */
+@Composable
+fun <T : Any> AppDialogHostShell(
+    activeDialog: T,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    isDismissible: Boolean = true,
+    contentKey: (T) -> Any = { it::class },
+    label: String = "AppDialogHostCrossfade",
+    content: @Composable (T) -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            dismissOnBackPress = isDismissible,
+            dismissOnClickOutside = isDismissible,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            modifier = modifier
+                .padding(24.dp)
+                .imePadding()
+                .widthIn(min = 280.dp, max = 560.dp)
+                .fillMaxWidth()
+                .wrapContentHeight()
+                .clearFocusOnOutsideTap { focusManager.clearFocus(force = true) },
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            AnimatedContent(
+                targetState = activeDialog,
+                contentKey = contentKey,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
+                },
+                contentAlignment = Alignment.Center,
+                label = label
+            ) { targetDialog ->
+                content(targetDialog)
+            }
+        }
+    }
+}
+
+/**
+ * 제목, 안내 본문, 취소/확인 버튼으로 구성된 공통 확인 다이얼로그 컨텐츠.
+ */
+@Composable
+fun AppConfirmDialogContent(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    dismissLabel: String = "취소",
+    useFilledConfirmButton: Boolean = false,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onDismiss) {
+                Text(dismissLabel)
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            if (useFilledConfirmButton) {
+                Button(onClick = onConfirm) {
+                    Text(confirmLabel)
+                }
+            } else {
+                TextButton(onClick = onConfirm) {
+                    Text(confirmLabel)
+                }
+            }
+        }
+    }
+}

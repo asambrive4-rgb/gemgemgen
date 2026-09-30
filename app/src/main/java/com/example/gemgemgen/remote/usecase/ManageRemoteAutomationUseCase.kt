@@ -1,17 +1,15 @@
-// 역할: 원격 연결 수신 서비스의 시작과 종료 생명주기를 제어합니다.
+// 역할: 원격 기기 페어링, 연결 해제, 자동화 요청 송신 및 강제 중지를 조율합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
-import com.example.gemgemgen.automation.usecase.NoOpAutomationHistoryRecorder
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
-import com.example.gemgemgen.wildcard.usecase.NoOpWildcardSetRepository
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
@@ -20,8 +18,8 @@ import kotlinx.coroutines.withContext
 
 class ManageRemoteAutomationUseCase(
     private val gateway: RemoteAutomationGateway,
-    private val automationHistoryRecorder: AutomationHistoryRecorder = NoOpAutomationHistoryRecorder,
-    private val wildcardSetRepository: WildcardSetRepository = NoOpWildcardSetRepository,
+    private val automationHistoryRecorder: AutomationHistoryRecorder = AutomationHistoryRecorder {},
+    private val wildcardSetRepository: WildcardSetRepository = WildcardSetRepository { emptyList() },
     private val promptGenerator: PromptGenerator = PromptGenerator(),
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val requestIdProvider: () -> String = { UUID.randomUUID().toString() }
@@ -58,10 +56,7 @@ class ManageRemoteAutomationUseCase(
         return gateway.cleanMemory()
     }
 
-    suspend fun start(
-        request: AutomationRunRequest,
-        onStateChange: (AutomationRunState) -> Unit
-    ): RemoteActionResult {
+    suspend fun start(request: AutomationRunRequest): RemoteActionResult {
         if (!status.value.canSend) {
             return RemoteActionResult.Failure("연결된 수신 기기를 찾지 못했습니다.")
         }
@@ -102,12 +97,7 @@ class ManageRemoteAutomationUseCase(
                     targetApp = request.targetApp,
                     flowImageCount = request.flowImageCount,
                     wildcards = wildcards
-                ),
-                onStateChange = { state ->
-                    if (activeRequestId.get() == requestId) {
-                        onStateChange(state)
-                    }
-                }
+                )
             )
         } finally {
             activeRequestId.compareAndSet(requestId, null)
@@ -115,10 +105,9 @@ class ManageRemoteAutomationUseCase(
         return RemoteActionResult.Success
     }
 
-    fun forceStop(onStateChange: (AutomationRunState) -> Unit) {
+    fun forceStop() {
         val requestId = activeRequestId.getAndSet(null)
         gateway.forceStop(requestId)
-        onStateChange(AutomationRunState.Stopped)
     }
 
     companion object {

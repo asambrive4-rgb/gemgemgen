@@ -7,19 +7,17 @@ import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
-import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
+import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
-import com.example.gemgemgen.analysis.ui.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
-import com.example.gemgemgen.analysis.usecase.AnalysisWildcardSaveResult
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
@@ -113,7 +111,9 @@ class AnalysisFeatureTest {
         val repository = FakeWildcardRepository()
         val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
         val save = SaveAnalysisWildcardFileUseCase(repository, FakeClipboard(), dispatchers)
-        val result = runCatching { save.save("test.txt", listOf("first\nsecond"), false) }
+        val result = runCatching {
+            save.saveAndPrepareReplacedSource("test.txt", listOf("first\nsecond"), false)
+        }
         assertTrue(result.exceptionOrNull() is IllegalArgumentException)
         assertTrue(repository.listFiles().isEmpty())
     }
@@ -132,8 +132,7 @@ class AnalysisFeatureTest {
                 "여성 자세",
                 "남성 자세",
                 "여성 표정",
-                "여성 헤어스타일",
-                "와카"
+                "여성 헤어스타일"
             ),
             AnalysisCategory.entries.map { it.label }
         )
@@ -211,7 +210,6 @@ class AnalysisFeatureTest {
                 text = "blue dress",
                 startIndex = 0,
                 endIndex = 10,
-                source = AnalysisTargetSource.AUTO,
                 category = AnalysisCategory.WOMEN_CLOTHING
             ),
             analysisReport = report,
@@ -254,7 +252,6 @@ class AnalysisFeatureTest {
                 text = "long hair",
                 startIndex = 14,
                 endIndex = 23,
-                source = AnalysisTargetSource.AUTO,
                 category = AnalysisCategory.WOMEN_HAIRSTYLE
             ),
             analysisReport = AnalysisResponseParser.parseReport(
@@ -304,7 +301,6 @@ class AnalysisFeatureTest {
                 text = "long hair",
                 startIndex = 14,
                 endIndex = 23,
-                source = AnalysisTargetSource.AUTO,
                 category = AnalysisCategory.WOMEN_HAIRSTYLE
             ),
             analysisReport = AnalysisResponseParser.parseReport(
@@ -334,12 +330,12 @@ class AnalysisFeatureTest {
             dispatchers = dispatchers
         )
 
-        val exists = useCase.save("옷", listOf("new"), overwrite = false)
-        assertEquals(AnalysisWildcardSaveResult.FileExists("옷.txt"), exists)
+        val exists = useCase.saveAndPrepareReplacedSource("옷", listOf("new"), overwrite = false)
+        assertEquals(AnalysisSaveAndReplaceResult.FileExists("옷.txt"), exists)
         assertEquals("old", repository.contentOf("옷.txt"))
 
-        val saved = useCase.save("옷", listOf("new"), overwrite = true)
-        assertEquals(AnalysisWildcardSaveResult.Success("옷.txt"), saved)
+        val saved = useCase.saveAndPrepareReplacedSource("옷", listOf("new"), overwrite = true) as AnalysisSaveAndReplaceResult.Success
+        assertEquals("옷.txt", saved.fileName)
         assertEquals("new", repository.contentOf("옷.txt"))
     }
 
@@ -358,7 +354,6 @@ class AnalysisFeatureTest {
             text = "red hair",
             startIndex = 0,
             endIndex = 8,
-            source = AnalysisTargetSource.AUTO,
             category = AnalysisCategory.WOMEN_HAIRSTYLE
         )
 
@@ -442,7 +437,6 @@ class AnalysisFeatureTest {
         )
         assertEquals(3, aiGateway.analyzeCallCount)
         assertTrue(afterCategoryChange.didAnalyze)
-        assertEquals(AnalysisTargetSource.AUTO, afterCategoryChange.target.source)
         // 재분석도 마스킹 역할 모델(테스트 기본값)을 사용
         assertEquals(
             listOf(DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_MODEL),
@@ -535,7 +529,6 @@ class AnalysisFeatureTest {
         viewModel.generateTxt()
 
         assertEquals(1, aiGateway.analyzeCallCount)
-        assertEquals(AnalysisTargetSource.AUTO, viewModel.uiState.value.targetSegment?.source)
         assertEquals("blue dress", viewModel.uiState.value.targetSegment?.text)
         assertEquals(listOf("자동 후보"), viewModel.uiState.value.generatedCandidates)
         assertEquals(AnalysisResultPresentation.TXT, viewModel.uiState.value.resultPresentation)
@@ -1188,14 +1181,17 @@ class AnalysisFeatureTest {
 
     @Test
     fun importSourcePromptFromAutomation_replacesWholeSourcePrompt() {
+        val workspace = PromptWorkspace()
         val viewModel = analysisViewModel(
             aiGateway = FakeAnalysisAiGateway(),
-            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            promptWorkspace = workspace
         )
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("old source")
         viewModel.onSourcePromptChange("old source")
 
-        viewModel.importSourcePromptFromAutomation("automation source")
+        workspace.updateCurrentPrompt("automation source")
+        viewModel.importSourcePromptFromAutomation()
 
         assertEquals("automation source", viewModel.sourcePromptTextFieldState.text.toString())
         assertEquals("automation source", viewModel.uiState.value.sourcePrompt)
@@ -1203,13 +1199,15 @@ class AnalysisFeatureTest {
 
     @Test
     fun importSourcePromptFromAutomation_clearsInvalidTargetSegment() {
+        val workspace = PromptWorkspace()
         val aiGateway = FakeAnalysisAiGateway(
             analyzeResponse = analysisJson(exactText = "red dress"),
             generateResponse = """[{"text":"후보","explanation":"설명"}]"""
         )
         val viewModel = analysisViewModel(
             aiGateway = aiGateway,
-            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            promptWorkspace = workspace
         )
         val original = "red dress blue sky"
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
@@ -1219,7 +1217,8 @@ class AnalysisFeatureTest {
         viewModel.generateTxt()
         assertTrue(viewModel.uiState.value.targetSegment != null)
 
-        viewModel.importSourcePromptFromAutomation("completely different text")
+        workspace.updateCurrentPrompt("completely different text")
+        viewModel.importSourcePromptFromAutomation()
 
         assertEquals("completely different text", viewModel.uiState.value.sourcePrompt)
         assertEquals(null, viewModel.uiState.value.targetSegment)
@@ -1227,14 +1226,17 @@ class AnalysisFeatureTest {
 
     @Test
     fun importSourcePromptFromAutomation_keepsSourceWhenAutomationEmpty() {
+        val workspace = PromptWorkspace()
         val viewModel = analysisViewModel(
             aiGateway = FakeAnalysisAiGateway(),
-            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            promptWorkspace = workspace
         )
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("keep me")
         viewModel.onSourcePromptChange("keep me")
 
-        viewModel.importSourcePromptFromAutomation("   ")
+        workspace.updateCurrentPrompt("   ")
+        viewModel.importSourcePromptFromAutomation()
 
         assertEquals("keep me", viewModel.sourcePromptTextFieldState.text.toString())
         assertEquals("keep me", viewModel.uiState.value.sourcePrompt)
@@ -1539,8 +1541,7 @@ class AnalysisFeatureTest {
                 "exactText": "$exactText",
                 "startIndex": 0,
                 "endIndex": 1,
-                "confidence": 0.9,
-                "reason": "테스트"
+                "confidence": 0.9
               },
               "visualContext": {
                 "viewpoint": "정면",
@@ -1592,27 +1593,19 @@ class AnalysisFeatureTest {
             modelId: String,
             payload: AnalysisPromptPayload
         ): String {
+            val generateMatch = Regex("""Generate exactly (\d+)""").find(payload.systemInstruction)
+            if (generateMatch != null) {
+                generateCallCount++
+                generateModelIds += modelId
+                lastGenerateCount = generateMatch.groupValues.getOrNull(1)?.toIntOrNull()
+                assertFalse(payload.systemInstruction.contains("fallback", ignoreCase = true))
+                onGenerateTxt?.invoke()
+                return generateResponse
+            }
             analyzeCallCount++
             analyzeModelIds += modelId
             onAnalyze?.invoke()
             return analyzeResponse
-        }
-
-        override suspend fun generateTxt(
-            apiKey: String,
-            modelId: String,
-            payload: AnalysisPromptPayload
-        ): String {
-            generateCallCount++
-            generateModelIds += modelId
-            lastGenerateCount = Regex("""Generate exactly (\d+)""")
-                .find(payload.systemInstruction)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.toIntOrNull()
-            assertFalse(payload.systemInstruction.contains("fallback", ignoreCase = true))
-            onGenerateTxt?.invoke()
-            return generateResponse
         }
     }
 
@@ -1797,8 +1790,7 @@ class AnalysisFeatureTest {
                     "exactText": "$exactText",
                     "startIndex": 0,
                     "endIndex": 1,
-                    "confidence": 0.9,
-                    "reason": "테스트"
+                    "confidence": 0.9
                   },
                   "visualContext": {
                     "viewpoint": "정면",

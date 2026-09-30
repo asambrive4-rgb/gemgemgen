@@ -7,7 +7,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
 import java.util.UUID
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -24,7 +23,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
         Context.MODE_PRIVATE
     )
     private val cipher = AndroidKeyStoreCipher(KEY_ALIAS)
-    private val json = Json { ignoreUnknownKeys = true }
+    private var cachedRecords: List<GeminiApiKeyRecord>? = null
 
     override fun listKeys(): List<GeminiApiKeyRecord> {
         return readRecords()
@@ -95,14 +94,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
         if (currentModel.isNullOrBlank() ||
             !AnalysisProvider.isModelForProvider(currentModel, provider)
         ) {
-            editor.putString(
-                modelKey,
-                if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
-                    AnalysisModelRole.defaultModel(analysisRole)
-                } else {
-                    AnalysisProvider.defaultModel(provider)
-                }
-            )
+            editor.putString(modelKey, defaultModelFor(analysisRole, provider))
         }
         editor.apply()
     }
@@ -117,11 +109,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
         ) {
             return stored
         }
-        return if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
-            AnalysisModelRole.defaultModel(analysisRole)
-        } else {
-            AnalysisProvider.defaultModel(provider)
-        }
+        return defaultModelFor(analysisRole, provider)
     }
 
     override fun setRoleModel(role: String, modelId: String) {
@@ -129,27 +117,38 @@ class AndroidEncryptedGeminiApiKeyRepository(
         val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
         val normalized = if (AnalysisProvider.isModelForProvider(modelId, provider)) {
             modelId
-        } else if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
+        } else {
+            defaultModelFor(analysisRole, provider)
+        }
+        prefs.edit().putString(roleModelKey(analysisRole.storageValue), normalized).apply()
+    }
+
+    private fun defaultModelFor(
+        analysisRole: AnalysisModelRole,
+        provider: AnalysisProvider
+    ): String {
+        return if (provider == AnalysisModelRole.defaultProvider(analysisRole)) {
             AnalysisModelRole.defaultModel(analysisRole)
         } else {
             AnalysisProvider.defaultModel(provider)
         }
-        prefs.edit().putString(roleModelKey(analysisRole.storageValue), normalized).apply()
     }
 
     private fun roleProviderKey(role: String): String = "${KEY_ROLE_PROVIDER_PREFIX}$role"
     private fun roleModelKey(role: String): String = "${KEY_ROLE_MODEL_PREFIX}$role"
 
     private fun readRecords(): List<GeminiApiKeyRecord> {
+        cachedRecords?.let { return it }
         val raw = prefs.getString(KEY_RECORDS, null) ?: return emptyList()
         return runCatching {
-            json.parseToJsonElement(raw)
+            analysisJson.parseToJsonElement(raw)
                 .jsonArray
                 .mapNotNull { element -> element.jsonObject.toRecordOrNull() }
-        }.getOrDefault(emptyList())
+        }.getOrDefault(emptyList()).also { cachedRecords = it }
     }
 
     private fun writeRecords(records: List<GeminiApiKeyRecord>) {
+        cachedRecords = records
         val array = buildJsonArray {
             records.forEach { record ->
                 add(

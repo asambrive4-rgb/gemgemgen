@@ -1,4 +1,4 @@
-// 역할: 안드로이드 시스템에서 접근성, 배터리, 오버레이 권한 상태를 직접 조회합니다.
+// 역할: 안드로이드 시스템에서 대상 앱 설치, 접근성, 오버레이, 폴더 접근 등 환경 상태를 부수효과 없이 조회합니다.
 package com.example.gemgemgen.environment.android
 
 import android.Manifest
@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import com.example.gemgemgen.automation.android.AndroidImeSettings
 import com.example.gemgemgen.automation.android.GeminiAccessibilityService
 import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
@@ -18,6 +19,9 @@ import com.example.gemgemgen.environment.usecase.EnvironmentGateway
 import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderAccessChecker
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
+import java.io.File
+
+private fun AndroidWildcardDirectStorage.folderFile(): File = File(folderPath())
 
 class AndroidEnvironmentGateway(
     context: Context
@@ -29,16 +33,11 @@ class AndroidEnvironmentGateway(
         val wildcardFolderUri = AndroidWildcardFolderRepository.getFolderUri(appContext)
         val hasAllFilesAccess = AndroidWildcardDirectStorage.hasAllFilesAccess()
         val directFolder = if (hasAllFilesAccess) {
-            runCatching { wildcardDirectStorage.ensureFolder() }.getOrNull()
+            runCatching { wildcardDirectStorage.folderFile() }.getOrNull()
         } else {
             null
         }
-        val enabledImeList = try {
-            val imm = appContext.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
-            imm?.enabledInputMethodList?.map { it.id }.orEmpty()
-        } catch (_: Throwable) {
-            emptyList()
-        }
+        val enabledImeList = AndroidImeSettings.getEnabledInputMethods(appContext)
         val targetImeId = AppDefaults.NULL_KEYBOARD_IME_CANDIDATES.firstOrNull { candidate ->
             enabledImeList.any { enabled -> enabled.equals(candidate, ignoreCase = true) }
         } ?: AppDefaults.NULL_KEYBOARD_IME_ID
@@ -116,4 +115,3 @@ class AndroidEnvironmentGateway(
             Manifest.permission.WRITE_SECURE_SETTINGS
         ) == PackageManager.PERMISSION_GRANTED
 }
-

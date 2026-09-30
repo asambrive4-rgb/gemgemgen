@@ -34,8 +34,7 @@ class PromptGenerator(
         private val wildcardsByToken: Map<String, WildcardSet>,
         private val random: Random
     ) {
-        @Suppress("UNUSED_PARAMETER")
-        fun generateFinalPrompt(index: Int): String {
+        fun generateFinalPrompt(): String {
             return applyReplacements(chooseReplacements())
         }
 

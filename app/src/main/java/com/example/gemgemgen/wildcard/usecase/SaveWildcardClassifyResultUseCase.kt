@@ -71,13 +71,11 @@ class SaveWildcardClassifyResultUseCase(
             val normalized = WildcardClassifyFileName.normalizeUserInput(entry.fileNameInput)
                 ?: return@mapNotNull SavePlan(entry.groupName, null, entry.items)
 
-            var candidate = normalized
-            var suffix = 2
-            while (!usedNames.add(candidate.lowercase())) {
-                val stem = normalized.removeSuffix(".txt")
-                candidate = "${stem}_$suffix.txt"
-                suffix++
-            }
+            val candidate = WildcardClassifyFileName.deduplicateName(
+                baseName = normalized,
+                usedNamesLowercase = usedNames,
+                extension = ".txt"
+            )
             SavePlan(entry.groupName, candidate, entry.items)
         }
     }

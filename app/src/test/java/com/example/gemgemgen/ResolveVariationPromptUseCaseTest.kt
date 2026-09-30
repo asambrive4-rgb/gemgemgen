@@ -1,16 +1,14 @@
-// 역할: 문단 선택 및 드래그 영역 기반 변주 프롬프트 결합 유스케이스의 정확성과 예외 안전성을 검증합니다.
+// 역할: 문단 선택 및 드래그 영역 기반 변주 프롬프트 결합 도메인 규칙의 정확성과 예외 안전성을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
-import com.example.gemgemgen.automation.usecase.ResolveVariationPromptUseCase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ResolveVariationPromptUseCaseTest {
 
-    private val useCase = ResolveVariationPromptUseCase()
     private val config = VariationPromptConfig("기본 변주 템플릿")
 
     @Test
@@ -19,7 +17,7 @@ class ResolveVariationPromptUseCaseTest {
         val start = fullText.indexOf("두 번째 문단")
         val range = PromptParagraphRange(start = start, endExclusive = start + "두 번째 문단".length)
 
-        val target = useCase.resolveTarget(
+        val target = config.resolveTarget(
             fullText = fullText,
             explicitSelectedText = null,
             isParagraphSelectionMode = true,
@@ -27,8 +25,7 @@ class ResolveVariationPromptUseCaseTest {
         )
 
         assertEquals("두 번째 문단", target)
-        val prompt = useCase.buildPrompt(
-            config = config,
+        val prompt = config.buildPrompt(
             fullText = fullText,
             explicitSelectedText = null,
             isParagraphSelectionMode = true,
@@ -41,7 +38,7 @@ class ResolveVariationPromptUseCaseTest {
     fun `resolveTarget returns explicit drag selection when paragraph mode is inactive`() {
         val fullText = "전체 프롬프트 원문입니다."
 
-        val target = useCase.resolveTarget(
+        val target = config.resolveTarget(
             fullText = fullText,
             explicitSelectedText = "프롬프트 원문",
             isParagraphSelectionMode = false,
@@ -49,8 +46,7 @@ class ResolveVariationPromptUseCaseTest {
         )
 
         assertEquals("프롬프트 원문", target)
-        val prompt = useCase.buildPrompt(
-            config = config,
+        val prompt = config.buildPrompt(
             fullText = fullText,
             explicitSelectedText = "프롬프트 원문",
             isParagraphSelectionMode = false,
@@ -65,7 +61,7 @@ class ResolveVariationPromptUseCaseTest {
         val start = fullText.indexOf("두 번째 문단")
         val range = PromptParagraphRange(start = start, endExclusive = start + "두 번째 문단".length)
 
-        val target = useCase.resolveTarget(
+        val target = config.resolveTarget(
             fullText = fullText,
             explicitSelectedText = "첫 번째",
             isParagraphSelectionMode = true,
@@ -79,7 +75,7 @@ class ResolveVariationPromptUseCaseTest {
     fun `resolveTarget falls back to explicit drag text if paragraph range is null in paragraph mode`() {
         val fullText = "전체 프롬프트 원문"
 
-        val target = useCase.resolveTarget(
+        val target = config.resolveTarget(
             fullText = fullText,
             explicitSelectedText = "프롬프트",
             isParagraphSelectionMode = true,
@@ -93,7 +89,7 @@ class ResolveVariationPromptUseCaseTest {
     fun `resolveTarget returns null when no selection exists`() {
         val fullText = "전체 프롬프트 원문"
 
-        val target = useCase.resolveTarget(
+        val target = config.resolveTarget(
             fullText = fullText,
             explicitSelectedText = null,
             isParagraphSelectionMode = false,
@@ -101,8 +97,7 @@ class ResolveVariationPromptUseCaseTest {
         )
 
         assertNull(target)
-        val prompt = useCase.buildPrompt(
-            config = config,
+        val prompt = config.buildPrompt(
             fullText = fullText,
             explicitSelectedText = null,
             isParagraphSelectionMode = false,
@@ -116,7 +111,7 @@ class ResolveVariationPromptUseCaseTest {
         val fullText = "짧은 본문"
         val outOfBoundsRange = PromptParagraphRange(start = 1, endExclusive = 100)
 
-        val target = useCase.resolveTarget(
+        val target = config.resolveTarget(
             fullText = fullText,
             explicitSelectedText = null,
             isParagraphSelectionMode = true,
@@ -131,7 +126,7 @@ class ResolveVariationPromptUseCaseTest {
         val fullText = "첫 문단\n\n   \n\n끝 문단"
         val blankRange = PromptParagraphRange(start = 5, endExclusive = 10)
 
-        val target = useCase.resolveTarget(
+        val target = config.resolveTarget(
             fullText = fullText,
             explicitSelectedText = null,
             isParagraphSelectionMode = true,

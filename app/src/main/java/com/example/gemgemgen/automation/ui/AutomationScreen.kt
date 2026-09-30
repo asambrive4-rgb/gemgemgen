@@ -28,9 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.gemgemgen.ui.theme.GemgemgenTheme
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -51,7 +49,7 @@ internal fun AutomationScreen(
     uiState: AutomationUiState,
     automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
-    actions: AutomationScreenActions = AutomationScreenActions.Empty,
+    actions: AutomationScreenActions,
     modifier: Modifier = Modifier
 ) {
     val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -201,19 +199,6 @@ internal fun AutomationScreen(
                 )
             }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun AutomationAppPreview() {
-    GemgemgenTheme {
-        AutomationScreen(
-            uiState = AutomationUiState(),
-            automationBarUiState = AutomationBarUiState(),
-            promptTemplateState = TextFieldState(),
-            actions = AutomationScreenActions.Empty
-        )
     }
 }
 

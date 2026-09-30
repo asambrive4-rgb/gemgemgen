@@ -1,28 +1,20 @@
 // 역할: 분석 화면의 API 키 관리, 인증, 알림 다이얼로그를 단일 호스트와 화면 액션 인터페이스로 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,19 +28,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
+import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.appTextFieldColors
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 
 sealed interface AnalysisDialogType {
     data object None : AnalysisDialogType
@@ -106,42 +95,32 @@ internal fun AnalysisDialogHost(
         }
     }
 
-    val focusManager = LocalFocusManager.current
-
-    Dialog(
+    AppDialogHostShell(
+        activeDialog = activeDialog,
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier
-                .padding(24.dp)
-                .imePadding()
-                .widthIn(min = 280.dp, max = 560.dp)
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .clearFocusOnOutsideTap { focusManager.clearFocus(force = true) },
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
-        ) {
-            AnimatedContent(
-                targetState = activeDialog,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
-                },
-                contentAlignment = Alignment.Center,
-                contentKey = { it::class },
-                label = "AnalysisDialogHostCrossfade"
-            ) { targetDialog ->
-                when (targetDialog) {
-                    AnalysisDialogType.None -> Unit
-                    AnalysisDialogType.KeyManagement -> KeyManagementContent(uiState, actions)
-                    is AnalysisDialogType.EditKeyLabel -> EditKeyLabelContent(targetDialog, actions)
-                    AnalysisDialogType.ResetSession -> ResetSessionContent(actions)
-                    is AnalysisDialogType.Overwrite -> OverwriteContent(targetDialog, actions)
-                    is AnalysisDialogType.GrokLogin -> GrokLoginContent(targetDialog, actions)
-                }
-            }
+        label = "AnalysisDialogHostCrossfade"
+    ) { targetDialog ->
+        when (targetDialog) {
+            AnalysisDialogType.None -> Unit
+            AnalysisDialogType.KeyManagement -> KeyManagementContent(uiState, actions)
+            is AnalysisDialogType.EditKeyLabel -> EditKeyLabelContent(targetDialog, actions)
+            AnalysisDialogType.ResetSession -> AppConfirmDialogContent(
+                title = "분석 세션 비우기",
+                message = "원문, 카테고리, 마스킹, 생성 결과와 변주 조건이 모두 지워집니다. " +
+                    "자동화 프롬프트와 계정 설정은 유지됩니다.",
+                confirmLabel = "비우기",
+                onConfirm = actions::confirmResetSession,
+                onDismiss = actions::dismissResetSession
+            )
+            is AnalysisDialogType.Overwrite -> AppConfirmDialogContent(
+                title = "같은 파일명이 있습니다",
+                message = "${targetDialog.fileName} 파일을 덮어쓸까요? 다른 이름을 입력하려면 취소하고 파일명을 바꿔주세요.",
+                confirmLabel = "덮어쓰기",
+                dismissLabel = "다른 파일명 입력",
+                onConfirm = actions::onConfirmOverwrite,
+                onDismiss = actions::dismissOverwrite
+            )
+            is AnalysisDialogType.GrokLogin -> GrokLoginContent(targetDialog, actions)
         }
     }
 }
@@ -326,80 +305,6 @@ private fun EditKeyLabelContent(
                 enabled = canSave
             ) {
                 Text("저장")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ResetSessionContent(
-    actions: AnalysisScreenActions
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "분석 세션 비우기",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "원문, 카테고리, 마스킹, 생성 결과와 변주 조건이 모두 지워집니다. " +
-                "자동화 프롬프트와 계정 설정은 유지됩니다.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = actions::dismissResetSession) {
-                Text("취소")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = actions::confirmResetSession) {
-                Text("비우기")
-            }
-        }
-    }
-}
-
-@Composable
-private fun OverwriteContent(
-    dialog: AnalysisDialogType.Overwrite,
-    actions: AnalysisScreenActions
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "같은 파일명이 있습니다",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "${dialog.fileName} 파일을 덮어쓸까요? 다른 이름을 입력하려면 취소하고 파일명을 바꿔주세요.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = actions::dismissOverwrite) {
-                Text("다른 파일명 입력")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = actions::onConfirmOverwrite) {
-                Text("덮어쓰기")
             }
         }
     }

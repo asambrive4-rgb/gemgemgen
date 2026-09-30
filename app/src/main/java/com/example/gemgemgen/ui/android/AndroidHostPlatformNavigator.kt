@@ -1,4 +1,4 @@
-// 역할: 안드로이드 시스템 설정 화면이나 외부 앱으로의 화면 이동을 처리합니다.
+// 역할: 안드로이드 시스템 설정 화면, 외부 브라우저(Firefox 우선) 및 외부 앱으로의 화면 이동을 처리합니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.ActivityNotFoundException
@@ -8,11 +8,12 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.core.net.toUri
+import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.ui.MainActivity
 
 /**
  * 화면(Composable) 계층에서 시스템 설정 인텐트 발송, 플랫폼 토스트,
- * 액티비티 포그라운드 전환 등 OS 세부사항(Details)을 격리하는 플랫폼 어댑터.
+ * 액티비티 포그라운드 전환 및 외부 브라우저 호출 등 OS 세부사항(Details)을 격리하는 플랫폼 어댑터.
  */
 class AndroidHostPlatformNavigator(private val context: Context) {
 
@@ -70,17 +71,49 @@ class AndroidHostPlatformNavigator(private val context: Context) {
     }
 
     /** 외부 브라우저(Firefox 우선)로 URL 열기 및 실패 시 안내 토스트 표시 */
-    fun openUrlPreferFirefox(
-        browserLauncher: com.example.gemgemgen.core.android.AndroidExternalBrowserLauncher,
-        url: String
-    ) {
-        val opened = browserLauncher.openUrlPreferFirefox(url)
-        if (!opened) {
+    fun openUrlPreferFirefox(url: String) {
+        if (!launchBrowserPreferFirefox(url)) {
             Toast.makeText(
                 context,
                 "브라우저를 열 수 없습니다. Firefox 설치 여부를 확인해 주세요.",
                 Toast.LENGTH_SHORT
             ).show()
+        }
+    }
+
+    private fun launchBrowserPreferFirefox(url: String): Boolean {
+        val appContext = context.applicationContext
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        if (uri.scheme != "http" && uri.scheme != "https") return false
+
+        val isFirefoxInstalled = runCatching {
+            appContext.packageManager.getPackageInfo(AppDefaults.FIREFOX_PACKAGE_NAME, 0)
+            true
+        }.getOrDefault(false)
+
+        if (isFirefoxInstalled) {
+            val firefoxIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                setPackage(AppDefaults.FIREFOX_PACKAGE_NAME)
+            }
+            if (startBrowserIntent(appContext, firefoxIntent)) return true
+        }
+
+        val defaultIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return startBrowserIntent(appContext, defaultIntent)
+    }
+
+    private fun startBrowserIntent(appContext: Context, intent: Intent): Boolean {
+        return try {
+            if (intent.resolveActivity(appContext.packageManager) == null && intent.`package` == null) {
+                return false
+            }
+            appContext.startActivity(intent)
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 }

@@ -12,10 +12,10 @@ object AppDefaults {
     val WILDCARD_DIRECTORY_CANDIDATES: List<String> = listOf(
         WILDCARD_DIRECTORY,
         "Download/wildcard"
-    ).distinct()
+    )
     const val NULL_KEYBOARD_IME_ID = "com.nilac.nullkeyboard/.NullKeyboardService"
     val NULL_KEYBOARD_IME_CANDIDATES: List<String> = listOf(
-        "com.nilac.nullkeyboard/.NullKeyboardService",
+        NULL_KEYBOARD_IME_ID,
         "com.wparam.nullkeyboard/.NullInputMethod",
         "com.sarvesh.nullkeyboard/.NullKeyboardService"
     )

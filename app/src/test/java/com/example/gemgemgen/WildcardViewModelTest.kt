@@ -6,13 +6,13 @@ import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.*
 import com.example.gemgemgen.wildcard.ui.*
 import com.example.gemgemgen.wildcard.usecase.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 
 class WildcardViewModelTest {
     @Test
@@ -24,8 +24,8 @@ class WildcardViewModelTest {
             )
         )
 
-        assertEquals("color.txt", viewModel.uiState.value.selectedFile?.fileName)
-        assertEquals("blue", viewModel.uiState.value.editingText)
+        assertEquals("color.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+        assertEquals("blue", viewModel.uiState.value.editor.editingText)
     }
 
     @Test
@@ -37,7 +37,7 @@ class WildcardViewModelTest {
         viewModel.onNewFileNameChange("hair")
         viewModel.createNewFile()
 
-        assertEquals("hair.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals("hair.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
         assertEquals(listOf("hair.txt"), viewModel.uiState.value.files.map { it.fileName })
         assertEquals("", fileManager.contentOf("hair.txt"))
     }
@@ -56,16 +56,16 @@ class WildcardViewModelTest {
     }
 
     @Test
-    fun saveCurrent_updatesSavedTextAndFileContent() {
+    fun onSaveFile_updatesSavedTextAndFileContent() {
         val fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
         val viewModel = viewModel(fileManager = fileManager)
 
         viewModel.onTextChange("silver hair")
-        assertTrue(viewModel.uiState.value.hasUnsavedChanges)
+        assertTrue(viewModel.uiState.value.editor.hasUnsavedChanges)
 
-        viewModel.saveCurrent()
+        viewModel.onSaveFile()
 
-        assertFalse(viewModel.uiState.value.hasUnsavedChanges)
+        assertFalse(viewModel.uiState.value.editor.hasUnsavedChanges)
         assertEquals("silver hair", fileManager.contentOf("hair.txt"))
     }
 
@@ -74,14 +74,14 @@ class WildcardViewModelTest {
         val viewModel = viewModel(
             fileManager = FakeWildcardFileManager("hair.txt" to "black hair")
         )
-        assertEquals("black hair", viewModel.uiState.value.editingText)
+        assertEquals("black hair", viewModel.uiState.value.editor.editingText)
 
         viewModel.trimForInactiveTab()
 
-        assertEquals("hair.txt", viewModel.uiState.value.selectedFile?.fileName)
-        assertEquals("black hair", viewModel.uiState.value.editingText)
-        assertEquals("black hair", viewModel.uiState.value.savedText)
-        assertTrue(viewModel.uiState.value.undoStack.isEmpty())
+        assertEquals("hair.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+        assertEquals("black hair", viewModel.uiState.value.editor.editingText)
+        assertEquals("black hair", viewModel.uiState.value.editor.savedText)
+        assertTrue(viewModel.uiState.value.editor.undoStack.isEmpty())
     }
 
     @Test
@@ -98,7 +98,7 @@ class WildcardViewModelTest {
         viewModel.onTextChange("silver hair")
         viewModel.selectFile(colorFile)
 
-        assertEquals("hair.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals("hair.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
         assertNotNull(viewModel.uiState.value.pendingAction)
     }
 
@@ -110,10 +110,23 @@ class WildcardViewModelTest {
         )
 
         viewModel.pasteBelowFromClipboard()
-        assertEquals("black hair\nsilver hair", viewModel.uiState.value.editingText)
+        assertEquals("black hair\nsilver hair", viewModel.uiState.value.editor.editingText)
 
         viewModel.undoClipboardEdit()
-        assertEquals("black hair", viewModel.uiState.value.editingText)
+        assertEquals("black hair", viewModel.uiState.value.editor.editingText)
+    }
+
+    @Test
+    fun pasteFromClipboard_withEmptyClipboardShowsError() {
+        val viewModel = viewModel(
+            fileManager = FakeWildcardFileManager("hair.txt" to "black hair"),
+            clipboardText = ""
+        )
+
+        viewModel.pasteFromClipboard()
+
+        assertEquals("클립보드가 비어 있습니다.", viewModel.uiState.value.error)
+        assertEquals("black hair", viewModel.uiState.value.editor.editingText)
     }
 
     @Test
@@ -142,7 +155,7 @@ class WildcardViewModelTest {
         assertFalse(viewModel.uiState.value.canDelete)
 
         viewModel.onTextChange("silver hair")
-        viewModel.saveCurrent()
+        viewModel.onSaveFile()
 
         assertEquals("파일을 편집하려면 wildcard 폴더를 다시 선택해주세요.", viewModel.uiState.value.error)
     }
@@ -160,9 +173,9 @@ class WildcardViewModelTest {
         viewModel.renameSelectedFile()
 
         assertFalse(viewModel.uiState.value.showRenameDialog)
-        assertEquals("new_hair.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals("new_hair.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
         assertEquals(listOf("new_hair.txt"), viewModel.uiState.value.files.map { it.fileName })
-        assertEquals("black hair", viewModel.uiState.value.editingText)
+        assertEquals("black hair", viewModel.uiState.value.editor.editingText)
         assertEquals("black hair", fileManager.contentOf("new_hair.txt"))
         assertEquals("", fileManager.contentOf("hair.txt"))
     }
@@ -276,7 +289,7 @@ class WildcardViewModelTest {
 
         assertFalse(viewModel.uiState.value.isLineSelectionMode)
         assertTrue(viewModel.uiState.value.selectedLineIndices.isEmpty())
-        assertEquals("b.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals("b.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
     }
 
     @Test
@@ -306,7 +319,7 @@ class WildcardViewModelTest {
         assertEquals("content://valid/folder", folderRepo.lastSavedUri)
         assertEquals("wildcard 폴더를 선택했습니다.", viewModel.uiState.value.message)
         assertEquals("", viewModel.uiState.value.error)
-        assertEquals("old.txt", viewModel.uiState.value.selectedFile?.fileName)
+        assertEquals("old.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
     }
 
     @Test
@@ -376,8 +389,8 @@ class WildcardViewModelTest {
 
         actions.selectFile(hairFile)
 
-        assertEquals("hair.txt", viewModel.uiState.value.selectedFile?.fileName)
-        assertEquals("black hair", viewModel.uiState.value.editingText)
+        assertEquals("hair.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+        assertEquals("black hair", viewModel.uiState.value.editor.editingText)
     }
 
     @Test
@@ -387,10 +400,10 @@ class WildcardViewModelTest {
         val actions: WildcardScreenActions = viewModel
 
         actions.onTextChange("blonde hair")
-        assertTrue(viewModel.uiState.value.hasUnsavedChanges)
+        assertTrue(viewModel.uiState.value.editor.hasUnsavedChanges)
 
         actions.onSaveFile()
-        assertFalse(viewModel.uiState.value.hasUnsavedChanges)
+        assertFalse(viewModel.uiState.value.editor.hasUnsavedChanges)
         assertEquals("blonde hair", fileManager.contentOf("hair.txt"))
     }
 
@@ -436,10 +449,7 @@ class WildcardViewModelTest {
                 repository = fileManager,
                 dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
             ),
-            wildcardClipboard = WildcardClipboardUseCase(
-                clipboardGateway,
-                dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
-            ),
+            clipboardGateway = clipboardGateway,
             coroutineScope = CoroutineScope(Dispatchers.Unconfined),
             saveWildcardFolder = folderRepository
         ).also {

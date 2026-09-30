@@ -13,6 +13,9 @@ import javax.crypto.spec.GCMParameterSpec
 internal class AndroidKeyStoreCipher(
     private val keyAlias: String
 ) {
+    @Volatile
+    private var cachedSecretKey: SecretKey? = null
+
     fun encrypt(value: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
@@ -33,24 +36,32 @@ internal class AndroidKeyStoreCipher(
     }
 
     private fun secretKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-        val existing = keyStore.getEntry(keyAlias, null) as? KeyStore.SecretKeyEntry
-        if (existing != null) return existing.secretKey
-
-        val keyGenerator = KeyGenerator.getInstance(
-            KeyProperties.KEY_ALGORITHM_AES,
-            ANDROID_KEY_STORE
-        )
-        val spec = KeyGenParameterSpec.Builder(
-            keyAlias,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(AES_KEY_SIZE_BITS)
-            .build()
-        keyGenerator.init(spec)
-        return keyGenerator.generateKey()
+        cachedSecretKey?.let { return it }
+        return synchronized(this) {
+            cachedSecretKey?.let { return@synchronized it }
+            val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+            val existing = keyStore.getEntry(keyAlias, null) as? KeyStore.SecretKeyEntry
+            val resolvedKey = if (existing != null) {
+                existing.secretKey
+            } else {
+                val keyGenerator = KeyGenerator.getInstance(
+                    KeyProperties.KEY_ALGORITHM_AES,
+                    ANDROID_KEY_STORE
+                )
+                val spec = KeyGenParameterSpec.Builder(
+                    keyAlias,
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                )
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(AES_KEY_SIZE_BITS)
+                    .build()
+                keyGenerator.init(spec)
+                keyGenerator.generateKey()
+            }
+            cachedSecretKey = resolvedKey
+            resolvedKey
+        }
     }
 
     private fun ByteArray.base64(): String {

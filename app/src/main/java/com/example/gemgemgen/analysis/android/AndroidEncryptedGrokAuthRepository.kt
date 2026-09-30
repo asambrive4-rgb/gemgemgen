@@ -4,7 +4,6 @@ package com.example.gemgemgen.analysis.android
 import android.content.Context
 import com.example.gemgemgen.analysis.usecase.GrokAuthRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -19,13 +18,12 @@ class AndroidEncryptedGrokAuthRepository(
         Context.MODE_PRIVATE
     )
     private val cipher = AndroidKeyStoreCipher(KEY_ALIAS)
-    private val json = Json { ignoreUnknownKeys = true }
 
     override fun loadSession(): GrokAuthSession? {
         val encrypted = prefs.getString(KEY_SESSION, null) ?: return null
         val plain = cipher.decrypt(encrypted) ?: return null
         return runCatching {
-            json.parseToJsonElement(plain).jsonObject.toSessionOrNull()
+            analysisJson.parseToJsonElement(plain).jsonObject.toSessionOrNull()
         }.getOrNull()
     }
 

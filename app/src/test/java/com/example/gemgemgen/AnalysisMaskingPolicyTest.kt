@@ -5,22 +5,13 @@ import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisDirectionInput
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
-import com.example.gemgemgen.analysis.domain.MaskingAnalysisCacheSnapshot
+import com.example.gemgemgen.analysis.domain.AnalysisReportCache
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AnalysisMaskingPolicyTest {
-
-    private data class FakeCacheSnapshot(
-        override val sourcePrompt: String,
-        override val category: AnalysisCategory,
-        override val targetSegment: AnalysisTargetSegment? = null,
-        override val selectedHints: List<String> = emptyList(),
-        override val customHint: String = ""
-    ) : MaskingAnalysisCacheSnapshot
 
     private val dummyDirections = listOf(
         AnalysisDirection(
@@ -68,7 +59,7 @@ class AnalysisMaskingPolicyTest {
 
     @Test
     fun shouldAnalyzeMasking_returnsFalse_whenAllFieldsMatch() {
-        val cache = FakeCacheSnapshot(
+        val cache = AnalysisReportCache(
             sourcePrompt = "test prompt",
             category = AnalysisCategory.WOMEN_HAIRSTYLE,
             targetSegment = null,
@@ -88,7 +79,7 @@ class AnalysisMaskingPolicyTest {
 
     @Test
     fun shouldAnalyzeMasking_returnsTrue_whenSourceChanges() {
-        val cache = FakeCacheSnapshot(
+        val cache = AnalysisReportCache(
             sourcePrompt = "old prompt",
             category = AnalysisCategory.WOMEN_HAIRSTYLE
         )
@@ -105,7 +96,7 @@ class AnalysisMaskingPolicyTest {
 
     @Test
     fun shouldAnalyzeMasking_returnsTrue_whenHintsOrCustomHintChange() {
-        val cache = FakeCacheSnapshot(
+        val cache = AnalysisReportCache(
             sourcePrompt = "prompt",
             category = AnalysisCategory.WOMEN_HAIRSTYLE,
             selectedHints = listOf("a"),
@@ -169,7 +160,7 @@ class AnalysisMaskingPolicyTest {
 
     @Test
     fun shouldAnalyzeMaskingFromHints_returnsFalse_whenMatchingCache() {
-        val cache = FakeCacheSnapshot(
+        val cache = AnalysisReportCache(
             sourcePrompt = "test prompt",
             category = AnalysisCategory.WOMEN_HAIRSTYLE,
             targetSegment = null,
@@ -190,7 +181,7 @@ class AnalysisMaskingPolicyTest {
 
     @Test
     fun shouldAnalyzeMaskingFromHints_returnsTrue_whenDirectionSelectionChanges() {
-        val cache = FakeCacheSnapshot(
+        val cache = AnalysisReportCache(
             sourcePrompt = "test prompt",
             category = AnalysisCategory.WOMEN_HAIRSTYLE,
             targetSegment = null,

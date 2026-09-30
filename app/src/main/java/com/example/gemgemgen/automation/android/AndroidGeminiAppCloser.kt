@@ -1,4 +1,4 @@
-// 역할: 최근 앱 목록을 통해 Gemini 앱 또는 자기 앱(GemGemGen) 프로세스를 종료합니다.
+// 역할: 최근 앱 목록을 통해 Gemini 앱을 재시작하거나 자기 앱(GemGemGen) 프로세스를 종료합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -8,8 +8,7 @@ import com.example.gemgemgen.automation.usecase.GeminiAppCloser
 import com.example.gemgemgen.core.AppDefaults
 
 class AndroidGeminiAppCloser(
-    private val context: Context,
-    private val relaunchAfterClose: Boolean = true
+    private val context: Context
 ) : GeminiAppCloser {
     override suspend fun closeGeminiApp(): CloseGeminiAppResult {
         val service = GeminiAccessibilityService.activeService
@@ -17,7 +16,6 @@ class AndroidGeminiAppCloser(
 
         val result = service.closeGeminiFromRecents()
         if (result !is CloseGeminiAppResult.Success) return result
-        if (!relaunchAfterClose) return result
 
         return if (launchGemini()) {
             result

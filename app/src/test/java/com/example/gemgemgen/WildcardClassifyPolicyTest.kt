@@ -1,179 +1,148 @@
-// 역할: 와일드카드 AI 분류 실행 및 저장 조건에 대한 도메인 정책 비즈니스 규칙을 검증합니다.
+// 역할: 와일드카드 AI 분류 실행 및 저장 조건에 대한 UI/도메인 상태 규칙을 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.wildcard.domain.WildcardClassifyPolicy
+import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
+import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
+import com.example.gemgemgen.wildcard.domain.WildcardTextFile
+import com.example.gemgemgen.wildcard.ui.WildcardClassifyUiState
+import com.example.gemgemgen.wildcard.ui.WildcardUiState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WildcardClassifyPolicyTest {
 
+    private val sampleFile = WildcardTextFile("hair.txt", "hair.txt")
+    private val samplePreview = WildcardClassifyResult(
+        criteria = "분위기별",
+        sourceLines = listOf("white hair"),
+        groups = emptyList()
+    )
+
+    private fun uiStateForRequest(
+        canModifyFiles: Boolean = true,
+        hasSelectedFile: Boolean = true,
+        hasSelectableLines: Boolean = true,
+        isFileOperationInProgress: Boolean = false,
+        isLineSelectionMode: Boolean = false,
+        isClassifyBusy: Boolean = false
+    ): WildcardUiState {
+        return WildcardUiState(
+            canModifyFiles = canModifyFiles,
+            editor = WildcardEditorSession(
+                selectedFile = if (hasSelectedFile) sampleFile else null,
+                editingText = if (hasSelectableLines) "white hair\nblack hair" else "   "
+            ),
+            isFileOperationInProgress = isFileOperationInProgress,
+            isLineSelectionMode = isLineSelectionMode,
+            classify = WildcardClassifyUiState(isClassifying = isClassifyBusy)
+        )
+    }
+
     // --- canRequestClassify 테스트 ---
 
     @Test
     fun canRequestClassify_allConditionsMet_returnsTrue() {
-        val result = WildcardClassifyPolicy.canRequestClassify(
-            canModifyFiles = true,
-            hasSelectedFile = true,
-            hasSelectableLines = true,
-            isFileOperationInProgress = false,
-            isLineSelectionMode = false,
-            isClassifyBusy = false
-        )
-        assertTrue(result)
+        assertTrue(uiStateForRequest().canRequestClassify)
     }
 
     @Test
     fun canRequestClassify_withoutModifyPermission_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRequestClassify(
-            canModifyFiles = false,
-            hasSelectedFile = true,
-            hasSelectableLines = true,
-            isFileOperationInProgress = false,
-            isLineSelectionMode = false,
-            isClassifyBusy = false
-        )
-        assertFalse(result)
+        assertFalse(uiStateForRequest(canModifyFiles = false).canRequestClassify)
     }
 
     @Test
     fun canRequestClassify_withoutSelectedFile_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRequestClassify(
-            canModifyFiles = true,
-            hasSelectedFile = false,
-            hasSelectableLines = true,
-            isFileOperationInProgress = false,
-            isLineSelectionMode = false,
-            isClassifyBusy = false
-        )
-        assertFalse(result)
+        assertFalse(uiStateForRequest(hasSelectedFile = false).canRequestClassify)
     }
 
     @Test
     fun canRequestClassify_withEmptyLines_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRequestClassify(
-            canModifyFiles = true,
-            hasSelectedFile = true,
-            hasSelectableLines = false,
-            isFileOperationInProgress = false,
-            isLineSelectionMode = false,
-            isClassifyBusy = false
-        )
-        assertFalse(result)
+        assertFalse(uiStateForRequest(hasSelectableLines = false).canRequestClassify)
     }
 
     @Test
     fun canRequestClassify_whenFileOperationInProgress_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRequestClassify(
-            canModifyFiles = true,
-            hasSelectedFile = true,
-            hasSelectableLines = true,
-            isFileOperationInProgress = true,
-            isLineSelectionMode = false,
-            isClassifyBusy = false
-        )
-        assertFalse(result)
+        assertFalse(uiStateForRequest(isFileOperationInProgress = true).canRequestClassify)
     }
 
     @Test
     fun canRequestClassify_whenLineSelectionMode_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRequestClassify(
-            canModifyFiles = true,
-            hasSelectedFile = true,
-            hasSelectableLines = true,
-            isFileOperationInProgress = false,
-            isLineSelectionMode = true,
-            isClassifyBusy = false
-        )
-        assertFalse(result)
+        assertFalse(uiStateForRequest(isLineSelectionMode = true).canRequestClassify)
     }
 
     @Test
     fun canRequestClassify_whenClassifyBusy_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRequestClassify(
-            canModifyFiles = true,
-            hasSelectedFile = true,
-            hasSelectableLines = true,
-            isFileOperationInProgress = false,
-            isLineSelectionMode = false,
-            isClassifyBusy = true
-        )
-        assertFalse(result)
+        assertFalse(uiStateForRequest(isClassifyBusy = true).canRequestClassify)
     }
 
     // --- canRunClassify 테스트 ---
 
     @Test
     fun canRunClassify_withValidCriteriaAndDialogOpened_returnsTrue() {
-        val result = WildcardClassifyPolicy.canRunClassify(
-            criteria = "분위기별",
+        val state = WildcardClassifyUiState(
+            classifyCriteria = "분위기별",
             isClassifying = false,
-            isFileOperationInProgress = false,
-            showCriteriaDialog = true,
-            hasPreview = false
+            showClassifyCriteriaDialog = true,
+            classifyPreview = null
         )
-        assertTrue(result)
+        assertTrue(state.canRunClassify(isFileOperationInProgress = false))
     }
 
     @Test
     fun canRunClassify_withValidCriteriaAndPreviewPresent_returnsTrue() {
-        val result = WildcardClassifyPolicy.canRunClassify(
-            criteria = "분위기별",
+        val state = WildcardClassifyUiState(
+            classifyCriteria = "분위기별",
             isClassifying = false,
-            isFileOperationInProgress = false,
-            showCriteriaDialog = false,
-            hasPreview = true
+            showClassifyCriteriaDialog = false,
+            classifyPreview = samplePreview
         )
-        assertTrue(result)
+        assertTrue(state.canRunClassify(isFileOperationInProgress = false))
     }
 
     @Test
     fun canRunClassify_withBlankCriteria_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRunClassify(
-            criteria = "   ",
+        val state = WildcardClassifyUiState(
+            classifyCriteria = "   ",
             isClassifying = false,
-            isFileOperationInProgress = false,
-            showCriteriaDialog = true,
-            hasPreview = false
+            showClassifyCriteriaDialog = true,
+            classifyPreview = null
         )
-        assertFalse(result)
+        assertFalse(state.canRunClassify(isFileOperationInProgress = false))
     }
 
     @Test
     fun canRunClassify_whenClassifying_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRunClassify(
-            criteria = "분위기별",
+        val state = WildcardClassifyUiState(
+            classifyCriteria = "분위기별",
             isClassifying = true,
-            isFileOperationInProgress = false,
-            showCriteriaDialog = true,
-            hasPreview = false
+            showClassifyCriteriaDialog = true,
+            classifyPreview = null
         )
-        assertFalse(result)
+        assertFalse(state.canRunClassify(isFileOperationInProgress = false))
     }
 
     @Test
     fun canRunClassify_whenFileOperationInProgress_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRunClassify(
-            criteria = "분위기별",
+        val state = WildcardClassifyUiState(
+            classifyCriteria = "분위기별",
             isClassifying = false,
-            isFileOperationInProgress = true,
-            showCriteriaDialog = true,
-            hasPreview = false
+            showClassifyCriteriaDialog = true,
+            classifyPreview = null
         )
-        assertFalse(result)
+        assertFalse(state.canRunClassify(isFileOperationInProgress = true))
     }
 
     @Test
     fun canRunClassify_whenNeitherDialogNorPreview_returnsFalse() {
-        val result = WildcardClassifyPolicy.canRunClassify(
-            criteria = "분위기별",
+        val state = WildcardClassifyUiState(
+            classifyCriteria = "분위기별",
             isClassifying = false,
-            isFileOperationInProgress = false,
-            showCriteriaDialog = false,
-            hasPreview = false
+            showClassifyCriteriaDialog = false,
+            classifyPreview = null
         )
-        assertFalse(result)
+        assertFalse(state.canRunClassify(isFileOperationInProgress = false))
     }
 
     // --- canSaveClassifyResult 테스트 ---
@@ -187,123 +156,83 @@ class WildcardClassifyPolicyTest {
                 fileNameInput = "light_hair"
             )
         )
-        val result = WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = true,
-            saveEntries = entries,
-            canModifyFiles = true,
+        val state = WildcardClassifyUiState(
+            classifyPreview = samplePreview,
+            classifySaveEntries = entries,
             isClassifying = false,
-            isFileOperationInProgress = false,
-            hasOverwriteConflicts = false
+            classifyOverwriteConflicts = emptyList()
         )
-        assertTrue(result)
+        assertTrue(state.canSaveClassifyResult(canModifyFiles = true, isFileOperationInProgress = false))
     }
 
     @Test
     fun canSaveClassifyResult_withoutPreview_returnsFalse() {
-        val entries = listOf(
-            WildcardClassifySaveEntry("밝은색", listOf("white"), "light")
+        val entries = listOf(WildcardClassifySaveEntry("밝은색", listOf("white"), "light"))
+        val state = WildcardClassifyUiState(
+            classifyPreview = null,
+            classifySaveEntries = entries
         )
-        val result = WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = false,
-            saveEntries = entries,
-            canModifyFiles = true,
-            isClassifying = false,
-            isFileOperationInProgress = false,
-            hasOverwriteConflicts = false
-        )
-        assertFalse(result)
+        assertFalse(state.canSaveClassifyResult(canModifyFiles = true, isFileOperationInProgress = false))
     }
 
     @Test
     fun canSaveClassifyResult_withEmptyEntries_returnsFalse() {
-        val result = WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = true,
-            saveEntries = emptyList(),
-            canModifyFiles = true,
-            isClassifying = false,
-            isFileOperationInProgress = false,
-            hasOverwriteConflicts = false
+        val state = WildcardClassifyUiState(
+            classifyPreview = samplePreview,
+            classifySaveEntries = emptyList()
         )
-        assertFalse(result)
+        assertFalse(state.canSaveClassifyResult(canModifyFiles = true, isFileOperationInProgress = false))
     }
 
     @Test
     fun canSaveClassifyResult_withInvalidFileName_returnsFalse() {
-        val entries = listOf(
-            WildcardClassifySaveEntry("밝은색", listOf("white"), "   ")
+        val entries = listOf(WildcardClassifySaveEntry("밝은색", listOf("white"), "   "))
+        val state = WildcardClassifyUiState(
+            classifyPreview = samplePreview,
+            classifySaveEntries = entries
         )
-        val result = WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = true,
-            saveEntries = entries,
-            canModifyFiles = true,
-            isClassifying = false,
-            isFileOperationInProgress = false,
-            hasOverwriteConflicts = false
-        )
-        assertFalse(result)
+        assertFalse(state.canSaveClassifyResult(canModifyFiles = true, isFileOperationInProgress = false))
     }
 
     @Test
     fun canSaveClassifyResult_withoutModifyPermission_returnsFalse() {
-        val entries = listOf(
-            WildcardClassifySaveEntry("밝은색", listOf("white"), "light")
+        val entries = listOf(WildcardClassifySaveEntry("밝은색", listOf("white"), "light"))
+        val state = WildcardClassifyUiState(
+            classifyPreview = samplePreview,
+            classifySaveEntries = entries
         )
-        val result = WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = true,
-            saveEntries = entries,
-            canModifyFiles = false,
-            isClassifying = false,
-            isFileOperationInProgress = false,
-            hasOverwriteConflicts = false
-        )
-        assertFalse(result)
+        assertFalse(state.canSaveClassifyResult(canModifyFiles = false, isFileOperationInProgress = false))
     }
 
     @Test
     fun canSaveClassifyResult_whenClassifying_returnsFalse() {
-        val entries = listOf(
-            WildcardClassifySaveEntry("밝은색", listOf("white"), "light")
+        val entries = listOf(WildcardClassifySaveEntry("밝은색", listOf("white"), "light"))
+        val state = WildcardClassifyUiState(
+            classifyPreview = samplePreview,
+            classifySaveEntries = entries,
+            isClassifying = true
         )
-        val result = WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = true,
-            saveEntries = entries,
-            canModifyFiles = true,
-            isClassifying = true,
-            isFileOperationInProgress = false,
-            hasOverwriteConflicts = false
-        )
-        assertFalse(result)
+        assertFalse(state.canSaveClassifyResult(canModifyFiles = true, isFileOperationInProgress = false))
     }
 
     @Test
     fun canSaveClassifyResult_whenFileOperationInProgress_returnsFalse() {
-        val entries = listOf(
-            WildcardClassifySaveEntry("밝은색", listOf("white"), "light")
+        val entries = listOf(WildcardClassifySaveEntry("밝은색", listOf("white"), "light"))
+        val state = WildcardClassifyUiState(
+            classifyPreview = samplePreview,
+            classifySaveEntries = entries
         )
-        val result = WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = true,
-            saveEntries = entries,
-            canModifyFiles = true,
-            isClassifying = false,
-            isFileOperationInProgress = true,
-            hasOverwriteConflicts = false
-        )
-        assertFalse(result)
+        assertFalse(state.canSaveClassifyResult(canModifyFiles = true, isFileOperationInProgress = true))
     }
 
     @Test
     fun canSaveClassifyResult_withOverwriteConflicts_returnsFalse() {
-        val entries = listOf(
-            WildcardClassifySaveEntry("밝은색", listOf("white"), "light")
+        val entries = listOf(WildcardClassifySaveEntry("밝은색", listOf("white"), "light"))
+        val state = WildcardClassifyUiState(
+            classifyPreview = samplePreview,
+            classifySaveEntries = entries,
+            classifyOverwriteConflicts = listOf("light.txt")
         )
-        val result = WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = true,
-            saveEntries = entries,
-            canModifyFiles = true,
-            isClassifying = false,
-            isFileOperationInProgress = false,
-            hasOverwriteConflicts = true
-        )
-        assertFalse(result)
+        assertFalse(state.canSaveClassifyResult(canModifyFiles = true, isFileOperationInProgress = false))
     }
 }

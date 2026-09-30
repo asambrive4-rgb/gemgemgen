@@ -729,8 +729,7 @@ class AutomationViewModelTest {
             override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
             override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
             override suspend fun send(
-                request: com.example.gemgemgen.remote.domain.RemoteAutomationRequest,
-                onStateChange: (AutomationRunState) -> Unit
+                request: com.example.gemgemgen.remote.domain.RemoteAutomationRequest
             ) = Unit
             override fun forceStop(requestId: String?) = Unit
             override suspend fun cleanMemory(): RemoteActionResult {
@@ -1485,7 +1484,7 @@ class AutomationViewModelTest {
         cleanMemoryGateway: MemoryCleanupGateway? = null,
         promptHistoryStore: PromptHistoryStore? = null,
         manageRemoteAutomation: ManageRemoteAutomationUseCase? = null,
-        soundAlertGateway: SoundAlertGateway = NoOpSoundAlertGateway,
+        soundAlertGateway: SoundAlertGateway = SoundAlertGateway {},
         runVariationPrompt: RunVariationPromptUseCase? = null,
         wildcardFileRepository: WildcardFileRepository? = null,
         promptSnippetRepository: PromptSnippetRepository? = null,
@@ -1493,7 +1492,7 @@ class AutomationViewModelTest {
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): AutomationViewModel {
         val resolvedRemote = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
-            NoOpRemoteAutomationGateway()
+            FakeRemoteGateway()
         )
         val resolvedMaintenance = appMaintenance ?: AppMaintenanceUseCase(
             geminiRestartCloser = closeGeminiCloser ?: FakeGeminiAppCloser(),
@@ -1733,19 +1732,44 @@ class AutomationViewModelTest {
             return disconnectResult
         }
 
-        override suspend fun send(
-            request: RemoteAutomationRequest,
-            onStateChange: (AutomationRunState) -> Unit
-        ) {
-            lastStateCallback = onStateChange
-            sendAction?.invoke(request, onStateChange)
+        override suspend fun send(request: RemoteAutomationRequest) {
+            val emitState: (AutomationRunState) -> Unit = { state ->
+                status.value = status.value.copy(automationState = state)
+            }
+            lastStateCallback = emitState
+            sendAction?.invoke(request, emitState)
         }
 
         override fun forceStop(requestId: String?) {
+            status.value = status.value.copy(automationState = AutomationRunState.Stopped)
             lastStateCallback?.invoke(AutomationRunState.Stopped)
         }
 
         override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
+    }
+
+    @Test
+    fun refreshStatus_doesNotRescanWildcardFiles_whileRefreshAutocompleteCandidatesDoes() {
+        var listFilesCount = 0
+        val wildcardRepository = object : WildcardFileRepository {
+            override fun listFiles(): List<WildcardTextFile> {
+                listFilesCount += 1
+                return listOf(WildcardTextFile(id = "장소.txt", fileName = "장소.txt"))
+            }
+            override fun readFile(file: WildcardTextFile): String = ""
+            override fun createFile(fileName: String): WildcardTextFile = WildcardTextFile(id = fileName, fileName = fileName)
+            override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile = file.copy(fileName = newName)
+            override fun writeFile(file: WildcardTextFile, text: String) = Unit
+            override fun deleteFile(file: WildcardTextFile) = Unit
+        }
+        val viewModel = viewModel(wildcardFileRepository = wildcardRepository)
+        assertEquals(1, listFilesCount)
+
+        viewModel.refreshStatus()
+        assertEquals(1, listFilesCount)
+
+        viewModel.refreshAutocompleteCandidates()
+        assertEquals(2, listFilesCount)
     }
 
     @Test

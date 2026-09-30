@@ -42,9 +42,9 @@ sealed interface MaintenanceResult {
 }
 
 class AppMaintenanceUseCase(
-    private val geminiRestartCloser: GeminiAppCloser,
+    private val geminiRestartCloser: GeminiAppCloser = GeminiAppCloser { CloseGeminiAppResult.AccessibilityUnavailable },
     private val selfAppCloser: GeminiAppCloser = geminiRestartCloser,
-    private val memoryCleanupGateway: MemoryCleanupGateway,
+    private val memoryCleanupGateway: MemoryCleanupGateway = MemoryCleanupGateway { MemoryCleanupResult.AccessibilityUnavailable },
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase? = null
 ) {
     suspend fun restartGemini(): MaintenanceResult =

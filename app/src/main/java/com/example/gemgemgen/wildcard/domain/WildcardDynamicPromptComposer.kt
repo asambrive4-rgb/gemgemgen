@@ -6,11 +6,6 @@ package com.example.gemgemgen.wildcard.domain
  * UI/파일 I/O 에 의존하지 않는 순수 규칙.
  */
 object WildcardDynamicPromptComposer {
-    /** 편집 중 텍스트에서 선택 가능한 줄 (trim, 빈 줄 제외, 위→아래 순서). */
-    fun selectableLines(editingText: String): List<String> {
-        return WildcardFileParser.parseItems(editingText)
-    }
-
     /**
      * [selectedIndices] 는 [allLines] 인덱스. 파일 순서를 유지하도록 정렬한 뒤 조립한다.
      */

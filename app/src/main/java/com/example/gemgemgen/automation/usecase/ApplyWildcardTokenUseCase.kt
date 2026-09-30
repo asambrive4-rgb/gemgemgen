@@ -5,7 +5,7 @@ import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 
 /**
  * 추천 칩 클릭 시 커서 위치의 단어를 해당 와일드카드 토큰 또는 상용구 문구로 치환하는 유스케이스.
- * 차단 상태, 문단 모드, 드래그 선택 상태, 토큰 유효성 및 치환 결과를 철저히 검증하여 안전성을 보장합니다.
+ * 문단 모드, 드래그 선택 상태, 토큰 유효성 및 치환 결과를 철저히 검증하여 안전성을 보장합니다.
  */
 class ApplyWildcardTokenUseCase {
 
@@ -20,10 +20,9 @@ class ApplyWildcardTokenUseCase {
         selectionEnd: Int,
         candidate: WildcardTokenAutocomplete.Candidate,
         candidates: List<WildcardTokenAutocomplete.Candidate>,
-        isParagraphSelectionMode: Boolean = false,
-        isBlocked: Boolean = false
+        isParagraphSelectionMode: Boolean = false
     ): Result? {
-        if (isBlocked || isParagraphSelectionMode) return null
+        if (isParagraphSelectionMode) return null
         if (candidate.token.isBlank()) return null
         if (selectionStart != selectionEnd) return null // 드래그 선택 중에는 치환 불가
         if (candidates.none { it.token == candidate.token }) return null

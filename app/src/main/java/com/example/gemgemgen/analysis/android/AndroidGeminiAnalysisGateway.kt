@@ -8,7 +8,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import kotlinx.coroutines.delay
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -24,7 +23,6 @@ class AndroidGeminiAnalysisGateway(
     private val maxRetries: Int = DEFAULT_MAX_RETRIES,
     private val initialRetryDelayMillis: Long = DEFAULT_INITIAL_RETRY_DELAY_MILLIS
 ) : AnalysisAiGateway {
-    private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun analyze(
         apiKey: String,
@@ -98,27 +96,20 @@ class AndroidGeminiAnalysisGateway(
             userPrompt = userPrompt,
             responseSchema = responseSchema
         )
-        return try {
-            writeRequestBody(connection, body.toString())
+        val (responseCode, responseText) = executeHttpRequest(connection, body.toString())
 
-            val responseCode = connection.responseCode
-            val responseText = readResponseBody(connection, responseCode)
-
-            if (responseCode !in 200..299) {
-                val isRetryable = responseCode == 503 ||
-                    responseCode == 502 ||
-                    responseCode == 504 ||
-                    (responseCode in 500..599 && responseText.contains("overloaded", ignoreCase = true))
-                if (isRetryable) {
-                    throw RetryableServerException(responseCode, responseText)
-                }
-                throw AnalysisException(formatHttpError(responseCode, responseText, modelId))
+        if (responseCode !in 200..299) {
+            val isRetryable = responseCode == 503 ||
+                responseCode == 502 ||
+                responseCode == 504 ||
+                (responseCode in 500..599 && responseText.contains("overloaded", ignoreCase = true))
+            if (isRetryable) {
+                throw RetryableServerException(responseCode, responseText)
             }
-
-            extractCandidateText(responseText)
-        } finally {
-            connection.disconnect()
+            throw AnalysisException(formatHttpError(responseCode, responseText, modelId))
         }
+
+        return extractCandidateText(responseText)
     }
 
     private fun buildRequestBody(
@@ -165,7 +156,7 @@ class AndroidGeminiAnalysisGateway(
     }
 
     internal fun extractCandidateText(responseText: String): String {
-        val root = json.parseToJsonElement(responseText).jsonObject
+        val root = analysisJson.parseToJsonElement(responseText).jsonObject
 
         // 1. 프롬프트 단계 차단(promptFeedback) 확인
         val promptFeedback = root["promptFeedback"] as? JsonObject
@@ -209,7 +200,7 @@ class AndroidGeminiAnalysisGateway(
     }
 
     internal fun formatHttpError(responseCode: Int, responseText: String, modelId: String): String {
-        val rawMessage = extractJsonErrorMessage(json, responseText)
+        val rawMessage = extractJsonErrorMessage(responseText)
         val lower = rawMessage.lowercase()
         return when {
             responseCode == 400 && (lower.contains("api key") || lower.contains("api_key")) ->

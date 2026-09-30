@@ -20,19 +20,17 @@ class VariationStartPolicyTest {
     @Test
     fun canRun_whenAllConditionsMet_returnsTrueAndNoReason() {
         val canRun = AutomationExecutionPolicy.canRunVariation(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment,
             isRunning = false,
             isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true,
             isVariationRunning = false
         )
         val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment,
             isRunning = false,
             isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true,
             isVariationRunning = false
         )
 
@@ -40,7 +38,7 @@ class VariationStartPolicyTest {
         assertNull(reason)
         assertTrue(
             AutomationExecutionPolicy.canInteractWithVariation(
-                isReceiverMode = false,
+                mode = AutomationMode.NORMAL,
                 isRunning = false,
                 isMaintenanceBusy = false,
                 isVariationRunning = false
@@ -51,25 +49,23 @@ class VariationStartPolicyTest {
     @Test
     fun receiverMode_rejectsWithReceiverModeMessage() {
         val canRun = AutomationExecutionPolicy.canRunVariation(
-            isReceiverMode = true,
+            mode = AutomationMode.RECEIVER,
+            environmentStatus = readyEnvironment,
             isRunning = false,
-            isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true
+            isMaintenanceBusy = false
         )
         val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = true,
+            mode = AutomationMode.RECEIVER,
+            environmentStatus = readyEnvironment,
             isRunning = false,
-            isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true
+            isMaintenanceBusy = false
         )
 
         assertFalse(canRun)
         assertEquals("수신 모드에서는 변주를 실행할 수 없습니다.", reason)
         assertFalse(
             AutomationExecutionPolicy.canInteractWithVariation(
-                isReceiverMode = true,
+                mode = AutomationMode.RECEIVER,
                 isRunning = false,
                 isMaintenanceBusy = false
             )
@@ -79,25 +75,23 @@ class VariationStartPolicyTest {
     @Test
     fun runningAutomation_rejectsWithAutomationRunningMessage() {
         val canRun = AutomationExecutionPolicy.canRunVariation(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment,
             isRunning = true,
-            isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true
+            isMaintenanceBusy = false
         )
         val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment,
             isRunning = true,
-            isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true
+            isMaintenanceBusy = false
         )
 
         assertFalse(canRun)
         assertEquals("자동화 실행 중에는 변주를 실행할 수 없습니다.", reason)
         assertFalse(
             AutomationExecutionPolicy.canInteractWithVariation(
-                isReceiverMode = false,
+                mode = AutomationMode.NORMAL,
                 isRunning = true,
                 isMaintenanceBusy = false
             )
@@ -107,19 +101,17 @@ class VariationStartPolicyTest {
     @Test
     fun variationRunning_rejectsWithVariationRunningMessage() {
         val canRun = AutomationExecutionPolicy.canRunVariation(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment,
             isRunning = false,
             isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true,
             isVariationRunning = true
         )
         val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment,
             isRunning = false,
             isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true,
             isVariationRunning = true
         )
 
@@ -127,7 +119,7 @@ class VariationStartPolicyTest {
         assertEquals("변주 자동화가 이미 실행 중입니다.", reason)
         assertFalse(
             AutomationExecutionPolicy.canInteractWithVariation(
-                isReceiverMode = false,
+                mode = AutomationMode.NORMAL,
                 isRunning = false,
                 isMaintenanceBusy = false,
                 isVariationRunning = true
@@ -138,25 +130,23 @@ class VariationStartPolicyTest {
     @Test
     fun maintenanceBusy_rejectsWithMaintenanceBusyMessage() {
         val canRun = AutomationExecutionPolicy.canRunVariation(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment,
             isRunning = false,
-            isMaintenanceBusy = true,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true
+            isMaintenanceBusy = true
         )
         val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = readyEnvironment,
             isRunning = false,
-            isMaintenanceBusy = true,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = true
+            isMaintenanceBusy = true
         )
 
         assertFalse(canRun)
         assertEquals("유지보수 작업이 진행 중입니다.", reason)
         assertFalse(
             AutomationExecutionPolicy.canInteractWithVariation(
-                isReceiverMode = false,
+                mode = AutomationMode.NORMAL,
                 isRunning = false,
                 isMaintenanceBusy = true
             )
@@ -165,19 +155,18 @@ class VariationStartPolicyTest {
 
     @Test
     fun geminiNotInstalled_rejectsWithGeminiNotInstalledMessage() {
+        val envWithoutGemini = readyEnvironment.copy(isGeminiInstalled = false)
         val canRun = AutomationExecutionPolicy.canRunVariation(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = envWithoutGemini,
             isRunning = false,
-            isMaintenanceBusy = false,
-            isGeminiInstalled = false,
-            isAccessibilityServiceEnabled = true
+            isMaintenanceBusy = false
         )
         val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = envWithoutGemini,
             isRunning = false,
-            isMaintenanceBusy = false,
-            isGeminiInstalled = false,
-            isAccessibilityServiceEnabled = true
+            isMaintenanceBusy = false
         )
 
         assertFalse(canRun)
@@ -185,7 +174,7 @@ class VariationStartPolicyTest {
         // Gemini 미설치여도 다른 실행/유지보수 상태가 아니면 인터랙트(버튼 노출 등)는 가능
         assertTrue(
             AutomationExecutionPolicy.canInteractWithVariation(
-                isReceiverMode = false,
+                mode = AutomationMode.NORMAL,
                 isRunning = false,
                 isMaintenanceBusy = false
             )
@@ -194,74 +183,25 @@ class VariationStartPolicyTest {
 
     @Test
     fun accessibilityDisabled_rejectsWithAccessibilityDisabledMessage() {
+        val envWithoutAccessibility = readyEnvironment.copy(isAccessibilityServiceEnabled = false)
         val canRun = AutomationExecutionPolicy.canRunVariation(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = envWithoutAccessibility,
             isRunning = false,
-            isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = false
+            isMaintenanceBusy = false
         )
         val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = false,
+            mode = AutomationMode.NORMAL,
+            environmentStatus = envWithoutAccessibility,
             isRunning = false,
-            isMaintenanceBusy = false,
-            isGeminiInstalled = true,
-            isAccessibilityServiceEnabled = false
+            isMaintenanceBusy = false
         )
 
         assertFalse(canRun)
         assertEquals("접근성 서비스를 먼저 켜주세요.", reason)
         assertTrue(
             AutomationExecutionPolicy.canInteractWithVariation(
-                isReceiverMode = false,
-                isRunning = false,
-                isMaintenanceBusy = false
-            )
-        )
-    }
-
-    @Test
-    fun overloadsWithModeAndEnvironmentStatus_workIdentically() {
-        val readyStatus = readyEnvironment
-        val normalCanRun = AutomationExecutionPolicy.canRunVariation(
-            mode = AutomationMode.NORMAL,
-            environmentStatus = readyStatus,
-            isRunning = false,
-            isMaintenanceBusy = false
-        )
-        assertTrue(normalCanRun)
-        assertNull(
-            AutomationExecutionPolicy.variationUnavailableReason(
                 mode = AutomationMode.NORMAL,
-                environmentStatus = readyStatus,
-                isRunning = false,
-                isMaintenanceBusy = false
-            )
-        )
-
-        val receiverCanRun = AutomationExecutionPolicy.canRunVariation(
-            mode = AutomationMode.RECEIVER,
-            environmentStatus = readyStatus,
-            isRunning = false,
-            isMaintenanceBusy = false
-        )
-        assertFalse(receiverCanRun)
-        assertEquals(
-            "수신 모드에서는 변주를 실행할 수 없습니다.",
-            AutomationExecutionPolicy.variationUnavailableReason(
-                mode = AutomationMode.RECEIVER,
-                environmentStatus = readyStatus,
-                isRunning = false,
-                isMaintenanceBusy = false
-            )
-        )
-
-        val unreadyEnv = readyStatus.copy(isGeminiInstalled = false)
-        assertEquals(
-            "Gemini 앱을 먼저 설치해주세요.",
-            AutomationExecutionPolicy.variationUnavailableReason(
-                mode = AutomationMode.NORMAL,
-                environmentStatus = unreadyEnv,
                 isRunning = false,
                 isMaintenanceBusy = false
             )
@@ -270,24 +210,30 @@ class VariationStartPolicyTest {
 
     @Test
     fun priorityOrder_receiverModeHasPrecedenceOverOtherFailures() {
-        val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = true,
-            isRunning = true,
-            isMaintenanceBusy = true,
+        val unreadyEnv = EnvironmentStatus(
             isGeminiInstalled = false,
             isAccessibilityServiceEnabled = false
+        )
+        val reason = AutomationExecutionPolicy.variationUnavailableReason(
+            mode = AutomationMode.RECEIVER,
+            environmentStatus = unreadyEnv,
+            isRunning = true,
+            isMaintenanceBusy = true
         )
         assertEquals("수신 모드에서는 변주를 실행할 수 없습니다.", reason)
     }
 
     @Test
     fun priorityOrder_runningHasPrecedenceOverGeminiNotInstalled() {
-        val reason = AutomationExecutionPolicy.variationUnavailableReason(
-            isReceiverMode = false,
-            isRunning = true,
-            isMaintenanceBusy = false,
+        val unreadyEnv = EnvironmentStatus(
             isGeminiInstalled = false,
             isAccessibilityServiceEnabled = false
+        )
+        val reason = AutomationExecutionPolicy.variationUnavailableReason(
+            mode = AutomationMode.NORMAL,
+            environmentStatus = unreadyEnv,
+            isRunning = true,
+            isMaintenanceBusy = false
         )
         assertEquals("자동화 실행 중에는 변주를 실행할 수 없습니다.", reason)
     }

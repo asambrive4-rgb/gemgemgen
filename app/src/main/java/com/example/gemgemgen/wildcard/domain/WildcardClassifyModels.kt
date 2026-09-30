@@ -39,7 +39,7 @@ object WildcardClassifyFileName {
      * 그룹명 → 기본 파일명 입력값 (확장자 없는 stem 권장 UI용).
      */
     fun suggestedInputFromGroupName(name: String): String {
-        val fileName = fromGroupName(name) ?: return name.trim().filterNot { it.isWhitespace() }
+        val fileName = normalizeUserInput(name) ?: return name.trim().filterNot { it.isWhitespace() }
         return fileName.removeSuffix(".txt")
     }
 
@@ -47,8 +47,6 @@ object WildcardClassifyFileName {
      * 그룹명 또는 사용자 입력 → `이름.txt`.
      * 공백 제거, 경로 위험 문자 치환. 비면 null.
      */
-    fun fromGroupName(name: String): String? = normalizeUserInput(name)
-
     fun normalizeUserInput(input: String): String? {
         val withoutExt = input.trim().removeSuffix(".txt").removeSuffix(".TXT")
         val cleaned = withoutExt
@@ -65,23 +63,32 @@ object WildcardClassifyFileName {
         return WildcardFileName.normalize(cleaned)
     }
 
+    fun deduplicateName(
+        baseName: String,
+        usedNamesLowercase: MutableSet<String>,
+        extension: String = ""
+    ): String {
+        val stem = if (extension.isNotEmpty()) baseName.removeSuffix(extension) else baseName
+        var candidate = "$stem$extension"
+        var suffix = 2
+        while (!usedNamesLowercase.add(candidate.lowercase())) {
+            candidate = "${stem}_$suffix$extension"
+            suffix++
+        }
+        return candidate
+    }
+
     fun buildSaveEntries(groups: List<WildcardClassifyGroup>): List<WildcardClassifySaveEntry> {
         val used = linkedSetOf<String>()
         return groups.mapNotNull { group ->
             if (group.items.isEmpty()) return@mapNotNull null
             if (group.name.trim() == UNCLASSIFIED_GROUP_NAME) return@mapNotNull null
 
-            var stem = suggestedInputFromGroupName(group.name).ifBlank { "group" }
-            var candidate = stem
-            var suffix = 2
-            while (!used.add(candidate.lowercase())) {
-                candidate = "${stem}_$suffix"
-                suffix++
-            }
+            val stem = suggestedInputFromGroupName(group.name).ifBlank { "group" }
             WildcardClassifySaveEntry(
                 groupName = group.name,
                 items = group.items,
-                fileNameInput = candidate
+                fileNameInput = deduplicateName(stem, used)
             )
         }
     }

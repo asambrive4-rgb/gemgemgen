@@ -16,11 +16,6 @@ internal class GeminiAccessibilityNodeFinder(
     fun findInputNode(): AccessibilityNodeInfo? =
         findInputNodeBy(viewIds = inputViewIds, keywords = INPUT_KEYWORDS)
 
-    fun findToolbarNewChatNode(): AccessibilityNodeInfo? =
-        cachedNode("toolbar_new_chat") { root ->
-            findFirstNodeContainingTextOrDescription(root, NEW_CHAT_DESCRIPTION)
-        }
-
     fun findSendNode(): AccessibilityNodeInfo? =
         cachedNode("send") { root ->
             for (viewId in SEND_VIEW_IDS) {

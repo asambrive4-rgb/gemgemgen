@@ -4,12 +4,11 @@ package com.example.gemgemgen.wildcard.ui
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
+import com.example.gemgemgen.analysis.usecase.AnalysisRoleModelSetting
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName
-import com.example.gemgemgen.wildcard.domain.WildcardClassifyPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
-import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardClassifySaveResult
@@ -32,23 +31,21 @@ data class WildcardClassifyUiState(
         get() = isClassifying || classifyPreview != null || showClassifyCriteriaDialog
 
     fun canRunClassify(isFileOperationInProgress: Boolean): Boolean =
-        WildcardClassifyPolicy.canRunClassify(
-            criteria = classifyCriteria,
-            isClassifying = isClassifying,
-            isFileOperationInProgress = isFileOperationInProgress,
-            showCriteriaDialog = showClassifyCriteriaDialog,
-            hasPreview = classifyPreview != null
-        )
+        classifyCriteria.isNotBlank() &&
+            !isClassifying &&
+            !isFileOperationInProgress &&
+            (showClassifyCriteriaDialog || classifyPreview != null)
 
     fun canSaveClassifyResult(canModifyFiles: Boolean, isFileOperationInProgress: Boolean): Boolean =
-        WildcardClassifyPolicy.canSaveClassifyResult(
-            hasPreview = classifyPreview != null,
-            saveEntries = classifySaveEntries,
-            canModifyFiles = canModifyFiles,
-            isClassifying = isClassifying,
-            isFileOperationInProgress = isFileOperationInProgress,
-            hasOverwriteConflicts = classifyOverwriteConflicts.isNotEmpty()
-        )
+        classifyPreview != null &&
+            classifySaveEntries.isNotEmpty() &&
+            classifySaveEntries.all {
+                WildcardClassifyFileName.normalizeUserInput(it.fileNameInput) != null
+            } &&
+            canModifyFiles &&
+            !isClassifying &&
+            !isFileOperationInProgress &&
+            classifyOverwriteConflicts.isEmpty()
 }
 
 interface WildcardClassifyActions {
@@ -74,38 +71,31 @@ class WildcardClassifyCoordinator(
     private val host: Host
 ) : WildcardClassifyActions {
     interface Host {
-        val selectedFile: WildcardTextFile?
-        val selectableLines: List<String>
-        val editingText: String
-        val canModifyFiles: Boolean
-        val isFileOperationInProgress: Boolean
-        val canRequestClassify: Boolean
-
-        fun onLineSelectionCleared()
-        fun showMessage(message: String)
-        fun showError(error: String)
-        fun clearError()
-        fun clearMessageAndError()
+        val currentState: WildcardUiState
         fun updateClassifyState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState)
+        fun onLineSelectionCleared()
+        fun updateFeedback(message: String? = null, error: String = "")
         fun beginFileOperation(): Boolean
         fun endFileOperation()
         suspend fun onFilesSaved()
+
+        fun showMessage(message: String) = updateFeedback(message = message, error = "")
+        fun showError(error: String) = updateFeedback(message = "", error = error)
+        fun clearError() = updateFeedback(error = "")
+        fun clearMessageAndError() = updateFeedback(message = "", error = "")
     }
 
     private var classifyJob: Job? = null
-    private var currentState = WildcardClassifyUiState()
 
     private fun updateState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState) {
-        host.updateClassifyState { state ->
-            transform(state).also { currentState = it }
-        }
+        host.updateClassifyState(transform)
     }
 
     fun cancelJob() {
         classifyJob?.cancel()
         classifyJob = null
-        if (currentState.isClassifying) {
-            currentState = currentState.copy(isClassifying = false)
+        if (host.currentState.classify.isClassifying) {
+            updateState { it.copy(isClassifying = false) }
         }
     }
 
@@ -115,12 +105,13 @@ class WildcardClassifyCoordinator(
     }
 
     override fun requestClassify() {
+        val state = host.currentState
         val classify = classifyWildcardLines
-        if (!host.canRequestClassify || classify == null) {
+        if (!state.canRequestClassify || classify == null) {
             when {
-                host.selectedFile == null -> host.showError("먼저 txt 파일을 선택해주세요.")
-                host.selectableLines.isEmpty() -> host.showError("분류할 줄이 없습니다.")
-                !host.canModifyFiles -> host.showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
+                state.editor.selectedFile == null -> host.showError("먼저 txt 파일을 선택해주세요.")
+                state.selectableLines.isEmpty() -> host.showError("분류할 줄이 없습니다.")
+                !state.canModifyFiles -> host.showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
                 else -> host.showError("분류 기능을 사용할 수 없습니다.")
             }
             return
@@ -172,7 +163,7 @@ class WildcardClassifyCoordinator(
         updateRoleSetting { keyManager.setRoleModel(AnalysisModelRole.GENERATION, modelId) }
     }
 
-    private fun updateRoleSetting(block: suspend () -> com.example.gemgemgen.analysis.usecase.AnalysisRoleModelSetting) {
+    private fun updateRoleSetting(block: suspend () -> AnalysisRoleModelSetting) {
         scope.launch {
             try {
                 val setting = block()
@@ -190,7 +181,7 @@ class WildcardClassifyCoordinator(
     }
 
     override fun dismissClassifyCriteriaDialog() {
-        if (currentState.isClassifying) return
+        if (host.currentState.classify.isClassifying) return
         updateState { it.copy(showClassifyCriteriaDialog = false) }
         host.clearError()
     }
@@ -200,16 +191,16 @@ class WildcardClassifyCoordinator(
             host.showError("분류 기능을 사용할 수 없습니다.")
             return
         }
-        val state = currentState
-        if (!state.canRunClassify(host.isFileOperationInProgress)) {
-            if (state.classifyCriteria.isBlank()) {
+        val state = host.currentState
+        if (!state.canRunClassify) {
+            if (state.classify.classifyCriteria.isBlank()) {
                 host.showError("분류 기준을 입력해주세요.")
             }
             return
         }
 
-        val editingText = host.editingText
-        val criteria = state.classifyCriteria
+        val editingText = state.editor.editingText
+        val criteria = state.classify.classifyCriteria
         cancelJob()
         classifyJob = scope.launch {
             updateState {
@@ -256,7 +247,7 @@ class WildcardClassifyCoordinator(
     }
 
     override fun dismissClassifyPreview() {
-        if (currentState.isClassifying) return
+        if (host.currentState.classify.isClassifying) return
         updateState {
             it.copy(
                 classifyPreview = null,
@@ -276,7 +267,7 @@ class WildcardClassifyCoordinator(
     }
 
     private fun mutateSaveEntry(index: Int, transform: (WildcardClassifySaveEntry) -> WildcardClassifySaveEntry) {
-        val entries = currentState.classifySaveEntries
+        val entries = host.currentState.classify.classifySaveEntries
         if (index !in entries.indices) return
         val updated = entries.toMutableList().also { it[index] = transform(it[index]) }
         updateState { it.copy(classifySaveEntries = updated) }
@@ -288,13 +279,14 @@ class WildcardClassifyCoordinator(
             host.showError("분류 저장 기능을 사용할 수 없습니다.")
             return
         }
-        val entries = currentState.classifySaveEntries
+        val state = host.currentState
+        val entries = state.classify.classifySaveEntries
         if (entries.isEmpty()) {
             host.showError("저장할 그룹이 없습니다.")
             return
         }
-        if (host.isFileOperationInProgress || currentState.isClassifying) return
-        if (!host.canModifyFiles) {
+        if (state.isFileOperationInProgress || state.classify.isClassifying) return
+        if (!state.canModifyFiles) {
             host.showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
             return
         }

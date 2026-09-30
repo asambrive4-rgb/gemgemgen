@@ -109,7 +109,9 @@ class GeminiAccessibilityService : AccessibilityService() {
         return PackageScopedPromptAutomation(
             delegate = delegate,
             targetApp = targetApp,
-            service = this
+            restrictPackages = ::restrictPackagesTo,
+            clearPackageRestriction = ::clearPackageRestriction,
+            isSessionRunning = ::isSessionRunning
         )
     }
 
@@ -117,7 +119,8 @@ class GeminiAccessibilityService : AccessibilityService() {
         return PackageScopedVariationPromptAutomation(
             delegate = geminiAutomation,
             targetApp = AutomationTargetApp.GEMINI,
-            service = this
+            restrictPackages = ::restrictPackagesTo,
+            clearPackageRestriction = ::clearPackageRestriction
         )
     }
 
@@ -263,7 +266,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     internal fun isSessionRunning(): Boolean {
-        return ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
+        return ProcessAutomationHolder.current()?.isSessionRunning() == true
     }
 
     private fun packageNamesFor(targetApp: AutomationTargetApp): Array<String> {
@@ -274,79 +277,6 @@ class GeminiAccessibilityService : AccessibilityService() {
             )
             AutomationTargetApp.CHATGPT -> arrayOf(AppDefaults.CHATGPT_PACKAGE_NAME)
             AutomationTargetApp.FLOW -> arrayOf(AppDefaults.FLOW_PACKAGE_NAME)
-        }
-    }
-
-    private class PackageScopedPromptAutomation(
-        private val delegate: PromptAutomationGateway,
-        private val targetApp: AutomationTargetApp,
-        private val service: GeminiAccessibilityService
-    ) : PromptAutomationGateway, FlowConfigurableGateway {
-        override fun setFlowImageCount(count: Int) {
-            (delegate as? FlowConfigurableGateway)?.setFlowImageCount(count)
-        }
-        override fun sendPrompt(
-            prompt: String,
-            newChatMode: NewChatMode,
-            onStateChange: (AutomationRunState) -> Unit,
-            onDone: () -> Unit
-        ) {
-            service.restrictPackagesTo(targetApp)
-            delegate.sendPrompt(
-                prompt = prompt,
-                newChatMode = newChatMode,
-                onStateChange = { state ->
-                    if (state is AutomationRunState.Failure || state is AutomationRunState.Stopped) {
-                        service.clearPackageRestriction()
-                    }
-                    onStateChange(state)
-                },
-                onDone = {
-                    if (!service.isSessionRunning()) {
-                        service.clearPackageRestriction()
-                    }
-                    onDone()
-                }
-            )
-        }
-
-        override fun cancelCurrentRun() {
-            delegate.cancelCurrentRun()
-            service.clearPackageRestriction()
-        }
-    }
-
-    private class PackageScopedVariationPromptAutomation(
-        private val delegate: VariationPromptAutomationGateway,
-        private val targetApp: AutomationTargetApp,
-        private val service: GeminiAccessibilityService
-    ) : VariationPromptAutomationGateway {
-        override fun pastePromptOnly(
-            prompt: String,
-            onStateChange: (AutomationRunState) -> Unit,
-            onDone: () -> Unit
-        ) {
-            service.restrictPackagesTo(targetApp)
-            delegate.pastePromptOnly(
-                prompt = prompt,
-                onStateChange = { state ->
-                    if (state is AutomationRunState.Failure ||
-                        state is AutomationRunState.Stopped
-                    ) {
-                        service.clearPackageRestriction()
-                    }
-                    onStateChange(state)
-                },
-                onDone = {
-                    service.clearPackageRestriction()
-                    onDone()
-                }
-            )
-        }
-
-        override fun cancelCurrentRun() {
-            delegate.cancelCurrentRun()
-            service.clearPackageRestriction()
         }
     }
 
@@ -556,3 +486,93 @@ class GeminiAccessibilityService : AccessibilityService() {
         private const val TAP_GESTURE_DURATION_MS = 60L
     }
 }
+
+internal abstract class BasePackageScopedAutomation(
+    private val targetApp: AutomationTargetApp,
+    private val restrictPackages: (AutomationTargetApp) -> Unit,
+    protected val clearPackageRestriction: () -> Unit
+) {
+    protected fun beginPackageScope() {
+        restrictPackages(targetApp)
+    }
+
+    protected fun handleStateChange(
+        state: AutomationRunState,
+        onStateChange: (AutomationRunState) -> Unit
+    ) {
+        if (state is AutomationRunState.Failure || state is AutomationRunState.Stopped) {
+            clearPackageRestriction()
+        }
+        onStateChange(state)
+    }
+
+    protected fun cancel(cancelDelegate: () -> Unit) {
+        cancelDelegate()
+        clearPackageRestriction()
+    }
+}
+
+internal class PackageScopedPromptAutomation(
+    private val delegate: PromptAutomationGateway,
+    targetApp: AutomationTargetApp,
+    restrictPackages: (AutomationTargetApp) -> Unit,
+    clearPackageRestriction: () -> Unit,
+    private val isSessionRunning: () -> Boolean
+) : BasePackageScopedAutomation(targetApp, restrictPackages, clearPackageRestriction),
+    PromptAutomationGateway,
+    FlowConfigurableGateway {
+
+    override fun setFlowImageCount(count: Int) {
+        (delegate as? FlowConfigurableGateway)?.setFlowImageCount(count)
+    }
+
+    override fun sendPrompt(
+        prompt: String,
+        newChatMode: NewChatMode,
+        onStateChange: (AutomationRunState) -> Unit,
+        onDone: () -> Unit
+    ) {
+        beginPackageScope()
+        delegate.sendPrompt(
+            prompt = prompt,
+            newChatMode = newChatMode,
+            onStateChange = { state -> handleStateChange(state, onStateChange) },
+            onDone = {
+                onDone()
+                if (!isSessionRunning()) {
+                    clearPackageRestriction()
+                }
+            }
+        )
+    }
+
+    override fun cancelCurrentRun() = cancel(delegate::cancelCurrentRun)
+}
+
+internal class PackageScopedVariationPromptAutomation(
+    private val delegate: VariationPromptAutomationGateway,
+    targetApp: AutomationTargetApp,
+    restrictPackages: (AutomationTargetApp) -> Unit,
+    clearPackageRestriction: () -> Unit
+) : BasePackageScopedAutomation(targetApp, restrictPackages, clearPackageRestriction),
+    VariationPromptAutomationGateway {
+
+    override fun pastePromptOnly(
+        prompt: String,
+        onStateChange: (AutomationRunState) -> Unit,
+        onDone: () -> Unit
+    ) {
+        beginPackageScope()
+        delegate.pastePromptOnly(
+            prompt = prompt,
+            onStateChange = { state -> handleStateChange(state, onStateChange) },
+            onDone = {
+                clearPackageRestriction()
+                onDone()
+            }
+        )
+    }
+
+    override fun cancelCurrentRun() = cancel(delegate::cancelCurrentRun)
+}
+

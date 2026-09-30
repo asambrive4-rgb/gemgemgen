@@ -1,6 +1,7 @@
 // 역할: 앱 시작 전 유지보수 및 모드별 메모리 확보(로컬/원격) 유스케이스 동작을 검증합니다.
 package com.example.gemgemgen
 
+import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 import com.example.gemgemgen.automation.usecase.GeminiAppCloser
@@ -9,9 +10,10 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
-import com.example.gemgemgen.remote.usecase.NoOpRemoteAutomationGateway
+import com.example.gemgemgen.remote.usecase.RemoteAutomationGateway
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
@@ -355,7 +357,7 @@ class AppMaintenanceUseCaseTest {
     private class FakeRemoteGateway(
         var cleanMemoryResult: RemoteActionResult = RemoteActionResult.Success,
         canSend: Boolean = true
-    ) : NoOpRemoteAutomationGateway() {
+    ) : RemoteAutomationGateway {
         var cleanCount = 0
         private val _status = MutableStateFlow(
             RemoteAutomationStatus(
@@ -365,6 +367,12 @@ class AppMaintenanceUseCaseTest {
             )
         )
         override val status: StateFlow<RemoteAutomationStatus> = _status
+
+        override fun selectMode(mode: AutomationMode) = Unit
+        override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
+        override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
+        override suspend fun send(request: RemoteAutomationRequest) = Unit
+        override fun forceStop(requestId: String?) = Unit
 
         override suspend fun cleanMemory(): RemoteActionResult {
             cleanCount++

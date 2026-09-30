@@ -3,16 +3,10 @@ package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 
-interface AnalysisAiGateway {
+fun interface AnalysisAiGateway {
     suspend fun analyze(
         apiKey: String,
         modelId: String,
         payload: AnalysisPromptPayload
     ): String
-
-    suspend fun generateTxt(
-        apiKey: String,
-        modelId: String,
-        payload: AnalysisPromptPayload
-    ): String = analyze(apiKey, modelId, payload)
 }

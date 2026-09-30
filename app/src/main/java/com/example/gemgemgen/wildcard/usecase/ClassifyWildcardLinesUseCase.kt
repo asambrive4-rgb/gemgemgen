@@ -3,14 +3,14 @@ package com.example.gemgemgen.wildcard.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisException
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyPromptBuilder
+import com.example.gemgemgen.wildcard.domain.WildcardClassifyResponseParser
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResultPolicy
-import com.example.gemgemgen.wildcard.domain.WildcardClassifyResponseParser
-import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer
+import com.example.gemgemgen.wildcard.domain.WildcardFileParser
 import kotlinx.coroutines.withContext
 
 class ClassifyWildcardLinesUseCase(
@@ -27,7 +27,7 @@ class ClassifyWildcardLinesUseCase(
             throw AnalysisException("분류 기준을 입력해주세요.")
         }
 
-        val sourceLines = WildcardDynamicPromptComposer.selectableLines(editingText)
+        val sourceLines = WildcardFileParser.parseItems(editingText)
         if (sourceLines.isEmpty()) {
             throw AnalysisException("분류할 줄이 없습니다.")
         }
@@ -37,7 +37,7 @@ class ClassifyWildcardLinesUseCase(
             criteria = trimmedCriteria,
             lines = sourceLines
         )
-        val responseText = aiGateway.generateTxt(
+        val responseText = aiGateway.analyze(
             apiKey = credential.accessTokenOrApiKey,
             modelId = credential.modelId,
             payload = payload

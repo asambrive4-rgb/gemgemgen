@@ -1,11 +1,6 @@
 // 역할: 와일드카드 관리 화면 표시용 UI 상태와 다이얼로그 모델을 정의합니다.
 package com.example.gemgemgen.wildcard.ui
 
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.wildcard.domain.WildcardClassifyPolicy
-import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
-import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
-import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer
 import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 
@@ -34,68 +29,42 @@ data class WildcardUiState(
     val selectedLineIndices: Set<Int> = emptySet(),
     val classify: WildcardClassifyUiState = WildcardClassifyUiState()
 ) {
-    val showClassifyCriteriaDialog: Boolean get() = classify.showClassifyCriteriaDialog
-    val classifyCriteria: String get() = classify.classifyCriteria
-    val isClassifying: Boolean get() = classify.isClassifying
-    val classifyPreview: WildcardClassifyResult? get() = classify.classifyPreview
-    val classifySaveEntries: List<WildcardClassifySaveEntry> get() = classify.classifySaveEntries
-    val classifyOverwriteConflicts: List<String> get() = classify.classifyOverwriteConflicts
-    val classifyProvider: AnalysisProvider get() = classify.classifyProvider
-    val classifyModelId: String get() = classify.classifyModelId
-
-    val selectedFile: WildcardTextFile?
-        get() = editor.selectedFile
-
-    val savedText: String
-        get() = editor.savedText
-
-    val editingText: String
-        get() = editor.editingText
-
-    val undoStack: List<String>
-        get() = editor.undoStack
-
-    val hasUnsavedChanges: Boolean
-        get() = editor.hasUnsavedChanges
-
-    val selectableLines: List<String> by lazy(LazyThreadSafetyMode.NONE) {
-        WildcardDynamicPromptComposer.selectableLines(editingText)
-    }
-
-    private val classifyBusy: Boolean
-        get() = classify.isBusy
+    val selectableLines: List<String>
+        get() = editor.selectableLines
 
     val canCreateFile: Boolean
-        get() = canModifyFiles && !isFileOperationInProgress && !isLineSelectionMode && !classifyBusy
+        get() = canModifyFiles && !isFileOperationInProgress && !isLineSelectionMode && !classify.isBusy
 
     val canSave: Boolean
-        get() = canModifyFiles && selectedFile != null && !isFileOperationInProgress &&
-            !isLineSelectionMode && !isClassifying
+        get() = canModifyFiles && editor.selectedFile != null && !isFileOperationInProgress &&
+            !isLineSelectionMode && !classify.isClassifying
 
     val canDelete: Boolean
-        get() = canModifyFiles && selectedFile != null && !isFileOperationInProgress &&
-            !isLineSelectionMode && !classifyBusy
+        get() = canModifyFiles && editor.selectedFile != null && !isFileOperationInProgress &&
+            !isLineSelectionMode && !classify.isBusy
 
     val canPaste: Boolean
-        get() = canModifyFiles && selectedFile != null && !isFileOperationInProgress &&
-            !isLineSelectionMode && !isClassifying
+        get() = canModifyFiles && editor.selectedFile != null && !isFileOperationInProgress &&
+            !isLineSelectionMode && !classify.isClassifying
 
     val canCopy: Boolean
-        get() = selectedFile != null && !isFileOperationInProgress && !isLineSelectionMode && !isClassifying
+        get() = editor.selectedFile != null && !isFileOperationInProgress &&
+            !isLineSelectionMode && !classify.isClassifying
 
     val canEditText: Boolean
-        get() = canModifyFiles && selectedFile != null && !isFileOperationInProgress &&
-            !isLineSelectionMode && !isClassifying && classifyPreview == null
+        get() = canModifyFiles && editor.selectedFile != null && !isFileOperationInProgress &&
+            !isLineSelectionMode && !classify.isClassifying && classify.classifyPreview == null
 
     val canUndo: Boolean
-        get() = canModifyFiles && undoStack.isNotEmpty() && !isFileOperationInProgress &&
-            !isLineSelectionMode && !isClassifying
+        get() = canModifyFiles && editor.undoStack.isNotEmpty() && !isFileOperationInProgress &&
+            !isLineSelectionMode && !classify.isClassifying
 
     val canEnterLineSelectionMode: Boolean
-        get() = selectedFile != null && !isFileOperationInProgress && !isLineSelectionMode && !classifyBusy
+        get() = editor.selectedFile != null && !isFileOperationInProgress &&
+            !isLineSelectionMode && !classify.isBusy
 
     val canExitLineSelectionMode: Boolean
-        get() = isLineSelectionMode && !isFileOperationInProgress && !isClassifying
+        get() = isLineSelectionMode && !isFileOperationInProgress && !classify.isClassifying
 
     val canSelectAllLines: Boolean
         get() = isLineSelectionMode &&
@@ -110,25 +79,22 @@ data class WildcardUiState(
         get() = isLineSelectionMode && selectedLineIndices.isNotEmpty() && !isFileOperationInProgress
 
     val canRequestClassify: Boolean
-        get() = WildcardClassifyPolicy.canRequestClassify(
-            canModifyFiles = canModifyFiles,
-            hasSelectedFile = selectedFile != null,
-            hasSelectableLines = editingText.isNotBlank(),
-            isFileOperationInProgress = isFileOperationInProgress,
-            isLineSelectionMode = isLineSelectionMode,
-            isClassifyBusy = classifyBusy
-        )
+        get() = canModifyFiles &&
+            editor.selectedFile != null &&
+            selectableLines.isNotEmpty() &&
+            !isFileOperationInProgress &&
+            !isLineSelectionMode &&
+            !classify.isBusy
 
     /** 기준 입력 다이얼로그 또는 미리보기에서 전체 재분류 가능 */
     val canRunClassify: Boolean
         get() = classify.canRunClassify(isFileOperationInProgress)
 
     val canRerunClassifyFromPreview: Boolean
-        get() = classifyPreview != null && canRunClassify
+        get() = classify.classifyPreview != null && canRunClassify
 
     val canSaveClassifyResult: Boolean
         get() = classify.canSaveClassifyResult(canModifyFiles, isFileOperationInProgress)
-
 }
 
 sealed interface WildcardPendingAction {

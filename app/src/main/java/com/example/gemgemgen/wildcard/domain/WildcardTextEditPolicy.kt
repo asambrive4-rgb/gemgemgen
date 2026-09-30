@@ -7,14 +7,6 @@ data class WildcardTextEditResult(
 )
 
 internal object WildcardTextEditPolicy {
-    fun paste(
-        currentText: String,
-        undoStack: List<String>,
-        pastedText: String
-    ): WildcardTextEditResult {
-        return replaceText(currentText, undoStack, pastedText)
-    }
-
     fun pasteBelow(
         currentText: String,
         undoStack: List<String>,
@@ -36,7 +28,7 @@ internal object WildcardTextEditPolicy {
         )
     }
 
-    private fun replaceText(
+    fun replaceText(
         currentText: String,
         undoStack: List<String>,
         newText: String
@@ -49,4 +41,3 @@ internal object WildcardTextEditPolicy {
 
     private const val MAX_UNDO_COUNT = 5
 }
-

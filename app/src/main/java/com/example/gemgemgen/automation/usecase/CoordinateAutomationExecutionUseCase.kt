@@ -22,7 +22,7 @@ sealed interface AutomationStartDecision {
 }
 
 class CheckAutomationStartUseCase(
-    private val overlayPermissionGateway: OverlayPermissionGateway
+    private val overlayPermissionGateway: OverlayPermissionGateway = OverlayPermissionGateway { true }
 ) {
     /**
      * 환경 상태, 대상 앱, 프롬프트 등 도메인 상태를 직접 전달받아 비즈니스 불변식을 평가하고 시작 결정을 내립니다.
@@ -58,12 +58,23 @@ class CheckAutomationStartUseCase(
 }
 
 class CoordinateAutomationExecutionUseCase(
-    private val checkAutomationStart: CheckAutomationStartUseCase,
-    private val automationHistoryRecorder: AutomationHistoryRecorder,
+    private val checkAutomationStart: CheckAutomationStartUseCase = CheckAutomationStartUseCase(),
+    private val automationHistoryRecorder: AutomationHistoryRecorder = AutomationHistoryRecorder {},
     private val automation: ExecuteAutomationLoopUseCase,
-    private val manageRemoteAutomation: ManageRemoteAutomationUseCase,
-    private val promptHistoryStore: PromptHistoryStore? = null
+    private val manageRemoteAutomation: ManageRemoteAutomationUseCase
 ) {
+    constructor(
+        overlayPermissionGateway: OverlayPermissionGateway,
+        automationHistoryRecorder: AutomationHistoryRecorder = AutomationHistoryRecorder {},
+        automation: ExecuteAutomationLoopUseCase,
+        manageRemoteAutomation: ManageRemoteAutomationUseCase
+    ) : this(
+        checkAutomationStart = CheckAutomationStartUseCase(overlayPermissionGateway),
+        automationHistoryRecorder = automationHistoryRecorder,
+        automation = automation,
+        manageRemoteAutomation = manageRemoteAutomation
+    )
+
     /**
      * 비즈니스 컨텍스트를 직접 전달받아 모드별 도메인 규칙을 직접 평가하고 자동화 시작 여부를 결정합니다.
      */
@@ -108,12 +119,8 @@ class CoordinateAutomationExecutionUseCase(
     }
 
     suspend fun executeRemote(
-        request: AutomationRunRequest,
-        onStateChange: (AutomationRunState) -> Unit
-    ): RemoteActionResult {
-        promptHistoryStore?.record(request.promptTemplate, request.targetApp)
-        return manageRemoteAutomation.start(request, onStateChange)
-    }
+        request: AutomationRunRequest
+    ): RemoteActionResult = manageRemoteAutomation.start(request)
 
     suspend fun executeLocal(request: AutomationRunRequest) {
         automationHistoryRecorder.record(request)
@@ -127,7 +134,10 @@ class CoordinateAutomationExecutionUseCase(
         onStateChange: (AutomationRunState) -> Unit,
         onCancelLocal: () -> Unit
     ) = when {
-        mode == AutomationMode.SENDER || isRemoteRunActive -> manageRemoteAutomation.forceStop(onStateChange)
+        mode == AutomationMode.SENDER || isRemoteRunActive -> {
+            manageRemoteAutomation.forceStop()
+            onStateChange(AutomationRunState.Stopped)
+        }
         isPreparationActive -> onStateChange(AutomationRunState.Stopped)
         else -> onCancelLocal()
     }

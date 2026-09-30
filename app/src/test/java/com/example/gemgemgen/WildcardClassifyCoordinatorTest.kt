@@ -1,12 +1,8 @@
 // 역할: 와일드카드 AI 단어 분류 코디네이터의 상태 전이를 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthGateway
@@ -15,11 +11,14 @@ import com.example.gemgemgen.analysis.usecase.GrokAuthSession
 import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
 import com.example.gemgemgen.wildcard.domain.WildcardFileException
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.ui.WildcardClassifyCoordinator
 import com.example.gemgemgen.wildcard.ui.WildcardClassifyUiState
+import com.example.gemgemgen.wildcard.ui.WildcardUiState
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
@@ -42,7 +41,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.requestClassify()
 
         assertEquals("먼저 txt 파일을 선택해주세요.", host.lastError)
-        assertFalse(host.classifyState.showClassifyCriteriaDialog)
+        assertFalse(host.uiState.classify.showClassifyCriteriaDialog)
     }
 
     @Test
@@ -53,7 +52,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.requestClassify()
 
         assertEquals("분류할 줄이 없습니다.", host.lastError)
-        assertFalse(host.classifyState.showClassifyCriteriaDialog)
+        assertFalse(host.uiState.classify.showClassifyCriteriaDialog)
     }
 
     @Test
@@ -64,7 +63,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.requestClassify()
 
         assertEquals("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.", host.lastError)
-        assertFalse(host.classifyState.showClassifyCriteriaDialog)
+        assertFalse(host.uiState.classify.showClassifyCriteriaDialog)
     }
 
     @Test
@@ -75,7 +74,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.requestClassify()
 
         assertTrue(host.lineSelectionCleared)
-        assertTrue(host.classifyState.showClassifyCriteriaDialog)
+        assertTrue(host.uiState.classify.showClassifyCriteriaDialog)
         assertEquals("", host.lastError)
     }
 
@@ -87,7 +86,7 @@ class WildcardClassifyCoordinatorTest {
         host.showError("임의 에러")
         coordinator.onClassifyCriteriaChange("분위기별 분류")
 
-        assertEquals("분위기별 분류", host.classifyState.classifyCriteria)
+        assertEquals("분위기별 분류", host.uiState.classify.classifyCriteria)
         assertEquals("", host.lastError)
     }
 
@@ -97,10 +96,10 @@ class WildcardClassifyCoordinatorTest {
         val coordinator = createCoordinator(host = host)
 
         coordinator.requestClassify()
-        assertTrue(host.classifyState.showClassifyCriteriaDialog)
+        assertTrue(host.uiState.classify.showClassifyCriteriaDialog)
 
         coordinator.dismissClassifyCriteriaDialog()
-        assertFalse(host.classifyState.showClassifyCriteriaDialog)
+        assertFalse(host.uiState.classify.showClassifyCriteriaDialog)
     }
 
     @Test
@@ -123,7 +122,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.onClassifyCriteriaChange("의류 종류별")
         coordinator.runClassify()
 
-        val state = host.classifyState
+        val state = host.uiState.classify
         assertFalse(state.isClassifying)
         assertFalse(state.showClassifyCriteriaDialog)
         assertNotNull(state.classifyPreview)
@@ -161,10 +160,10 @@ class WildcardClassifyCoordinatorTest {
         coordinator.onClassifyCriteriaChange("과일")
         coordinator.runClassify()
 
-        assertEquals(1, host.classifyState.classifySaveEntries.size)
+        assertEquals(1, host.uiState.classify.classifySaveEntries.size)
         coordinator.onClassifyFileNameChange(0, "fresh_fruits")
 
-        assertEquals("fresh_fruits", host.classifyState.classifySaveEntries[0].fileNameInput)
+        assertEquals("fresh_fruits", host.uiState.classify.classifySaveEntries[0].fileNameInput)
     }
 
     @Test
@@ -190,8 +189,8 @@ class WildcardClassifyCoordinatorTest {
         coordinator.saveClassifyResult()
 
         assertTrue(host.filesSavedCalled)
-        assertNull(host.classifyState.classifyPreview)
-        assertTrue(host.classifyState.classifySaveEntries.isEmpty())
+        assertNull(host.uiState.classify.classifyPreview)
+        assertTrue(host.uiState.classify.classifySaveEntries.isEmpty())
         assertEquals("1개 파일로 저장했습니다.", host.lastMessage)
         assertEquals("red\nblue", repo.contentOf("색상.txt"))
     }
@@ -218,7 +217,7 @@ class WildcardClassifyCoordinatorTest {
         coordinator.runClassify()
         coordinator.saveClassifyResult(overwrite = false)
 
-        assertEquals(listOf("색상.txt"), host.classifyState.classifyOverwriteConflicts)
+        assertEquals(listOf("색상.txt"), host.uiState.classify.classifyOverwriteConflicts)
         assertEquals("같은 이름의 파일이 있습니다. 덮어쓸까요?", host.lastError)
 
         coordinator.confirmClassifyOverwrite()
@@ -234,10 +233,10 @@ class WildcardClassifyCoordinatorTest {
         val coordinator = createCoordinator(host = host)
 
         coordinator.onClassifyCriteriaChange("임의 기준")
-        assertEquals("임의 기준", host.classifyState.classifyCriteria)
+        assertEquals("임의 기준", host.uiState.classify.classifyCriteria)
 
         coordinator.reset()
-        assertEquals("", host.classifyState.classifyCriteria)
+        assertEquals("", host.uiState.classify.classifyCriteria)
     }
 
     private fun createCoordinator(
@@ -245,9 +244,7 @@ class WildcardClassifyCoordinatorTest {
         aiResponseText: String = "",
         repo: FakeWildcardRepo = FakeWildcardRepo()
     ): WildcardClassifyCoordinator {
-        val fakeAiGateway = object : AnalysisAiGateway {
-            override suspend fun analyze(apiKey: String, modelId: String, payload: AnalysisPromptPayload): String = aiResponseText
-        }
+        val fakeAiGateway = AnalysisAiGateway { _, _, _ -> aiResponseText }
         val keyRepository = FakeKeyRepo(activeKey = "fake-key")
         val fakeGrokGateway = object : GrokAuthGateway {
             override suspend fun startDeviceLogin(): GrokDeviceLoginChallenge = error("unused")
@@ -319,51 +316,40 @@ class WildcardClassifyCoordinatorTest {
     }
 
     private class FakeHost(
-        override var selectedFile: WildcardTextFile? = WildcardTextFile("test.txt", "test.txt"),
-        override var editingText: String = "line1\nline2",
-        override var canModifyFiles: Boolean = true,
-        override var isFileOperationInProgress: Boolean = false
+        selectedFile: WildcardTextFile? = WildcardTextFile("test.txt", "test.txt"),
+        editingText: String = "line1\nline2",
+        canModifyFiles: Boolean = true,
+        isFileOperationInProgress: Boolean = false
     ) : WildcardClassifyCoordinator.Host {
-        override val selectableLines: List<String>
-            get() = com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer.selectableLines(editingText)
-        var lineSelectionCleared: Boolean = false
-        var lastMessage: String = ""
-        var lastError: String = ""
-        var filesSavedCalled: Boolean = false
-        var classifyState: WildcardClassifyUiState = WildcardClassifyUiState()
+        var uiState: WildcardUiState = WildcardUiState(
+            editor = WildcardEditorSession(
+                selectedFile = selectedFile,
+                savedText = editingText,
+                editingText = editingText
+            ),
+            canModifyFiles = canModifyFiles,
+            isFileOperationInProgress = isFileOperationInProgress
+        )
 
-        override val canRequestClassify: Boolean
-            get() = canModifyFiles &&
-                selectedFile != null &&
-                selectableLines.isNotEmpty() &&
-                !isFileOperationInProgress &&
-                !classifyState.isBusy
+        override val currentState: WildcardUiState
+            get() = uiState
+
+        var lineSelectionCleared: Boolean = false
+        val lastMessage: String get() = uiState.message
+        val lastError: String get() = uiState.error
+        var filesSavedCalled: Boolean = false
 
         override fun onLineSelectionCleared() {
             lineSelectionCleared = true
+            uiState = uiState.copy(isLineSelectionMode = false, selectedLineIndices = emptySet())
         }
 
-        override fun showMessage(message: String) {
-            lastMessage = message
-            lastError = ""
-        }
-
-        override fun showError(error: String) {
-            lastError = error
-            lastMessage = ""
-        }
-
-        override fun clearError() {
-            lastError = ""
-        }
-
-        override fun clearMessageAndError() {
-            lastMessage = ""
-            lastError = ""
+        override fun updateFeedback(message: String?, error: String) {
+            uiState = uiState.copy(message = message ?: uiState.message, error = error)
         }
 
         override fun updateClassifyState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState) {
-            classifyState = transform(classifyState)
+            uiState = uiState.copy(classify = transform(uiState.classify))
         }
 
         override fun beginFileOperation(): Boolean = true

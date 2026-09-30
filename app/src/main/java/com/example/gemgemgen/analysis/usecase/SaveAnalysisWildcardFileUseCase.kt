@@ -9,12 +9,6 @@ import com.example.gemgemgen.wildcard.domain.WildcardFileName
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import kotlinx.coroutines.withContext
 
-sealed class AnalysisWildcardSaveResult {
-    data class Success(val fileName: String) : AnalysisWildcardSaveResult()
-    data class FileExists(val fileName: String) : AnalysisWildcardSaveResult()
-    data object InvalidFileName : AnalysisWildcardSaveResult()
-}
-
 sealed class AnalysisSaveAndReplaceResult {
     data object InvalidFileName : AnalysisSaveAndReplaceResult()
     data class FileExists(val fileName: String) : AnalysisSaveAndReplaceResult()
@@ -31,28 +25,6 @@ class SaveAnalysisWildcardFileUseCase(
     private val clipboardGateway: ClipboardGateway,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
-    suspend fun save(
-        fileNameInput: String,
-        candidates: List<String>,
-        overwrite: Boolean
-    ): AnalysisWildcardSaveResult = withContext(dispatchers.io) {
-        require(candidates.none { '\n' in it || '\r' in it }) {
-            "여러 줄의 원문을 보존한 후보는 한 줄 단위 와일드카드 파일로 저장할 수 없습니다. '생성' 카드에서 복사하거나 적용해 주세요."
-        }
-        val fileName = WildcardFileName.normalize(fileNameInput)
-            ?: return@withContext AnalysisWildcardSaveResult.InvalidFileName
-        val existingFile = repository.listFiles()
-            .firstOrNull { it.fileName.equals(fileName, ignoreCase = true) }
-
-        if (existingFile != null && !overwrite) {
-            return@withContext AnalysisWildcardSaveResult.FileExists(fileName)
-        }
-
-        val targetFile = existingFile ?: repository.createFile(fileName)
-        repository.writeFile(targetFile, candidates.joinToString(separator = "\n"))
-        AnalysisWildcardSaveResult.Success(fileName)
-    }
-
     /**
      * Saves candidates to a wildcard file, replaces the target span in the source
      * with a `__token__`, and copies the replaced source to the clipboard.
@@ -62,40 +34,43 @@ class SaveAnalysisWildcardFileUseCase(
         fileNameInput: String,
         candidates: List<String>,
         overwrite: Boolean,
-        sourcePrompt: String,
-        targetSegment: AnalysisTargetSegment?
-    ): AnalysisSaveAndReplaceResult = when (
-        val saveResult = save(
-            fileNameInput = fileNameInput,
-            candidates = candidates,
-            overwrite = overwrite
+        sourcePrompt: String = "",
+        targetSegment: AnalysisTargetSegment? = null
+    ): AnalysisSaveAndReplaceResult = withContext(dispatchers.io) {
+        require(candidates.none { '\n' in it || '\r' in it }) {
+            "여러 줄의 원문을 보존한 후보는 한 줄 단위 와일드카드 파일로 저장할 수 없습니다. '생성' 카드에서 복사하거나 적용해 주세요."
+        }
+        val fileName = WildcardFileName.normalize(fileNameInput)
+            ?: return@withContext AnalysisSaveAndReplaceResult.InvalidFileName
+        val existingFile = repository.listFiles()
+            .firstOrNull { it.fileName.equals(fileName, ignoreCase = true) }
+
+        if (existingFile != null && !overwrite) {
+            return@withContext AnalysisSaveAndReplaceResult.FileExists(fileName)
+        }
+
+        val targetFile = existingFile ?: repository.createFile(fileName)
+        repository.writeFile(targetFile, candidates.joinToString(separator = "\n"))
+
+        val replacedSource = AnalysisTargetSegmentPolicy.replaceSegmentWithWildcardToken(
+            source = sourcePrompt,
+            segment = targetSegment,
+            savedFileName = fileName
         )
-    ) {
-        AnalysisWildcardSaveResult.InvalidFileName ->
-            AnalysisSaveAndReplaceResult.InvalidFileName
-        is AnalysisWildcardSaveResult.FileExists ->
-            AnalysisSaveAndReplaceResult.FileExists(saveResult.fileName)
-        is AnalysisWildcardSaveResult.Success -> {
-            val replacedSource = AnalysisTargetSegmentPolicy.replaceSegmentWithWildcardToken(
-                source = sourcePrompt,
-                segment = targetSegment,
-                savedFileName = saveResult.fileName
+        try {
+            clipboardGateway.writeText(replacedSource)
+            AnalysisSaveAndReplaceResult.Success(
+                fileName = fileName,
+                replacedSource = replacedSource,
+                clipboardCopied = true
             )
-            try {
-                withContext(dispatchers.io) { clipboardGateway.writeText(replacedSource) }
-                AnalysisSaveAndReplaceResult.Success(
-                    fileName = saveResult.fileName,
-                    replacedSource = replacedSource,
-                    clipboardCopied = true
-                )
-            } catch (error: RuntimeException) {
-                AnalysisSaveAndReplaceResult.Success(
-                    fileName = saveResult.fileName,
-                    replacedSource = replacedSource,
-                    clipboardCopied = false,
-                    clipboardError = error.message
-                )
-            }
+        } catch (error: RuntimeException) {
+            AnalysisSaveAndReplaceResult.Success(
+                fileName = fileName,
+                replacedSource = replacedSource,
+                clipboardCopied = false,
+                clipboardError = error.message
+            )
         }
     }
 }

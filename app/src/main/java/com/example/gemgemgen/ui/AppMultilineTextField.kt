@@ -16,9 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -38,6 +38,8 @@ import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 import kotlin.math.abs
 
@@ -71,10 +73,7 @@ fun AppMultilineTextField(
     onReplaceSelectedParagraph: (String) -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
-    var deleteRequestId by remember { mutableIntStateOf(0) }
-    var replaceRequestId by remember { mutableIntStateOf(0) }
-    var replacementText by remember { mutableStateOf("") }
-    var paragraphTapRequestId by remember { mutableIntStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     // Host가 매 리컴포즈마다 새 람다를 넘기더라도 debounce 구독이 재시작되지 않게 한다.
@@ -90,45 +89,23 @@ fun AppMultilineTextField(
             .collect { onValueChangeLatest(it) }
     }
 
-    LaunchedEffect(deleteRequestId) {
-        if (deleteRequestId > 0) {
-            onDeleteSelectedParagraphLatest()
-        }
-    }
-
-    LaunchedEffect(replaceRequestId) {
-        if (replaceRequestId > 0) {
-            onReplaceSelectedParagraphLatest(replacementText)
-        }
-    }
-
-    LaunchedEffect(paragraphTapRequestId) {
-        if (paragraphTapRequestId > 0) {
-            // The text field updates its cursor from the same tap. Read it after that update settles.
-            yield()
-            onParagraphOffsetSelectedLatest(state.selection.end)
-        }
-    }
-
     var initialScrollDone by remember(state) { mutableStateOf(false) }
 
     LaunchedEffect(state, scrollState) {
         if (initialScrollDone) return@LaunchedEffect
-        snapshotFlow {
-            val hasText = state.text.isNotEmpty()
-            val max = scrollState.maxValue
-            hasText to max
-        }.collect { (hasText, max) ->
-            if (hasText && max > 0 && !initialScrollDone) {
-                scrollState.scrollTo(max)
-                initialScrollDone = true
-            }
+        val (_, max) = snapshotFlow {
+            state.text.isNotEmpty() to scrollState.maxValue
+        }.first { (hasText, max) ->
+            hasText && max > 0
         }
+        scrollState.scrollTo(max)
+        initialScrollDone = true
     }
 
     val deleteOnlyTransformation = remember(
         paragraphSelectionEnabled,
-        highlightRange
+        highlightRange,
+        coroutineScope
     ) {
         if (!paragraphSelectionEnabled) {
             null
@@ -149,10 +126,13 @@ fun AppMultilineTextField(
                 }
                 revertAllChanges()
                 if (isPureDeletion && highlightRange != null) {
-                    deleteRequestId += 1
+                    coroutineScope.launch {
+                        onDeleteSelectedParagraphLatest()
+                    }
                 } else if (highlightRange != null && insertedText.isNotEmpty()) {
-                    replacementText = insertedText
-                    replaceRequestId += 1
+                    coroutineScope.launch {
+                        onReplaceSelectedParagraphLatest(insertedText)
+                    }
                 }
             }
         }
@@ -219,7 +199,11 @@ fun AppMultilineTextField(
     }
     val paragraphTapModifier = if (paragraphSelectionEnabled) {
         Modifier.observeSimpleTap {
-            paragraphTapRequestId += 1
+            coroutineScope.launch {
+                // The text field updates its cursor from the same tap. Read it after that update settles.
+                yield()
+                onParagraphOffsetSelectedLatest(state.selection.end)
+            }
         }
     } else {
         Modifier

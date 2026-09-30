@@ -28,7 +28,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.Button
@@ -82,11 +81,9 @@ import kotlin.math.roundToInt
 internal fun AnalysisScreen(
     uiState: AnalysisUiState,
     sourcePromptState: TextFieldState,
-    actions: AnalysisScreenActions = AnalysisScreenActions.Empty,
+    actions: AnalysisScreenActions,
     modifier: Modifier = Modifier
 ) {
-    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-
     Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
         Box(
             modifier = Modifier
@@ -150,7 +147,7 @@ internal fun AnalysisScreen(
                 )
 
                 // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
-                Spacer(modifier = Modifier.height(if (isKeyboardVisible) 260.dp else 160.dp))
+                AnalysisBottomSpacer()
             }
 
             Surface(
@@ -183,6 +180,12 @@ internal fun AnalysisScreen(
             actions = actions
         )
     }
+}
+
+@Composable
+private fun AnalysisBottomSpacer() {
+    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    Spacer(modifier = Modifier.height(if (isKeyboardVisible) 260.dp else 160.dp))
 }
 
 @Composable
@@ -700,71 +703,12 @@ private fun DirectionSection(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             directions.forEach { direction ->
-                DirectionChip(
-                    title = direction.title,
+                NeuPillChip(
+                    text = direction.title,
                     selected = direction.id in selectedIds,
                     onClick = { onToggleDirection(direction.id) }
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun DirectionChip(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(14.dp)
-    val containerColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.card
-    }
-    val contentColor = if (selected) {
-        AppTheme.colors.onPrimary
-    } else {
-        AppTheme.colors.textPrimary
-    }
-    val borderColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.cardBorder
-    }
-
-    Surface(
-        shape = shape,
-        color = containerColor,
-        contentColor = contentColor,
-        border = BorderStroke(1.dp, borderColor),
-        modifier = Modifier
-            .shadow(
-                elevation = if (selected) 4.dp else 2.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.4f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(13.dp),
-                    tint = AppTheme.colors.onPrimary
-                )
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
-            )
         }
     }
 }

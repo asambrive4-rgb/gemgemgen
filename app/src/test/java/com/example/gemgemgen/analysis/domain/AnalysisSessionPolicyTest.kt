@@ -1,12 +1,12 @@
 // 역할: AI 분석 세션 정책(사전조건 평가, 생성 권한, 복사/저장 권한, 세션 초기화 가능 여부)의 도메인 규칙을 검증합니다.
 package com.example.gemgemgen.analysis.domain
 
+import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import com.example.gemgemgen.analysis.domain.AnalysisTargetSource
 
 class AnalysisSessionPolicyTest {
 
@@ -164,52 +164,33 @@ class AnalysisSessionPolicyTest {
     fun canResetSession_evaluatesAllSessionStateProperties() {
         // 1. 완전히 깨끗한 초기 상태는 리셋 불가
         assertFalse(
-            AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                targetSegment = null,
-                generatedCandidatesCount = 0,
-                selectedDirectionIdsCount = 0,
-                customHint = "",
-                txtCount = AnalysisTxtCountPolicy.DEFAULT_COUNT,
-                resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
-                selectedCandidateIndex = null,
-                hasAppliedCandidateToAutomation = false,
-                hasPendingOverwrite = false,
-                error = "",
-                message = "",
-                warning = "",
-                isBusy = false
-            )
+            AnalysisSessionPolicy.canResetSession(AnalysisUiState())
         )
 
         // 2. 원문이 있는 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "something",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY
+                AnalysisUiState(sourcePrompt = "something")
             )
         )
 
         // 3. 기본 카테고리가 아닌 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = AnalysisCategory.WOMEN_POSE
+                AnalysisUiState(selectedCategory = AnalysisCategory.WOMEN_POSE)
             )
         )
 
         // 4. 타겟 세그먼트가 있는 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                targetSegment = AnalysisTargetSegment(
-                    text = "test",
-                    startIndex = 0,
-                    endIndex = 4,
-                    source = AnalysisTargetSource.AUTO,
-                    category = AnalysisCategory.FREE_EDIT
+                AnalysisUiState(
+                    targetSegment = AnalysisTargetSegment(
+                        text = "test",
+                        startIndex = 0,
+                        endIndex = 4,
+                        category = AnalysisCategory.FREE_EDIT
+                    )
                 )
             )
         )
@@ -217,104 +198,80 @@ class AnalysisSessionPolicyTest {
         // 5. 생성된 후보가 있는 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                generatedCandidatesCount = 1
+                AnalysisUiState(generatedCandidates = listOf("candidate"))
             )
         )
 
         // 6. 방향 선택이 있는 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                selectedDirectionIdsCount = 1
+                AnalysisUiState(selectedDirectionIds = setOf("dir1"))
             )
         )
 
         // 7. 커스텀 힌트가 있는 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                customHint = "hint"
+                AnalysisUiState(customHint = "hint")
             )
         )
 
         // 8. txtCount가 기본값이 아닌 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                txtCount = 5
+                AnalysisUiState(txtCount = 5)
             )
         )
 
         // 9. 결과 파일명이 기본값이 아닌 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                resultFileName = "custom.txt"
+                AnalysisUiState(resultFileName = "custom.txt")
             )
         )
 
         // 10. 후보 인덱스가 선택된 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                selectedCandidateIndex = 0
+                AnalysisUiState(selectedCandidateIndex = 0)
             )
         )
 
         // 11. 자동화에 후보가 적용된 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                hasAppliedCandidateToAutomation = true
+                AnalysisUiState(hasAppliedCandidateToAutomation = true)
             )
         )
 
         // 12. 덮어쓰기 대기 상태인 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                hasPendingOverwrite = true
+                AnalysisUiState(pendingOverwriteFileName = "dup.txt")
             )
         )
 
         // 13. 에러 또는 메시지가 있는 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                error = "some error"
+                AnalysisUiState(error = "some error")
             )
         )
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                message = "some message"
+                AnalysisUiState(message = "some message")
             )
         )
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                warning = "some warning"
+                AnalysisUiState(warning = "some warning")
             )
         )
 
         // 14. Busy 상태인 경우
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                isBusy = true
+                AnalysisUiState(status = AnalysisStatus.GENERATING)
             )
         )
     }

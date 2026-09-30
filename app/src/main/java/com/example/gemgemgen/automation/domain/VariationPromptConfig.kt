@@ -1,9 +1,27 @@
-﻿// 역할: 변주 생성용 프롬프트 설정 데이터 및 추후 선택 문구 결합 규칙을 제공합니다.
+// 역할: 변주 생성용 프롬프트 설정 데이터 및 문단·드래그 선택 문구 판별·결합 규칙을 제공합니다.
 package com.example.gemgemgen.automation.domain
 
 data class VariationPromptConfig(
     val prompt: String = DEFAULT_VARIATION_PROMPT
 ) {
+    fun resolveTarget(rawSelectedText: String?): String? =
+        Companion.resolveTarget(rawSelectedText)
+
+    /**
+     * 현재 프롬프트 본문과 선택 상태(문단 선택 또는 드래그)를 바탕으로 변주 대상 텍스트를 결정합니다.
+     */
+    fun resolveTarget(
+        fullText: String,
+        explicitSelectedText: String?,
+        isParagraphSelectionMode: Boolean = false,
+        selectedParagraphRange: PromptParagraphRange? = null
+    ): String? = Companion.resolveTarget(
+        fullText = fullText,
+        explicitSelectedText = explicitSelectedText,
+        isParagraphSelectionMode = isParagraphSelectionMode,
+        selectedParagraphRange = selectedParagraphRange
+    )
+
     /**
      * 템플릿의 드래그 선택 영역 텍스트를 변주 프롬프트 끝에 결합합니다.
      * 선택된 텍스트가 없으면 기본 프롬프트만 반환합니다.
@@ -21,7 +39,64 @@ data class VariationPromptConfig(
         }
     }
 
+    /**
+     * 현재 프롬프트 본문과 선택 상태를 바탕으로 변주 대상 텍스트를 결정하여 기본 변주 프롬프트 끝에 결합합니다.
+     */
+    fun buildPrompt(
+        fullText: String,
+        explicitSelectedText: String?,
+        isParagraphSelectionMode: Boolean = false,
+        selectedParagraphRange: PromptParagraphRange? = null
+    ): String = buildPrompt(
+        resolveTarget(
+            fullText = fullText,
+            explicitSelectedText = explicitSelectedText,
+            isParagraphSelectionMode = isParagraphSelectionMode,
+            selectedParagraphRange = selectedParagraphRange
+        )
+    )
+
     companion object {
+        fun resolveTarget(rawSelectedText: String?): String? =
+            rawSelectedText?.trim()?.takeIf { it.isNotEmpty() }
+
+        fun resolveTarget(
+            fullText: String,
+            explicitSelectedText: String?,
+            isParagraphSelectionMode: Boolean = false,
+            selectedParagraphRange: PromptParagraphRange? = null
+        ): String? {
+            if (isParagraphSelectionMode && selectedParagraphRange != null) {
+                val start = selectedParagraphRange.start.coerceIn(0, fullText.length)
+                val end = selectedParagraphRange.endExclusive.coerceIn(start, fullText.length)
+                val paragraphText = fullText.substring(start, end).trim()
+                if (paragraphText.isNotEmpty()) {
+                    return paragraphText
+                }
+            }
+
+            return resolveTarget(explicitSelectedText)
+        }
+
+        fun buildPrompt(
+            targetText: String?,
+            instruction: String = DEFAULT_VARIATION_PROMPT
+        ): String = VariationPromptConfig(instruction).buildPrompt(targetText)
+
+        fun buildPrompt(
+            config: VariationPromptConfig,
+            fullText: String,
+            explicitSelectedText: String? = null,
+            isParagraphSelectionMode: Boolean = false,
+            selectedParagraphRange: PromptParagraphRange? = null
+        ): String = config.buildPrompt(
+            resolveTarget(
+                fullText = fullText,
+                explicitSelectedText = explicitSelectedText,
+                isParagraphSelectionMode = isParagraphSelectionMode,
+                selectedParagraphRange = selectedParagraphRange
+            )
+        )
         const val DEFAULT_VARIATION_PROMPT: String =
             """당신은 자연어 기반 이미지 생성 모델에 최적화된 프롬프트 엔지니어입니다.
 

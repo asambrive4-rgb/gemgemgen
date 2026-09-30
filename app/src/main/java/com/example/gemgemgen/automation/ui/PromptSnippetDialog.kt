@@ -26,8 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -275,10 +273,7 @@ fun PromptSnippetDialog(
                                     onCopySnippet = { content ->
                                         clipboardManager.setText(AnnotatedString(content))
                                     },
-                                    onAddNewClick = startNew,
-                                    onAddPreset = { shortcut, content ->
-                                        onAddSnippet(shortcut, content)
-                                    }
+                                    onAddNewClick = startNew
                                 )
                             }
                             SnippetTab.FORM -> {
@@ -375,18 +370,16 @@ private fun SnippetVaultContent(
     onEditSnippet: (PromptSnippet) -> Unit,
     onDeleteSnippet: (id: String) -> Unit,
     onCopySnippet: (content: String) -> Unit,
-    onAddNewClick: () -> Unit,
-    onAddPreset: (shortcut: String, content: String) -> Unit
+    onAddNewClick: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         if (snippets.isEmpty()) {
-            // 빈 상태 (Empty State) & 원터치 추천 프리셋
+            // 빈 상태 (Empty State)
             EmptySnippetVaultView(
-                onAddNewClick = onAddNewClick,
-                onAddPreset = onAddPreset
+                onAddNewClick = onAddNewClick
             )
         } else {
             // 보관 중인 상용구 목록 (시원한 세로 스크롤)
@@ -636,12 +629,11 @@ private fun SnippetCardItem(
 }
 
 /**
- * 상용구가 비어 있을 때 노출되는 빈 화면 & 추천 프리셋 뷰
+ * 상용구가 비어 있을 때 노출되는 빈 화면 뷰
  */
 @Composable
 private fun EmptySnippetVaultView(
-    onAddNewClick: () -> Unit,
-    onAddPreset: (shortcut: String, content: String) -> Unit
+    onAddNewClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -665,7 +657,7 @@ private fun EmptySnippetVaultView(
                     color = AppTheme.colors.textPrimary
                 )
                 Text(
-                    text = "자주 쓰는 긴 프롬프트에 짧은 단축어를 붙여 저장해 보세요.\n아래 추천 프리셋을 누르면 바로 등록됩니다.",
+                    text = "자주 쓰는 긴 프롬프트에 짧은 단축어를 붙여 저장해 보세요.",
                     style = MaterialTheme.typography.bodySmall,
                     fontSize = 11.sp,
                     textAlign = TextAlign.Center,
@@ -673,46 +665,6 @@ private fun EmptySnippetVaultView(
                     lineHeight = 16.sp
                 )
             }
-        }
-
-        // 추천 프리셋 칩 목록
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = "💡 원터치 추천 프리셋",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.primary
-            )
-
-            PresetChipItem(
-                title = "💎 고화질 마스터피스",
-                shortcut = "고화질",
-                content = "masterpiece, best quality, ultra-detailed 8k, photorealistic",
-                onClick = {
-                    onAddPreset("고화질", "masterpiece, best quality, ultra-detailed 8k, photorealistic")
-                }
-            )
-
-            PresetChipItem(
-                title = "🇰🇷 정중한 한국어 번역",
-                shortcut = "한국어",
-                content = "위 내용을 꼼꼼히 확인하고 자연스럽고 정중한 한국어로 요약 번역해 주세요.",
-                onClick = {
-                    onAddPreset("한국어", "위 내용을 꼼꼼히 확인하고 자연스럽고 정중한 한국어로 요약 번역해 주세요.")
-                }
-            )
-
-            PresetChipItem(
-                title = "📸 실사 시네마틱 사진",
-                shortcut = "실사",
-                content = "35mm photograph, cinematic lighting, sharp focus, high aesthetic quality",
-                onClick = {
-                    onAddPreset("실사", "35mm photograph, cinematic lighting, sharp focus, high aesthetic quality")
-                }
-            )
         }
 
         NeuButton(
@@ -730,67 +682,6 @@ private fun EmptySnippetVaultView(
                     modifier = Modifier.size(16.dp)
                 )
                 Text("직접 새 상용구 작성하기")
-            }
-        }
-    }
-}
-
-/**
- * 추천 프리셋 칩 아이템
- */
-@Composable
-private fun PresetChipItem(
-    title: String,
-    shortcut: String,
-    content: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = AppTheme.colors.card,
-        border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
-                Text(
-                    text = "$title (단축어: $shortcut)",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textPrimary
-                )
-                Text(
-                    text = content,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontSize = 11.sp,
-                    color = AppTheme.colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = AppTheme.colors.primary.copy(alpha = 0.1f),
-                modifier = Modifier.padding(start = 8.dp)
-            ) {
-                Text(
-                    text = "+ 추가",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.primary,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
             }
         }
     }

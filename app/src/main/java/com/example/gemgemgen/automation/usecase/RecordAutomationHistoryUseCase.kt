@@ -31,7 +31,3 @@ class RecordAutomationHistoryUseCase(
         }
     }
 }
-
-object NoOpAutomationHistoryRecorder : AutomationHistoryRecorder {
-    override suspend fun record(request: AutomationRunRequest) = Unit
-}

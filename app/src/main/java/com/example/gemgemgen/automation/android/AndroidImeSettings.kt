@@ -32,13 +32,16 @@ class AndroidImeSettings(
         }
     }
 
-    override fun getEnabledInputMethods(): List<String> {
-        return try {
-            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-            imm?.enabledInputMethodList?.map { it.id }.orEmpty()
-        } catch (_: Throwable) {
-            emptyList()
+    override fun getEnabledInputMethods(): List<String> = getEnabledInputMethods(context)
+
+    companion object {
+        fun getEnabledInputMethods(context: Context): List<String> {
+            return try {
+                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.enabledInputMethodList?.map { it.id }.orEmpty()
+            } catch (_: Throwable) {
+                emptyList()
+            }
         }
     }
 }
-

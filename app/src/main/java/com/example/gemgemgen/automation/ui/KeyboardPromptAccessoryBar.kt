@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -23,11 +21,9 @@ internal fun KeyboardPromptAccessoryBar(
     uiState: AutomationUiState,
     automationBarUiState: AutomationBarUiState,
     promptTemplateState: TextFieldState,
-    actions: AutomationScreenActions = AutomationScreenActions.Empty,
+    actions: AutomationScreenActions,
     modifier: Modifier = Modifier
 ) {
-    val keyboardVariationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
-
     val countBadgeText = if (automationBarUiState.automationState is AutomationRunState.Running &&
         automationBarUiState.automationState.currentIndex != null &&
         automationBarUiState.automationState.totalCount != null
@@ -85,13 +81,12 @@ internal fun KeyboardPromptAccessoryBar(
             ActionIsland {
                 ParagraphSelectionModeButton(
                     selected = uiState.isParagraphSelectionMode,
-                    enabled = true,
                     onClick = actions::toggleParagraphSelectionMode
                 )
             }
 
             PromptEditorActionGroup(
-                isTargetSelectionEnabled = true,
+                promptTemplateState = promptTemplateState,
                 canCopyPrompt = uiState.hasPromptTemplate,
                 onInsertTopInstruction = actions::insertTopInstruction,
                 onInsertBottomInstruction = actions::insertBottomInstruction,
@@ -102,15 +97,9 @@ internal fun KeyboardPromptAccessoryBar(
                 showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                 isVariationButtonEnabled = uiState.canInteractWithVariation,
                 variationAutomationState = uiState.variationAutomationState,
-                onRunVariation = {
-                    val selectedText = keyboardVariationSelectedTextAtPress.value
-                        ?: promptTemplateState.selectedTextOrNull()
-                    keyboardVariationSelectedTextAtPress.value = null
+                onRunVariation = { selectedText ->
                     actions.onClearFocus()
                     actions.onRunVariation(selectedText)
-                },
-                onVariationPointerDown = {
-                    keyboardVariationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
                 },
                 onOpenVariationPromptConfigDialog = actions::openVariationPromptConfigDialog
             )

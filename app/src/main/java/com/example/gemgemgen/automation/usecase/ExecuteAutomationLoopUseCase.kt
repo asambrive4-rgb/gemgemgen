@@ -49,6 +49,10 @@ class ExecuteAutomationLoopUseCase(
     private val _runState = MutableStateFlow<AutomationRunState>(AutomationRunState.Idle)
     val runState: StateFlow<AutomationRunState> = _runState.asStateFlow()
 
+    fun isSessionRunning(): Boolean {
+        return currentRun?.finished == false && _runState.value is AutomationRunState.Running
+    }
+
     suspend fun run(
         request: AutomationRunRequest,
         onStateChange: ((AutomationRunState) -> Unit)? = null
@@ -223,7 +227,7 @@ class ExecuteAutomationLoopUseCase(
         val nextIndex = run.successCount + 1
         run.currentIndex = nextIndex
         val finalPrompt = generateFinalPrompt?.invoke(run.promptTemplate, run.wildcards, nextIndex)
-            ?: run.promptPlan.generateFinalPrompt(nextIndex)
+            ?: run.promptPlan.generateFinalPrompt()
 
         updateRunState(run, "프롬프트 생성 완료", onStateChange)
 

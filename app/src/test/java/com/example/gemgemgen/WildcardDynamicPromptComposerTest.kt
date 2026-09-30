@@ -8,15 +8,6 @@ import org.junit.Test
 
 class WildcardDynamicPromptComposerTest {
     @Test
-    fun selectableLines_trimsAndDropsEmptyLines() {
-        val lines = WildcardDynamicPromptComposer.selectableLines(
-            "  red  \n\n blue \n\ngreen"
-        )
-
-        assertEquals(listOf("red", "blue", "green"), lines)
-    }
-
-    @Test
     fun compose_joinsSelectedLinesInOrder() {
         val result = WildcardDynamicPromptComposer.compose(
             listOf("red", "blue", "green")

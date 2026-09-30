@@ -4,6 +4,7 @@ package com.example.gemgemgen.analysis.usecase
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.analysis.domain.AnalysisReportCache
 import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
@@ -28,10 +29,8 @@ data class ExecuteAnalysisGenerationRequest(
     val customHint: String = "",
     val maskingProvider: AnalysisProvider,
     val hasMaskingCredential: Boolean,
-    val maskingModel: String,
     val generationProvider: AnalysisProvider,
     val hasGenerationCredential: Boolean,
-    val generationModel: String,
     val failureFallback: String = "생성에 실패했습니다."
 )
 
