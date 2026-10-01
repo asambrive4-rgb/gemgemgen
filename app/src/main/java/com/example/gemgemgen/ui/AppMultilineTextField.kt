@@ -170,25 +170,27 @@ fun AppMultilineTextField(
         if (highlightRange == null && searchHighlightRanges.isEmpty()) {
             null
         } else {
+            val paragraphSpanStyle = highlightRange?.let { SpanStyle(background = selectedParagraphColor) }
+            val activeSearchSpanStyle = SpanStyle(background = ACTIVE_SEARCH_HIGHLIGHT_COLOR)
+            val normalSearchSpanStyle = SpanStyle(background = SEARCH_HIGHLIGHT_COLOR)
             OutputTransformation {
-                highlightRange?.let { range ->
-                    if (range.endExclusive <= length) {
-                        addStyle(
-                            spanStyle = SpanStyle(background = selectedParagraphColor),
-                            start = range.start,
-                            end = range.endExclusive
-                        )
-                    }
+                val pSpan = paragraphSpanStyle
+                if (highlightRange != null && pSpan != null && highlightRange.endExclusive <= length) {
+                    addStyle(
+                        spanStyle = pSpan,
+                        start = highlightRange.start,
+                        end = highlightRange.endExclusive
+                    )
                 }
                 searchHighlightRanges.forEachIndexed { index, range ->
                     if (range.endExclusive <= length) {
-                        val color = if (index == activeSearchMatchIndex) {
-                            ACTIVE_SEARCH_HIGHLIGHT_COLOR
+                        val span = if (index == activeSearchMatchIndex) {
+                            activeSearchSpanStyle
                         } else {
-                            SEARCH_HIGHLIGHT_COLOR
+                            normalSearchSpanStyle
                         }
                         addStyle(
-                            spanStyle = SpanStyle(background = color),
+                            spanStyle = span,
                             start = range.start,
                             end = range.endExclusive
                         )

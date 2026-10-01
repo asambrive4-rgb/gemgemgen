@@ -201,16 +201,21 @@ internal fun validateWildcardFileName(fileName: String) {
 internal class AndroidWildcardDirectStorage {
     fun listFiles(): List<WildcardTextFile> {
         val now = System.currentTimeMillis()
-        cachedFolder?.let { cached ->
-            if (now - cachedFolderAtMs < FOLDER_CACHE_TTL_MS && cached.isDirectory) {
-                return parseWildcardFiles(cached)
-            }
+        val cached = cachedFiles
+        val folder = cachedFolder
+        if (cached != null && folder != null && now - cachedFilesAtMs < FOLDER_CACHE_TTL_MS && folder.isDirectory) {
+            return cached
         }
-        val (resolved, files) = resolveDirectFolderWithFiles(now)
-        if (!resolved.isDirectory && !resolved.mkdirs() && !resolved.isDirectory) {
+        val targetFolder = directFolder()
+        if (!targetFolder.isDirectory && !targetFolder.mkdirs() && !targetFolder.isDirectory) {
             throw WildcardFileException("wildcard 폴더를 만들지 못했습니다.")
         }
-        return files
+        val parsed = parseWildcardFiles(targetFolder)
+        cachedFolder = targetFolder
+        cachedFolderAtMs = now
+        cachedFiles = parsed
+        cachedFilesAtMs = now
+        return parsed
     }
 
     fun readFile(file: WildcardTextFile): String {
@@ -230,6 +235,7 @@ internal class AndroidWildcardDirectStorage {
             if (!file.createNewFile()) {
                 throw WildcardFileException("새 파일을 만들지 못했습니다.")
             }
+            clearCache()
             WildcardTextFile(id = fileName, fileName = fileName)
         } catch (_: IOException) {
             throw WildcardFileException("새 파일을 만들지 못했습니다.")
@@ -241,6 +247,7 @@ internal class AndroidWildcardDirectStorage {
     fun writeFile(file: WildcardTextFile, text: String) {
         try {
             fileOnDisk(file).writeText(text, Charsets.UTF_8)
+            clearCache()
         } catch (_: IOException) {
             throw WildcardFileException("${file.fileName} 파일을 저장하지 못했습니다.")
         } catch (_: SecurityException) {
@@ -253,6 +260,7 @@ internal class AndroidWildcardDirectStorage {
             if (!fileOnDisk(file).delete()) {
                 throw WildcardFileException("${file.fileName} 파일을 삭제하지 못했습니다.")
             }
+            clearCache()
         } catch (_: SecurityException) {
             throw WildcardFileException("${file.fileName} 파일을 삭제하지 못했습니다.")
         }
@@ -266,6 +274,7 @@ internal class AndroidWildcardDirectStorage {
             if (!renamed.renameTo(target)) {
                 throw WildcardFileException("${file.fileName} 파일 이름을 수정하지 못했습니다.")
             }
+            clearCache()
             WildcardTextFile(id = newName, fileName = newName)
         } catch (_: SecurityException) {
             throw WildcardFileException("${file.fileName} 파일 이름을 수정하지 못했습니다.")
@@ -301,27 +310,20 @@ internal class AndroidWildcardDirectStorage {
                 return cached
             }
         }
-        return resolveDirectFolderWithFiles(now).first
-    }
-
-    private fun resolveDirectFolderWithFiles(now: Long): Pair<File, List<WildcardTextFile>> {
         @Suppress("DEPRECATION")
         val externalRoot = Environment.getExternalStorageDirectory()
         val candidates = AppDefaults.WILDCARD_DIRECTORY_CANDIDATES.map { relativePath ->
             File(externalRoot, relativePath)
         }
-        for (candidate in candidates) {
-            val files = parseWildcardFiles(candidate)
-            if (files.isNotEmpty()) {
-                cachedFolder = candidate
-                cachedFolderAtMs = now
-                return candidate to files
-            }
-        }
-        val fallback = candidates.firstOrNull { it.isDirectory } ?: candidates.first()
-        cachedFolder = fallback
+        val matched = candidates.firstOrNull { candidate ->
+            candidate.isDirectory && candidate.listFiles { f ->
+                f.isFile && f.name.endsWith(".txt", ignoreCase = true)
+            }?.isNotEmpty() == true
+        } ?: candidates.firstOrNull { it.isDirectory } ?: candidates.first()
+
+        cachedFolder = matched
         cachedFolderAtMs = now
-        return fallback to emptyList()
+        return matched
     }
 
     private fun parseWildcardFiles(folder: File): List<WildcardTextFile> {
@@ -341,6 +343,13 @@ internal class AndroidWildcardDirectStorage {
         private const val FOLDER_CACHE_TTL_MS = 2_000L
         @Volatile private var cachedFolder: File? = null
         @Volatile private var cachedFolderAtMs: Long = 0L
+        @Volatile private var cachedFiles: List<WildcardTextFile>? = null
+        @Volatile private var cachedFilesAtMs: Long = 0L
+
+        fun clearCache() {
+            cachedFiles = null
+            cachedFilesAtMs = 0L
+        }
 
         fun hasAllFilesAccess(): Boolean {
             return try {

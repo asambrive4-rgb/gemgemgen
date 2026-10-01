@@ -1,4 +1,4 @@
-// 역할: 최근 앱 제어, 제스처 주입, 공통 노드 클릭 위임 및 접근성 감시 패키지 등록(setServiceInfo) 최적화를 제공하는 인프라 서비스
+// 역할: 최근 앱 제어, 제스처 주입, 공통 노드 클릭 위임 및 앱별 자동화 게이트웨이를 제공하는 접근성 인프라 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -19,10 +19,8 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.NewChatMode
-import com.example.gemgemgen.automation.usecase.FlowConfigurableGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
-import com.example.gemgemgen.core.AppDefaults
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,9 +39,6 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var memoryCleanupToken: Any? = null
     private var memoryCleanupCompletion: ((MemoryCleanupResult) -> Unit)? = null
     private var memoryCleanupAutomation: GoogleAppForceStopAutomation? = null
-    private var previousMemoryPackageRestriction: Array<String>? = null
-    private var isAccessibilitySubscriptionConfigured: Boolean = false
-    private var currentSubscribedPackageNames: Set<String>? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
     private val geminiAutomation by lazy {
@@ -72,7 +67,12 @@ class GeminiAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         activeService = this
-        clearPackageRestriction()
+        serviceInfo = serviceInfo?.apply {
+            eventTypes = 0
+            notificationTimeout = 0L
+            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
@@ -83,7 +83,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         ProcessAutomationHolder.onAccessibilityLost()
         serviceScope.coroutineContext.cancelChildren()
         handler.removeCallbacksAndMessages(null)
-        clearPackageRestriction()
     }
 
     override fun onDestroy() {
@@ -93,30 +92,21 @@ class GeminiAccessibilityService : AccessibilityService() {
         }
         finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
         ProcessAutomationHolder.onAccessibilityLost()
-        currentSubscribedPackageNames = null
-        isAccessibilitySubscriptionConfigured = false
         serviceScope.cancel()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
     internal fun gatewayFor(targetApp: AutomationTargetApp): PromptAutomationGateway {
-        val delegate = when (targetApp) {
+        return when (targetApp) {
             AutomationTargetApp.GEMINI -> geminiAutomation
             AutomationTargetApp.CHATGPT -> chatGptAutomation
             AutomationTargetApp.FLOW -> flowAutomation
         }
-        return PackageScopedPromptAutomation(
-            delegate = delegate,
-            targetApp = targetApp,
-            restrictPackages = ::restrictPackagesTo,
-            clearPackageRestriction = ::clearPackageRestriction,
-            isSessionRunning = ::isSessionRunning
-        )
     }
 
     internal fun variationGateway(): VariationPromptAutomationGateway {
-        return gatewayFor(AutomationTargetApp.GEMINI)
+        return geminiAutomation
     }
 
     internal suspend fun closeGeminiFromRecents(): CloseGeminiAppResult {
@@ -146,7 +136,6 @@ class GeminiAccessibilityService : AccessibilityService() {
                 memoryCleanupCompletion = null
                 memoryCleanupAutomation?.cancel()
                 memoryCleanupAutomation = null
-                restoreMemoryPackageRestriction()
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }
@@ -154,8 +143,6 @@ class GeminiAccessibilityService : AccessibilityService() {
 
             handler.post {
                 if (memoryCleanupToken !== token) return@post
-                previousMemoryPackageRestriction = serviceInfo?.packageNames?.copyOf()
-                clearPackageRestriction()
                 memoryCleanupAutomation = GoogleAppForceStopAutomation(
                     handler = handler,
                     rootProvider = { rootInActiveWindow },
@@ -216,8 +203,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         closeTaskDescription = closeDescription
         closeAppCompletion = onFinished
         handler.post {
-            // Recents/system UI must stay visible to package filter.
-            clearPackageRestriction()
             val opened = tapDexRecentsButton {
                 handler.postDelayed(
                     { closeNextTaskCard(closedCount = 0, clickCount = 0) },
@@ -227,51 +212,6 @@ class GeminiAccessibilityService : AccessibilityService() {
             if (!opened) {
                 finishCloseApp(CloseGeminiAppResult.RecentsUnavailable)
             }
-        }
-    }
-
-    private fun restrictPackagesTo(targetApp: AutomationTargetApp) {
-        applyAccessibilitySubscription(packageNamesFor(targetApp))
-    }
-
-    private fun clearPackageRestriction() {
-        applyAccessibilitySubscription(packageNames = null)
-    }
-
-    private fun restoreMemoryPackageRestriction() {
-        val previousPackageRestriction = previousMemoryPackageRestriction
-        previousMemoryPackageRestriction = null
-        applyAccessibilitySubscription(previousPackageRestriction)
-    }
-
-    private fun applyAccessibilitySubscription(packageNames: Array<String>?) {
-        val requestedSet = packageNames?.toSet()
-        if (isAccessibilitySubscriptionConfigured && currentSubscribedPackageNames == requestedSet) {
-            return
-        }
-        val info = serviceInfo ?: return
-        info.eventTypes = 0
-        info.packageNames = packageNames
-        info.notificationTimeout = 0L
-        info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-        setServiceInfo(info)
-        currentSubscribedPackageNames = requestedSet
-        isAccessibilitySubscriptionConfigured = true
-    }
-
-    internal fun isSessionRunning(): Boolean {
-        return ProcessAutomationHolder.current()?.isSessionRunning() == true
-    }
-
-    private fun packageNamesFor(targetApp: AutomationTargetApp): Array<String> {
-        return when (targetApp) {
-            AutomationTargetApp.GEMINI -> arrayOf(
-                AppDefaults.GEMINI_PACKAGE_NAME,
-                AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME
-            )
-            AutomationTargetApp.CHATGPT -> arrayOf(AppDefaults.CHATGPT_PACKAGE_NAME)
-            AutomationTargetApp.FLOW -> arrayOf(AppDefaults.FLOW_PACKAGE_NAME)
         }
     }
 
@@ -454,7 +394,6 @@ class GeminiAccessibilityService : AccessibilityService() {
         memoryCleanupCompletion = null
         memoryCleanupAutomation?.cancel()
         memoryCleanupAutomation = null
-        restoreMemoryPackageRestriction()
     }
 
 
@@ -482,81 +421,4 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 }
 
-internal abstract class BasePackageScopedAutomation(
-    private val targetApp: AutomationTargetApp,
-    private val restrictPackages: (AutomationTargetApp) -> Unit,
-    protected val clearPackageRestriction: () -> Unit
-) {
-    protected fun beginPackageScope() {
-        restrictPackages(targetApp)
-    }
-
-    protected fun handleStateChange(
-        state: AutomationRunState,
-        onStateChange: (AutomationRunState) -> Unit
-    ) {
-        if (state is AutomationRunState.Failure || state is AutomationRunState.Stopped) {
-            clearPackageRestriction()
-        }
-        onStateChange(state)
-    }
-
-    protected fun cancel(cancelDelegate: () -> Unit) {
-        cancelDelegate()
-        clearPackageRestriction()
-    }
-}
-
-internal class PackageScopedPromptAutomation(
-    private val delegate: PromptAutomationGateway,
-    targetApp: AutomationTargetApp,
-    restrictPackages: (AutomationTargetApp) -> Unit,
-    clearPackageRestriction: () -> Unit,
-    private val isSessionRunning: () -> Boolean
-) : BasePackageScopedAutomation(targetApp, restrictPackages, clearPackageRestriction),
-    PromptAutomationGateway,
-    FlowConfigurableGateway {
-
-    override fun setFlowImageCount(count: Int) {
-        (delegate as? FlowConfigurableGateway)?.setFlowImageCount(count)
-    }
-
-    override fun sendPrompt(
-        prompt: String,
-        newChatMode: NewChatMode,
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        beginPackageScope()
-        delegate.sendPrompt(
-            prompt = prompt,
-            newChatMode = newChatMode,
-            onStateChange = { state -> handleStateChange(state, onStateChange) },
-            onDone = {
-                onDone()
-                if (!isSessionRunning()) {
-                    clearPackageRestriction()
-                }
-            }
-        )
-    }
-
-    override fun pastePromptOnly(
-        prompt: String,
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    ) {
-        beginPackageScope()
-        delegate.pastePromptOnly(
-            prompt = prompt,
-            onStateChange = { state -> handleStateChange(state, onStateChange) },
-            onDone = {
-                clearPackageRestriction()
-                onDone()
-            }
-        )
-    }
-
-    override fun cancelCurrentRun() = cancel(delegate::cancelCurrentRun)
-}
 

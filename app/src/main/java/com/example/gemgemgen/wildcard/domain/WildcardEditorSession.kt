@@ -11,6 +11,10 @@ data class WildcardEditorSession(
         WildcardFileParser.parseItems(editingText)
     }
 
+    val hasSelectableLines: Boolean by lazy(LazyThreadSafetyMode.NONE) {
+        WildcardFileParser.hasAnyItem(editingText)
+    }
+
     val hasUnsavedChanges: Boolean
         get() = selectedFile != null && savedText != editingText
 

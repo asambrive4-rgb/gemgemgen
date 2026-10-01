@@ -63,6 +63,7 @@ object AnalysisMaskingPolicy {
         selectedDirectionIds: Set<String>,
         customHint: String
     ): Boolean {
+        if (cache == null) return true
         val directionInput = extractDirectionInput(directions, selectedDirectionIds, customHint)
         return shouldAnalyzeMasking(
             source = source,

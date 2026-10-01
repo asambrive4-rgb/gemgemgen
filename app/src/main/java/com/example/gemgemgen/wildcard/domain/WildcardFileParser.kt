@@ -21,4 +21,8 @@ object WildcardFileParser {
             .filter { it.isNotEmpty() }
             .toList()
     }
+
+    fun hasAnyItem(text: String): Boolean {
+        return text.lineSequence().any { it.isNotBlank() }
+    }
 }

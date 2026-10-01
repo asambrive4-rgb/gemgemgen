@@ -127,13 +127,7 @@ class AnalysisViewModel(
             AnalysisTargetSegmentPolicy.isStillValid(value, it)
         }
         val clearCandidates = state.generatedCandidates.isNotEmpty()
-        val nextNeedsMasking = computeNeedsMaskingAnalysis(
-            source = value,
-            category = state.selectedCategory,
-            targetSegment = nextSegment,
-            cache = null,
-            state = state
-        )
+        val nextNeedsMasking = true
 
         if (!forceStateSync) {
             // 핫패스: canGenerate 경계·구간 무효·결과 정리가 없으면 화면 state 방출 생략
@@ -161,12 +155,7 @@ class AnalysisViewModel(
     override fun onCategorySelected(category: AnalysisCategory) {
         analysisCache = null
         val source = currentSourcePrompt()
-        val nextNeedsMasking = computeNeedsMaskingAnalysis(
-            source = source,
-            category = category,
-            targetSegment = null,
-            cache = null
-        )
+        val nextNeedsMasking = true
         _uiState.update {
             it.clearCandidates().copy(
                 sourcePrompt = source,

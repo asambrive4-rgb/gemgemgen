@@ -114,7 +114,7 @@ class PromptEditorCoordinator(
 
     private fun publishPromptTemplateToUiState(value: String, force: Boolean) {
         val selection = textFieldState.selection
-        val nextCandidates = computeActiveSuggestions(
+        val nextCandidates = resolveActiveSuggestions(
             text = value,
             cursor = selection.max,
             selectionMin = selection.min,
@@ -504,7 +504,7 @@ class PromptEditorCoordinator(
         promptEditorSession = session
         onPromptTextChanged?.invoke(session.text)
         val message = AutomationUiText.paragraphMessage(session.messageKey)
-        val suggestions = computeActiveSuggestions(
+        val suggestions = resolveActiveSuggestions(
             text = session.text,
             cursor = session.text.length,
             selectionMin = session.text.length,
@@ -541,6 +541,50 @@ class PromptEditorCoordinator(
     }
 
     private var currentAutocompleteCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
+    private var lastSuggestionText: String? = null
+    private var lastSuggestionCursor: Int = -1
+    private var lastSuggestionCandidates: List<WildcardTokenAutocomplete.Candidate> = emptyList()
+    private var lastSuggestionParagraphMode: Boolean = false
+    private var lastComputedSuggestions: List<WildcardTokenAutocomplete.Candidate> = emptyList()
+
+    private fun resolveActiveSuggestions(
+        text: String,
+        cursor: Int,
+        selectionMin: Int,
+        selectionMax: Int,
+        candidates: List<WildcardTokenAutocomplete.Candidate>,
+        isParagraphSelectionMode: Boolean = false
+    ): List<WildcardTokenAutocomplete.Candidate> {
+        if (isParagraphSelectionMode || selectionMin != selectionMax) {
+            lastSuggestionText = text
+            lastSuggestionCursor = cursor
+            lastSuggestionCandidates = candidates
+            lastSuggestionParagraphMode = isParagraphSelectionMode
+            lastComputedSuggestions = emptyList()
+            return emptyList()
+        }
+        if (text == lastSuggestionText &&
+            cursor == lastSuggestionCursor &&
+            candidates === lastSuggestionCandidates &&
+            isParagraphSelectionMode == lastSuggestionParagraphMode
+        ) {
+            return lastComputedSuggestions
+        }
+        val computed = computeActiveSuggestions(
+            text = text,
+            cursor = cursor,
+            selectionMin = selectionMin,
+            selectionMax = selectionMax,
+            candidates = candidates,
+            isParagraphSelectionMode = isParagraphSelectionMode
+        )
+        lastSuggestionText = text
+        lastSuggestionCursor = cursor
+        lastSuggestionCandidates = candidates
+        lastSuggestionParagraphMode = isParagraphSelectionMode
+        lastComputedSuggestions = computed
+        return computed
+    }
 
     fun updateAutocompleteCandidates(
         candidates: List<WildcardTokenAutocomplete.Candidate>
@@ -551,7 +595,7 @@ class PromptEditorCoordinator(
 
     fun refreshActiveSuggestions() {
         val selection = textFieldState.selection
-        val suggestions = computeActiveSuggestions(
+        val suggestions = resolveActiveSuggestions(
             text = textFieldState.text.toString(),
             cursor = selection.max,
             selectionMin = selection.min,

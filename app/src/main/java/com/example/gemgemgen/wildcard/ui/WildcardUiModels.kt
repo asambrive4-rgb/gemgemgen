@@ -81,7 +81,7 @@ data class WildcardUiState(
     val canRequestClassify: Boolean
         get() = canModifyFiles &&
             editor.selectedFile != null &&
-            selectableLines.isNotEmpty() &&
+            editor.hasSelectableLines &&
             !isFileOperationInProgress &&
             !isLineSelectionMode &&
             !classify.isBusy

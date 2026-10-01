@@ -38,6 +38,7 @@ import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
+import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.ui.WildcardScreen
 import com.example.gemgemgen.wildcard.ui.WildcardScreenActions
 import com.example.gemgemgen.wildcard.ui.WildcardViewModel
@@ -60,6 +61,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val mainUiState by automationViewModel.uiState.collectAsStateWithLifecycle()
     val automationBarUiState by automationViewModel.automationBarUiState.collectAsStateWithLifecycle()
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.AUTOMATION) }
+    var lastSyncedWildcardFiles by remember { mutableStateOf<List<WildcardTextFile>?>(null) }
     val wildcardStoreOwner = remember { TabViewModelStoreOwner() }
     val analysisStoreOwner = remember { TabViewModelStoreOwner() }
     val floatingBarController = remember(activity) {
@@ -160,10 +162,14 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
         if (selectedTab != tab) {
             trimInactiveTabs(exceptTab = tab)
-        }
-        // 와일드카드 탭에서 파일 추가/이름변경 후 돌아와도 추천 목록이 갱신되게 한다.
-        if (tab == MainTab.AUTOMATION) {
-            automationViewModel.refreshAutocompleteCandidates()
+            // 와일드카드 탭에서 파일 추가/이름변경/삭제 후 자동화 탭으로 돌아왔을 때만 추천 목록 갱신
+            if (tab == MainTab.AUTOMATION && selectedTab == MainTab.WILDCARD) {
+                val currentFiles = getInitializedWildcardViewModel()?.uiState?.value?.files
+                if (currentFiles != null && currentFiles != lastSyncedWildcardFiles) {
+                    lastSyncedWildcardFiles = currentFiles
+                    automationViewModel.refreshAutocompleteCandidates()
+                }
+            }
         }
         selectedTab = tab
     }

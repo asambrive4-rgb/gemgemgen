@@ -69,4 +69,13 @@ class WildcardEditorSessionTest {
         assertTrue(trimmed.undoStack.isEmpty())
         assertTrue(trimmed.hasUnsavedChanges)
     }
+
+    @Test
+    fun hasSelectableLines_returnsTrueOnlyWhenValidLinesExist() {
+        val sessionWithText = WildcardEditorSession(editingText = "  first line  \n\n  second line  ")
+        assertTrue(sessionWithText.hasSelectableLines)
+
+        val sessionBlank = WildcardEditorSession(editingText = "   \n\n   ")
+        assertFalse(sessionBlank.hasSelectableLines)
+    }
 }

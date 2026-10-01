@@ -39,4 +39,11 @@ class WildcardFileParserTest {
             WildcardFileParser.parseItems(text)
         )
     }
+
+    @Test
+    fun hasAnyItem_returnsTrueWhenNonBlankLineExists() {
+        org.junit.Assert.assertTrue(WildcardFileParser.hasAnyItem("   \n  item  \n   "))
+        org.junit.Assert.assertFalse(WildcardFileParser.hasAnyItem("   \n\n  \t  "))
+        org.junit.Assert.assertFalse(WildcardFileParser.hasAnyItem(""))
+    }
 }
