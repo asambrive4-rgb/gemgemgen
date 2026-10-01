@@ -9,7 +9,7 @@ enum class NewChatMode {
     Subsequent
 }
 
-interface PromptAutomationGateway {
+interface PromptAutomationGateway : VariationPromptAutomationGateway {
     fun sendPrompt(
         prompt: String,
         newChatMode: NewChatMode,
@@ -17,7 +17,15 @@ interface PromptAutomationGateway {
         onDone: () -> Unit
     )
 
-    fun cancelCurrentRun()
+    override fun pastePromptOnly(
+        prompt: String,
+        onStateChange: (AutomationRunState) -> Unit,
+        onDone: () -> Unit
+    ) {
+        sendPrompt(prompt, NewChatMode.Initial, onStateChange, onDone)
+    }
+
+    override fun cancelCurrentRun()
 }
 
 /**

@@ -116,12 +116,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     internal fun variationGateway(): VariationPromptAutomationGateway {
-        return PackageScopedVariationPromptAutomation(
-            delegate = geminiAutomation,
-            targetApp = AutomationTargetApp.GEMINI,
-            restrictPackages = ::restrictPackagesTo,
-            clearPackageRestriction = ::clearPackageRestriction
-        )
+        return gatewayFor(AutomationTargetApp.GEMINI)
     }
 
     internal suspend fun closeGeminiFromRecents(): CloseGeminiAppResult {
@@ -545,17 +540,6 @@ internal class PackageScopedPromptAutomation(
             }
         )
     }
-
-    override fun cancelCurrentRun() = cancel(delegate::cancelCurrentRun)
-}
-
-internal class PackageScopedVariationPromptAutomation(
-    private val delegate: VariationPromptAutomationGateway,
-    targetApp: AutomationTargetApp,
-    restrictPackages: (AutomationTargetApp) -> Unit,
-    clearPackageRestriction: () -> Unit
-) : BasePackageScopedAutomation(targetApp, restrictPackages, clearPackageRestriction),
-    VariationPromptAutomationGateway {
 
     override fun pastePromptOnly(
         prompt: String,

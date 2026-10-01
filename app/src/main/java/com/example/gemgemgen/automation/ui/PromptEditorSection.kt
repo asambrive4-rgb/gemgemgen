@@ -102,7 +102,7 @@ internal fun PromptEditorSection(
     showWildcardSuggestions: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val effectiveCandidates = uiState.activeSuggestionCandidates
+    val effectiveCandidates = uiState.editor.activeSuggestionCandidates
     val lastNonEmptyCandidates = remember {
         mutableStateOf(emptyList<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>())
     }
@@ -178,7 +178,7 @@ internal fun PromptEditorSection(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = null,
-                        tint = if (uiState.isSearchActive) AppTheme.colors.accent else AppTheme.colors.textSecondary,
+                        tint = if (uiState.editor.isSearchActive) AppTheme.colors.accent else AppTheme.colors.textSecondary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -186,15 +186,15 @@ internal fun PromptEditorSection(
         }
 
         AnimatedVisibility(
-            visible = uiState.isSearchActive,
+            visible = uiState.editor.isSearchActive,
             enter = fadeIn(tween(150)) + expandVertically(tween(150)),
             exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
         ) {
             PromptSearchBar(
-                query = uiState.searchQuery,
+                query = uiState.editor.searchQuery,
                 onQueryChange = actions::setSearchQuery,
-                matchCount = uiState.searchMatches.size,
-                currentMatchIndex = uiState.activeSearchMatchIndex,
+                matchCount = uiState.editor.searchMatches.size,
+                currentMatchIndex = uiState.editor.activeSearchMatchIndex,
                 onNavigateNext = actions::navigateSearchNext,
                 onNavigatePrevious = actions::navigateSearchPrevious,
                 onClose = actions::closeSearch
@@ -231,12 +231,12 @@ internal fun PromptEditorSection(
             onValueChange = actions::onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
             minLines = 6,
-            paragraphSelectionEnabled = uiState.isParagraphSelectionMode,
-            highlightRange = uiState.selectedParagraphRange?.toHighlightRange(),
+            paragraphSelectionEnabled = uiState.editor.isParagraphSelectionMode,
+            highlightRange = uiState.editor.selectedParagraphRange?.toHighlightRange(),
             selectedParagraphColor = AppTheme.colors.primary.copy(alpha = 0.22f),
-            searchHighlightRanges = uiState.searchMatches,
-            activeSearchMatchIndex = uiState.activeSearchMatchIndex,
-            supportingText = uiState.paragraphSelectionMessage,
+            searchHighlightRanges = uiState.editor.searchMatches,
+            activeSearchMatchIndex = uiState.editor.activeSearchMatchIndex,
+            supportingText = uiState.editor.paragraphSelectionMessage,
             onParagraphOffsetSelected = actions::selectPromptParagraphAt,
             onDeleteSelectedParagraph = actions::deleteSelectedPromptParagraph,
             onReplaceSelectedParagraph = actions::replaceSelectedPromptParagraph
@@ -245,18 +245,18 @@ internal fun PromptEditorSection(
         if (showPromptActions) {
             PromptActionRow(
                 promptTemplateState = promptTemplateState,
-                isParagraphSelectionMode = uiState.isParagraphSelectionMode,
+                isParagraphSelectionMode = uiState.editor.isParagraphSelectionMode,
                 onToggleParagraphSelectionMode = actions::toggleParagraphSelectionMode,
                 canCloseGemini = uiState.canCloseGemini,
                 canCloseSelfApp = uiState.canCloseSelfApp,
                 canCleanMemory = uiState.canCleanMemory,
                 isMemoryCleanupScheduled = uiState.isMemoryCleanupScheduled,
                 isMaintenanceBusy = uiState.isMaintenanceBusy,
-                canNavigateHistoryBack = uiState.canNavigateHistoryBack,
-                canNavigateHistoryForward = uiState.canNavigateHistoryForward,
-                isHistoryIndicatorVisible = uiState.isHistoryIndicatorVisible,
-                historyDotCount = uiState.historyDotCount,
-                activeHistoryDotIndex = uiState.activeHistoryDotIndex,
+                canNavigateHistoryBack = uiState.editor.canNavigateHistoryBack,
+                canNavigateHistoryForward = uiState.editor.canNavigateHistoryForward,
+                isHistoryIndicatorVisible = uiState.editor.isHistoryIndicatorVisible,
+                historyDotCount = uiState.editor.historyDotCount,
+                activeHistoryDotIndex = uiState.editor.activeHistoryDotIndex,
                 canCopyPrompt = uiState.hasPromptTemplate,
                 onCloseGeminiApp = actions::closeGeminiApp,
                 onCleanDeviceMemory = actions::cleanDeviceMemory,

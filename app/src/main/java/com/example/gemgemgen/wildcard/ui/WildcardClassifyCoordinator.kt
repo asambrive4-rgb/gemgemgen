@@ -64,137 +64,126 @@ interface WildcardClassifyActions {
 }
 
 class WildcardClassifyCoordinator(
-    private val classifyWildcardLines: ClassifyWildcardLinesUseCase? = null,
-    private val saveWildcardClassifyResult: SaveWildcardClassifyResultUseCase? = null,
-    private val analysisKeyManager: ManageGeminiApiKeysUseCase? = null,
+    private val classifyWildcardLines: ClassifyWildcardLinesUseCase,
+    private val saveWildcardClassifyResult: SaveWildcardClassifyResultUseCase,
+    private val analysisKeyManager: ManageGeminiApiKeysUseCase,
     private val scope: CoroutineScope,
-    private val host: Host
+    private val currentState: () -> WildcardUiState,
+    private val updateState: ((WildcardUiState) -> WildcardUiState) -> Unit,
+    private val onFilesSaved: suspend () -> Unit = {},
+    private val beginFileOperation: () -> Boolean = { true },
+    private val endFileOperation: () -> Unit = {}
 ) : WildcardClassifyActions {
-    interface Host {
-        val currentState: WildcardUiState
-        fun updateClassifyState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState)
-        fun onLineSelectionCleared()
-        fun updateFeedback(message: String? = null, error: String = "")
-        fun beginFileOperation(): Boolean
-        fun endFileOperation()
-        suspend fun onFilesSaved()
-
-        fun showMessage(message: String) = updateFeedback(message = message, error = "")
-        fun showError(error: String) = updateFeedback(message = "", error = error)
-        fun clearError() = updateFeedback(error = "")
-        fun clearMessageAndError() = updateFeedback(message = "", error = "")
-    }
-
     private var classifyJob: Job? = null
 
-    private fun updateState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState) {
-        host.updateClassifyState(transform)
+    private fun updateClassifyState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState) {
+        updateState { it.copy(classify = transform(it.classify)) }
+    }
+
+    private fun showMessage(message: String) {
+        updateState { it.copy(message = message, error = "") }
+    }
+
+    private fun showError(error: String) {
+        updateState { it.copy(message = "", error = error) }
+    }
+
+    private fun clearError() {
+        updateState { it.copy(error = "") }
+    }
+
+    private fun clearMessageAndError() {
+        updateState { it.copy(message = "", error = "") }
     }
 
     fun cancelJob() {
         classifyJob?.cancel()
         classifyJob = null
-        if (host.currentState.classify.isClassifying) {
-            updateState { it.copy(isClassifying = false) }
+        if (currentState().classify.isClassifying) {
+            updateClassifyState { it.copy(isClassifying = false) }
         }
     }
 
     fun reset() {
         cancelJob()
-        updateState { WildcardClassifyUiState() }
+        updateClassifyState { WildcardClassifyUiState() }
     }
 
     override fun requestClassify() {
-        val state = host.currentState
-        val classify = classifyWildcardLines
-        if (!state.canRequestClassify || classify == null) {
+        val state = currentState()
+        if (!state.canRequestClassify) {
             when {
-                state.editor.selectedFile == null -> host.showError("먼저 txt 파일을 선택해주세요.")
-                state.selectableLines.isEmpty() -> host.showError("분류할 줄이 없습니다.")
-                !state.canModifyFiles -> host.showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
-                else -> host.showError("분류 기능을 사용할 수 없습니다.")
+                state.editor.selectedFile == null -> showError("먼저 txt 파일을 선택해주세요.")
+                state.selectableLines.isEmpty() -> showError("분류할 줄이 없습니다.")
+                !state.canModifyFiles -> showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
+                else -> showError("분류 기능을 사용할 수 없습니다.")
             }
             return
         }
 
         scope.launch {
-            val generationSetting = analysisKeyManager?.getRoleSetting(AnalysisModelRole.GENERATION)
-            host.onLineSelectionCleared()
+            val generationSetting = analysisKeyManager.getRoleSetting(AnalysisModelRole.GENERATION)
             updateState {
                 it.copy(
-                    showClassifyCriteriaDialog = true,
-                    classifyCriteria = it.classifyCriteria,
-                    classifyPreview = null,
-                    classifySaveEntries = emptyList(),
-                    classifyOverwriteConflicts = emptyList(),
-                    classifyProvider = generationSetting?.provider ?: it.classifyProvider,
-                    classifyModelId = generationSetting?.modelId ?: it.classifyModelId
+                    isLineSelectionMode = false,
+                    selectedLineIndices = emptySet(),
+                    classify = it.classify.copy(
+                        showClassifyCriteriaDialog = true,
+                        classifyCriteria = it.classify.classifyCriteria,
+                        classifyPreview = null,
+                        classifySaveEntries = emptyList(),
+                        classifyOverwriteConflicts = emptyList(),
+                        classifyProvider = generationSetting.provider,
+                        classifyModelId = generationSetting.modelId
+                    ),
+                    message = "",
+                    error = ""
                 )
             }
-            host.clearMessageAndError()
         }
     }
 
     override fun onClassifyCriteriaChange(value: String) {
-        updateState { it.copy(classifyCriteria = value) }
-        host.clearError()
+        updateClassifyState { it.copy(classifyCriteria = value) }
+        clearError()
     }
 
     override fun onClassifyProviderSelected(provider: AnalysisProvider) {
-        val keyManager = analysisKeyManager ?: run {
-            updateState {
-                it.copy(
-                    classifyProvider = provider,
-                    classifyModelId = AnalysisProvider.defaultModel(provider)
-                )
-            }
-            host.clearError()
-            return
-        }
-        updateRoleSetting { keyManager.setRoleProvider(AnalysisModelRole.GENERATION, provider) }
+        updateRoleSetting { analysisKeyManager.setRoleProvider(AnalysisModelRole.GENERATION, provider) }
     }
 
     override fun onClassifyModelSelected(modelId: String) {
-        val keyManager = analysisKeyManager ?: run {
-            updateState { it.copy(classifyModelId = modelId) }
-            host.clearError()
-            return
-        }
-        updateRoleSetting { keyManager.setRoleModel(AnalysisModelRole.GENERATION, modelId) }
+        updateRoleSetting { analysisKeyManager.setRoleModel(AnalysisModelRole.GENERATION, modelId) }
     }
 
     private fun updateRoleSetting(block: suspend () -> AnalysisRoleModelSetting) {
         scope.launch {
             try {
                 val setting = block()
-                updateState {
+                updateClassifyState {
                     it.copy(
                         classifyProvider = setting.provider,
                         classifyModelId = setting.modelId
                     )
                 }
-                host.clearError()
+                clearError()
             } catch (error: RuntimeException) {
-                host.showError(error.message ?: "모델을 바꾸지 못했습니다.")
+                showError(error.message ?: "모델을 바꾸지 못했습니다.")
             }
         }
     }
 
     override fun dismissClassifyCriteriaDialog() {
-        if (host.currentState.classify.isClassifying) return
-        updateState { it.copy(showClassifyCriteriaDialog = false) }
-        host.clearError()
+        if (currentState().classify.isClassifying) return
+        updateClassifyState { it.copy(showClassifyCriteriaDialog = false) }
+        clearError()
     }
 
     override fun runClassify() {
-        val classify = classifyWildcardLines ?: run {
-            host.showError("분류 기능을 사용할 수 없습니다.")
-            return
-        }
-        val state = host.currentState
+        val state = currentState()
         if (!state.canRunClassify) {
             if (state.classify.classifyCriteria.isBlank()) {
-                host.showError("분류 기준을 입력해주세요.")
+                showError("분류 기준을 입력해주세요.")
             }
             return
         }
@@ -203,7 +192,7 @@ class WildcardClassifyCoordinator(
         val criteria = state.classify.classifyCriteria
         cancelJob()
         classifyJob = scope.launch {
-            updateState {
+            updateClassifyState {
                 it.copy(
                     isClassifying = true,
                     showClassifyCriteriaDialog = false,
@@ -212,9 +201,9 @@ class WildcardClassifyCoordinator(
                     classifyOverwriteConflicts = emptyList()
                 )
             }
-            host.showMessage("분류 중…")
+            showMessage("분류 중…")
             try {
-                val result = classify.classify(
+                val result = classifyWildcardLines.classify(
                     editingText = editingText,
                     criteria = criteria
                 )
@@ -224,7 +213,7 @@ class WildcardClassifyCoordinator(
                 } else {
                     ""
                 }
-                updateState {
+                updateClassifyState {
                     it.copy(
                         isClassifying = false,
                         classifyPreview = result,
@@ -233,29 +222,29 @@ class WildcardClassifyCoordinator(
                         classifyCriteria = result.criteria
                     )
                 }
-                host.showMessage("분류 미리보기: ${entries.size}개 파일$dropNote")
+                showMessage("분류 미리보기: ${entries.size}개 파일$dropNote")
             } catch (error: RuntimeException) {
-                updateState {
+                updateClassifyState {
                     it.copy(
                         isClassifying = false,
                         showClassifyCriteriaDialog = true
                     )
                 }
-                host.showError(error.message ?: "분류에 실패했습니다.")
+                showError(error.message ?: "분류에 실패했습니다.")
             }
         }
     }
 
     override fun dismissClassifyPreview() {
-        if (host.currentState.classify.isClassifying) return
-        updateState {
+        if (currentState().classify.isClassifying) return
+        updateClassifyState {
             it.copy(
                 classifyPreview = null,
                 classifySaveEntries = emptyList(),
                 classifyOverwriteConflicts = emptyList()
             )
         }
-        host.clearMessageAndError()
+        clearMessageAndError()
     }
 
     override fun onClassifyFileNameChange(index: Int, value: String) {
@@ -267,64 +256,60 @@ class WildcardClassifyCoordinator(
     }
 
     private fun mutateSaveEntry(index: Int, transform: (WildcardClassifySaveEntry) -> WildcardClassifySaveEntry) {
-        val entries = host.currentState.classify.classifySaveEntries
+        val entries = currentState().classify.classifySaveEntries
         if (index !in entries.indices) return
         val updated = entries.toMutableList().also { it[index] = transform(it[index]) }
-        updateState { it.copy(classifySaveEntries = updated) }
-        host.clearError()
+        updateClassifyState { it.copy(classifySaveEntries = updated) }
+        clearError()
     }
 
     override fun saveClassifyResult(overwrite: Boolean) {
-        val saveUseCase = saveWildcardClassifyResult ?: run {
-            host.showError("분류 저장 기능을 사용할 수 없습니다.")
-            return
-        }
-        val state = host.currentState
+        val state = currentState()
         val entries = state.classify.classifySaveEntries
         if (entries.isEmpty()) {
-            host.showError("저장할 그룹이 없습니다.")
+            showError("저장할 그룹이 없습니다.")
             return
         }
         if (state.isFileOperationInProgress || state.classify.isClassifying) return
         if (!state.canModifyFiles) {
-            host.showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
+            showError("파일을 저장하려면 wildcard 폴더를 다시 선택해주세요.")
             return
         }
-        if (!host.beginFileOperation()) return
+        if (!beginFileOperation()) return
 
         scope.launch {
             try {
-                when (val result = saveUseCase.save(entries, overwrite = overwrite)) {
+                when (val result = saveWildcardClassifyResult.save(entries, overwrite = overwrite)) {
                     is WildcardClassifySaveResult.Success -> {
-                        host.onFilesSaved()
-                        updateState {
+                        onFilesSaved()
+                        updateClassifyState {
                             it.copy(
                                 classifyPreview = null,
                                 classifySaveEntries = emptyList(),
                                 classifyOverwriteConflicts = emptyList()
                             )
                         }
-                        host.showMessage("${result.savedFileNames.size}개 파일로 저장했습니다.")
+                        showMessage("${result.savedFileNames.size}개 파일로 저장했습니다.")
                     }
                     is WildcardClassifySaveResult.FileExists -> {
-                        updateState {
+                        updateClassifyState {
                             it.copy(
                                 classifyOverwriteConflicts = result.conflictingFileNames
                             )
                         }
-                        host.showError("같은 이름의 파일이 있습니다. 덮어쓸까요?")
+                        showError("같은 이름의 파일이 있습니다. 덮어쓸까요?")
                     }
                     WildcardClassifySaveResult.NothingToSave -> {
-                        host.showError("저장할 그룹이 없습니다.")
+                        showError("저장할 그룹이 없습니다.")
                     }
                     is WildcardClassifySaveResult.InvalidFileName -> {
-                        host.showError("파일 이름이 올바르지 않습니다: ${result.groupName}")
+                        showError("파일 이름이 올바르지 않습니다: ${result.groupName}")
                     }
                 }
             } catch (error: RuntimeException) {
-                host.showError(error.message ?: "분류 결과를 저장하지 못했습니다.")
+                showError(error.message ?: "분류 결과를 저장하지 못했습니다.")
             } finally {
-                host.endFileOperation()
+                endFileOperation()
             }
         }
     }
@@ -334,9 +319,9 @@ class WildcardClassifyCoordinator(
     }
 
     override fun dismissClassifyOverwrite() {
-        updateState {
+        updateClassifyState {
             it.copy(classifyOverwriteConflicts = emptyList())
         }
-        host.clearError()
+        clearError()
     }
 }

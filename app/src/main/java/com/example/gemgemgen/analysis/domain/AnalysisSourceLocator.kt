@@ -29,7 +29,7 @@ object AnalysisSourceLocator {
         val found = if (occurrence != null && matches.size > 1) {
             matches.getOrNull(occurrence - 1)
         } else {
-            matches.singleOrNull() ?: matches.singleOrNull { it.startIndex == requested.startIndex }
+            matches.singleOrNull()
         }
         require(found != null) { "같은 문구가 원문에 여러 번 있습니다. 앞뒤 문맥을 포함해 수정 대상을 구분해 주세요." }
         return found

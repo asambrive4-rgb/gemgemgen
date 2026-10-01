@@ -1,6 +1,7 @@
-// 역할: 와일드카드 토큰 치환 유스케이스 동작과 안전성 조건을 검증합니다.
+// 역할: 와일드카드 토큰 및 상용구 치환 규칙 동작과 안전성 조건을 검증합니다.
 package com.example.gemgemgen.automation.usecase
 
+import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -9,7 +10,21 @@ import org.junit.Test
 
 class ApplyWildcardTokenUseCaseTest {
 
-    private val useCase = ApplyWildcardTokenUseCase()
+    private fun useCase(
+        text: String,
+        selectionStart: Int,
+        selectionEnd: Int,
+        candidate: Candidate,
+        candidates: List<Candidate>,
+        isParagraphSelectionMode: Boolean = false
+    ) = WildcardTokenAutocomplete.applyToken(
+        text = text,
+        selectionStart = selectionStart,
+        selectionEnd = selectionEnd,
+        candidate = candidate,
+        candidates = candidates,
+        isParagraphSelectionMode = isParagraphSelectionMode
+    )
 
     private val placeCandidate = Candidate(name = "장소", token = "__장소__")
 

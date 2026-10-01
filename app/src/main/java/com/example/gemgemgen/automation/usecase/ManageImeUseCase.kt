@@ -11,8 +11,7 @@ class ManageImeUseCase(
         val originalImeId = settings.getDefaultInputMethod()
         if (originalImeId.isNullOrBlank()) {
             return ImeSwitchResult.Failure(
-                message = "현재 입력기 ID를 읽지 못했습니다.",
-                originalImeId = originalImeId
+                message = "현재 입력기 ID를 읽지 못했습니다."
             )
         }
 
@@ -61,8 +60,7 @@ class ManageImeUseCase(
         }
 
         return ImeSwitchResult.Failure(
-            message = "Null Keyboard로 전환하지 못했습니다.",
-            originalImeId = originalImeId
+            message = "Null Keyboard로 전환하지 못했습니다."
         )
     }
 
@@ -91,8 +89,7 @@ data class ImeSwitchSession(
 sealed interface ImeSwitchResult {
     data class Success(val session: ImeSwitchSession) : ImeSwitchResult
     data class Failure(
-        val message: String,
-        val originalImeId: String?
+        val message: String
     ) : ImeSwitchResult
 }
 

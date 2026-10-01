@@ -2,13 +2,38 @@
 package com.example.gemgemgen.wildcard.domain
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.jsonObject
 
 object WildcardClassifyPromptBuilder {
+    private val CLASSIFY_RESPONSE_SCHEMA: JsonObject by lazy {
+        Json.parseToJsonElement(
+            """
+            {
+              "type": "object",
+              "properties": {
+                "groups": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string" },
+                      "items": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    },
+                    "required": ["name", "items"]
+                  }
+                }
+              },
+              "required": ["groups"]
+            }
+            """.trimIndent()
+        ).jsonObject
+    }
+
     fun build(
         criteria: String,
         lines: List<String>
@@ -24,7 +49,7 @@ Rules:
 1. Use ONLY the user-provided classification criteria to decide groups and membership.
 2. Every output item MUST be an exact copy of one input line. Do not rewrite, translate, merge, or invent lines.
 3. Prefer assigning each input line to exactly one group.
-4. You may omit a line from all named groups if it does not fit; the app will place leftovers into "미분류".
+4. You may omit a line from all named groups if it does not fit; unassigned lines will be treated as dropped lines and not saved.
 5. Group names must be short Korean labels suitable as file names (no path characters).
 6. Return strict JSON only matching the schema.
         """.trimIndent()
@@ -42,63 +67,7 @@ Classify all lines according to the criteria. Return JSON with groups[].name and
         return AnalysisPromptPayload(
             systemInstruction = systemInstruction,
             userPrompt = userPrompt,
-            responseSchema = classifyResponseSchema()
+            responseSchema = CLASSIFY_RESPONSE_SCHEMA
         )
-    }
-
-    private fun classifyResponseSchema(): JsonObject {
-        return buildJsonObject {
-            put("type", JsonPrimitive("object"))
-            put(
-                "properties",
-                buildJsonObject {
-                    put(
-                        "groups",
-                        buildJsonObject {
-                            put("type", JsonPrimitive("array"))
-                            put(
-                                "items",
-                                buildJsonObject {
-                                    put("type", JsonPrimitive("object"))
-                                    put(
-                                        "properties",
-                                        buildJsonObject {
-                                            put("name", buildJsonObject {
-                                                put("type", JsonPrimitive("string"))
-                                            })
-                                            put(
-                                                "items",
-                                                buildJsonObject {
-                                                    put("type", JsonPrimitive("array"))
-                                                    put(
-                                                        "items",
-                                                        buildJsonObject {
-                                                            put("type", JsonPrimitive("string"))
-                                                        }
-                                                    )
-                                                }
-                                            )
-                                        }
-                                    )
-                                    put(
-                                        "required",
-                                        JsonArray(
-                                            listOf(
-                                                JsonPrimitive("name"),
-                                                JsonPrimitive("items")
-                                            )
-                                        )
-                                    )
-                                }
-                            )
-                        }
-                    )
-                }
-            )
-            put(
-                "required",
-                JsonArray(listOf(JsonPrimitive("groups")))
-            )
-        }
     }
 }

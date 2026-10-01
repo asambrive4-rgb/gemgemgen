@@ -42,29 +42,20 @@ class PromptHistoryStoreTest {
     @Test
     fun record_newPrompt_prependsToHistory() {
         val repo = FakePromptHistoryRepository()
-        var time = 1000L
-        val store = PromptHistoryStore(
-            repository = repo,
-            currentTimeMillisProvider = { time++ }
-        )
+        val store = PromptHistoryStore(repository = repo)
 
         store.record("첫 번째 프롬프트", AutomationTargetApp.CHATGPT)
         val result = store.record("두 번째 프롬프트", AutomationTargetApp.GEMINI)
 
         assertEquals(2, result.size)
         assertEquals("두 번째 프롬프트", result[0].prompt)
-        assertEquals(AutomationTargetApp.GEMINI, result[0].targetApp)
         assertEquals("첫 번째 프롬프트", result[1].prompt)
     }
 
     @Test
     fun record_duplicatePrompt_reordersToTopWithoutDuplicate() {
         val repo = FakePromptHistoryRepository()
-        var time = 1000L
-        val store = PromptHistoryStore(
-            repository = repo,
-            currentTimeMillisProvider = { time++ }
-        )
+        val store = PromptHistoryStore(repository = repo)
 
         store.record("A", AutomationTargetApp.CHATGPT)
         store.record("B", AutomationTargetApp.GEMINI)
@@ -75,7 +66,6 @@ class PromptHistoryStoreTest {
 
         assertEquals(3, updated.size)
         assertEquals("B", updated[0].prompt)
-        assertEquals(AutomationTargetApp.CHATGPT, updated[0].targetApp)
         assertEquals("C", updated[1].prompt)
         assertEquals("A", updated[2].prompt)
     }
@@ -120,10 +110,7 @@ class PromptHistoryStoreTest {
         val repo = FakePromptHistoryRepository(
             initialItems = listOf(
                 PromptHistoryItem(
-                    id = "1",
-                    prompt = "기존 프롬프트",
-                    targetApp = AutomationTargetApp.GEMINI,
-                    createdAtMillis = 100L
+                    prompt = "기존 프롬프트"
                 )
             )
         )

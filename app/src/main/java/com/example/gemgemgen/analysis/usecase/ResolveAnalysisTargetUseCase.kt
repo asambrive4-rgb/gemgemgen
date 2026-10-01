@@ -143,7 +143,8 @@ class ResolveAnalysisTargetUseCase(
         val responseText = aiGateway.analyze(
             apiKey = credential.accessTokenOrApiKey,
             modelId = credential.modelId,
-            payload = payload
+            payload = payload,
+            provider = credential.provider
         )
         val report = AnalysisResponseParser.parseReport(responseText, sourcePrompt)
         if (report.variationGoal.isNotBlank()) {

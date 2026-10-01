@@ -2,6 +2,7 @@
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.usecase.AnalysisException
 import java.net.HttpURLConnection
@@ -27,7 +28,8 @@ class AndroidGeminiAnalysisGateway(
     override suspend fun analyze(
         apiKey: String,
         modelId: String,
-        payload: AnalysisPromptPayload
+        payload: AnalysisPromptPayload,
+        provider: AnalysisProvider
     ): String {
         return generateContent(
             apiKey = apiKey,
@@ -240,10 +242,6 @@ class AndroidGeminiAnalysisGateway(
         return runCatching {
             thoughtElement.jsonPrimitive.content.toBooleanStrictOrNull() == true
         }.getOrDefault(false)
-    }
-
-    private fun List<JsonElement>?.orEmpty(): List<JsonElement> {
-        return this ?: emptyList()
     }
 
     private class RetryableServerException(

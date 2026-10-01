@@ -53,10 +53,7 @@ internal fun readResponseBody(
     return stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
 }
 
-internal fun extractJsonErrorMessage(responseText: String): String =
-    extractJsonErrorMessage(analysisJson, responseText)
-
-internal fun extractJsonErrorMessage(json: Json = analysisJson, responseText: String): String {
+internal fun extractJsonErrorMessage(responseText: String, json: Json = analysisJson): String {
     return runCatching {
         val root = json.parseToJsonElement(responseText).jsonObject
         val errorDescription = (root["error_description"] as? JsonPrimitive)?.contentOrNull

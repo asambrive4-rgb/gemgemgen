@@ -4,7 +4,9 @@ package com.example.gemgemgen
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
+import com.example.gemgemgen.automation.ui.AutomationUiState
 import com.example.gemgemgen.automation.ui.AutomationUiText
+import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,9 +15,9 @@ class AutomationUiTextTest {
     @Test
     fun accessibilityPrompt_mentionsServiceName() {
         assertTrue(
-            AutomationUiText.accessibilityPromptMessage().contains("GemGemGen 자동화")
+            AutomationUiText.ACCESSIBILITY_PROMPT_MESSAGE.contains("GemGemGen 자동화")
         )
-        assertEquals("접근성 서비스 필요", AutomationUiText.accessibilityPromptTitle())
+        assertEquals("접근성 서비스 필요", AutomationUiText.ACCESSIBILITY_PROMPT_TITLE)
     }
 
     @Test
@@ -59,12 +61,31 @@ class AutomationUiTextTest {
     }
 
     @Test
+    fun unavailableMessages_withUiState_blocksWhenVariationIsRunning() {
+        val runningState = AutomationUiState(
+            environmentStatus = EnvironmentStatus(
+                isAccessibilityServiceEnabled = true,
+                isGeminiInstalled = true
+            ),
+            variationAutomationState = AutomationRunState.Running("변주 중")
+        )
+        assertEquals(
+            "자동화 중에는 Gemini를 재시작할 수 없습니다.",
+            AutomationUiText.geminiRestartUnavailableMessage(runningState)
+        )
+        assertEquals(
+            "자동화 중에는 앱을 종료할 수 없습니다.",
+            AutomationUiText.selfAppTerminateUnavailableMessage(runningState)
+        )
+    }
+
+    @Test
     fun memoryCleanupScheduled_messagesIncludeScheduleKeywords() {
         assertTrue(
-            AutomationUiText.memoryCleanupScheduledText().contains("예약")
+            AutomationUiText.MEMORY_CLEANUP_SCHEDULED_TEXT.contains("예약")
         )
         assertTrue(
-            AutomationUiText.memoryCleanupScheduleCanceledText().contains("취소")
+            AutomationUiText.MEMORY_CLEANUP_SCHEDULE_CANCELED_TEXT.contains("취소")
         )
     }
 }

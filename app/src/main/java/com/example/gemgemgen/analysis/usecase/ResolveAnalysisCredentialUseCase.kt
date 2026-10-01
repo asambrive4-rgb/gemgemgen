@@ -26,12 +26,14 @@ class ResolveAnalysisCredentialUseCase(
             }
             ResolvedAnalysisCredential(
                 accessTokenOrApiKey = token,
-                modelId = modelId
+                modelId = modelId,
+                provider = provider
             )
         }
 }
 
 data class ResolvedAnalysisCredential(
     val accessTokenOrApiKey: String,
-    val modelId: String
+    val modelId: String,
+    val provider: AnalysisProvider
 )

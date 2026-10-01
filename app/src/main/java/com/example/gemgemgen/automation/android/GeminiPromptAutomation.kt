@@ -50,11 +50,7 @@ internal class GeminiPromptAutomation(
             NewChatMode.Subsequent -> {
                 // 2회차 이후 반복 실행 시에는 이미 정규 세션이 확보되었으므로
                 // 불필요한 사이드바 개폐 오버헤드를 없애고 상단 툴바 또는 직접 새 채팅으로 신속 전환합니다.
-                val toolbarNewChat = nodeFinder.findNodeByTextOrDescription("새 채팅")
-                if (toolbarNewChat != null && clickNodeOrParent(toolbarNewChat)) {
-                    notifyState(AutomationRunState.Running("상단 툴바 새 채팅 진입 완료"))
-                    nodeFinder.invalidateCache()
-                    delay(NEW_CHAT_SETTLE_MS)
+                if (tryToolbarNewChat(notifyState)) {
                     true
                 } else {
                     clickDirectNewChat(notifyState)
@@ -67,12 +63,9 @@ internal class GeminiPromptAutomation(
         notifyState: suspend (AutomationRunState) -> Unit
     ) {
         // 이전 오류 화면(안전 가이드라인 경고 등)에 갇히지 않도록 상단 툴바의 고정 진입점("새 채팅" 버튼 등)을 직접 식별하고 클릭 후 안정화
-        val toolbarNode = nodeFinder.findNodeByTextOrDescription("새 채팅") ?: return
         notifyState(AutomationRunState.Running("Gemini 오류 화면 탈출을 위한 새 채팅 전환 중"))
-        if (clickNodeOrParent(toolbarNode)) {
+        if (tryToolbarNewChat(notifyState)) {
             notifyState(AutomationRunState.Running("Gemini 오류 화면 탈출 완료"))
-            nodeFinder.invalidateCache()
-            delay(NEW_CHAT_SETTLE_MS)
         }
     }
 
@@ -112,22 +105,28 @@ internal class GeminiPromptAutomation(
         } == true
     }
 
-    private suspend fun tryFallbackToolbarNewChat(
+    private suspend fun tryToolbarNewChat(
         notifyState: suspend (AutomationRunState) -> Unit
     ): Boolean {
-        val toolbarNewChat = nodeFinder.findNodeByTextOrDescription("새 채팅")
-        if (toolbarNewChat == null) {
-            notifyState(AutomationRunState.Failure("Gemini 사이드바 및 상단 툴바 새 채팅 버튼을 찾지 못했습니다."))
-            return false
-        }
-        notifyState(AutomationRunState.Running("사이드바 미감지로 상단 툴바 새 채팅 대체 시도"))
+        val toolbarNewChat = nodeFinder.findNodeByTextOrDescription("새 채팅") ?: return false
         return if (clickNodeOrParent(toolbarNewChat)) {
             notifyState(AutomationRunState.Running("상단 툴바 새 채팅 진입 완료"))
             nodeFinder.invalidateCache()
             delay(NEW_CHAT_SETTLE_MS)
             true
         } else {
-            notifyState(AutomationRunState.Failure("Gemini 상단 툴바 새 채팅 클릭에 실패했습니다."))
+            false
+        }
+    }
+
+    private suspend fun tryFallbackToolbarNewChat(
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        notifyState(AutomationRunState.Running("사이드바 미감지로 상단 툴바 새 채팅 대체 시도"))
+        return if (tryToolbarNewChat(notifyState)) {
+            true
+        } else {
+            notifyState(AutomationRunState.Failure("Gemini 사이드바 및 상단 툴바 새 채팅 버튼을 찾지 못했습니다."))
             false
         }
     }

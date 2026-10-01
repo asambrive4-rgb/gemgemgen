@@ -40,7 +40,8 @@ class ClassifyWildcardLinesUseCase(
         val responseText = aiGateway.analyze(
             apiKey = credential.accessTokenOrApiKey,
             modelId = credential.modelId,
-            payload = payload
+            payload = payload,
+            provider = credential.provider
         )
         val rawGroups = try {
             WildcardClassifyResponseParser.parseGroups(responseText)

@@ -2,6 +2,7 @@
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.usecase.AnalysisException
 import java.net.HttpURLConnection
@@ -23,7 +24,8 @@ class AndroidGrokAnalysisGateway : AnalysisAiGateway {
     override suspend fun analyze(
         apiKey: String,
         modelId: String,
-        payload: AnalysisPromptPayload
+        payload: AnalysisPromptPayload,
+        provider: AnalysisProvider
     ): String {
         return complete(
             accessToken = apiKey,

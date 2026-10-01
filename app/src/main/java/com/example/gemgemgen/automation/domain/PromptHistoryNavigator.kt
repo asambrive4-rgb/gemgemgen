@@ -39,22 +39,11 @@ class PromptHistoryNavigator(
         }
     }
 
-    fun onAutomationStarted(
-        executedPrompt: String,
-        updatedHistory: List<String> = prependExecutedPrompt(executedPrompt)
-    ) {
-        val filtered = updatedHistory.filter { it.isNotBlank() }.take(MAX_HISTORY_COUNT)
-        historyItems = filtered
+    fun onAutomationStarted(executedPrompt: String) {
+        historyItems = prependPrompt(executedPrompt, historyItems)
         draftPrompt = executedPrompt
         currentIndex = historyItems.size
         _isNavigating = false
-    }
-
-    private fun prependExecutedPrompt(executedPrompt: String): List<String> {
-        if (executedPrompt.isBlank()) return historyItems
-        val trimmed = executedPrompt.trim()
-        return (listOf(executedPrompt) + historyItems.filterNot { it.trim() == trimmed })
-            .take(MAX_HISTORY_COUNT)
     }
 
     fun onUserTyping(newText: String) {
@@ -99,5 +88,12 @@ class PromptHistoryNavigator(
 
     companion object {
         const val MAX_HISTORY_COUNT = 6
+
+        fun prependPrompt(executedPrompt: String, history: List<String>): List<String> {
+            if (executedPrompt.isBlank()) return history.take(MAX_HISTORY_COUNT)
+            val trimmed = executedPrompt.trim()
+            return (listOf(executedPrompt) + history.filterNot { it.trim() == trimmed })
+                .take(MAX_HISTORY_COUNT)
+        }
     }
 }

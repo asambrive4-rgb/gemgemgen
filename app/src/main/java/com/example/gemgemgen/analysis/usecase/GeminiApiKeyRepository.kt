@@ -4,10 +4,11 @@ package com.example.gemgemgen.analysis.usecase
 data class GeminiApiKeyRecord(
     val id: String,
     val label: String,
-    val encryptedValue: String,
     val preview: String,
     val isActive: Boolean
 )
+
+typealias GeminiApiKeySummary = GeminiApiKeyRecord
 
 interface GeminiApiKeyRepository {
     fun listKeys(): List<GeminiApiKeyRecord>

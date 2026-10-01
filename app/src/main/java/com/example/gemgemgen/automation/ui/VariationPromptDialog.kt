@@ -31,15 +31,12 @@ import com.example.gemgemgen.ui.theme.appTextFieldColors
 
 @Composable
 fun VariationPromptDialog(
-    showDialog: Boolean,
     config: VariationPromptConfig,
     onSave: (VariationPromptConfig) -> Unit,
     onDismiss: () -> Unit
 ) {
-    if (!showDialog) return
-
     val clipboardManager = LocalClipboardManager.current
-    var text by remember(config.prompt, showDialog) { mutableStateOf(config.prompt) }
+    var text by remember(config.prompt) { mutableStateOf(config.prompt) }
 
     PromptConfigDialogFrame(
         title = "변주 프롬프트 설정",

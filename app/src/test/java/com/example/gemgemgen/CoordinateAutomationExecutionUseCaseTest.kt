@@ -263,8 +263,7 @@ class CoordinateAutomationExecutionUseCaseTest {
             wildcardSetRepository = WildcardSetRepository { emptyList() },
             promptGatewayProvider = PromptAutomationGatewayProvider { promptGateway },
             targetAppLauncher = TargetAppLauncher { true },
-            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined)
         )
     }
 

@@ -83,14 +83,16 @@ object AnalysisResponseParser {
     }
 
     private fun parseRange(obj: JsonObject): AnalysisSourceRange {
-        val start = obj["startIndex"].stringOrBlank().toIntOrNull() ?: -1
-        val end = obj["endIndex"].stringOrBlank().toIntOrNull() ?: -1
         val text = obj["exactText"] as? kotlinx.serialization.json.JsonPrimitive
         if (text == null || !text.isString) {
             throw AnalysisParseException("편집할 원문 문자열이 없습니다.")
         }
-        return AnalysisSourceRange(start, end, text.content,
-            obj["occurrence"].stringOrBlank().toIntOrNull())
+        return AnalysisSourceRange(
+            startIndex = -1,
+            endIndex = -1,
+            exactText = text.content,
+            occurrence = obj["occurrence"].stringOrBlank().toIntOrNull()
+        )
     }
 
     fun parseTxtCandidates(jsonText: String): List<String> {
@@ -101,11 +103,7 @@ object AnalysisResponseParser {
                 "AI 응답을 JSON 형식으로 해석하지 못했습니다. (후보 목록 형식이 올바르지 않습니다.)"
             )
         }
-        val items = when (root) {
-            is JsonArray -> root
-            is JsonObject -> root["items"]?.jsonArrayOrNull() ?: JsonArray(emptyList())
-            else -> JsonArray(emptyList())
-        }
+        val items = (root as? JsonArray) ?: JsonArray(emptyList())
 
         return items.mapNotNull { element ->
             element.jsonObjectOrNull()
@@ -148,9 +146,7 @@ object AnalysisResponseParser {
             viewpoint = obj["viewpoint"].stringOrDefault("알 수 없음"),
             distance = obj["distance"].stringOrDefault("알 수 없음"),
             visibleScope = obj["visibleScope"].stringOrDefault("알 수 없음"),
-            cameraAngle = obj["cameraAngle"].stringOrDefault("알 수 없음"),
-            visibleElements = obj["visibleElements"].strings(),
-            hiddenOrUnclearElements = obj["hiddenOrUnclearElements"].strings()
+            cameraAngle = obj["cameraAngle"].stringOrDefault("알 수 없음")
         )
     }
 

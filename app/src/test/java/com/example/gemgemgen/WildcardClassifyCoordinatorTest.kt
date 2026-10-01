@@ -244,7 +244,7 @@ class WildcardClassifyCoordinatorTest {
         aiResponseText: String = "",
         repo: FakeWildcardRepo = FakeWildcardRepo()
     ): WildcardClassifyCoordinator {
-        val fakeAiGateway = AnalysisAiGateway { _, _, _ -> aiResponseText }
+        val fakeAiGateway = AnalysisAiGateway { _, _, _, _ -> aiResponseText }
         val keyRepository = FakeKeyRepo(activeKey = "fake-key")
         val fakeGrokGateway = object : GrokAuthGateway {
             override suspend fun startDeviceLogin(): GrokDeviceLoginChallenge = error("unused")
@@ -286,7 +286,17 @@ class WildcardClassifyCoordinatorTest {
             saveWildcardClassifyResult = saveUseCase,
             analysisKeyManager = keyManager,
             scope = CoroutineScope(Dispatchers.Unconfined),
-            host = host
+            currentState = { host.uiState },
+            updateState = { transform ->
+                val next = transform(host.uiState)
+                if (!next.isLineSelectionMode && next.selectedLineIndices.isEmpty()) {
+                    host.lineSelectionCleared = true
+                }
+                host.uiState = next
+            },
+            onFilesSaved = { host.filesSavedCalled = true },
+            beginFileOperation = { host.beginFileOperation() },
+            endFileOperation = { host.endFileOperation() }
         )
     }
 
@@ -299,7 +309,7 @@ class WildcardClassifyCoordinatorTest {
         init {
             if (activeKey != null) {
                 rawKeys["k1"] = activeKey
-                records += GeminiApiKeyRecord("k1", "key1", "enc", "preview", isActive = true)
+                records += GeminiApiKeyRecord("k1", "key1", "preview", isActive = true)
             }
         }
 
@@ -320,7 +330,7 @@ class WildcardClassifyCoordinatorTest {
         editingText: String = "line1\nline2",
         canModifyFiles: Boolean = true,
         isFileOperationInProgress: Boolean = false
-    ) : WildcardClassifyCoordinator.Host {
+    ) {
         var uiState: WildcardUiState = WildcardUiState(
             editor = WildcardEditorSession(
                 selectedFile = selectedFile,
@@ -331,32 +341,17 @@ class WildcardClassifyCoordinatorTest {
             isFileOperationInProgress = isFileOperationInProgress
         )
 
-        override val currentState: WildcardUiState
-            get() = uiState
-
         var lineSelectionCleared: Boolean = false
         val lastMessage: String get() = uiState.message
         val lastError: String get() = uiState.error
         var filesSavedCalled: Boolean = false
 
-        override fun onLineSelectionCleared() {
-            lineSelectionCleared = true
-            uiState = uiState.copy(isLineSelectionMode = false, selectedLineIndices = emptySet())
+        fun showError(error: String) {
+            uiState = uiState.copy(message = "", error = error)
         }
 
-        override fun updateFeedback(message: String?, error: String) {
-            uiState = uiState.copy(message = message ?: uiState.message, error = error)
-        }
-
-        override fun updateClassifyState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState) {
-            uiState = uiState.copy(classify = transform(uiState.classify))
-        }
-
-        override fun beginFileOperation(): Boolean = true
-        override fun endFileOperation() = Unit
-        override suspend fun onFilesSaved() {
-            filesSavedCalled = true
-        }
+        fun beginFileOperation(): Boolean = true
+        fun endFileOperation() = Unit
     }
 
     private class FakeWildcardRepo(

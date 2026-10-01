@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirectionInput
+import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
@@ -144,13 +145,11 @@ class AnalysisViewModel(
         }
 
         _uiState.update { current ->
-            current.copy(
+            val base = if (clearCandidates) current.clearCandidates() else current
+            base.copy(
                 sourcePrompt = value,
                 targetSegment = nextSegment,
                 needsMaskingAnalysis = nextNeedsMasking,
-                generatedCandidates = if (clearCandidates) emptyList() else current.generatedCandidates,
-                resultPresentation = if (clearCandidates) AnalysisResultPresentation.NONE else current.resultPresentation,
-                selectedCandidateIndex = current.selectedCandidateIndex.takeUnless { clearCandidates },
                 error = "",
                 message = if (nextSegment != state.targetSegment) "" else current.message,
                 warning = "",
@@ -169,14 +168,11 @@ class AnalysisViewModel(
             cache = null
         )
         _uiState.update {
-            it.copy(
+            it.clearCandidates().copy(
                 sourcePrompt = source,
                 selectedCategory = category,
                 targetSegment = null,
                 needsMaskingAnalysis = nextNeedsMasking,
-                generatedCandidates = emptyList(),
-                resultPresentation = AnalysisResultPresentation.NONE,
-                selectedCandidateIndex = null,
                 error = "",
                 message = "",
                 warning = "",
@@ -194,13 +190,10 @@ class AnalysisViewModel(
             cache = null
         )
         _uiState.update {
-            it.copy(
+            it.clearCandidates().copy(
                 sourcePrompt = source,
                 targetSegment = null,
                 needsMaskingAnalysis = nextNeedsMasking,
-                generatedCandidates = emptyList(),
-                resultPresentation = AnalysisResultPresentation.NONE,
-                selectedCandidateIndex = null,
                 message = "마스킹 구간을 해제했습니다.",
                 warning = "",
                 error = ""
@@ -275,12 +268,9 @@ class AnalysisViewModel(
                     },
                     onTargetChanged = { newTarget, warning ->
                         _uiState.update {
-                            it.copy(
+                            it.clearCandidates().copy(
                                 sourcePrompt = source,
                                 targetSegment = newTarget,
-                                generatedCandidates = emptyList(),
-                                resultPresentation = AnalysisResultPresentation.NONE,
-                                selectedCandidateIndex = null,
                                 warning = warning
                             )
                         }
@@ -296,7 +286,7 @@ class AnalysisViewModel(
                     }
                     is ExecuteAnalysisGenerationResult.Success -> {
                         analysisCache = result.cache
-                        val category = checkNotNull(snapshot.selectedCategory)
+                        val category = snapshot.selectedCategory
                         _uiState.update {
                             it.copy(
                                 sourcePrompt = source,
@@ -424,7 +414,7 @@ class AnalysisViewModel(
 
     private fun computeNeedsMaskingAnalysis(
         source: String = currentSourcePrompt(),
-        category: AnalysisCategory? = _uiState.value.selectedCategory,
+        category: AnalysisCategory = _uiState.value.selectedCategory,
         targetSegment: AnalysisTargetSegment? = _uiState.value.targetSegment,
         cache: AnalysisReportCache? = analysisCache,
         state: AnalysisUiState = _uiState.value,
@@ -435,7 +425,7 @@ class AnalysisViewModel(
         category = category,
         targetSegment = targetSegment,
         cache = cache,
-        directions = state.directions,
+        directions = AnalysisDummyDirections.values,
         selectedDirectionIds = selectedDirectionIds,
         customHint = customHint
     )
@@ -443,7 +433,7 @@ class AnalysisViewModel(
     private fun currentDirectionInput(
         state: AnalysisUiState = _uiState.value
     ): AnalysisDirectionInput = AnalysisMaskingPolicy.extractDirectionInput(
-        directions = state.directions,
+        directions = AnalysisDummyDirections.values,
         selectedDirectionIds = state.selectedDirectionIds,
         customHint = state.customHint
     )
@@ -480,7 +470,7 @@ class AnalysisViewModel(
         sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("")
 
         _uiState.update {
-            it.copy(
+            it.clearCandidates().copy(
                 sourcePrompt = "",
                 selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
                 targetSegment = null,
@@ -491,9 +481,6 @@ class AnalysisViewModel(
                 txtCount = AnalysisTxtCountPolicy.DEFAULT_COUNT,
                 selectedDirectionIds = emptySet(),
                 customHint = "",
-                generatedCandidates = emptyList(),
-                resultPresentation = AnalysisResultPresentation.NONE,
-                selectedCandidateIndex = null,
                 hasAppliedCandidateToAutomation = false,
                 resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
                 pendingOverwriteFileName = null,
@@ -817,11 +804,9 @@ class AnalysisViewModel(
         grokLoginJob = scope.launch {
             try {
                 _uiState.update {
-                    it.copy(
+                    it.resetGrokLoginDialog().copy(
                         showGrokLoginDialog = true,
                         isGrokLoginPolling = true,
-                        grokLoginUserCode = "",
-                        grokLoginVerificationUri = "",
                         error = "",
                         message = "Grok 로그인 준비 중..."
                     )
@@ -838,13 +823,9 @@ class AnalysisViewModel(
                 val status = grokAuth.awaitDeviceLogin(challenge)
                 val quota = grokAuth.fetchQuota()
                 _uiState.update {
-                    it.copy(
+                    it.resetGrokLoginDialog().copy(
                         isGrokLoggedIn = status.isLoggedIn,
                         grokAccountPreview = status.accountPreview,
-                        showGrokLoginDialog = false,
-                        isGrokLoginPolling = false,
-                        grokLoginUserCode = "",
-                        grokLoginVerificationUri = "",
                         grokRemainingPercent = quota?.remainingPercent,
                         message = "Grok 로그인에 성공했습니다.",
                         error = ""
@@ -854,12 +835,7 @@ class AnalysisViewModel(
                 throw error
             } catch (error: Exception) {
                 _uiState.update {
-                    it.copy(
-                        isGrokLoginPolling = false,
-                        showGrokLoginDialog = false,
-                        grokLoginUserCode = "",
-                        grokLoginVerificationUri = ""
-                    )
+                    it.resetGrokLoginDialog()
                 }
                 showError(error.message ?: "Grok 로그인에 실패했습니다.")
             }
@@ -870,11 +846,7 @@ class AnalysisViewModel(
         grokLoginJob?.cancel()
         grokLoginJob = null
         _uiState.update {
-            it.copy(
-                showGrokLoginDialog = false,
-                isGrokLoginPolling = false,
-                grokLoginUserCode = "",
-                grokLoginVerificationUri = "",
+            it.resetGrokLoginDialog().copy(
                 message = "Grok 로그인을 취소했습니다."
             )
         }
@@ -977,3 +949,16 @@ class AnalysisViewModel(
         grokLoginJob = null
     }
 }
+
+private fun AnalysisUiState.clearCandidates(): AnalysisUiState = copy(
+    generatedCandidates = emptyList(),
+    resultPresentation = AnalysisResultPresentation.NONE,
+    selectedCandidateIndex = null
+)
+
+private fun AnalysisUiState.resetGrokLoginDialog(): AnalysisUiState = copy(
+    showGrokLoginDialog = false,
+    isGrokLoginPolling = false,
+    grokLoginUserCode = "",
+    grokLoginVerificationUri = ""
+)

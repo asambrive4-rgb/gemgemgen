@@ -91,7 +91,7 @@ internal fun AutomationScreen(
                         isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
                     )
                 } else if (isKeyboardVisible) {
-                    val hasSuggestions = uiState.activeSuggestionCandidates.isNotEmpty()
+                    val hasSuggestions = uiState.editor.activeSuggestionCandidates.isNotEmpty()
                     val bottomSpacerHeight = if (hasSuggestions) 105.dp else 56.dp
                     Spacer(modifier = Modifier.height(bottomSpacerHeight))
                 }
@@ -129,9 +129,9 @@ internal fun AutomationScreen(
                             .padding(AutomationScreenContentPadding),
                         verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
                     ) {
-                        if (uiState.activeSuggestionCandidates.isNotEmpty()) {
+                        if (uiState.editor.activeSuggestionCandidates.isNotEmpty()) {
                             PromptSuggestionBar(
-                                suggestions = uiState.activeSuggestionCandidates,
+                                suggestions = uiState.editor.activeSuggestionCandidates,
                                 onSuggestionClick = { candidate ->
                                     actions.applySuggestion(candidate)
                                 }
@@ -163,7 +163,6 @@ internal fun AutomationScreen(
 
             if (uiState.showInstructionConfigDialog) {
                 PromptInstructionDialog(
-                    showDialog = true,
                     config = uiState.promptInstructionConfig,
                     initialTab = uiState.instructionConfigDialogInitialTab,
                     onSave = actions::saveInstructionConfig,
@@ -172,7 +171,6 @@ internal fun AutomationScreen(
             }
             if (uiState.showVariationPromptConfigDialog) {
                 VariationPromptDialog(
-                    showDialog = true,
                     config = uiState.variationPromptConfig,
                     onSave = actions::saveVariationPromptConfig,
                     onDismiss = actions::closeVariationPromptConfigDialog
@@ -181,14 +179,13 @@ internal fun AutomationScreen(
 
             if (uiState.showPromptSnippetDialog) {
                 val selectedText = promptTemplateState.selectedTextOrNull()
-                    ?: uiState.selectedParagraphRange?.let { range ->
+                    ?: uiState.editor.selectedParagraphRange?.let { range ->
                         val full = promptTemplateState.text.toString()
                         val s = range.start.coerceIn(0, full.length)
                         val e = range.endExclusive.coerceIn(s, full.length)
                         full.substring(s, e).takeIf { it.isNotEmpty() }
                     }
                 PromptSnippetDialog(
-                    showDialog = true,
                     snippets = uiState.promptSnippets,
                     currentPromptText = selectedText ?: promptTemplateState.text.toString(),
                     isSelectionPrompt = selectedText != null,

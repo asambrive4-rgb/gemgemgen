@@ -80,7 +80,7 @@ internal fun KeyboardPromptAccessoryBar(
         ) {
             ActionIsland {
                 ParagraphSelectionModeButton(
-                    selected = uiState.isParagraphSelectionMode,
+                    selected = uiState.editor.isParagraphSelectionMode,
                     onClick = actions::toggleParagraphSelectionMode
                 )
             }

@@ -2,8 +2,6 @@
 package com.example.gemgemgen.analysis.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
-import com.example.gemgemgen.analysis.domain.AnalysisDirection
-import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
@@ -20,14 +18,13 @@ import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 
 data class AnalysisUiState(
     val sourcePrompt: String = "",
-    val selectedCategory: AnalysisCategory? = DEFAULT_ANALYSIS_CATEGORY,
+    val selectedCategory: AnalysisCategory = DEFAULT_ANALYSIS_CATEGORY,
     val targetSegment: AnalysisTargetSegment? = null,
     val status: AnalysisStatus = AnalysisStatus.IDLE,
     val error: String = "",
     val message: String = "",
     val warning: String = "",
     val txtCount: Int = AnalysisTxtCountPolicy.DEFAULT_COUNT,
-    val directions: List<AnalysisDirection> = AnalysisDummyDirections.values,
     val selectedDirectionIds: Set<String> = emptySet(),
     val customHint: String = "",
     val generatedCandidates: List<String> = emptyList(),
@@ -135,7 +132,6 @@ object AnalysisUiText {
     fun startBlockedMessage(reason: AnalysisStartBlockReason): String {
         return when (reason) {
             AnalysisStartBlockReason.BlankSource -> "원문을 입력하거나 가져오세요."
-            AnalysisStartBlockReason.MissingCategory -> "변경할 카테고리를 선택하세요."
             is AnalysisStartBlockReason.MissingMaskingCredential -> when (reason.provider) {
                 AnalysisProvider.GEMINI -> "자동 마스킹용 Gemini API 키를 등록하거나 활성화하세요."
                 AnalysisProvider.GROK -> "자동 마스킹용 Grok에 로그인하세요."

@@ -34,7 +34,6 @@ class ExecuteAutomationLoopUseCase(
     private val manageAnimationScaleUseCase: ManageAnimationScaleUseCase? = null,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     promptGenerator: PromptGenerator = PromptGenerator(),
-    private val generateFinalPrompt: ((String, List<WildcardSet>, Int) -> String)? = null,
     private val runPreparer: PrepareAutomationRunUseCase = PrepareAutomationRunUseCase(
         wildcardSetRepository = wildcardSetRepository,
         dispatchers = dispatchers,
@@ -226,8 +225,7 @@ class ExecuteAutomationLoopUseCase(
 
         val nextIndex = run.successCount + 1
         run.currentIndex = nextIndex
-        val finalPrompt = generateFinalPrompt?.invoke(run.promptTemplate, run.wildcards, nextIndex)
-            ?: run.promptPlan.generateFinalPrompt()
+        val finalPrompt = run.promptPlan.generateFinalPrompt()
 
         updateRunState(run, "프롬프트 생성 완료", onStateChange)
 

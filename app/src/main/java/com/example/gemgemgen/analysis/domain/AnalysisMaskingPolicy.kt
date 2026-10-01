@@ -40,13 +40,12 @@ object AnalysisMaskingPolicy {
 
     fun shouldAnalyzeMasking(
         source: String,
-        category: AnalysisCategory?,
+        category: AnalysisCategory = DEFAULT_ANALYSIS_CATEGORY,
         targetSegment: AnalysisTargetSegment?,
         cache: AnalysisReportCache?,
         selectedHints: List<String>,
         customHint: String
     ): Boolean {
-        if (category == null) return false
         if (cache == null) return true
         return cache.sourcePrompt != source ||
             cache.category != category ||
@@ -57,7 +56,7 @@ object AnalysisMaskingPolicy {
 
     fun shouldAnalyzeMaskingFromHints(
         source: String,
-        category: AnalysisCategory?,
+        category: AnalysisCategory = DEFAULT_ANALYSIS_CATEGORY,
         targetSegment: AnalysisTargetSegment?,
         cache: AnalysisReportCache?,
         directions: List<AnalysisDirection>,

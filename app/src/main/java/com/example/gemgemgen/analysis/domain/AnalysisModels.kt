@@ -45,9 +45,7 @@ data class AnalysisVisualContext(
     val viewpoint: String = "알 수 없음",
     val distance: String = "알 수 없음",
     val visibleScope: String = "알 수 없음",
-    val cameraAngle: String = "알 수 없음",
-    val visibleElements: List<String> = emptyList(),
-    val hiddenOrUnclearElements: List<String> = emptyList()
+    val cameraAngle: String = "알 수 없음"
 )
 
 data class AnalysisSpatialLayout(

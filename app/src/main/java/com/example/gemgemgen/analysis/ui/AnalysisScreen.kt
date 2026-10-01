@@ -65,6 +65,7 @@ import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.ui.theme.NeuPillChip
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
+import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
@@ -121,7 +122,7 @@ internal fun AnalysisScreen(
                 )
 
                 DirectionSection(
-                    directions = uiState.directions,
+                    directions = AnalysisDummyDirections.values,
                     selectedIds = uiState.selectedDirectionIds,
                     onToggleDirection = { actions.toggleDirection(it) }
                 )

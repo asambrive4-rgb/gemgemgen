@@ -54,7 +54,8 @@ class GenerateAnalysisTxtUseCase(
         val responseText = aiGateway.analyze(
             apiKey = credential.accessTokenOrApiKey,
             modelId = credential.modelId,
-            payload = payload
+            payload = payload,
+            provider = credential.provider
         )
         val candidates = if (category == AnalysisCategory.FREE_EDIT) {
             AnalysisResponseParser.parseEditCandidates(responseText).take(normalizedCount).map { edits ->

@@ -148,15 +148,15 @@ class AndroidGeminiAnalysisGatewayTest {
     fun `공통 JSON 오류 추출 헬퍼가 객체 및 문자열 형태의 오류를 모두 처리한다`() {
         assertEquals(
             "Invalid token",
-            extractJsonErrorMessage(json, """{"error_description": "Invalid token", "error": "invalid_grant"}""")
+            extractJsonErrorMessage("""{"error_description": "Invalid token", "error": "invalid_grant"}""", json)
         )
         assertEquals(
             "Rate limit exceeded",
-            extractJsonErrorMessage(json, """{"error": {"message": "Rate limit exceeded"}}""")
+            extractJsonErrorMessage("""{"error": {"message": "Rate limit exceeded"}}""", json)
         )
         assertEquals(
             "Bad request",
-            extractJsonErrorMessage(json, """{"error": "Bad request"}""")
+            extractJsonErrorMessage("""{"error": "Bad request"}""", json)
         )
     }
 }

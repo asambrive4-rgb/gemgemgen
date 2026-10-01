@@ -29,7 +29,7 @@ class SharedPreferencesLastRunSnapshotRepository(
                 preferences.getString(KEY_TARGET_APP, "").orEmpty()
             ),
             flowImageCount = preferences.getInt(KEY_FLOW_IMAGE_COUNT, AppDefaults.DEFAULT_FLOW_IMAGE_COUNT)
-        ).takeIf { it.hasRestorablePrompt() }
+        )
         cachedSnapshot = snapshot
         isLoaded = true
         return snapshot

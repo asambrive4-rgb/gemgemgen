@@ -67,9 +67,8 @@ class AutomationViewModel(
     private val clipboardGateway: ClipboardGateway,
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: ExecuteAutomationLoopUseCase,
-    private val appMaintenance: AppMaintenanceUseCase = AppMaintenanceUseCase(),
-    checkAutomationStart: CheckAutomationStartUseCase =
-        CheckAutomationStartUseCase(OverlayPermissionGateway { true }),
+    private val appMaintenance: AppMaintenanceUseCase,
+    checkAutomationStart: CheckAutomationStartUseCase? = null,
     private val wildcardFileRepository: WildcardFileRepository? = null,
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase,
     private val soundAlertGateway: SoundAlertGateway = SoundAlertGateway {},
@@ -77,23 +76,8 @@ class AutomationViewModel(
     private val themePaletteStore: com.example.gemgemgen.ui.theme.ThemePaletteStore? = null,
     private val promptWorkspace: PromptWorkspace? = null,
     private val dispatchers: AppDispatchers = AppDispatchers(),
-    recordAutomationHistory: AutomationHistoryRecorder = RecordAutomationHistoryUseCase(
-        lastRunSnapshotStore = lastRunSnapshotStore,
-        promptHistoryStore = promptHistoryStore,
-        dispatchers = dispatchers
-    ),
-    private val executeAutomation: CoordinateAutomationExecutionUseCase = CoordinateAutomationExecutionUseCase(
-        checkAutomationStart = checkAutomationStart,
-        automationHistoryRecorder = recordAutomationHistory,
-        automation = automation,
-        manageRemoteAutomation = manageRemoteAutomation
-    ),
-    private val promptInstructionRepository: PromptInstructionRepository =
-        object : PromptInstructionRepository {
-            private var current = PromptInstructionConfig.DEFAULT
-            override fun load(): PromptInstructionConfig = current
-            override fun save(config: PromptInstructionConfig) { current = config }
-        },
+    private val executeAutomation: CoordinateAutomationExecutionUseCase,
+    private val promptInstructionRepository: PromptInstructionRepository? = null,
     private val variationPromptRepository: VariationPromptRepository? = null,
     private val promptSnippetRepository: PromptSnippetRepository? = null,
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
@@ -310,7 +294,7 @@ class AutomationViewModel(
     override fun saveInstructionConfig(config: PromptInstructionConfig) {
         scope.launch {
             withContext(dispatchers.io) {
-                promptInstructionRepository.save(config)
+                promptInstructionRepository?.save(config)
             }
         }
         _uiState.update {
@@ -354,8 +338,8 @@ class AutomationViewModel(
         val targetText = state.variationPromptConfig.resolveTarget(
             fullText = promptEditor.currentPromptTemplateText(),
             explicitSelectedText = selectedText,
-            isParagraphSelectionMode = state.isParagraphSelectionMode,
-            selectedParagraphRange = state.selectedParagraphRange
+            isParagraphSelectionMode = state.editor.isParagraphSelectionMode,
+            selectedParagraphRange = state.editor.selectedParagraphRange
         )
         val resolvedPrompt = state.variationPromptConfig.buildPrompt(targetText)
 
@@ -463,16 +447,16 @@ class AutomationViewModel(
     override fun closeGeminiApp() = executeMaintenance(
         canExecute = AutomationUiState::canCloseGemini,
         unavailableMessage = AutomationUiText::geminiRestartUnavailableMessage,
-        startingText = AutomationUiText.geminiRestartStartingText(),
-        canceledText = AutomationUiText.geminiRestartCanceledText(),
+        startingText = AutomationUiText.GEMINI_RESTART_STARTING_TEXT,
+        canceledText = AutomationUiText.GEMINI_RESTART_CANCELED_TEXT,
         action = appMaintenance::restartGemini
     )
 
     override fun terminateSelfApp() = executeMaintenance(
         canExecute = AutomationUiState::canCloseSelfApp,
         unavailableMessage = AutomationUiText::selfAppTerminateUnavailableMessage,
-        startingText = AutomationUiText.selfAppTerminateStartingText(),
-        canceledText = AutomationUiText.selfAppTerminateCanceledText(),
+        startingText = AutomationUiText.SELF_APP_TERMINATE_STARTING_TEXT,
+        canceledText = AutomationUiText.SELF_APP_TERMINATE_CANCELED_TEXT,
         action = appMaintenance::terminateSelf
     )
 
@@ -493,9 +477,9 @@ class AutomationViewModel(
                     maintenanceState = MaintenanceState(
                         isBusy = false,
                         message = if (nextScheduled) {
-                            AutomationUiText.memoryCleanupScheduledText()
+                            AutomationUiText.MEMORY_CLEANUP_SCHEDULED_TEXT
                         } else {
-                            AutomationUiText.memoryCleanupScheduleCanceledText()
+                            AutomationUiText.MEMORY_CLEANUP_SCHEDULE_CANCELED_TEXT
                         }
                     )
                 )
@@ -742,7 +726,7 @@ class AutomationViewModel(
                     AutomationInitialState(
                         lastRunSnapshotStore.load(),
                         promptHistoryStore?.load().orEmpty(),
-                        promptInstructionRepository.load(),
+                        promptInstructionRepository?.load() ?: PromptInstructionConfig.DEFAULT,
                         variationPromptRepository?.load() ?: VariationPromptConfig.DEFAULT
                     ),
                     checkEnvironmentStatus.check(),

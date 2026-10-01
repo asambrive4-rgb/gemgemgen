@@ -4,7 +4,6 @@ package com.example.gemgemgen.wildcard.usecase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
-import com.example.gemgemgen.wildcard.domain.WildcardFileException
 import kotlinx.coroutines.withContext
 
 sealed class WildcardClassifySaveResult {
@@ -48,11 +47,7 @@ class SaveWildcardClassifyResultUseCase(
             val existing = existingFiles
                 .firstOrNull { it.fileName.equals(fileName, ignoreCase = true) }
             val target = existing ?: repository.createFile(fileName)
-            try {
-                repository.writeFile(target, plan.items.joinToString(separator = "\n"))
-            } catch (error: WildcardFileException) {
-                throw error
-            }
+            repository.writeFile(target, plan.items.joinToString(separator = "\n"))
             saved.add(fileName)
         }
         WildcardClassifySaveResult.Success(saved)

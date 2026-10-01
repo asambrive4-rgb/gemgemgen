@@ -129,7 +129,8 @@ internal abstract class AccessibilityPromptAutomation(
     }
 
     protected open fun isSendConfirmed(prompt: String): Boolean {
-        return checkPromptInputAfterSend(prompt) == PromptInputAfterSend.Empty
+        val inputNode = findInputNode() ?: return false
+        return !isNodeTextApplied(inputNode, prompt)
     }
 
     protected open suspend fun recoverFromInputFailure(
@@ -330,23 +331,6 @@ internal abstract class AccessibilityPromptAutomation(
         return confirmed == true
     }
 
-    private fun checkPromptInputAfterSend(prompt: String): PromptInputAfterSend {
-        val inputNode = findInputNode() ?: return PromptInputAfterSend.Unknown
-        val text = inputNode.text ?: return PromptInputAfterSend.Unknown
-        val hint = inputNode.hintText
-
-        if (text.isBlank() || (hint != null && text.contentEquals(hint))) {
-            return PromptInputAfterSend.Empty
-        }
-
-        val sample = if (prompt.length > 50) prompt.take(50) else prompt
-        return if (text.contains(sample)) {
-            PromptInputAfterSend.StillPresent
-        } else {
-            PromptInputAfterSend.Empty
-        }
-    }
-
     private fun isNodeTextApplied(node: AccessibilityNodeInfo, prompt: String): Boolean {
         val text = node.text ?: return false
         val hint = node.hintText
@@ -360,12 +344,6 @@ internal abstract class AccessibilityPromptAutomation(
     private fun isPromptTextApplied(prompt: String): Boolean {
         val inputNode = findInputNode() ?: return false
         return isNodeTextApplied(inputNode, prompt)
-    }
-
-    private enum class PromptInputAfterSend {
-        Empty,
-        StillPresent,
-        Unknown
     }
 
     private companion object {

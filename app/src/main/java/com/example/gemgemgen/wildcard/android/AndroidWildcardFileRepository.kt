@@ -47,24 +47,27 @@ object AndroidWildcardFolderAccessChecker {
 class AndroidWildcardFileRepository(
     private val context: Context
 ) : WildcardFileRepository {
-    private val documentReader = AndroidWildcardDocumentReader(context)
     private val directStorage = AndroidWildcardDirectStorage()
 
     override fun listFiles(): List<WildcardTextFile> {
         if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
             return directStorage.listFiles()
         }
-        return documentReader.listDocuments().map { it.toTextFile() }
+        return listSafFiles()
     }
 
     override fun readFile(file: WildcardTextFile): String {
         if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
             return directStorage.readFile(file)
         }
-        return documentReader.readText(file.toDocument())
+        val uri = documentUriFor(file)
+        return context.contentResolver.openInputStream(uri)?.use { input ->
+            input.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } ?: throw WildcardFileException("${file.fileName} 파일을 열지 못했습니다.")
     }
 
     override fun createFile(fileName: String): WildcardTextFile {
+        validateWildcardFileName(fileName)
         if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
             return directStorage.createFile(fileName)
         }
@@ -113,6 +116,7 @@ class AndroidWildcardFileRepository(
     }
 
     override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile {
+        validateWildcardFileName(newName)
         if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
             return directStorage.renameFile(file, newName)
         }
@@ -129,29 +133,64 @@ class AndroidWildcardFileRepository(
         )
     }
 
+    private fun listSafFiles(): List<WildcardTextFile> {
+        val folderUri = currentFolderUri()
+        val resolver = context.contentResolver
+        val childUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+            folderUri,
+            DocumentsContract.getTreeDocumentId(folderUri)
+        )
+        val result = mutableListOf<WildcardTextFile>()
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE
+        )
+
+        val cursor = resolver.query(childUri, projection, null, null, null)
+            ?: throw WildcardFileException("wildcard 폴더를 읽지 못했습니다. 폴더를 다시 선택해주세요.")
+
+        cursor.use {
+            val idIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+
+            while (cursor.moveToNext()) {
+                val fileName = cursor.getString(nameIndex) ?: continue
+                if (WildcardFileParser.tokenFromFileName(fileName) == null) continue
+                if (cursor.getString(mimeIndex) == DocumentsContract.Document.MIME_TYPE_DIR) continue
+
+                val documentId = cursor.getString(idIndex)
+                result += WildcardTextFile(
+                    id = documentId,
+                    fileName = fileName
+                )
+            }
+        }
+
+        return result.sortedBy { it.fileName.lowercase() }
+    }
+
     private fun currentFolderUri(): Uri {
         return AndroidWildcardFolderRepository.getFolderUri(context)
             ?: throw WildcardFileException("wildcard 폴더를 먼저 선택해주세요.")
     }
 
-    private fun WildcardDocument.toTextFile(): WildcardTextFile {
-        return WildcardTextFile(
-            id = id,
-            fileName = fileName
-        )
-    }
-
-    private fun WildcardTextFile.toDocument(): WildcardDocument {
-        return WildcardDocument(
-            id = id,
-            fileName = fileName,
-            documentUri = documentUriFor(this)
-        )
-    }
-
     private fun documentUriFor(file: WildcardTextFile): Uri {
         val folderUri = currentFolderUri()
         return DocumentsContract.buildDocumentUriUsingTree(folderUri, file.id)
+    }
+}
+
+internal fun validateWildcardFileName(fileName: String) {
+    if (
+        fileName.isBlank() ||
+        fileName == "." ||
+        fileName == ".." ||
+        fileName.contains('/') ||
+        fileName.contains('\\')
+    ) {
+        throw WildcardFileException("파일명이 올바르지 않습니다.")
     }
 }
 
@@ -185,7 +224,7 @@ internal class AndroidWildcardDirectStorage {
     }
 
     fun createFile(fileName: String): WildcardTextFile {
-        validateFileName(fileName)
+        validateWildcardFileName(fileName)
         return try {
             val file = File(ensureFolder(), fileName)
             if (!file.createNewFile()) {
@@ -220,7 +259,7 @@ internal class AndroidWildcardDirectStorage {
     }
 
     fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile {
-        validateFileName(newName)
+        validateWildcardFileName(newName)
         return try {
             val renamed = fileOnDisk(file)
             val target = File(renamed.parentFile, newName)
@@ -244,7 +283,7 @@ internal class AndroidWildcardDirectStorage {
     }
 
     private fun fileOnDisk(file: WildcardTextFile): File {
-        validateFileName(file.id)
+        validateWildcardFileName(file.id)
         if (file.id != file.fileName) {
             throw WildcardFileException("wildcard 파일을 찾지 못했습니다.")
         }
@@ -253,18 +292,6 @@ internal class AndroidWildcardDirectStorage {
             throw WildcardFileException("wildcard 파일을 찾지 못했습니다.")
         }
         return diskFile
-    }
-
-    private fun validateFileName(fileName: String) {
-        if (
-            fileName.isBlank() ||
-            fileName == "." ||
-            fileName == ".." ||
-            fileName.contains('/') ||
-            fileName.contains('\\')
-        ) {
-            throw WildcardFileException("파일명이 올바르지 않습니다.")
-        }
     }
 
     private fun directFolder(): File {

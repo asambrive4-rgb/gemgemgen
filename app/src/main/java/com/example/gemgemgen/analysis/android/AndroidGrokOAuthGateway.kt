@@ -16,8 +16,8 @@ import kotlinx.serialization.json.jsonPrimitive
  */
 class AndroidGrokOAuthGateway : GrokAuthGateway {
 
-    override suspend fun startDeviceLogin(): GrokDeviceLoginChallenge {
-        return try {
+    override suspend fun startDeviceLogin(): GrokDeviceLoginChallenge =
+        executeWithNetworkErrorHandling("Grok 로그인") {
             val discovery = fetchDiscovery()
             val deviceEndpoint = discovery.deviceAuthorizationEndpoint
                 ?: throw AnalysisException("xAI device code 로그인을 지원하지 않습니다.")
@@ -46,22 +46,10 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
                 intervalSeconds = root.string("interval")?.toIntOrNull() ?: 5,
                 tokenEndpoint = discovery.tokenEndpoint
             )
-        } catch (error: AnalysisException) {
-            throw error
-        } catch (error: Exception) {
-            throw AnalysisException(
-                formatAnalysisNetworkError(
-                    error = error,
-                    serviceName = "Grok 로그인",
-                    serverLabel = "xAI 인증 서버",
-                    timeoutMillis = READ_TIMEOUT_MS
-                )
-            )
         }
-    }
 
-    override suspend fun pollDeviceLogin(challenge: GrokDeviceLoginChallenge): GrokAuthSession? {
-        return try {
+    override suspend fun pollDeviceLogin(challenge: GrokDeviceLoginChallenge): GrokAuthSession? =
+        executeWithNetworkErrorHandling("Grok 로그인 확인") {
             val body = formBody(
                 "grant_type" to DEVICE_GRANT,
                 "client_id" to CLIENT_ID,
@@ -69,7 +57,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
             )
             val response = postForm(challenge.tokenEndpoint, body)
             if (response.code in 200..299) {
-                return parseTokenResponse(response.body, challenge.tokenEndpoint)
+                return@executeWithNetworkErrorHandling parseTokenResponse(response.body, challenge.tokenEndpoint)
             }
             val error = parseOAuthError(response.body)
             when (error) {
@@ -84,22 +72,10 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
                         .ifBlank { "Grok 로그인 확인에 실패했습니다. (${response.code})" }
                 )
             }
-        } catch (error: AnalysisException) {
-            throw error
-        } catch (error: Exception) {
-            throw AnalysisException(
-                formatAnalysisNetworkError(
-                    error = error,
-                    serviceName = "Grok 로그인 확인",
-                    serverLabel = "xAI 인증 서버",
-                    timeoutMillis = READ_TIMEOUT_MS
-                )
-            )
         }
-    }
 
-    override suspend fun refreshSession(session: GrokAuthSession): GrokAuthSession {
-        return try {
+    override suspend fun refreshSession(session: GrokAuthSession): GrokAuthSession =
+        executeWithNetworkErrorHandling("Grok 세션 갱신") {
             val endpoint = session.tokenEndpoint
                 ?: throw AnalysisException("Grok 세션 갱신 정보가 없습니다.")
             val refreshToken = session.refreshToken
@@ -126,13 +102,18 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
                 refreshToken = refreshed.refreshToken ?: session.refreshToken,
                 accountPreview = refreshed.accountPreview.ifBlank { session.accountPreview }
             )
+        }
+
+    private inline fun <T> executeWithNetworkErrorHandling(serviceName: String, block: () -> T): T {
+        return try {
+            block()
         } catch (error: AnalysisException) {
             throw error
         } catch (error: Exception) {
             throw AnalysisException(
                 formatAnalysisNetworkError(
                     error = error,
-                    serviceName = "Grok 세션 갱신",
+                    serviceName = serviceName,
                     serverLabel = "xAI 인증 서버",
                     timeoutMillis = READ_TIMEOUT_MS
                 )

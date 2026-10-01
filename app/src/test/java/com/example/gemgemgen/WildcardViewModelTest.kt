@@ -1,6 +1,7 @@
 // 역할: 와일드카드 뷰모델의 파일 탐색, 편집, 화면 액션 인터페이스 및 폴더 관리 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
+import com.example.gemgemgen.analysis.usecase.*
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.*
@@ -345,23 +346,6 @@ class WildcardViewModelTest {
     }
 
     @Test
-    fun decideWildcardFolderAction_delegatesBasedOnEnvironmentStatus() {
-        val vm = viewModel()
-        assertEquals(
-            WildcardFolderAction.OpenDirectFolder,
-            vm.decideWildcardFolderAction(hasAllFilesAccess = true, isWildcardDirectoryAccessible = true)
-        )
-        assertEquals(
-            WildcardFolderAction.OpenStorageSettings,
-            vm.decideWildcardFolderAction(hasAllFilesAccess = false, isWildcardDirectoryAccessible = false)
-        )
-        assertEquals(
-            WildcardFolderAction.LaunchSafPicker,
-            vm.decideWildcardFolderAction(hasAllFilesAccess = false, isWildcardDirectoryAccessible = true)
-        )
-    }
-
-    @Test
     fun saveWildcardFolder_validatesBlankFolder() {
         val repo = FakeWildcardFolderRepository()
         val viewModel = viewModel(folderRepository = repo)
@@ -430,11 +414,10 @@ class WildcardViewModelTest {
     fun wildcardScreenActions_classifyRequest_opensCriteriaDialog() {
         val fileManager = FakeWildcardFileManager("hair.txt" to "black hair\nblonde hair")
         val viewModel = viewModel(fileManager = fileManager)
-        val actions: WildcardScreenActions = viewModel
 
-        actions.requestClassify()
-        // classifyWildcardLines가 null이면 에러를 띄움
-        assertEquals("분류 기능을 사용할 수 없습니다.", viewModel.uiState.value.error)
+        viewModel.classifyCoordinator.requestClassify()
+        assertTrue(viewModel.uiState.value.classify.showClassifyCriteriaDialog)
+        assertEquals("", viewModel.uiState.value.error)
     }
 
     private fun viewModel(
@@ -444,14 +427,48 @@ class WildcardViewModelTest {
         canModifyFiles: Boolean = true,
         folderRepository: WildcardFolderRepository? = null
     ): WildcardViewModel {
+        val folderRepo = folderRepository ?: FakeWildcardFolderRepository()
+        val dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+        val fakeAiGateway = AnalysisAiGateway { _, _, _, _ -> "" }
+        val fakeKeyRepo = object : GeminiApiKeyRepository {
+            override fun listKeys(): List<GeminiApiKeyRecord> = emptyList()
+            override fun addKey(label: String, rawKey: String): GeminiApiKeyRecord = error("unused")
+            override fun deleteKey(id: String) = Unit
+            override fun activateKey(id: String) = Unit
+            override fun activeKeyValue(): String? = "fake-key"
+            override fun updateKeyLabel(id: String, newLabel: String) = Unit
+            override fun getRoleProvider(role: String): String = "gemini"
+            override fun setRoleProvider(role: String, providerId: String) = Unit
+            override fun getRoleModel(role: String): String = "model"
+            override fun setRoleModel(role: String, modelId: String) = Unit
+        }
+        val fakeGrokGateway = object : GrokAuthGateway {
+            override suspend fun startDeviceLogin(): GrokDeviceLoginChallenge = error("unused")
+            override suspend fun pollDeviceLogin(challenge: GrokDeviceLoginChallenge): GrokAuthSession? = null
+            override suspend fun refreshSession(session: GrokAuthSession): GrokAuthSession = error("unused")
+        }
+        val fakeGrokRepo = object : GrokAuthRepository {
+            override fun loadSession(): GrokAuthSession? = null
+            override fun saveSession(session: GrokAuthSession) = Unit
+            override fun clearSession() = Unit
+        }
+        val grokAuth = ManageGrokAuthUseCase(fakeGrokGateway, fakeGrokRepo, dispatchers = dispatchers)
+        val resolver = ResolveAnalysisCredentialUseCase(fakeKeyRepo, grokAuth, dispatchers)
+        val classifyUseCase = ClassifyWildcardLinesUseCase(fakeAiGateway, resolver, dispatchers)
+        val saveUseCase = SaveWildcardClassifyResultUseCase(fileManager, dispatchers)
+        val keyManager = ManageGeminiApiKeysUseCase(fakeKeyRepo, dispatchers)
+
         return WildcardViewModel(
             manageWildcardFiles = ManageWildcardFilesUseCase(
                 repository = fileManager,
-                dispatchers = AppDispatchers(io = Dispatchers.Unconfined)
+                dispatchers = dispatchers
             ),
             clipboardGateway = clipboardGateway,
+            classifyWildcardLines = classifyUseCase,
+            saveWildcardClassifyResult = saveUseCase,
+            analysisKeyManager = keyManager,
             coroutineScope = CoroutineScope(Dispatchers.Unconfined),
-            saveWildcardFolder = folderRepository
+            saveWildcardFolder = folderRepo
         ).also {
             it.onFolderAccessChanged(canModifyFiles)
         }

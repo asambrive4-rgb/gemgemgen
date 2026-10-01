@@ -52,16 +52,19 @@ object AndroidAutomationRuntimeProvider {
     }
 }
 
-object ActivePromptAutomationGatewayProvider : PromptAutomationGatewayProvider {
+object ActivePromptAutomationGatewayProvider : PromptAutomationGatewayProvider, VariationPromptAutomationGatewayProvider {
     override fun current(targetApp: AutomationTargetApp): PromptAutomationGateway? {
         return GeminiAccessibilityService.activeService?.gatewayFor(targetApp)
+    }
+
+    override fun current(): VariationPromptAutomationGateway? {
+        return current(AutomationTargetApp.GEMINI)
     }
 }
 
 object ActiveVariationPromptAutomationGatewayProvider : VariationPromptAutomationGatewayProvider {
-    override fun current(): VariationPromptAutomationGateway? {
-        return GeminiAccessibilityService.activeService?.variationGateway()
-    }
+    override fun current(): VariationPromptAutomationGateway? =
+        ActivePromptAutomationGatewayProvider.current()
 }
 
 class AndroidTargetAppLauncher(

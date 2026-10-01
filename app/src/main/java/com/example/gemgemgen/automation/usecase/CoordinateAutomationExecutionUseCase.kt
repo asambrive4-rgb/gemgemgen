@@ -63,17 +63,6 @@ class CoordinateAutomationExecutionUseCase(
     private val automation: ExecuteAutomationLoopUseCase,
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase
 ) {
-    constructor(
-        overlayPermissionGateway: OverlayPermissionGateway,
-        automationHistoryRecorder: AutomationHistoryRecorder = AutomationHistoryRecorder {},
-        automation: ExecuteAutomationLoopUseCase,
-        manageRemoteAutomation: ManageRemoteAutomationUseCase
-    ) : this(
-        checkAutomationStart = CheckAutomationStartUseCase(overlayPermissionGateway),
-        automationHistoryRecorder = automationHistoryRecorder,
-        automation = automation,
-        manageRemoteAutomation = manageRemoteAutomation
-    )
 
     /**
      * 비즈니스 컨텍스트를 직접 전달받아 모드별 도메인 규칙을 직접 평가하고 자동화 시작 여부를 결정합니다.

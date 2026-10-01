@@ -239,21 +239,21 @@ class AutomationViewModelTest {
         val viewModel = viewModel(promptHistoryStore = store)
         viewModel.onPromptTemplateChange("현재 작성 중인 글")
 
-        assertTrue(viewModel.uiState.value.canNavigateHistoryBack)
-        assertTrue(!viewModel.uiState.value.canNavigateHistoryForward)
+        assertTrue(viewModel.uiState.value.editor.canNavigateHistoryBack)
+        assertTrue(!viewModel.uiState.value.editor.canNavigateHistoryForward)
 
         // 뒤로 1단계: 최신 실행기록 복원
         viewModel.navigatePromptHistoryBack()
         assertEquals("과거 프롬프트 2 (최신)", viewModel.uiState.value.promptTemplate)
         assertEquals("과거 프롬프트 2 (최신)", viewModel.promptTemplateTextFieldState.text.toString())
-        assertTrue(viewModel.uiState.value.isHistoryIndicatorVisible)
-        assertTrue(viewModel.uiState.value.canNavigateHistoryForward)
+        assertTrue(viewModel.uiState.value.editor.isHistoryIndicatorVisible)
+        assertTrue(viewModel.uiState.value.editor.canNavigateHistoryForward)
 
         // 뒤로 2단계: 그 전 실행기록 복원
         viewModel.navigatePromptHistoryBack()
         assertEquals("과거 프롬프트 1", viewModel.uiState.value.promptTemplate)
         assertEquals("과거 프롬프트 1", viewModel.promptTemplateTextFieldState.text.toString())
-        assertTrue(!viewModel.uiState.value.canNavigateHistoryBack)
+        assertTrue(!viewModel.uiState.value.editor.canNavigateHistoryBack)
 
         // 앞으로 1단계: 최신 실행기록 복원
         viewModel.navigatePromptHistoryForward()
@@ -263,8 +263,8 @@ class AutomationViewModelTest {
         viewModel.navigatePromptHistoryForward()
         assertEquals("현재 작성 중인 글", viewModel.uiState.value.promptTemplate)
         assertEquals("현재 작성 중인 글", viewModel.promptTemplateTextFieldState.text.toString())
-        assertTrue(!viewModel.uiState.value.isHistoryIndicatorVisible)
-        assertTrue(!viewModel.uiState.value.canNavigateHistoryForward)
+        assertTrue(!viewModel.uiState.value.editor.isHistoryIndicatorVisible)
+        assertTrue(!viewModel.uiState.value.editor.canNavigateHistoryForward)
     }
 
     @Test
@@ -277,7 +277,7 @@ class AutomationViewModelTest {
 
         // 네비게이션으로 과거 기록을 보던 중 (인디케이터 노출 상태)
         viewModel.navigatePromptHistoryBack()
-        assertTrue(viewModel.uiState.value.isHistoryIndicatorVisible)
+        assertTrue(viewModel.uiState.value.editor.isHistoryIndicatorVisible)
 
         // 다시 신규 프롬프트 작성 후 자동화 시작
         viewModel.onPromptTemplateChange("신규 실행 프롬프트")
@@ -285,8 +285,8 @@ class AutomationViewModelTest {
         assertTrue(decision is AutomationStartDecision.Started)
 
         // 인디케이터가 즉시 닫히고, 방금 실행한 프롬프트가 히스토리 1순위로 저장 및 편집기에 반영됨
-        assertTrue(!viewModel.uiState.value.isHistoryIndicatorVisible)
-        assertEquals(2, viewModel.uiState.value.historyDotCount)
+        assertTrue(!viewModel.uiState.value.editor.isHistoryIndicatorVisible)
+        assertEquals(2, viewModel.uiState.value.editor.historyDotCount)
         assertEquals("신규 실행 프롬프트", store.load().first().prompt)
         assertEquals(2, store.load().size)
         assertEquals(1, repo.loadCallCount)
@@ -298,13 +298,13 @@ class AutomationViewModelTest {
 
         viewModel.toggleParagraphSelectionMode()
 
-        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
-        assertEquals("", viewModel.uiState.value.paragraphSelectionMessage)
+        assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
+        assertEquals("", viewModel.uiState.value.editor.paragraphSelectionMessage)
 
         viewModel.toggleParagraphSelectionMode()
 
-        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
-        assertEquals(null, viewModel.uiState.value.selectedParagraphRange)
+        assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
+        assertEquals(null, viewModel.uiState.value.editor.selectedParagraphRange)
     }
 
     @Test
@@ -317,7 +317,7 @@ class AutomationViewModelTest {
 
         assertEquals(
             PromptParagraphRange(3, 5),
-            viewModel.uiState.value.selectedParagraphRange
+            viewModel.uiState.value.editor.selectedParagraphRange
         )
     }
 
@@ -329,8 +329,8 @@ class AutomationViewModelTest {
 
         viewModel.selectPromptParagraphAt(3)
 
-        assertEquals(null, viewModel.uiState.value.selectedParagraphRange)
-        assertTrue(viewModel.uiState.value.paragraphSelectionMessage.contains("빈 줄"))
+        assertEquals(null, viewModel.uiState.value.editor.selectedParagraphRange)
+        assertTrue(viewModel.uiState.value.editor.paragraphSelectionMessage.contains("빈 줄"))
     }
 
     @Test
@@ -346,7 +346,7 @@ class AutomationViewModelTest {
             "인물\n새 장소\n보조 설명\n조명",
             viewModel.uiState.value.promptTemplate
         )
-        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
         assertEquals(
             TextRange("인물\n새 장소\n보조 설명".length),
             viewModel.promptTemplateTextFieldState.selection
@@ -366,7 +366,7 @@ class AutomationViewModelTest {
             "인물\n새 장소\n보조 설명\n조명",
             viewModel.uiState.value.promptTemplate
         )
-        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
         assertEquals(
             TextRange("인물\n새 장소\n보조 설명".length),
             viewModel.promptTemplateTextFieldState.selection
@@ -383,10 +383,10 @@ class AutomationViewModelTest {
         viewModel.replaceSelectedPromptParagraph("   ")
 
         assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
-        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
         assertEquals(
             PromptParagraphRange(3, 5),
-            viewModel.uiState.value.selectedParagraphRange
+            viewModel.uiState.value.editor.selectedParagraphRange
         )
     }
 
@@ -399,8 +399,8 @@ class AutomationViewModelTest {
         viewModel.importPromptFromClipboard()
 
         assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
-        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
-        assertTrue(viewModel.uiState.value.paragraphSelectionMessage.contains("먼저"))
+        assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
+        assertTrue(viewModel.uiState.value.editor.paragraphSelectionMessage.contains("먼저"))
     }
 
     @Test
@@ -413,10 +413,10 @@ class AutomationViewModelTest {
         viewModel.importPromptFromClipboard()
 
         assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
-        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
         assertEquals(
             PromptParagraphRange(3, 5),
-            viewModel.uiState.value.selectedParagraphRange
+            viewModel.uiState.value.editor.selectedParagraphRange
         )
     }
 
@@ -434,7 +434,7 @@ class AutomationViewModelTest {
             TextRange("인물\n".length),
             viewModel.promptTemplateTextFieldState.selection
         )
-        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
     }
 
     @Test
@@ -446,9 +446,9 @@ class AutomationViewModelTest {
 
         viewModel.cancelParagraphSelection()
 
-        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
-        assertEquals(null, viewModel.uiState.value.selectedParagraphRange)
-        assertEquals("", viewModel.uiState.value.paragraphSelectionMessage)
+        assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
+        assertEquals(null, viewModel.uiState.value.editor.selectedParagraphRange)
+        assertEquals("", viewModel.uiState.value.editor.paragraphSelectionMessage)
     }
 
     @Test
@@ -1044,23 +1044,23 @@ class AutomationViewModelTest {
         viewModel.onPromptTemplateChange("Hello World, hello Compose!")
 
         viewModel.toggleSearch(true)
-        assertTrue(viewModel.uiState.value.isSearchActive)
+        assertTrue(viewModel.uiState.value.editor.isSearchActive)
 
         viewModel.setSearchQuery("hello")
-        assertEquals(2, viewModel.uiState.value.searchMatches.size)
-        assertEquals(0, viewModel.uiState.value.activeSearchMatchIndex)
+        assertEquals(2, viewModel.uiState.value.editor.searchMatches.size)
+        assertEquals(0, viewModel.uiState.value.editor.activeSearchMatchIndex)
 
         viewModel.navigateSearchNext()
-        assertEquals(1, viewModel.uiState.value.activeSearchMatchIndex)
+        assertEquals(1, viewModel.uiState.value.editor.activeSearchMatchIndex)
 
         viewModel.navigateSearchPrevious()
-        assertEquals(0, viewModel.uiState.value.activeSearchMatchIndex)
+        assertEquals(0, viewModel.uiState.value.editor.activeSearchMatchIndex)
 
         viewModel.closeSearch()
-        assertTrue(!viewModel.uiState.value.isSearchActive)
-        assertEquals("", viewModel.uiState.value.searchQuery)
-        assertTrue(viewModel.uiState.value.searchMatches.isEmpty())
-        assertEquals(-1, viewModel.uiState.value.activeSearchMatchIndex)
+        assertTrue(!viewModel.uiState.value.editor.isSearchActive)
+        assertEquals("", viewModel.uiState.value.editor.searchQuery)
+        assertTrue(viewModel.uiState.value.editor.searchMatches.isEmpty())
+        assertEquals(-1, viewModel.uiState.value.editor.activeSearchMatchIndex)
     }
 
     @Test
@@ -1068,11 +1068,11 @@ class AutomationViewModelTest {
         val viewModel = viewModel()
         viewModel.onPromptTemplateChange("Paragraph 1\n\nParagraph 2")
         viewModel.toggleParagraphSelectionMode()
-        assertTrue(viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
 
         viewModel.toggleSearch(true)
-        assertTrue(viewModel.uiState.value.isSearchActive)
-        assertTrue(!viewModel.uiState.value.isParagraphSelectionMode)
+        assertTrue(viewModel.uiState.value.editor.isSearchActive)
+        assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
     }
 
     @Test
@@ -1494,19 +1494,30 @@ class AutomationViewModelTest {
         val resolvedRemote = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
             FakeRemoteGateway()
         )
+        val resolvedAutomation = automationRunner ?: automation(
+            dispatchers = dispatchers
+        )
         val resolvedMaintenance = appMaintenance ?: AppMaintenanceUseCase(
             geminiRestartCloser = closeGeminiCloser ?: FakeGeminiAppCloser(),
             selfAppCloser = terminateSelfCloser ?: FakeGeminiAppCloser(),
             memoryCleanupGateway = cleanMemoryGateway ?: FakeMemoryCleanupGateway(),
             manageRemoteAutomation = resolvedRemote
         )
+        val resolvedExecute = CoordinateAutomationExecutionUseCase(
+            automationHistoryRecorder = RecordAutomationHistoryUseCase(
+                lastRunSnapshotStore = lastRunSnapshotStore,
+                promptHistoryStore = promptHistoryStore,
+                dispatchers = dispatchers
+            ),
+            automation = resolvedAutomation,
+            manageRemoteAutomation = resolvedRemote
+        )
         return AutomationViewModel(
             checkEnvironmentStatus = environmentStatusReader,
             clipboardGateway = clipboardGateway,
             lastRunSnapshotStore = lastRunSnapshotStore,
-            automation = automationRunner ?: automation(
-                dispatchers = dispatchers
-            ),
+            automation = resolvedAutomation,
+            executeAutomation = resolvedExecute,
             appMaintenance = resolvedMaintenance,
             wildcardFileRepository = wildcardFileRepository,
             promptSnippetRepository = promptSnippetRepository,
@@ -1540,8 +1551,7 @@ class AutomationViewModelTest {
             wildcardSetRepository = FakeWildcardSetRepository(loadWildcards),
             promptGatewayProvider = PromptAutomationGatewayProvider { service },
             targetAppLauncher = TargetAppLauncher { true },
-            dispatchers = dispatchers,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            dispatchers = dispatchers
         )
     }
 

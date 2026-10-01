@@ -31,6 +31,9 @@ object WildcardTokenAutocomplete {
         val cursorAfter: Int
     )
 
+    val CANDIDATE_COMPARATOR: Comparator<Candidate> = compareBy<Candidate> { it.name.length }
+        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+
     /** 파일명 목록 → 와일드카드 추천 후보 (이름 오름차순, 토큰 중복 제거). */
     fun candidatesFromFileNames(fileNames: Iterable<String>): List<Candidate> {
         return fileNames
@@ -41,10 +44,7 @@ object WildcardTokenAutocomplete {
                 Candidate(name = name, token = token, displayText = token, type = Candidate.Type.WILDCARD)
             }
             .distinctBy { it.token.lowercase() }
-            .sortedWith(
-                compareBy<Candidate> { it.name.length }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
-            )
+            .sortedWith(CANDIDATE_COMPARATOR)
     }
 
     /** 상용구(스니펫) 목록 → 추천 후보 (단축어 오름차순, 단축어 중복 제거). */
@@ -62,10 +62,7 @@ object WildcardTokenAutocomplete {
                 )
             }
             .distinctBy { it.name.lowercase() }
-            .sortedWith(
-                compareBy<Candidate> { it.name.length }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
-            )
+            .sortedWith(CANDIDATE_COMPARATOR)
     }
 
     /**
@@ -88,12 +85,46 @@ object WildcardTokenAutocomplete {
         return candidates
             .asSequence()
             .filter { it.name.startsWith(word, ignoreCase = true) }
-            .sortedWith(
-                compareBy<Candidate> { it.name.length }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
-            )
+            .sortedWith(CANDIDATE_COMPARATOR)
             .take(maxCount)
             .toList()
+    }
+
+    /**
+     * 추천 칩 클릭 시 커서 위치의 단어를 해당 와일드카드 토큰 또는 상용구 문구로 치환합니다.
+     */
+    fun applyToken(
+        text: String,
+        selectionStart: Int,
+        selectionEnd: Int,
+        candidate: Candidate,
+        candidates: List<Candidate>,
+        isParagraphSelectionMode: Boolean = false
+    ): Replacement? {
+        if (isParagraphSelectionMode) return null
+        if (candidate.token.isBlank()) return null
+        if (selectionStart != selectionEnd) return null // 드래그 선택 중에는 치환 불가
+        if (candidates.none { it.token == candidate.token }) return null
+
+        val range = wordRangeAt(text, selectionEnd) ?: return null
+        val word = text.substring(range.first, range.last + 1)
+        if (word.isEmpty()) return null
+
+        val isMatchingPrefix = candidate.name.startsWith(word, ignoreCase = true) ||
+                candidate.token.startsWith(word, ignoreCase = true) ||
+                candidate.token.equals(word, ignoreCase = true) ||
+                candidate.name.equals(word, ignoreCase = true)
+        if (!isMatchingPrefix) return null
+
+        val replacement = replaceWordAtCursor(
+            text = text,
+            cursor = selectionEnd,
+            token = candidate.token
+        ) ?: return null
+
+        if (replacement.newText == text) return null
+
+        return replacement
     }
 
     /**

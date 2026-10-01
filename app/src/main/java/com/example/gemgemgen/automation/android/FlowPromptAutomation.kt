@@ -67,13 +67,10 @@ internal class FlowPromptAutomation(
     ): Boolean {
         val bounds = Rect()
         inputNode.getBoundsInScreen(bounds)
-        val tapX = if (bounds.width() > 0) bounds.exactCenterX() else 437f
         // EditText 컨테이너 상단에서 하단 버튼 행을 제외한 텍스트 영역 중앙을 터치
         val tapY = if (bounds.height() > 0) (bounds.top + 45f) else 1315f
 
-        if (tapAtCoordinates != null && tapX > 0 && tapY > 0) {
-            // 1. 입력창 영역을 먼저 물리 탭하여 Flutter 텍스트 엔진을 활성화
-            tapAtCoordinates.invoke(tapX, tapY, null)
+        if (tapNodeOrPerformClick(inputNode, customCenterY = tapY)) {
             delay(INPUT_TAP_SETTLE_MS)
         }
 
@@ -88,21 +85,8 @@ internal class FlowPromptAutomation(
     }
 
     override fun performSendClick(sendNode: AccessibilityNodeInfo): Boolean {
-        val bounds = Rect()
-        sendNode.getBoundsInScreen(bounds)
-        val centerX = bounds.exactCenterX()
-        val centerY = bounds.exactCenterY()
-
-        // 1. 접근성 ACTION_CLICK 시도
         sendNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-
-        // 2. Flutter 캔버스 엔진을 위한 물리 터치 제스처 탭 전송
-        if (centerX > 0 && centerY > 0 && tapAtCoordinates != null) {
-            tapAtCoordinates.invoke(centerX, centerY, null)
-            return true
-        }
-
-        return sendNode.isEnabled
+        return tapNodeOrPerformClick(sendNode)
     }
 
     override fun isSendConfirmed(prompt: String): Boolean {
@@ -165,11 +149,14 @@ internal class FlowPromptAutomation(
         } == true
     }
 
-    private fun tapNodeOrPerformClick(node: AccessibilityNodeInfo): Boolean {
+    private fun tapNodeOrPerformClick(
+        node: AccessibilityNodeInfo,
+        customCenterY: Float? = null
+    ): Boolean {
         val bounds = Rect()
         node.getBoundsInScreen(bounds)
-        val centerX = bounds.exactCenterX()
-        val centerY = bounds.exactCenterY()
+        val centerX = if (bounds.width() > 0) bounds.exactCenterX() else 437f
+        val centerY = customCenterY ?: if (bounds.height() > 0) bounds.exactCenterY() else 1315f
         if (centerX > 0 && centerY > 0 && tapAtCoordinates != null) {
             tapAtCoordinates.invoke(centerX, centerY, null)
             return true

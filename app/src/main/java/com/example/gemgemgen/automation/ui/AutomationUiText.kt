@@ -1,7 +1,6 @@
 // 역할: 자동화 화면과 플로팅 바에 표시되는 상태 메시지 및 버튼 문구를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
-import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.PromptParagraphMessageKey
@@ -9,10 +8,15 @@ import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
 import com.example.gemgemgen.remote.domain.AutomationMode
 
 object AutomationUiText {
-    fun accessibilityPromptTitle(): String = "접근성 서비스 필요"
-
-    fun accessibilityPromptMessage(): String =
+    const val ACCESSIBILITY_PROMPT_TITLE: String = "접근성 서비스 필요"
+    const val ACCESSIBILITY_PROMPT_MESSAGE: String =
         "자동화를 쓰려면 접근성 서비스「GemGemGen 자동화」를 켜야 합니다. 접근성 설정으로 이동할까요?"
+    const val GEMINI_RESTART_STARTING_TEXT: String = "Gemini 재시작 중..."
+    const val SELF_APP_TERMINATE_STARTING_TEXT: String = "앱 종료 중..."
+    const val GEMINI_RESTART_CANCELED_TEXT: String = "Gemini 재시작을 취소했습니다."
+    const val SELF_APP_TERMINATE_CANCELED_TEXT: String = "앱 종료를 취소했습니다."
+    const val MEMORY_CLEANUP_SCHEDULED_TEXT: String = "자동화 종료 후 메모리 정리가 예약되었습니다."
+    const val MEMORY_CLEANUP_SCHEDULE_CANCELED_TEXT: String = "메모리 정리 예약이 취소되었습니다."
 
     fun paragraphMessage(key: PromptParagraphMessageKey): String {
         return when (key) {
@@ -38,14 +42,6 @@ object AutomationUiText {
         }
     }
 
-    fun geminiRestartStartingText(): String = "Gemini 재시작 중..."
-
-    fun selfAppTerminateStartingText(): String = "앱 종료 중..."
-
-    fun geminiRestartCanceledText(): String = "Gemini 재시작을 취소했습니다."
-
-    fun selfAppTerminateCanceledText(): String = "앱 종료를 취소했습니다."
-
     fun memoryCleanupStartingText(mode: AutomationMode = AutomationMode.NORMAL): String {
         return if (mode == AutomationMode.SENDER) "수신 기기 메모리 정리 중..." else "메모리 정리 중..."
     }
@@ -53,10 +49,6 @@ object AutomationUiText {
     fun memoryCleanupCanceledText(mode: AutomationMode = AutomationMode.NORMAL): String {
         return if (mode == AutomationMode.SENDER) "수신 기기 메모리 정리를 취소했습니다." else "메모리 정리를 취소했습니다."
     }
-
-    fun memoryCleanupScheduledText(): String = "자동화 종료 후 메모리 정리가 예약되었습니다."
-
-    fun memoryCleanupScheduleCanceledText(): String = "메모리 정리 예약이 취소되었습니다."
 
     fun memoryCleanupUnavailableMessage(state: AutomationUiState): String {
         return when {
@@ -72,11 +64,11 @@ object AutomationUiText {
     }
 
     fun geminiRestartUnavailableMessage(state: AutomationUiState): String {
-        return geminiRestartUnavailableMessage(blockReasonFor(state))
+        return geminiRestartUnavailableMessage(state.geminiRestartBlockReason)
     }
 
     fun selfAppTerminateUnavailableMessage(state: AutomationUiState): String {
-        return selfAppTerminateUnavailableMessage(selfBlockReasonFor(state))
+        return selfAppTerminateUnavailableMessage(state.selfCloseBlockReason)
     }
 
     fun selfAppTerminateUnavailableMessage(reason: SelfAppControlBlockReason?): String {
@@ -104,22 +96,4 @@ object AutomationUiText {
             null -> "Gemini 재시작을 지금 실행할 수 없습니다."
         }
     }
-
-    private fun blockReasonFor(state: AutomationUiState): GeminiAppControlBlockReason? {
-        return AutomationExecutionPolicy.geminiBlockReason(
-            isGeminiInstalled = state.environmentStatus.isGeminiInstalled,
-            isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
-            isAutomationRunning = state.isRunning,
-            isClosingInProgress = state.isMaintenanceBusy
-        )
-    }
-
-    private fun selfBlockReasonFor(state: AutomationUiState): SelfAppControlBlockReason? {
-        return AutomationExecutionPolicy.selfAppBlockReason(
-            isAccessibilityServiceEnabled = state.environmentStatus.isAccessibilityServiceEnabled,
-            isAutomationRunning = state.isRunning,
-            isClosingInProgress = state.isMaintenanceBusy
-        )
-    }
 }
-

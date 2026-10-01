@@ -9,7 +9,6 @@ import com.example.gemgemgen.automation.usecase.ManageImeUseCase
 import com.example.gemgemgen.core.AppDefaults
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,7 +50,6 @@ class ManageImeUseCaseTest {
         val result = useCase.switchToNullKeyboard()
 
         assertTrue(result is ImeSwitchResult.Failure)
-        assertNull((result as ImeSwitchResult.Failure).originalImeId)
         assertTrue(settings.writes.isEmpty())
     }
 

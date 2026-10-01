@@ -23,10 +23,10 @@ class AndroidEncryptedGeminiApiKeyRepository(
         Context.MODE_PRIVATE
     )
     private val cipher = AndroidKeyStoreCipher(KEY_ALIAS)
-    private var cachedRecords: List<GeminiApiKeyRecord>? = null
+    private var cachedRecords: List<StoredGeminiApiKey>? = null
 
     override fun listKeys(): List<GeminiApiKeyRecord> {
-        return readRecords()
+        return readRecords().map { it.toRecord() }
     }
 
     override fun addKey(
@@ -34,7 +34,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
         rawKey: String
     ): GeminiApiKeyRecord {
         val existing = readRecords()
-        val record = GeminiApiKeyRecord(
+        val record = StoredGeminiApiKey(
             id = UUID.randomUUID().toString(),
             label = label,
             encryptedValue = cipher.encrypt(rawKey),
@@ -42,7 +42,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
             isActive = existing.none { it.isActive }
         )
         writeRecords(existing + record)
-        return record
+        return record.toRecord()
     }
 
     override fun deleteKey(id: String) {
@@ -137,17 +137,17 @@ class AndroidEncryptedGeminiApiKeyRepository(
     private fun roleProviderKey(role: String): String = "${KEY_ROLE_PROVIDER_PREFIX}$role"
     private fun roleModelKey(role: String): String = "${KEY_ROLE_MODEL_PREFIX}$role"
 
-    private fun readRecords(): List<GeminiApiKeyRecord> {
+    private fun readRecords(): List<StoredGeminiApiKey> {
         cachedRecords?.let { return it }
         val raw = prefs.getString(KEY_RECORDS, null) ?: return emptyList()
         return runCatching {
             analysisJson.parseToJsonElement(raw)
                 .jsonArray
-                .mapNotNull { element -> element.jsonObject.toRecordOrNull() }
+                .mapNotNull { element -> element.jsonObject.toStoredRecordOrNull() }
         }.getOrDefault(emptyList()).also { cachedRecords = it }
     }
 
-    private fun writeRecords(records: List<GeminiApiKeyRecord>) {
+    private fun writeRecords(records: List<StoredGeminiApiKey>) {
         cachedRecords = records
         val array = buildJsonArray {
             records.forEach { record ->
@@ -165,17 +165,32 @@ class AndroidEncryptedGeminiApiKeyRepository(
         prefs.edit().putString(KEY_RECORDS, array.toString()).apply()
     }
 
-    private fun JsonObject.toRecordOrNull(): GeminiApiKeyRecord? {
+    private fun JsonObject.toStoredRecordOrNull(): StoredGeminiApiKey? {
         val id = this["id"]?.jsonPrimitive?.content ?: return null
         val label = this["label"]?.jsonPrimitive?.content ?: return null
         val encryptedValue = this["encryptedValue"]?.jsonPrimitive?.content ?: return null
         val preview = this["preview"]?.jsonPrimitive?.content ?: return null
         val isActive = this["isActive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
             ?: false
-        return GeminiApiKeyRecord(
+        return StoredGeminiApiKey(
             id = id,
             label = label,
             encryptedValue = encryptedValue,
+            preview = preview,
+            isActive = isActive
+        )
+    }
+
+    private data class StoredGeminiApiKey(
+        val id: String,
+        val label: String,
+        val encryptedValue: String,
+        val preview: String,
+        val isActive: Boolean
+    ) {
+        fun toRecord(): GeminiApiKeyRecord = GeminiApiKeyRecord(
+            id = id,
+            label = label,
             preview = preview,
             isActive = isActive
         )

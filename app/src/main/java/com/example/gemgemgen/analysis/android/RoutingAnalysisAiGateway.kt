@@ -2,11 +2,11 @@
 package com.example.gemgemgen.analysis.android
 
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 
 /**
- * modelId 로 Gemini/Grok 경로를 고른다.
- * (단계별 모델이 달라질 수 있어 전역 프로바이더 설정에 의존하지 않는다.)
+ * 프로바이더(Gemini/Grok) 설정에 따라 직접 알맞은 게이트웨이로 라우팅한다.
  */
 class RoutingAnalysisAiGateway(
     private val gemini: AnalysisAiGateway,
@@ -15,12 +15,16 @@ class RoutingAnalysisAiGateway(
     override suspend fun analyze(
         apiKey: String,
         modelId: String,
-        payload: AnalysisPromptPayload
+        payload: AnalysisPromptPayload,
+        provider: AnalysisProvider
     ): String {
-        return delegate(modelId).analyze(apiKey, modelId, payload)
+        return delegate(provider).analyze(apiKey, modelId, payload, provider)
     }
 
-    private fun delegate(modelId: String): AnalysisAiGateway {
-        return if (modelId.startsWith("grok-")) grok else gemini
+    private fun delegate(provider: AnalysisProvider): AnalysisAiGateway {
+        return when (provider) {
+            AnalysisProvider.GROK -> grok
+            AnalysisProvider.GEMINI -> gemini
+        }
     }
 }

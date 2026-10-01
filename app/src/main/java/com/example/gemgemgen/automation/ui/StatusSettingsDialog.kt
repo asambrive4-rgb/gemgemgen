@@ -101,14 +101,14 @@ private fun AccessibilityPromptDialogContent(
             .padding(24.dp)
     ) {
         Text(
-            text = AutomationUiText.accessibilityPromptTitle(),
+            text = AutomationUiText.ACCESSIBILITY_PROMPT_TITLE,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = AutomationUiText.accessibilityPromptMessage(),
+            text = AutomationUiText.ACCESSIBILITY_PROMPT_MESSAGE,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

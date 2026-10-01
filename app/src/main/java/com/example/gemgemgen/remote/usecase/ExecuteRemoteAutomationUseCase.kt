@@ -2,7 +2,6 @@
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
-import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
@@ -37,19 +36,16 @@ class CheckRemoteExecutionUseCase {
 
 class ExecuteRemoteAutomationUseCase(
     private val checkExecution: CheckRemoteExecutionUseCase,
-    private val automation: ExecuteAutomationLoopUseCase,
-    private val promptGenerator: PromptGenerator = PromptGenerator()
+    private val automation: ExecuteAutomationLoopUseCase
 ) {
     suspend fun execute(
         request: RemoteAutomationRequest,
         conditions: RemoteExecutionConditions,
         onStateChange: (AutomationRunState) -> Unit
     ): RemoteExecutionDecision {
-        val wildcardTokens = promptGenerator.extractTokens(request.promptTemplate)
-        val requiresLocalWildcards = wildcardTokens.isNotEmpty() && request.wildcards.isEmpty()
         val decision = checkExecution.decide(
             conditions = conditions,
-            requiresWildcardDirectory = requiresLocalWildcards
+            requiresWildcardDirectory = false
         )
         if (decision is RemoteExecutionDecision.Rejected) {
             onStateChange(AutomationRunState.Failure(decision.message))

@@ -4,7 +4,9 @@ package com.example.gemgemgen.automation.ui
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
+import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.core.AppDefaults
@@ -45,19 +47,6 @@ data class AutomationUiState(
     val showVariationPromptConfigDialog: Boolean = false,
     val isMemoryCleanupScheduled: Boolean = false
 ) {
-    val isParagraphSelectionMode: Boolean get() = editor.isParagraphSelectionMode
-    val selectedParagraphRange: PromptParagraphRange? get() = editor.selectedParagraphRange
-    val paragraphSelectionMessage: String get() = editor.paragraphSelectionMessage
-    val canNavigateHistoryBack: Boolean get() = editor.canNavigateHistoryBack
-    val canNavigateHistoryForward: Boolean get() = editor.canNavigateHistoryForward
-    val isHistoryIndicatorVisible: Boolean get() = editor.isHistoryIndicatorVisible
-    val historyDotCount: Int get() = editor.historyDotCount
-    val activeHistoryDotIndex: Int get() = editor.activeHistoryDotIndex
-    val activeSuggestionCandidates: List<WildcardTokenAutocomplete.Candidate> get() = editor.activeSuggestionCandidates
-    val isSearchActive: Boolean get() = editor.isSearchActive
-    val searchQuery: String get() = editor.searchQuery
-    val searchMatches: List<com.example.gemgemgen.ui.TextHighlightRange> get() = editor.searchMatches
-    val activeSearchMatchIndex: Int get() = editor.activeSearchMatchIndex
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()
 
@@ -111,20 +100,26 @@ data class AutomationUiState(
     val maintenanceMessage: String
         get() = maintenanceState.message
 
-    val canCloseGemini: Boolean
-        get() = AutomationExecutionPolicy.canCloseGemini(
+    val geminiRestartBlockReason: GeminiAppControlBlockReason?
+        get() = AutomationExecutionPolicy.geminiBlockReason(
             isGeminiInstalled = environmentStatus.isGeminiInstalled,
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning || isVariationRunning,
             isClosingInProgress = isMaintenanceBusy
         )
 
-    val canCloseSelfApp: Boolean
-        get() = AutomationExecutionPolicy.canCloseSelfApp(
+    val selfCloseBlockReason: SelfAppControlBlockReason?
+        get() = AutomationExecutionPolicy.selfAppBlockReason(
             isAccessibilityServiceEnabled = environmentStatus.isAccessibilityServiceEnabled,
             isAutomationRunning = isRunning || isVariationRunning,
             isClosingInProgress = isMaintenanceBusy
         )
+
+    val canCloseGemini: Boolean
+        get() = geminiRestartBlockReason == null
+
+    val canCloseSelfApp: Boolean
+        get() = selfCloseBlockReason == null
 
     val canCleanMemory: Boolean
         get() = AutomationExecutionPolicy.canCleanMemory(

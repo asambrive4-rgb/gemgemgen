@@ -61,8 +61,7 @@ class GeminiAccessibilityServiceTest {
             },
             promptGatewayProvider = PromptAutomationGatewayProvider { scopedGateway },
             targetAppLauncher = TargetAppLauncher { true },
-            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined)
         )
 
         loopUseCase.run(
@@ -136,7 +135,14 @@ class GeminiAccessibilityServiceTest {
         var lastOnDone: (() -> Unit)? = null
         var lastOnStateChange: ((AutomationRunState) -> Unit)? = null
 
-        val variationDelegate = object : VariationPromptAutomationGateway {
+        val variationDelegate = object : PromptAutomationGateway {
+            override fun sendPrompt(
+                prompt: String,
+                newChatMode: NewChatMode,
+                onStateChange: (AutomationRunState) -> Unit,
+                onDone: () -> Unit
+            ) = Unit
+
             override fun pastePromptOnly(
                 prompt: String,
                 onStateChange: (AutomationRunState) -> Unit,
@@ -149,11 +155,12 @@ class GeminiAccessibilityServiceTest {
             override fun cancelCurrentRun() = Unit
         }
 
-        val scopedVariation = PackageScopedVariationPromptAutomation(
+        val scopedVariation = PackageScopedPromptAutomation(
             delegate = variationDelegate,
             targetApp = AutomationTargetApp.GEMINI,
             restrictPackages = { target -> currentRestrictedTarget = target },
-            clearPackageRestriction = { currentRestrictedTarget = null }
+            clearPackageRestriction = { currentRestrictedTarget = null },
+            isSessionRunning = { false }
         )
 
         var doneCalled = false

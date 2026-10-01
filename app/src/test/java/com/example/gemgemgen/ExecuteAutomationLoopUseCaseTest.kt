@@ -22,7 +22,6 @@ class ExecuteAutomationLoopUseCaseTest {
     fun run_loadsWildcardsOnceSendsMarkerFirstAndGeneratesOnePromptPerRepeat() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = true)
         var loadCount = 0
-        val generatedIndexes = mutableListOf<Int>()
         var loadedTokens: Set<String>? = null
         val automation = automation(
             service = service,
@@ -30,10 +29,6 @@ class ExecuteAutomationLoopUseCaseTest {
                 loadCount += 1
                 loadedTokens = tokens
                 listOf(WildcardSet("__hair__", "hair.txt", listOf("black hair")))
-            },
-            generateFinalPrompt = { _, _, index ->
-                generatedIndexes += index
-                "prompt $index"
             }
         )
 
@@ -51,9 +46,9 @@ class ExecuteAutomationLoopUseCaseTest {
         assertEquals(
             listOf(
                 ExecuteAutomationLoopUseCase.MARKER_PROMPT,
-                "prompt 1",
-                "prompt 2",
-                "prompt 3"
+                "base black hair",
+                "base black hair",
+                "base black hair"
             ),
             service.sentPrompts
         )
@@ -66,15 +61,13 @@ class ExecuteAutomationLoopUseCaseTest {
             ),
             service.newChatModes
         )
-        assertEquals(listOf(1, 2, 3), generatedIndexes)
     }
 
     @Test
     fun run_withFlowTarget_skipsMarkerAndSendsInitialModeOnFirstPromptOnly() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = true)
         val automation = automation(
-            service = service,
-            generateFinalPrompt = { _, _, index -> "flow prompt $index" }
+            service = service
         )
 
         automation.run(
@@ -88,7 +81,7 @@ class ExecuteAutomationLoopUseCaseTest {
         )
 
         assertEquals(
-            listOf("flow prompt 1", "flow prompt 2"),
+            listOf("test template", "test template"),
             service.sentPrompts
         )
         assertEquals(
@@ -107,8 +100,7 @@ class ExecuteAutomationLoopUseCaseTest {
             loadWildcardSets = {
                 loadCount += 1
                 emptyList()
-            },
-            generateFinalPrompt = { _, _, _ -> "plain prompt" }
+            }
         )
 
         automation.run(
@@ -131,17 +123,12 @@ class ExecuteAutomationLoopUseCaseTest {
     fun run_withInitialWildcards_bypassesRepositoryAndUsesProvidedSets() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = true)
         var loadCount = 0
-        var receivedWildcards: List<WildcardSet>? = null
         val customWildcard = WildcardSet("__color__", "color.txt", listOf("cyan"))
         val automation = automation(
             service = service,
             loadWildcardSets = {
                 loadCount += 1
                 listOf(WildcardSet("__color__", "color.txt", listOf("magenta")))
-            },
-            generateFinalPrompt = { _, wildcards, _ ->
-                receivedWildcards = wildcards
-                "paint it ${wildcards.first().items.first()}"
             }
         )
 
@@ -156,7 +143,6 @@ class ExecuteAutomationLoopUseCaseTest {
         )
 
         assertEquals(0, loadCount)
-        assertEquals(listOf(customWildcard), receivedWildcards)
         assertEquals(
             listOf(ExecuteAutomationLoopUseCase.MARKER_PROMPT, "paint it cyan"),
             service.sentPrompts
@@ -167,8 +153,7 @@ class ExecuteAutomationLoopUseCaseTest {
     fun cancel_cancelsServiceRestoresImeAndWritesStoppedLog() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(
-            service = service,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            service = service
         )
         val states = mutableListOf<AutomationRunState>()
 
@@ -192,8 +177,7 @@ class ExecuteAutomationLoopUseCaseTest {
     fun onAccessibilityLost_cancelsRestoresImeAndEmitsFailure() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(
-            service = service,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            service = service
         )
 
         automation.run(
@@ -230,8 +214,7 @@ class ExecuteAutomationLoopUseCaseTest {
     fun run_rejectsSecondStartWhileActiveWithoutClearingRunState() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(
-            service = service,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            service = service
         )
         val rejected = mutableListOf<AutomationRunState>()
 
@@ -268,10 +251,9 @@ class ExecuteAutomationLoopUseCaseTest {
     fun run_stopsAfterFirstPromptFailureAndWritesFailureLog() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = true)
         val automation = automation(
-            service = service,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            service = service
         )
-        service.failOnPrompt = "prompt 1"
+        service.failOnPrompt = "base"
         val states = mutableListOf<AutomationRunState>()
 
         automation.run(
@@ -297,8 +279,7 @@ class ExecuteAutomationLoopUseCaseTest {
             onLaunch = {
                 launchedTargets += it
                 true
-            },
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            }
         )
 
         automation.run(
@@ -318,8 +299,7 @@ class ExecuteAutomationLoopUseCaseTest {
     fun updateRepeatCount_midRun_increasesTargetAndContinuesSending() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(
-            service = service,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            service = service
         )
 
         automation.run(
@@ -345,10 +325,10 @@ class ExecuteAutomationLoopUseCaseTest {
         assertEquals(
             listOf(
                 ExecuteAutomationLoopUseCase.MARKER_PROMPT,
-                "prompt 1",
-                "prompt 2",
-                "prompt 3",
-                "prompt 4"
+                "base",
+                "base",
+                "base",
+                "base"
             ),
             service.sentPrompts
         )
@@ -359,8 +339,7 @@ class ExecuteAutomationLoopUseCaseTest {
     fun updateRepeatCount_doesNotGoBelowAlreadySuccessfulCount() = runBlocking {
         val service = FakePromptAutomationGateway(autoComplete = false)
         val automation = automation(
-            service = service,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            service = service
         )
 
         automation.run(
@@ -384,9 +363,9 @@ class ExecuteAutomationLoopUseCaseTest {
         assertEquals(
             listOf(
                 ExecuteAutomationLoopUseCase.MARKER_PROMPT,
-                "prompt 1",
-                "prompt 2",
-                "prompt 3"
+                "base",
+                "base",
+                "base"
             ),
             service.sentPrompts
         )
@@ -395,8 +374,7 @@ class ExecuteAutomationLoopUseCaseTest {
     @Test
     fun updateRepeatCount_whenIdle_returnsNull() {
         val automation = automation(
-            service = FakePromptAutomationGateway(autoComplete = true),
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            service = FakePromptAutomationGateway(autoComplete = true)
         )
 
         assertEquals(null, automation.updateRepeatCount(9))
@@ -416,8 +394,7 @@ class ExecuteAutomationLoopUseCaseTest {
         val animManager = ManageAnimationScaleUseCase(scaleSettings)
         val automation = automation(
             service = service,
-            manageAnimationScaleUseCase = animManager,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            manageAnimationScaleUseCase = animManager
         )
 
         automation.run(
@@ -445,8 +422,7 @@ class ExecuteAutomationLoopUseCaseTest {
         val animManager = ManageAnimationScaleUseCase(scaleSettings)
         val automation = automation(
             service = service,
-            manageAnimationScaleUseCase = animManager,
-            generateFinalPrompt = { _, _, index -> "prompt $index" }
+            manageAnimationScaleUseCase = animManager
         )
 
         automation.run(
@@ -470,8 +446,7 @@ class ExecuteAutomationLoopUseCaseTest {
         loadWildcardSets: (Set<String>) -> List<WildcardSet> = { emptyList() },
         onGatewayRequest: (AutomationTargetApp) -> Unit = {},
         onLaunch: (AutomationTargetApp) -> Boolean = { true },
-        manageAnimationScaleUseCase: ManageAnimationScaleUseCase? = null,
-        generateFinalPrompt: (String, List<WildcardSet>, Int) -> String
+        manageAnimationScaleUseCase: ManageAnimationScaleUseCase? = null
     ): ExecuteAutomationLoopUseCase {
         defaultImeId = ORIGINAL_IME_ID
         return ExecuteAutomationLoopUseCase(
@@ -493,8 +468,7 @@ class ExecuteAutomationLoopUseCaseTest {
             },
             targetAppLauncher = TargetAppLauncher(onLaunch),
             manageAnimationScaleUseCase = manageAnimationScaleUseCase,
-            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
-            generateFinalPrompt = generateFinalPrompt
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined)
         )
     }
 

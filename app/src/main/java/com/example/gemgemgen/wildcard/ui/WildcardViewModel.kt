@@ -3,13 +3,10 @@ package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer
 import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
-import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
-import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
 import com.example.gemgemgen.wildcard.domain.WildcardTextEditPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardTextEditResult
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
@@ -28,25 +25,47 @@ import kotlinx.coroutines.launch
 class WildcardViewModel(
     private val manageWildcardFiles: ManageWildcardFilesUseCase,
     private val clipboardGateway: ClipboardGateway,
-    classifyWildcardLines: ClassifyWildcardLinesUseCase? = null,
-    saveWildcardClassifyResult: SaveWildcardClassifyResultUseCase? = null,
-    analysisKeyManager: ManageGeminiApiKeysUseCase? = null,
-    classifyCoordinator: WildcardClassifyCoordinator? = null,
+    classifyWildcardLines: ClassifyWildcardLinesUseCase,
+    saveWildcardClassifyResult: SaveWildcardClassifyResultUseCase,
+    analysisKeyManager: ManageGeminiApiKeysUseCase,
     coroutineScope: CoroutineScope? = null,
-    private val saveWildcardFolder: WildcardFolderRepository? = null
+    private val saveWildcardFolder: WildcardFolderRepository
 ) : ViewModel(), WildcardScreenActions {
     private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardUiState())
     val uiState: StateFlow<WildcardUiState> = _uiState.asStateFlow()
 
-    private val classifyCoordinator: WildcardClassifyCoordinator =
-        classifyCoordinator ?: WildcardClassifyCoordinator(
+    val classifyCoordinator: WildcardClassifyCoordinator =
+        WildcardClassifyCoordinator(
             classifyWildcardLines = classifyWildcardLines,
             saveWildcardClassifyResult = saveWildcardClassifyResult,
             analysisKeyManager = analysisKeyManager,
             scope = scope,
-            host = ClassifyHost()
+            currentState = { _uiState.value },
+            updateState = { transform -> _uiState.update(transform) },
+            onFilesSaved = {
+                val workspace = manageWildcardFiles.refreshWorkspace(
+                    selectedFile = _uiState.value.editor.selectedFile,
+                    openFirstFile = false
+                )
+                _uiState.update { it.copy(files = workspace.files) }
+            },
+            beginFileOperation = ::beginFileOperation,
+            endFileOperation = ::endFileOperation
         )
+
+    override fun requestClassify() = classifyCoordinator.requestClassify()
+    override fun onClassifyCriteriaChange(value: String) = classifyCoordinator.onClassifyCriteriaChange(value)
+    override fun onClassifyProviderSelected(provider: com.example.gemgemgen.analysis.domain.AnalysisProvider) = classifyCoordinator.onClassifyProviderSelected(provider)
+    override fun onClassifyModelSelected(modelId: String) = classifyCoordinator.onClassifyModelSelected(modelId)
+    override fun dismissClassifyCriteriaDialog() = classifyCoordinator.dismissClassifyCriteriaDialog()
+    override fun runClassify() = classifyCoordinator.runClassify()
+    override fun dismissClassifyPreview() = classifyCoordinator.dismissClassifyPreview()
+    override fun onClassifyFileNameChange(index: Int, value: String) = classifyCoordinator.onClassifyFileNameChange(index, value)
+    override fun onToggleClassifyFileNameEdit(index: Int) = classifyCoordinator.onToggleClassifyFileNameEdit(index)
+    override fun saveClassifyResult(overwrite: Boolean) = classifyCoordinator.saveClassifyResult(overwrite)
+    override fun confirmClassifyOverwrite() = classifyCoordinator.confirmClassifyOverwrite()
+    override fun dismissClassifyOverwrite() = classifyCoordinator.dismissClassifyOverwrite()
 
     init {
         refreshFiles(openFirstFile = true)
@@ -128,20 +147,6 @@ class WildcardViewModel(
         }
     }
 
-    // WildcardClassifyActions 위임 구현
-    override fun requestClassify() = classifyCoordinator.requestClassify()
-    override fun onClassifyCriteriaChange(value: String) = classifyCoordinator.onClassifyCriteriaChange(value)
-    override fun onClassifyProviderSelected(provider: AnalysisProvider) = classifyCoordinator.onClassifyProviderSelected(provider)
-    override fun onClassifyModelSelected(modelId: String) = classifyCoordinator.onClassifyModelSelected(modelId)
-    override fun dismissClassifyCriteriaDialog() = classifyCoordinator.dismissClassifyCriteriaDialog()
-    override fun runClassify() = classifyCoordinator.runClassify()
-    override fun dismissClassifyPreview() = classifyCoordinator.dismissClassifyPreview()
-    override fun onClassifyFileNameChange(index: Int, value: String) = classifyCoordinator.onClassifyFileNameChange(index, value)
-    override fun onToggleClassifyFileNameEdit(index: Int) = classifyCoordinator.onToggleClassifyFileNameEdit(index)
-    override fun saveClassifyResult(overwrite: Boolean) = classifyCoordinator.saveClassifyResult(overwrite)
-    override fun confirmClassifyOverwrite() = classifyCoordinator.confirmClassifyOverwrite()
-    override fun dismissClassifyOverwrite() = classifyCoordinator.dismissClassifyOverwrite()
-
     // WildcardScreenActions 어댑터/오버라이드 지점
     override fun onRefresh() { refreshFiles(openFirstFile = true) }
     override fun onSelectFolder() { requestFolderSelection() }
@@ -185,22 +190,14 @@ class WildcardViewModel(
     }
 
     fun getInitialWildcardFolderUri(): String? =
-        saveWildcardFolder?.getFolderUri()
-
-    fun decideWildcardFolderAction(
-        hasAllFilesAccess: Boolean = false,
-        isWildcardDirectoryAccessible: Boolean = false
-    ): WildcardFolderAction = WildcardFolderAccessPolicy.decideAction(
-        hasAllFilesAccess = hasAllFilesAccess,
-        isWildcardDirectoryAccessible = isWildcardDirectoryAccessible
-    )
+        saveWildcardFolder.getFolderUri()
 
     fun saveWildcardFolder(folderUri: String): FolderSelectionResult {
         val normalized = folderUri.trim()
         val result = if (normalized.isBlank()) {
             FolderSelectionResult.Failure("폴더 경로가 비어 있습니다.")
         } else {
-            saveWildcardFolder?.save(normalized) ?: FolderSelectionResult.Success
+            saveWildcardFolder.save(normalized)
         }
         when (result) {
             FolderSelectionResult.Success -> {
@@ -563,33 +560,5 @@ class WildcardViewModel(
 
     private fun clearPendingAction() {
         _uiState.update { it.copy(pendingAction = null, message = "", error = "") }
-    }
-
-    private inner class ClassifyHost : WildcardClassifyCoordinator.Host {
-        override val currentState: WildcardUiState
-            get() = _uiState.value
-
-        override fun updateClassifyState(transform: (WildcardClassifyUiState) -> WildcardClassifyUiState) {
-            _uiState.update { it.copy(classify = transform(it.classify)) }
-        }
-
-        override fun onLineSelectionCleared() {
-            _uiState.update { it.copy(isLineSelectionMode = false, selectedLineIndices = emptySet()) }
-        }
-
-        override fun updateFeedback(message: String?, error: String) {
-            _uiState.update { it.copy(message = message ?: it.message, error = error) }
-        }
-
-        override fun beginFileOperation(): Boolean = this@WildcardViewModel.beginFileOperation()
-        override fun endFileOperation() = this@WildcardViewModel.endFileOperation()
-
-        override suspend fun onFilesSaved() {
-            val workspace = manageWildcardFiles.refreshWorkspace(
-                selectedFile = _uiState.value.editor.selectedFile,
-                openFirstFile = false
-            )
-            _uiState.update { it.copy(files = workspace.files) }
-        }
     }
 }

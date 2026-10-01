@@ -8,7 +8,6 @@ internal val DEFAULT_ANALYSIS_CATEGORY: AnalysisCategory = AnalysisCategory.FREE
 
 sealed interface AnalysisStartBlockReason {
     data object BlankSource : AnalysisStartBlockReason
-    data object MissingCategory : AnalysisStartBlockReason
     data class MissingMaskingCredential(val provider: AnalysisProvider) : AnalysisStartBlockReason
     data class MissingGenerationCredential(val provider: AnalysisProvider) : AnalysisStartBlockReason
 }
@@ -16,7 +15,7 @@ sealed interface AnalysisStartBlockReason {
 object AnalysisSessionPolicy {
     fun evaluateStartBlockReason(
         source: String,
-        category: AnalysisCategory?,
+        category: AnalysisCategory,
         needsMaskingAnalysis: Boolean,
         maskingProvider: AnalysisProvider,
         hasMaskingCredential: Boolean,
@@ -28,9 +27,6 @@ object AnalysisSessionPolicy {
         if (source.isBlank()) {
             return AnalysisStartBlockReason.BlankSource
         }
-        if (category == null) {
-            return AnalysisStartBlockReason.MissingCategory
-        }
         if (needsMaskingAnalysis && !hasMaskingCredential) {
             return AnalysisStartBlockReason.MissingMaskingCredential(maskingProvider)
         }
@@ -38,30 +34,6 @@ object AnalysisSessionPolicy {
             return AnalysisStartBlockReason.MissingGenerationCredential(generationProvider)
         }
         return null
-    }
-
-    fun canGenerate(
-        source: String,
-        category: AnalysisCategory?,
-        needsMaskingAnalysis: Boolean,
-        maskingProvider: AnalysisProvider,
-        hasMaskingCredential: Boolean,
-        generationProvider: AnalysisProvider,
-        hasGenerationCredential: Boolean,
-        status: AnalysisStatus
-    ): Boolean {
-        if (status == AnalysisStatus.GENERATING) {
-            return false
-        }
-        return evaluateStartBlockReason(
-            source = source,
-            category = category,
-            needsMaskingAnalysis = needsMaskingAnalysis,
-            maskingProvider = maskingProvider,
-            hasMaskingCredential = hasMaskingCredential,
-            generationProvider = generationProvider,
-            hasGenerationCredential = hasGenerationCredential
-        ) == null
     }
 
     fun canCopyOrSave(

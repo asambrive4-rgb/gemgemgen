@@ -14,7 +14,7 @@ class AnalysisSessionPolicyTest {
     fun evaluateStartBlockReason_whenBusy_alwaysReturnsNull() {
         val reason = AnalysisSessionPolicy.evaluateStartBlockReason(
             source = "",
-            category = null,
+            category = AnalysisCategory.FREE_EDIT,
             needsMaskingAnalysis = true,
             maskingProvider = AnalysisProvider.GEMINI,
             hasMaskingCredential = false,
@@ -40,20 +40,7 @@ class AnalysisSessionPolicyTest {
         )
         assertEquals(AnalysisStartBlockReason.BlankSource, blankReason)
 
-        // 2. 카테고리 누락
-        val missingCategoryReason = AnalysisSessionPolicy.evaluateStartBlockReason(
-            source = "hello prompt",
-            category = null,
-            needsMaskingAnalysis = false,
-            maskingProvider = AnalysisProvider.GEMINI,
-            hasMaskingCredential = true,
-            generationProvider = AnalysisProvider.GROK,
-            hasGenerationCredential = true,
-            isBusy = false
-        )
-        assertEquals(AnalysisStartBlockReason.MissingCategory, missingCategoryReason)
-
-        // 3. 마스킹 키 누락
+        // 2. 마스킹 키 누락
         val missingMaskingReason = AnalysisSessionPolicy.evaluateStartBlockReason(
             source = "hello prompt",
             category = AnalysisCategory.FREE_EDIT,
@@ -66,7 +53,7 @@ class AnalysisSessionPolicyTest {
         )
         assertEquals(AnalysisStartBlockReason.MissingMaskingCredential(AnalysisProvider.GEMINI), missingMaskingReason)
 
-        // 4. 생성 키 누락
+        // 3. 생성 키 누락
         val missingGenerationReason = AnalysisSessionPolicy.evaluateStartBlockReason(
             source = "hello prompt",
             category = AnalysisCategory.FREE_EDIT,
@@ -79,7 +66,7 @@ class AnalysisSessionPolicyTest {
         )
         assertEquals(AnalysisStartBlockReason.MissingGenerationCredential(AnalysisProvider.GROK), missingGenerationReason)
 
-        // 5. 모든 조건 충족 -> null
+        // 4. 모든 조건 충족 -> null
         val allowedReason = AnalysisSessionPolicy.evaluateStartBlockReason(
             source = "hello prompt",
             category = AnalysisCategory.FREE_EDIT,
@@ -91,34 +78,6 @@ class AnalysisSessionPolicyTest {
             isBusy = false
         )
         assertNull(allowedReason)
-    }
-
-    @Test
-    fun canGenerate_respectsStatusAndPreconditions() {
-        assertFalse(
-            AnalysisSessionPolicy.canGenerate(
-                source = "prompt",
-                category = AnalysisCategory.FREE_EDIT,
-                needsMaskingAnalysis = false,
-                maskingProvider = AnalysisProvider.GEMINI,
-                hasMaskingCredential = true,
-                generationProvider = AnalysisProvider.GROK,
-                hasGenerationCredential = true,
-                status = AnalysisStatus.GENERATING
-            )
-        )
-        assertTrue(
-            AnalysisSessionPolicy.canGenerate(
-                source = "prompt",
-                category = AnalysisCategory.FREE_EDIT,
-                needsMaskingAnalysis = false,
-                maskingProvider = AnalysisProvider.GEMINI,
-                hasMaskingCredential = true,
-                generationProvider = AnalysisProvider.GROK,
-                hasGenerationCredential = true,
-                status = AnalysisStatus.IDLE
-            )
-        )
     }
 
     @Test

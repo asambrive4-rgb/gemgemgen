@@ -6,13 +6,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.withContext
 
-data class GeminiApiKeySummary(
-    val id: String,
-    val label: String,
-    val preview: String,
-    val isActive: Boolean
-)
-
 data class AnalysisRoleModelSetting(
     val role: AnalysisModelRole,
     val provider: AnalysisProvider,
@@ -24,7 +17,7 @@ class ManageGeminiApiKeysUseCase(
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     suspend fun listKeys(): List<GeminiApiKeySummary> = withContext(dispatchers.io) {
-        repository.listKeys().map { it.toSummary() }
+        repository.listKeys()
     }
 
     suspend fun addKey(label: String, rawKey: String): List<GeminiApiKeySummary> = mutateKeys {
@@ -55,7 +48,7 @@ class ManageGeminiApiKeysUseCase(
     private suspend fun mutateKeys(action: () -> Unit): List<GeminiApiKeySummary> =
         withContext(dispatchers.io) {
             action()
-            repository.listKeys().map { it.toSummary() }
+            repository.listKeys()
         }
 
     suspend fun getRoleSetting(role: AnalysisModelRole): AnalysisRoleModelSetting =
@@ -81,14 +74,5 @@ class ManageGeminiApiKeysUseCase(
     ): AnalysisRoleModelSetting = withContext(dispatchers.io) {
         repository.setRoleModel(role.storageValue, modelId)
         getRoleSetting(role)
-    }
-
-    private fun GeminiApiKeyRecord.toSummary(): GeminiApiKeySummary {
-        return GeminiApiKeySummary(
-            id = id,
-            label = label,
-            preview = preview,
-            isActive = isActive
-        )
     }
 }

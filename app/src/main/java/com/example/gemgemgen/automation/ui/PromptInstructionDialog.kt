@@ -57,18 +57,15 @@ import com.example.gemgemgen.ui.theme.appTextFieldColors
 
 @Composable
 fun PromptInstructionDialog(
-    showDialog: Boolean,
     config: PromptInstructionConfig,
     initialTab: InstructionTab = InstructionTab.TOP,
     onSave: (PromptInstructionConfig) -> Unit,
     onDismiss: () -> Unit
 ) {
-    if (!showDialog) return
-
     val clipboardManager = LocalClipboardManager.current
-    var activeTab by remember(initialTab, showDialog) { mutableStateOf(initialTab) }
-    var topText by remember(config.topInstruction, showDialog) { mutableStateOf(config.topInstruction) }
-    var bottomText by remember(config.bottomInstruction, showDialog) { mutableStateOf(config.bottomInstruction.orEmpty()) }
+    var activeTab by remember(initialTab) { mutableStateOf(initialTab) }
+    var topText by remember(config.topInstruction) { mutableStateOf(config.topInstruction) }
+    var bottomText by remember(config.bottomInstruction) { mutableStateOf(config.bottomInstruction.orEmpty()) }
 
     PromptConfigDialogFrame(
         title = "인스트럭션 문구 관리",

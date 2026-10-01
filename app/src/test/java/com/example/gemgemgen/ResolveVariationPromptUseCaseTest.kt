@@ -25,12 +25,7 @@ class ResolveVariationPromptUseCaseTest {
         )
 
         assertEquals("두 번째 문단", target)
-        val prompt = config.buildPrompt(
-            fullText = fullText,
-            explicitSelectedText = null,
-            isParagraphSelectionMode = true,
-            selectedParagraphRange = range
-        )
+        val prompt = config.buildPrompt(target)
         assertEquals("기본 변주 템플릿\n\n두 번째 문단", prompt)
     }
 
@@ -46,12 +41,7 @@ class ResolveVariationPromptUseCaseTest {
         )
 
         assertEquals("프롬프트 원문", target)
-        val prompt = config.buildPrompt(
-            fullText = fullText,
-            explicitSelectedText = "프롬프트 원문",
-            isParagraphSelectionMode = false,
-            selectedParagraphRange = null
-        )
+        val prompt = config.buildPrompt(target)
         assertEquals("기본 변주 템플릿\n\n프롬프트 원문", prompt)
     }
 
@@ -97,12 +87,7 @@ class ResolveVariationPromptUseCaseTest {
         )
 
         assertNull(target)
-        val prompt = config.buildPrompt(
-            fullText = fullText,
-            explicitSelectedText = null,
-            isParagraphSelectionMode = false,
-            selectedParagraphRange = null
-        )
+        val prompt = config.buildPrompt(target)
         assertEquals("기본 변주 템플릿", prompt)
     }
 

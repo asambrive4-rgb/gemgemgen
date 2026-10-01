@@ -12,7 +12,6 @@ import com.example.gemgemgen.automation.domain.PromptSegmentEditPolicy
 import com.example.gemgemgen.automation.domain.PromptTextMutation
 import com.example.gemgemgen.automation.domain.PromptTypingChange
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
-import com.example.gemgemgen.automation.usecase.ApplyWildcardTokenUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.ui.TextHighlightRange
@@ -52,7 +51,6 @@ class PromptEditorCoordinator(
     private val scope: CoroutineScope,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     initialPrompt: String = "",
-    private val applyWildcardTokenUseCase: ApplyWildcardTokenUseCase = ApplyWildcardTokenUseCase(),
     private val onPromptTextChanged: ((String) -> Unit)? = null
 ) {
     val textFieldState = TextFieldState()
@@ -115,8 +113,13 @@ class PromptEditorCoordinator(
     }
 
     private fun publishPromptTemplateToUiState(value: String, force: Boolean) {
+        val selection = textFieldState.selection
         val nextCandidates = computeActiveSuggestions(
             text = value,
+            cursor = selection.max,
+            selectionMin = selection.min,
+            selectionMax = selection.max,
+            candidates = currentAutocompleteCandidates,
             isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode
         )
         _editorUiState.update { state ->
@@ -260,13 +263,9 @@ class PromptEditorCoordinator(
         updateNavigationAvailability()
     }
 
-    fun onAutomationStarted(prompt: String, updatedHistory: List<String>? = null) {
+    fun onAutomationStarted(prompt: String) {
         syncPromptTemplateFromTextField()
-        if (updatedHistory != null) {
-            promptHistoryNavigator.onAutomationStarted(prompt, updatedHistory)
-        } else {
-            promptHistoryNavigator.onAutomationStarted(prompt)
-        }
+        promptHistoryNavigator.onAutomationStarted(prompt)
         updateNavigationAvailability()
     }
 
@@ -401,7 +400,7 @@ class PromptEditorCoordinator(
         val selection = textFieldState.selection
         val currentText = textFieldState.text.toString()
 
-        val result = applyWildcardTokenUseCase(
+        val result = WildcardTokenAutocomplete.applyToken(
             text = currentText,
             selectionStart = selection.min,
             selectionEnd = selection.max,
@@ -507,6 +506,9 @@ class PromptEditorCoordinator(
         val message = AutomationUiText.paragraphMessage(session.messageKey)
         val suggestions = computeActiveSuggestions(
             text = session.text,
+            cursor = session.text.length,
+            selectionMin = session.text.length,
+            selectionMax = session.text.length,
             candidates = candidates,
             isParagraphSelectionMode = session.isParagraphSelectionMode
         )
@@ -547,29 +549,13 @@ class PromptEditorCoordinator(
         refreshActiveSuggestions()
     }
 
-    fun computeActiveSuggestions(
-        text: String = textFieldState.text.toString(),
-        cursor: Int = textFieldState.selection.max,
-        selectionStart: Int = textFieldState.selection.min,
-        selectionEnd: Int = textFieldState.selection.max,
-        candidates: List<WildcardTokenAutocomplete.Candidate> = currentAutocompleteCandidates,
-        isParagraphSelectionMode: Boolean = _editorUiState.value.isParagraphSelectionMode
-    ): List<WildcardTokenAutocomplete.Candidate> = Companion.computeActiveSuggestions(
-        text = text,
-        cursor = cursor,
-        selectionMin = selectionStart,
-        selectionMax = selectionEnd,
-        candidates = candidates,
-        isParagraphSelectionMode = isParagraphSelectionMode
-    )
-
     fun refreshActiveSuggestions() {
         val selection = textFieldState.selection
         val suggestions = computeActiveSuggestions(
             text = textFieldState.text.toString(),
             cursor = selection.max,
-            selectionStart = selection.min,
-            selectionEnd = selection.max,
+            selectionMin = selection.min,
+            selectionMax = selection.max,
             candidates = currentAutocompleteCandidates,
             isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode
         )

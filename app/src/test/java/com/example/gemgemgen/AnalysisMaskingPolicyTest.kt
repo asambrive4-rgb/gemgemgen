@@ -31,18 +31,6 @@ class AnalysisMaskingPolicyTest {
         )
     )
 
-    @Test
-    fun shouldAnalyzeMasking_returnsFalse_whenCategoryIsNull() {
-        val result = AnalysisMaskingPolicy.shouldAnalyzeMasking(
-            source = "test prompt",
-            category = null,
-            targetSegment = null,
-            cache = null,
-            selectedHints = emptyList(),
-            customHint = ""
-        )
-        assertFalse(result)
-    }
 
     @Test
     fun shouldAnalyzeMasking_returnsTrue_whenCacheIsNull() {
@@ -198,19 +186,5 @@ class AnalysisMaskingPolicyTest {
             customHint = "custom"
         )
         assertTrue(result)
-    }
-
-    @Test
-    fun shouldAnalyzeMaskingFromHints_returnsFalse_whenCategoryIsNull() {
-        val result = AnalysisMaskingPolicy.shouldAnalyzeMaskingFromHints(
-            source = "test prompt",
-            category = null,
-            targetSegment = null,
-            cache = null,
-            directions = dummyDirections,
-            selectedDirectionIds = setOf("dir1"),
-            customHint = "custom"
-        )
-        assertFalse(result)
     }
 }

@@ -93,7 +93,6 @@ private enum class SnippetTab {
  */
 @Composable
 fun PromptSnippetDialog(
-    showDialog: Boolean,
     snippets: List<PromptSnippet>,
     currentPromptText: String = "",
     isSelectionPrompt: Boolean = false,
@@ -102,8 +101,6 @@ fun PromptSnippetDialog(
     onDeleteSnippet: (id: String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    if (!showDialog) return
-
     val clipboardManager = LocalClipboardManager.current
     val focusManager = LocalFocusManager.current
     val clearInputFocus = remember(focusManager) {
@@ -111,13 +108,13 @@ fun PromptSnippetDialog(
     }
 
     // 현재 활성화된 탭 및 편집 상태
-    var currentTab by remember(showDialog) { mutableStateOf(SnippetTab.VAULT) }
-    var editingSnippet by remember(showDialog) { mutableStateOf<PromptSnippet?>(null) }
+    var currentTab by remember { mutableStateOf(SnippetTab.VAULT) }
+    var editingSnippet by remember { mutableStateOf<PromptSnippet?>(null) }
 
     // 폼 입력 상태
-    var shortcutInput by remember(showDialog) { mutableStateOf("") }
-    var contentInput by remember(showDialog) { mutableStateOf("") }
-    var errorMessage by remember(showDialog) { mutableStateOf("") }
+    var shortcutInput by remember { mutableStateOf("") }
+    var contentInput by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf("") }
 
     // 수정 모드 시작 핸들러
     val startEditing: (PromptSnippet) -> Unit = { snippet ->

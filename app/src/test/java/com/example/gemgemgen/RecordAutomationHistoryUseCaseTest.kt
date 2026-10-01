@@ -59,7 +59,6 @@ class RecordAutomationHistoryUseCaseTest {
         val historyItems = historyStore.load()
         assertEquals(1, historyItems.size)
         assertEquals("test history prompt", historyItems[0].prompt)
-        assertEquals(AutomationTargetApp.GEMINI, historyItems[0].targetApp)
     }
 
     private class RecordingLastRunSnapshotRepository : LastRunSnapshotRepository {

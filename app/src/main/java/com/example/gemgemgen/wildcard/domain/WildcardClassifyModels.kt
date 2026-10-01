@@ -17,10 +17,7 @@ data class WildcardClassifyResult(
         get() = droppedLines.size
 
     val savableGroups: List<WildcardClassifyGroup>
-        get() = groups.filter { group ->
-            group.items.isNotEmpty() &&
-                group.name.trim() != WildcardClassifyFileName.UNCLASSIFIED_GROUP_NAME
-        }
+        get() = groups.filter { group -> group.items.isNotEmpty() }
 }
 
 /** 미리보기에서 파일명을 수정한 뒤 저장에 쓰는 항목 */
@@ -82,7 +79,6 @@ object WildcardClassifyFileName {
         val used = linkedSetOf<String>()
         return groups.mapNotNull { group ->
             if (group.items.isEmpty()) return@mapNotNull null
-            if (group.name.trim() == UNCLASSIFIED_GROUP_NAME) return@mapNotNull null
 
             val stem = suggestedInputFromGroupName(group.name).ifBlank { "group" }
             WildcardClassifySaveEntry(
@@ -118,7 +114,6 @@ object WildcardClassifyResultPolicy {
         for (group in rawGroups) {
             val name = group.name.trim()
             if (name.isEmpty()) continue
-            if (name == WildcardClassifyFileName.UNCLASSIFIED_GROUP_NAME) continue
 
             val kept = ArrayList<String>()
             for (item in group.items) {

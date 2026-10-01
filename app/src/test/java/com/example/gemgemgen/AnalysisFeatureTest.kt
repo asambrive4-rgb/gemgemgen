@@ -3,19 +3,22 @@ package com.example.gemgemgen
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisDirection
+import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
+import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
+import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
+import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
-import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
@@ -760,7 +763,7 @@ class AnalysisFeatureTest {
             keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
             promptWorkspace = promptWorkspace
         )
-        val directionId = viewModel.uiState.value.directions.first().id
+        val directionId = AnalysisDummyDirections.values.first().id
 
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
         viewModel.onSourcePromptChange(original)
@@ -1591,7 +1594,8 @@ class AnalysisFeatureTest {
         override suspend fun analyze(
             apiKey: String,
             modelId: String,
-            payload: AnalysisPromptPayload
+            payload: AnalysisPromptPayload,
+            provider: AnalysisProvider
         ): String {
             val generateMatch = Regex("""Generate exactly (\d+)""").find(payload.systemInstruction)
             if (generateMatch != null) {
@@ -1621,7 +1625,6 @@ class AnalysisFeatureTest {
                 records += GeminiApiKeyRecord(
                     id = "initial",
                     label = "initial",
-                    encryptedValue = "encrypted",
                     preview = "****${activeKey.takeLast(4)}",
                     isActive = true
                 )
@@ -1639,7 +1642,6 @@ class AnalysisFeatureTest {
             val record = GeminiApiKeyRecord(
                 id = id,
                 label = label,
-                encryptedValue = "encrypted-$id",
                 preview = "****${rawKey.takeLast(4)}",
                 isActive = records.none { it.isActive }
             )

@@ -2,6 +2,7 @@
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisReportCache
@@ -21,7 +22,7 @@ enum class AnalysisGenerationStep {
 
 data class ExecuteAnalysisGenerationRequest(
     val sourcePrompt: String,
-    val category: AnalysisCategory?,
+    val category: AnalysisCategory = DEFAULT_ANALYSIS_CATEGORY,
     val targetSegment: AnalysisTargetSegment?,
     val cache: AnalysisReportCache?,
     val count: Int,
@@ -78,7 +79,7 @@ class ExecuteAnalysisGenerationUseCase(
         if (blockedReason != null) {
             return@withContext ExecuteAnalysisGenerationResult.Blocked(blockedReason)
         }
-        val category = checkNotNull(request.category)
+        val category = request.category
 
         if (needsMaskingAnalysis) {
             onStep?.invoke(AnalysisGenerationStep.MASKING)
