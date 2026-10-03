@@ -83,4 +83,5 @@ interface AutomationScreenActions {
     fun onOpenWildcardStorageSettings() {}
     fun onOpenAccessibilitySettings() {}
     fun onClearFocus() {}
+    fun onToggleCopyPromptOnStart(enabled: Boolean) {}
 }

@@ -1,4 +1,4 @@
-// 역할: 시스템 설정(IME/애니메이션) 비동기 전환 및 메인 스레드 안전 상태 전파로 대상 AI 앱 자동화 반복 루프를 관리합니다.
+// 역할: 시스템 설정(IME/애니메이션) 전환, 시작 시 클립보드 백업 및 메인 스레드 안전 상태 전파로 대상 AI 앱 자동화 반복 루프를 관리합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -7,6 +7,7 @@ import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.automation.domain.PromptGenerator
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.WildcardSet
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import kotlinx.coroutines.CancellationException
@@ -32,6 +33,8 @@ class ExecuteAutomationLoopUseCase(
     private val promptGatewayProvider: PromptAutomationGatewayProvider,
     private val targetAppLauncher: TargetAppLauncher,
     private val manageAnimationScaleUseCase: ManageAnimationScaleUseCase? = null,
+    private val clipboardGateway: ClipboardGateway? = null,
+    private val isCopyPromptOnStartEnabled: (() -> Boolean)? = null,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     promptGenerator: PromptGenerator = PromptGenerator(),
     private val runPreparer: PrepareAutomationRunUseCase = PrepareAutomationRunUseCase(
@@ -180,6 +183,20 @@ class ExecuteAutomationLoopUseCase(
             promptPlan = preparedRun.promptPlan,
             flowImageCount = request.flowImageCount
         ).also { currentRun = it }
+
+        // =========================================================================================
+        // [주의: 사용자 명시적 요구 기능 - 임의 삭제 절대 금지]
+        // - 기능: 자동화 시작 시 사용자의 원본 프롬프트 템플릿을 시스템 클립보드에 1회 백업
+        // - 목적: 자동화 오류 발생 시 수동 복구 및 타 앱 수동 붙여넣기 편의성 제공
+        // - 규칙: 성능 최적화, 클립보드 오염 방지, 미사용 코드 정리 등의 이유로 이 블록을
+        //         삭제하거나 @Suppress("UNUSED_PARAMETER") 처리하지 마세요.
+        //         비활성화는 반드시 설정 화면의 토글(AutomationSettingsStore)을 통해서만 제어합니다.
+        // =========================================================================================
+        if (isCopyPromptOnStartEnabled?.invoke() != false) {
+            withContext(dispatchers.io) {
+                clipboardGateway?.writeText(request.promptTemplate)
+            }
+        }
 
         updateRunState(run, "${request.targetApp.displayName} 앱 실행 중", onStateChange)
         if (!targetAppLauncher.launch(request.targetApp)) {

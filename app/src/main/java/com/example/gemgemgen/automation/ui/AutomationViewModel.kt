@@ -81,6 +81,7 @@ class AutomationViewModel(
     private val variationPromptRepository: VariationPromptRepository? = null,
     private val promptSnippetRepository: PromptSnippetRepository? = null,
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
+    private val automationSettingsStore: com.example.gemgemgen.automation.android.AutomationSettingsStore? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel(), AutomationScreenActions {
     private val scope = coroutineScope ?: viewModelScope
@@ -100,7 +101,8 @@ class AutomationViewModel(
             selectedThemePalette = themePaletteStore?.currentPalette?.value
                 ?: com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
             selectedThemeMode = themePaletteStore?.currentMode?.value
-                ?: com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT
+                ?: com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT,
+            copyPromptOnStart = automationSettingsStore?.copyPromptOnStart?.value ?: true
         )
     )
     val uiState: StateFlow<AutomationUiState> = _uiState.asStateFlow()
@@ -143,6 +145,13 @@ class AutomationViewModel(
                 }
             }
         }
+        automationSettingsStore?.let { store ->
+            scope.launch {
+                store.copyPromptOnStart.collect { enabled ->
+                    _uiState.update { it.copy(copyPromptOnStart = enabled) }
+                }
+            }
+        }
         loadInitialState()
         promptWorkspace?.let { workspace ->
             workspace.segmentReplacer = ::replacePromptTemplateSegment
@@ -163,6 +172,11 @@ class AutomationViewModel(
     override fun onPromptTemplateChange(value: String) { promptEditor.onPromptTemplateChange(value, updateTextFieldState = true) }
     override fun onRunVariation(selectedText: String?) { runVariation(selectedText) }
     override fun onConfirmAccessibilityPrompt() { confirmAccessibilityPrompt() }
+
+    override fun onToggleCopyPromptOnStart(enabled: Boolean) {
+        automationSettingsStore?.setCopyPromptOnStart(enabled)
+        _uiState.update { it.copy(copyPromptOnStart = enabled) }
+    }
 
     override fun onSelectThemePalette(palette: com.example.gemgemgen.ui.theme.AppThemePalette) {
         themePaletteStore?.setPalette(palette)

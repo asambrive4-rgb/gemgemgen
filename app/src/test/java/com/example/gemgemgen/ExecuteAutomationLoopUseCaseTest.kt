@@ -439,6 +439,60 @@ class ExecuteAutomationLoopUseCaseTest {
         assertEquals(AnimationScales(0.5f, 0.5f, 0.5f), currentScales)
     }
 
+    @Test
+    fun run_copiesPromptTemplateToClipboard_whenEnabled() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = true)
+        var copiedText: String? = null
+        val fakeClipboard = object : ClipboardGateway {
+            override fun readText(): String = copiedText.orEmpty()
+            override fun writeText(text: String) {
+                copiedText = text
+            }
+        }
+        val automation = automation(
+            service = service,
+            clipboardGateway = fakeClipboard,
+            isCopyPromptOnStartEnabled = { true }
+        )
+
+        automation.run(
+            request = AutomationRunRequest(
+                promptTemplate = "test prompt template __flower__",
+                repeatCountText = "1",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+
+        assertEquals("test prompt template __flower__", copiedText)
+    }
+
+    @Test
+    fun run_doesNotCopyPromptTemplateToClipboard_whenDisabled() = runBlocking {
+        val service = FakePromptAutomationGateway(autoComplete = true)
+        var copiedText: String? = null
+        val fakeClipboard = object : ClipboardGateway {
+            override fun readText(): String = copiedText.orEmpty()
+            override fun writeText(text: String) {
+                copiedText = text
+            }
+        }
+        val automation = automation(
+            service = service,
+            clipboardGateway = fakeClipboard,
+            isCopyPromptOnStartEnabled = { false }
+        )
+
+        automation.run(
+            request = AutomationRunRequest(
+                promptTemplate = "test prompt template __flower__",
+                repeatCountText = "1",
+                targetApp = AutomationTargetApp.GEMINI
+            )
+        )
+
+        assertEquals(null, copiedText)
+    }
+
     private var defaultImeId = ORIGINAL_IME_ID
 
     private fun automation(
@@ -446,7 +500,9 @@ class ExecuteAutomationLoopUseCaseTest {
         loadWildcardSets: (Set<String>) -> List<WildcardSet> = { emptyList() },
         onGatewayRequest: (AutomationTargetApp) -> Unit = {},
         onLaunch: (AutomationTargetApp) -> Boolean = { true },
-        manageAnimationScaleUseCase: ManageAnimationScaleUseCase? = null
+        manageAnimationScaleUseCase: ManageAnimationScaleUseCase? = null,
+        clipboardGateway: ClipboardGateway? = null,
+        isCopyPromptOnStartEnabled: (() -> Boolean)? = null
     ): ExecuteAutomationLoopUseCase {
         defaultImeId = ORIGINAL_IME_ID
         return ExecuteAutomationLoopUseCase(
@@ -468,6 +524,8 @@ class ExecuteAutomationLoopUseCaseTest {
             },
             targetAppLauncher = TargetAppLauncher(onLaunch),
             manageAnimationScaleUseCase = manageAnimationScaleUseCase,
+            clipboardGateway = clipboardGateway,
+            isCopyPromptOnStartEnabled = isCopyPromptOnStartEnabled,
             dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined)
         )
     }

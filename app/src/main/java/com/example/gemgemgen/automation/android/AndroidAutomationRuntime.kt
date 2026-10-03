@@ -37,6 +37,7 @@ internal object ProcessAutomationHolder {
 object AndroidAutomationRuntimeProvider {
     fun get(context: Context): ExecuteAutomationLoopUseCase {
         val appContext = context.applicationContext
+        val settingsStore = AutomationSettingsStore(appContext)
         return ProcessAutomationHolder.getOrCreate {
             ExecuteAutomationLoopUseCase(
                 manageImeUseCase = ManageImeUseCase(AndroidImeSettings(appContext)),
@@ -46,7 +47,9 @@ object AndroidAutomationRuntimeProvider {
                 manageAnimationScaleUseCase = ManageAnimationScaleUseCase(
                     settings = AndroidAnimationScaleSettings(appContext),
                     backupStore = SharedPreferencesAnimationScaleBackupStore(appContext)
-                )
+                ),
+                clipboardGateway = com.example.gemgemgen.core.android.AndroidClipboardGateway(appContext),
+                isCopyPromptOnStartEnabled = { settingsStore.copyPromptOnStart.value }
             )
         }
     }

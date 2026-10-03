@@ -45,7 +45,14 @@ data class AutomationUiState(
     val variationPromptConfig: VariationPromptConfig = VariationPromptConfig.DEFAULT,
     val variationAutomationState: AutomationRunState = AutomationRunState.Idle,
     val showVariationPromptConfigDialog: Boolean = false,
-    val isMemoryCleanupScheduled: Boolean = false
+    val isMemoryCleanupScheduled: Boolean = false,
+    /**
+     * =========================================================================================
+     * [주의: 사용자 명시적 요구 기능 - 임의 삭제 절대 금지]
+     * - 기능: 자동화 시작 시 사용자의 원본 프롬프트 템플릿을 시스템 클립보드에 1회 백업할지 여부
+     * =========================================================================================
+     */
+    val copyPromptOnStart: Boolean = true
 ) {
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()

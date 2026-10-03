@@ -100,6 +100,7 @@ class AndroidAppContainer(context: Context) {
     val promptInstructionRepository by lazy { SharedPreferencesPromptInstructionRepository(appContext) }
     val variationPromptRepository by lazy { SharedPreferencesVariationPromptRepository(appContext) }
     val promptSnippetRepository by lazy { SharedPreferencesPromptSnippetRepository(appContext) }
+    val automationSettingsStore by lazy { com.example.gemgemgen.automation.android.AutomationSettingsStore(appContext) }
 
     val automationViewModelFactory: ViewModelProvider.Factory = factory<AutomationViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
@@ -140,7 +141,8 @@ class AndroidAppContainer(context: Context) {
             runVariationPrompt = RunVariationPromptUseCase(
                 gatewayProvider = ActiveVariationPromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
-            )
+            ),
+            automationSettingsStore = automationSettingsStore
         )
     }
 

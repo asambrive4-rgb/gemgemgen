@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +38,7 @@ import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
+import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.AppThemeMode
@@ -75,9 +77,14 @@ internal fun SettingsDialogHost(
     ) { stage ->
         when (stage) {
             SettingsDialogStage.ACCESSIBILITY_PROMPT -> {
-                AccessibilityPromptDialogContent(
+                AppConfirmDialogContent(
+                    title = AutomationUiText.ACCESSIBILITY_PROMPT_TITLE,
+                    message = AutomationUiText.ACCESSIBILITY_PROMPT_MESSAGE,
+                    confirmLabel = "이동",
+                    dismissLabel = "취소",
+                    useFilledConfirmButton = true,
                     onConfirm = { actions.onConfirmAccessibilityPrompt() },
-                    onDismissToSettings = { actions.dismissAccessibilityPromptToSettings() }
+                    onDismiss = { actions.dismissAccessibilityPromptToSettings() }
                 )
             }
             SettingsDialogStage.SETTINGS -> {
@@ -85,45 +92,6 @@ internal fun SettingsDialogHost(
                     uiState = uiState,
                     actions = actions
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccessibilityPromptDialogContent(
-    onConfirm: () -> Unit,
-    onDismissToSettings: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp)
-    ) {
-        Text(
-            text = AutomationUiText.ACCESSIBILITY_PROMPT_TITLE,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = AutomationUiText.ACCESSIBILITY_PROMPT_MESSAGE,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onDismissToSettings) {
-                Text("취소")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = onConfirm) {
-                Text("이동")
             }
         }
     }
@@ -356,6 +324,53 @@ private fun StatusSettingsDialogContent(
                     ) {
                         Text(if (uiState.isDisconnectingRemote) "연결 끊는 중…" else "연결 끊기")
                     }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            // 자동화 편의 설정 (시작 시 클립보드 복사 등)
+            Text(
+                text = "📋 자동화 편의 설정",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp)
+                    ) {
+                        Text(
+                            text = "시작 시 프롬프트 클립보드 복사",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "자동화 시작 시 원본 프롬프트 템플릿을 클립보드에 보관합니다. (삼성 기기간 클립보드 공유 스낵바가 1회 발생할 수 있습니다.)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = uiState.copyPromptOnStart,
+                        onCheckedChange = { actions.onToggleCopyPromptOnStart(it) }
+                    )
                 }
             }
 
