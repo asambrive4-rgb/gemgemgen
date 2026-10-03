@@ -150,34 +150,45 @@ internal abstract class AccessibilityPromptAutomation(
         clickNodeOrParent(inputNode)
         delay(INPUT_CLICK_SETTLE_MS)
 
-        val targetNode = inputNode
+        // 클릭 후 뷰 전환(예: collapsed -> expanded)이 일어날 수 있으므로 최신 입력 노드를 우선 취득
+        invalidateInputCache()
+        val targetNode = findInputNode() ?: inputNode
+
         targetNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        awaitInputFocus(targetNode)
+
         val arguments = Bundle().apply {
             putCharSequence(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
                 prompt
             )
         }
-        targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        val setTextResult = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
 
         invalidateInputCache()
 
-        val textAppliedDirectly = runCatching {
-            targetNode.refresh()
-            isNodeTextApplied(targetNode, prompt)
-        }.getOrDefault(false)
+        if (setTextResult) {
+            val textAppliedDirectly = runCatching {
+                targetNode.refresh()
+                isNodeTextApplied(targetNode, prompt)
+            }.getOrDefault(false)
 
-        if (!textAppliedDirectly && !isPromptTextApplied(prompt)) {
-            delay(INPUT_SETTLE_RECHECK_MS)
-            invalidateInputCache()
-            if (!isPromptTextApplied(prompt)) {
-                copyToClipboard?.invoke(prompt)
-                targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-                delay(INPUT_PASTE_SETTLE_MS)
+            if (textAppliedDirectly || isPromptTextApplied(prompt)) {
+                return true
             }
         }
 
-        return true
+        return isPromptTextApplied(prompt)
+    }
+
+    /** 클릭 직후 포커스 반영이 늦어도 SET_TEXT가 실패하지 않도록 포커스가 잡힐 때까지 잠시 기다립니다. */
+    private suspend fun awaitInputFocus(node: AccessibilityNodeInfo) {
+        val deadline = SystemClock.uptimeMillis() + INPUT_FOCUS_WAIT_MAX_MS
+        while (SystemClock.uptimeMillis() < deadline) {
+            val focused = runCatching { node.refresh(); node.isFocused }.getOrDefault(false)
+            if (focused) return
+            delay(INPUT_FOCUS_POLL_MS)
+        }
     }
 
     protected suspend fun <T> retryUntilFound(
@@ -263,11 +274,7 @@ internal abstract class AccessibilityPromptAutomation(
             node
         } ?: return false
 
-        val applied = applyPromptText(inputNode, prompt)
-        if (!applied) {
-            notifyState(AutomationRunState.Failure("$targetAppName 프롬프트 입력 실패"))
-            return false
-        }
+        applyPromptText(inputNode, prompt)
 
         delay(INPUT_CONFIRM_WAIT_MS)
 
@@ -286,7 +293,19 @@ internal abstract class AccessibilityPromptAutomation(
             }
             if (isPromptTextApplied(prompt)) true else null
         }
-        return retrySuccess == true
+        if (retrySuccess == true) {
+            return true
+        }
+
+        return fallbackPasteWithClipboard(prompt)
+    }
+
+    private suspend fun fallbackPasteWithClipboard(prompt: String): Boolean {
+        val targetNode = findInputNode() ?: return false
+        copyToClipboard?.invoke(prompt)
+        val pasteResult = targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        delay(INPUT_PASTE_SETTLE_MS)
+        return pasteResult && isPromptTextApplied(prompt)
     }
 
     private suspend fun clickSendWhenReady(
@@ -352,6 +371,8 @@ internal abstract class AccessibilityPromptAutomation(
         const val LAUNCH_SETTLE_WAIT_MS = 300L
         const val STATE_NOTIFY_THROTTLE_MS = 1200L
         const val INPUT_CLICK_SETTLE_MS = 150L
+        const val INPUT_FOCUS_WAIT_MAX_MS = 1000L
+        const val INPUT_FOCUS_POLL_MS = 50L
         const val INPUT_PASTE_SETTLE_MS = 100L
         const val INPUT_SETTLE_RECHECK_MS = 60L
         const val INPUT_CONFIRM_WAIT_MS = 500L

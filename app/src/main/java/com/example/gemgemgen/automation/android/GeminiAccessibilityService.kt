@@ -5,6 +5,8 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.content.ClipData
+import android.content.ClipDescription
+import android.os.PersistableBundle
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Path
@@ -399,7 +401,12 @@ class GeminiAccessibilityService : AccessibilityService() {
 
     private fun copyTextToClipboard(text: String) {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("prompt", text))
+        val clip = ClipData.newPlainText("prompt", text).apply {
+            description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
+        clipboard?.setPrimaryClip(clip)
     }
 
     companion object {

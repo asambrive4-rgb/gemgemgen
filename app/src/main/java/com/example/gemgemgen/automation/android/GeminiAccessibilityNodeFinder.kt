@@ -9,8 +9,8 @@ internal class GeminiAccessibilityNodeFinder(
     private val inputResourceId: String
 ) : BaseAccessibilityNodeFinder(rootProvider, GEMINI_ACCESSIBILITY_PACKAGES) {
     private val inputViewIds = listOf(
-        inputResourceId,
-        "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_text"
+        "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_text",
+        inputResourceId
     ).distinct()
 
     fun findInputNode(): AccessibilityNodeInfo? =
