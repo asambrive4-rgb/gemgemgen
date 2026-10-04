@@ -25,8 +25,7 @@ class RecordAutomationHistoryUseCase(
                 )
             )
             promptHistoryStore?.record(
-                prompt = request.promptTemplate,
-                targetApp = request.targetApp
+                prompt = request.promptTemplate
             )
         }
     }

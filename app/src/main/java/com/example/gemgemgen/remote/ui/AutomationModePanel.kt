@@ -36,12 +36,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.PaddingValues
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
-import com.example.gemgemgen.ui.theme.NeuInsetBed
+import com.example.gemgemgen.ui.theme.NeuSegmentedTabBar
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 
 @Composable
@@ -57,65 +58,23 @@ fun AutomationModePanel(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        NeuInsetBed(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp),
-            shape = RoundedCornerShape(14.dp),
-            backgroundColor = AppTheme.colors.insetBed,
-            borderColor = AppTheme.colors.insetBorder
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AutomationMode.entries.forEach { mode ->
-                    val isSelected = selectedMode == mode
-                    val label = when (mode) {
-                        AutomationMode.NORMAL -> "일반"
-                        AutomationMode.SENDER -> "송신"
-                        AutomationMode.RECEIVER -> "수신"
-                    }
-                    val pillShape = RoundedCornerShape(11.dp)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .then(
-                                if (isSelected) {
-                                    Modifier.shadow(
-                                        elevation = 2.dp,
-                                        shape = pillShape,
-                                        ambientColor = AppTheme.colors.primary.copy(alpha = 0.35f),
-                                        spotColor = AppTheme.colors.primary.copy(alpha = 0.25f)
-                                    )
-                                } else {
-                                    Modifier
-                                }
-                            )
-                            .clip(pillShape)
-                            .background(
-                                if (isSelected) AppTheme.colors.primary else Color.Transparent
-                            )
-                            .clickable(enabled = enabled) {
-                                if (selectedMode != mode) {
-                                    onModeSelected(mode)
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            color = if (isSelected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
+        NeuSegmentedTabBar(
+            items = AutomationMode.entries,
+            selectedItem = selectedMode,
+            onItemSelected = onModeSelected,
+            enabled = enabled,
+            itemLabel = { mode ->
+                when (mode) {
+                    AutomationMode.NORMAL -> "일반"
+                    AutomationMode.SENDER -> "송신"
+                    AutomationMode.RECEIVER -> "수신"
                 }
-            }
-        }
+            },
+            height = 38.dp,
+            shape = RoundedCornerShape(14.dp),
+            pillShape = RoundedCornerShape(11.dp),
+            contentPadding = PaddingValues(3.dp)
+        )
 
 
         if (selectedMode == AutomationMode.SENDER &&

@@ -1,4 +1,4 @@
-// 역할: 정밀 분석 결과의 세그먼트 편집 및 치환 동작을 검증합니다.
+// 역할: 정밀 분석 결과의 세그먼트 편집, 치환 및 프롬프트 조립 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisCascadingTrace
@@ -18,6 +18,7 @@ import com.example.gemgemgen.analysis.domain.AnalysisVisualContext
 
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -231,5 +232,38 @@ class AnalysisPrecisionEditingTest {
             assertEquals(category != AnalysisCategory.FREE_EDIT, fields.containsKey("text"))
             assertEquals(false, fields.containsKey("explanation"))
         }
+    }
+
+    @Test fun buildTxtPrompt_formatsInternalObjectsAndOmitsDuplicateVariationGoal() {
+        val testTarget = target.copy(
+            editableRanges = listOf(primary)
+        )
+        val payload = AnalysisPromptBuilder.buildTxtPrompt(
+            sourcePrompt = source,
+            category = AnalysisCategory.FREE_EDIT,
+            targetSegment = testTarget,
+            analysisReport = report.copy(variationGoal = "전신 구도로 확장하고 디테일 보완"),
+            count = 2,
+            selectedHints = emptyList()
+        )
+        val instruction = payload.systemInstruction
+
+        // 1. Kotlin 데이터 클래스 toString 날것 덤프 미포함 검증
+        assertFalse(instruction.contains("AnalysisSourceRange("))
+        assertFalse(instruction.contains("AnalysisVisualContext("))
+        assertFalse(instruction.contains("AnalysisCascadingTrace("))
+
+        // 2. 포맷팅된 문자열이 정상 포함되었는지 검증
+        assertTrue(instruction.contains("Suggested edit locations: \"상반신 촬영.\""))
+        assertTrue(instruction.contains("Target visual context: viewpoint=알 수 없음, distance=알 수 없음, scope=전신, angle=알 수 없음"))
+        assertTrue(instruction.contains("Five cascading checks: newlyVisible=[발, 지지면]"))
+        assertTrue(instruction.contains("conflictingSegments=[\"발과 바닥은 보이지 않는다.\"]"))
+        assertTrue(instruction.contains("Protected source ranges: \"System Instruction"))
+        assertTrue(instruction.contains("Keep identity."))
+
+        // 3. 중복된 variationGoal(- Variation goal:) 문구 제거 검증
+        assertFalse(instruction.contains("- Variation goal:"))
+        assertTrue(instruction.contains("Variation goal (from analysis; follow this as the primary creative objective):"))
+        assertTrue(instruction.contains("전신 구도로 확장하고 디테일 보완"))
     }
 }

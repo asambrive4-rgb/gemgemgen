@@ -7,14 +7,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -33,6 +32,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
@@ -41,7 +41,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -49,7 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.example.gemgemgen.ui.theme.AppTheme
-import com.example.gemgemgen.ui.theme.NeuInsetBed
+import com.example.gemgemgen.ui.theme.NeuSegmentedTabBar
 
 @Immutable
 internal class MainTabPage(
@@ -66,7 +65,8 @@ internal fun MainTabbedScreen(
 ) {
     if (tabs.isEmpty()) return
 
-    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val tabItems = remember(tabs) { tabs.map { it.tab } }
+    val isKeyboardVisible = rememberIsImeVisible()
     val focusManager = LocalFocusManager.current
     val saveableStateHolder = rememberSaveableStateHolder()
     val visitedTabs = rememberSaveable { mutableStateListOf<MainTab>() }
@@ -91,61 +91,19 @@ internal fun MainTabbedScreen(
                         .padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    NeuInsetBed(
+                    NeuSegmentedTabBar(
+                        items = tabItems,
+                        selectedItem = selectedTab,
+                        onItemSelected = onSelectTab,
+                        itemLabel = { it.label },
+                        height = 38.dp,
+                        shape = RoundedCornerShape(19.dp),
+                        pillShape = RoundedCornerShape(16.dp),
+                        contentPadding = PaddingValues(2.5.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .height(38.dp)
-                            .graphicsLayer(),
-                        shape = RoundedCornerShape(19.dp),
-                        backgroundColor = AppTheme.colors.insetBed,
-                        borderColor = AppTheme.colors.insetBorder
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(2.5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            tabs.forEach { page ->
-                                val isSelected = selectedTab == page.tab
-                                val pillShape = RoundedCornerShape(16.dp)
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .then(
-                                            if (isSelected) {
-                                                Modifier.shadow(
-                                                    elevation = 4.dp,
-                                                    shape = pillShape,
-                                                    ambientColor = AppTheme.colors.primary.copy(alpha = 0.35f),
-                                                    spotColor = AppTheme.colors.primary.copy(alpha = 0.3f)
-                                                )
-                                            } else {
-                                                Modifier
-                                            }
-                                        )
-                                        .clip(pillShape)
-                                        .background(
-                                            if (isSelected) AppTheme.colors.primary else Color.Transparent
-                                        )
-                                        .clickable {
-                                            if (page.tab != selectedTab) {
-                                                onSelectTab(page.tab)
-                                            }
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = page.tab.label,
-                                        color = if (isSelected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
-                    }
+                            .graphicsLayer()
+                    )
 
                     Spacer(modifier = Modifier.width(8.dp))
 
@@ -162,7 +120,6 @@ internal fun MainTabbedScreen(
                                 ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
                                 spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
                             )
-                            .graphicsLayer()
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),

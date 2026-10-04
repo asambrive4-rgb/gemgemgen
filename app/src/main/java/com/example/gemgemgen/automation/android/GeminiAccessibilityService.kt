@@ -22,7 +22,6 @@ import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
-import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -105,10 +104,6 @@ class GeminiAccessibilityService : AccessibilityService() {
             AutomationTargetApp.CHATGPT -> chatGptAutomation
             AutomationTargetApp.FLOW -> flowAutomation
         }
-    }
-
-    internal fun variationGateway(): VariationPromptAutomationGateway {
-        return geminiAutomation
     }
 
     internal suspend fun closeGeminiFromRecents(): CloseGeminiAppResult {

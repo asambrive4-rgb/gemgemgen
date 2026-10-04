@@ -1,49 +1,98 @@
-// 역할: 원격 자동화 수신 기록 및 세션 연결 정보를 메모리와 로컬에 보관하는 저장소입니다.
+// 역할: Jetpack DataStore를 통해 원격 자동화 수신 기록 및 세션 연결 정보를 로컬에 보관하는 저장소입니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.remote.domain.AutomationMode
+import java.io.IOException
 import java.util.UUID
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 
-internal class RemoteAutomationStore(context: Context) {
-    private val preferences = context.applicationContext.getSharedPreferences(
-        PREFERENCES_NAME,
-        Context.MODE_PRIVATE
-    )
+private val Context.remoteAutomationDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = RemoteAutomationStore.DATASTORE_NAME
+)
+
+internal class RemoteAutomationStore(
+    private val dataStore: DataStore<Preferences>
+) {
+    constructor(context: Context) : this(context.applicationContext.remoteAutomationDataStore)
 
     fun mode(): AutomationMode {
-        return AutomationMode.fromStorageValue(preferences.getString(KEY_MODE, null))
+        val raw = runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map { it[KEY_MODE] }
+                .first()
+        }
+        return AutomationMode.fromStorageValue(raw)
     }
 
     fun saveMode(mode: AutomationMode) {
-        preferences.edit().putString(KEY_MODE, mode.storageValue).apply()
-    }
-
-    fun installationId(): String {
-        val saved = preferences.getString(KEY_INSTALLATION_ID, null)
-        if (!saved.isNullOrBlank()) return saved
-        return UUID.randomUUID().toString().also { generated ->
-            preferences.edit().putString(KEY_INSTALLATION_ID, generated).commit()
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[KEY_MODE] = mode.storageValue
+            }
         }
     }
 
+    fun installationId(): String {
+        val saved = runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map { it[KEY_INSTALLATION_ID] }
+                .first()
+        }
+        if (!saved.isNullOrBlank()) return saved
+        val generated = UUID.randomUUID().toString()
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[KEY_INSTALLATION_ID] = generated
+            }
+        }
+        return generated
+    }
+
     fun pairedSender(): PairedSender? {
-        val senderId = preferences.getString(KEY_PAIRED_SENDER_ID, null).orEmpty()
-        val token = preferences.getString(KEY_PAIRED_SENDER_TOKEN, null).orEmpty()
+        val (senderId, token) = runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map { Pair(it[KEY_PAIRED_SENDER_ID].orEmpty(), it[KEY_PAIRED_SENDER_TOKEN].orEmpty()) }
+                .first()
+        }
         return if (senderId.isBlank() || token.isBlank()) null else PairedSender(senderId, token)
     }
 
     fun savePairedSender(senderId: String, token: String) {
-        preferences.edit()
-            .putString(KEY_PAIRED_SENDER_ID, senderId)
-            .putString(KEY_PAIRED_SENDER_TOKEN, token)
-            .apply()
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[KEY_PAIRED_SENDER_ID] = senderId
+                preferences[KEY_PAIRED_SENDER_TOKEN] = token
+            }
+        }
     }
 
     fun pairedReceiver(): PairedReceiver? {
-        val receiverId = preferences.getString(KEY_PAIRED_RECEIVER_ID, null).orEmpty()
-        val receiverName = preferences.getString(KEY_PAIRED_RECEIVER_NAME, null).orEmpty()
-        val token = preferences.getString(KEY_PAIRED_RECEIVER_TOKEN, null).orEmpty()
+        val (receiverId, receiverName, token) = runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map {
+                    Triple(
+                        it[KEY_PAIRED_RECEIVER_ID].orEmpty(),
+                        it[KEY_PAIRED_RECEIVER_NAME].orEmpty(),
+                        it[KEY_PAIRED_RECEIVER_TOKEN].orEmpty()
+                    )
+                }
+                .first()
+        }
         return if (receiverId.isBlank() || token.isBlank()) {
             null
         } else {
@@ -52,19 +101,30 @@ internal class RemoteAutomationStore(context: Context) {
     }
 
     fun savePairedReceiver(receiverId: String, receiverName: String, token: String) {
-        preferences.edit()
-            .putString(KEY_PAIRED_RECEIVER_ID, receiverId)
-            .putString(KEY_PAIRED_RECEIVER_NAME, receiverName)
-            .putString(KEY_PAIRED_RECEIVER_TOKEN, token)
-            .apply()
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[KEY_PAIRED_RECEIVER_ID] = receiverId
+                preferences[KEY_PAIRED_RECEIVER_NAME] = receiverName
+                preferences[KEY_PAIRED_RECEIVER_TOKEN] = token
+            }
+        }
     }
 
     fun isUserDisconnected(): Boolean {
-        return preferences.getBoolean(KEY_USER_DISCONNECTED, false)
+        return runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map { it[KEY_USER_DISCONNECTED] ?: false }
+                .first()
+        }
     }
 
     fun saveUserDisconnected(disconnected: Boolean) {
-        preferences.edit().putBoolean(KEY_USER_DISCONNECTED, disconnected).apply()
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[KEY_USER_DISCONNECTED] = disconnected
+            }
+        }
     }
 
     data class PairedSender(val senderId: String, val token: String)
@@ -75,14 +135,14 @@ internal class RemoteAutomationStore(context: Context) {
     )
 
     companion object {
-        private const val PREFERENCES_NAME = "remote_automation"
-        private const val KEY_MODE = "mode"
-        private const val KEY_INSTALLATION_ID = "installation_id"
-        private const val KEY_PAIRED_SENDER_ID = "paired_sender_id"
-        private const val KEY_PAIRED_SENDER_TOKEN = "paired_sender_token"
-        private const val KEY_PAIRED_RECEIVER_ID = "paired_receiver_id"
-        private const val KEY_PAIRED_RECEIVER_NAME = "paired_receiver_name"
-        private const val KEY_PAIRED_RECEIVER_TOKEN = "paired_receiver_token"
-        private const val KEY_USER_DISCONNECTED = "user_disconnected"
+        const val DATASTORE_NAME = "remote_automation"
+        val KEY_MODE = stringPreferencesKey("mode")
+        val KEY_INSTALLATION_ID = stringPreferencesKey("installation_id")
+        val KEY_PAIRED_SENDER_ID = stringPreferencesKey("paired_sender_id")
+        val KEY_PAIRED_SENDER_TOKEN = stringPreferencesKey("paired_sender_token")
+        val KEY_PAIRED_RECEIVER_ID = stringPreferencesKey("paired_receiver_id")
+        val KEY_PAIRED_RECEIVER_NAME = stringPreferencesKey("paired_receiver_name")
+        val KEY_PAIRED_RECEIVER_TOKEN = stringPreferencesKey("paired_receiver_token")
+        val KEY_USER_DISCONNECTED = booleanPreferencesKey("user_disconnected")
     }
 }

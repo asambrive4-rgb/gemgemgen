@@ -1,7 +1,6 @@
 // 역할: 과거 프롬프트 기록을 메모리에 캐싱하고 저장소와 동기화합니다.
 package com.example.gemgemgen.automation.usecase
 
-import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.PromptHistoryNavigator
 
@@ -24,10 +23,7 @@ class PromptHistoryStore(
     }
 
     @Synchronized
-    fun record(
-        prompt: String,
-        targetApp: AutomationTargetApp? = null
-    ): List<PromptHistoryItem> {
+    fun record(prompt: String): List<PromptHistoryItem> {
         if (prompt.isBlank()) {
             return load()
         }

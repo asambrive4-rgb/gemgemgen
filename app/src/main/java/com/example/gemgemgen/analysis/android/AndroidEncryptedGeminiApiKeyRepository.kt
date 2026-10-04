@@ -1,12 +1,23 @@
-// 역할: 기기 보안 저장소에 암호화된 Gemini API 키와 역할별 모델 설정을 저장하고 불러옵니다.
+// 역할: Jetpack DataStore와 기기 보안 키체인을 활용하여 암호화된 Gemini API 키와 역할별 모델 설정을 로컬에 저장하고 불러옵니다.
 package com.example.gemgemgen.analysis.android
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
+import java.io.IOException
 import java.util.UUID
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -15,14 +26,19 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class AndroidEncryptedGeminiApiKeyRepository(
-    context: Context
+private val Context.geminiApiKeyDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = AndroidEncryptedGeminiApiKeyRepository.DATASTORE_NAME
+)
+
+class AndroidEncryptedGeminiApiKeyRepository internal constructor(
+    private val dataStore: DataStore<Preferences>,
+    private val cipher: AndroidKeyStoreCipher = AndroidKeyStoreCipher(KEY_ALIAS)
 ) : GeminiApiKeyRepository {
-    private val prefs = context.applicationContext.getSharedPreferences(
-        PREFS_NAME,
-        Context.MODE_PRIVATE
+    constructor(context: Context) : this(
+        context.applicationContext.geminiApiKeyDataStore,
+        AndroidKeyStoreCipher(KEY_ALIAS)
     )
-    private val cipher = AndroidKeyStoreCipher(KEY_ALIAS)
+
     private var cachedRecords: List<StoredGeminiApiKey>? = null
 
     override fun listKeys(): List<GeminiApiKeyRecord> {
@@ -76,8 +92,13 @@ class AndroidEncryptedGeminiApiKeyRepository(
 
     override fun getRoleProvider(role: String): String {
         val analysisRole = AnalysisModelRole.fromStorage(role)
-        val key = roleProviderKey(analysisRole.storageValue)
-        val stored = prefs.getString(key, null)
+        val key = stringPreferencesKey(roleProviderKey(analysisRole.storageValue))
+        val stored = runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map { it[key] }
+                .first()
+        }
         if (!stored.isNullOrBlank()) {
             return AnalysisProvider.fromStorage(stored).storageValue
         }
@@ -87,23 +108,31 @@ class AndroidEncryptedGeminiApiKeyRepository(
     override fun setRoleProvider(role: String, providerId: String) {
         val analysisRole = AnalysisModelRole.fromStorage(role)
         val provider = AnalysisProvider.fromStorage(providerId)
-        val modelKey = roleModelKey(analysisRole.storageValue)
-        val currentModel = prefs.getString(modelKey, null)
-        val editor = prefs.edit()
-            .putString(roleProviderKey(analysisRole.storageValue), provider.storageValue)
-        if (currentModel.isNullOrBlank() ||
-            !AnalysisProvider.isModelForProvider(currentModel, provider)
-        ) {
-            editor.putString(modelKey, defaultModelFor(analysisRole, provider))
+        val providerPrefKey = stringPreferencesKey(roleProviderKey(analysisRole.storageValue))
+        val modelPrefKey = stringPreferencesKey(roleModelKey(analysisRole.storageValue))
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[providerPrefKey] = provider.storageValue
+                val currentModel = preferences[modelPrefKey]
+                if (currentModel.isNullOrBlank() ||
+                    !AnalysisProvider.isModelForProvider(currentModel, provider)
+                ) {
+                    preferences[modelPrefKey] = defaultModelFor(analysisRole, provider)
+                }
+            }
         }
-        editor.apply()
     }
 
     override fun getRoleModel(role: String): String {
         val analysisRole = AnalysisModelRole.fromStorage(role)
         val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
-        val modelKey = roleModelKey(analysisRole.storageValue)
-        val stored = prefs.getString(modelKey, null)
+        val key = stringPreferencesKey(roleModelKey(analysisRole.storageValue))
+        val stored = runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map { it[key] }
+                .first()
+        }
         if (!stored.isNullOrBlank() &&
             AnalysisProvider.isModelForProvider(stored, provider)
         ) {
@@ -120,7 +149,12 @@ class AndroidEncryptedGeminiApiKeyRepository(
         } else {
             defaultModelFor(analysisRole, provider)
         }
-        prefs.edit().putString(roleModelKey(analysisRole.storageValue), normalized).apply()
+        val key = stringPreferencesKey(roleModelKey(analysisRole.storageValue))
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[key] = normalized
+            }
+        }
     }
 
     private fun defaultModelFor(
@@ -139,7 +173,12 @@ class AndroidEncryptedGeminiApiKeyRepository(
 
     private fun readRecords(): List<StoredGeminiApiKey> {
         cachedRecords?.let { return it }
-        val raw = prefs.getString(KEY_RECORDS, null) ?: return emptyList()
+        val raw = runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map { it[KEY_PREF_RECORDS] }
+                .first()
+        } ?: return emptyList()
         return runCatching {
             analysisJson.parseToJsonElement(raw)
                 .jsonArray
@@ -149,7 +188,7 @@ class AndroidEncryptedGeminiApiKeyRepository(
 
     private fun writeRecords(records: List<StoredGeminiApiKey>) {
         cachedRecords = records
-        val array = buildJsonArray {
+        val jsonArray = buildJsonArray {
             records.forEach { record ->
                 add(
                     buildJsonObject {
@@ -161,22 +200,26 @@ class AndroidEncryptedGeminiApiKeyRepository(
                     }
                 )
             }
+        }.toString()
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[KEY_PREF_RECORDS] = jsonArray
+            }
         }
-        prefs.edit().putString(KEY_RECORDS, array.toString()).apply()
     }
 
     private fun JsonObject.toStoredRecordOrNull(): StoredGeminiApiKey? {
-        val id = this["id"]?.jsonPrimitive?.content ?: return null
-        val label = this["label"]?.jsonPrimitive?.content ?: return null
-        val encryptedValue = this["encryptedValue"]?.jsonPrimitive?.content ?: return null
-        val preview = this["preview"]?.jsonPrimitive?.content ?: return null
-        val isActive = this["isActive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull()
-            ?: false
+        val id = this["id"]?.jsonPrimitive?.content.orEmpty()
+        val label = this["label"]?.jsonPrimitive?.content.orEmpty()
+        val encryptedValue = this["encryptedValue"]?.jsonPrimitive?.content.orEmpty()
+        val preview = this["preview"]?.jsonPrimitive?.content.orEmpty()
+        val isActive = this["isActive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        if (id.isBlank() || encryptedValue.isBlank()) return null
         return StoredGeminiApiKey(
             id = id,
-            label = label,
+            label = label.ifBlank { "API 키" },
             encryptedValue = encryptedValue,
-            preview = preview,
+            preview = preview.ifBlank { preview(encryptedValue) },
             isActive = isActive
         )
     }
@@ -200,9 +243,9 @@ class AndroidEncryptedGeminiApiKeyRepository(
         return "****${rawKey.takeLast(4)}"
     }
 
-    private companion object {
-        const val PREFS_NAME = "gemgemgen_analysis_api_keys"
-        const val KEY_RECORDS = "records"
+    companion object {
+        const val DATASTORE_NAME = "gemgemgen_analysis_api_keys"
+        val KEY_PREF_RECORDS = stringPreferencesKey("records")
         const val KEY_ROLE_PROVIDER_PREFIX = "role_provider_"
         const val KEY_ROLE_MODEL_PREFIX = "role_model_"
         const val KEY_ALIAS = "gemgemgen_analysis_api_key"

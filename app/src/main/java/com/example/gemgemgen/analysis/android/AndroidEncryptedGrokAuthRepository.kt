@@ -1,26 +1,46 @@
-// 역할: 기기 보안 저장소에 암호화된 Grok 인증 토큰을 저장하고 관리합니다.
+// 역할: Jetpack DataStore와 기기 보안 키체인을 활용하여 암호화된 Grok 인증 토큰을 저장하고 관리합니다.
 package com.example.gemgemgen.analysis.android
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.analysis.usecase.GrokAuthRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession
+import java.io.IOException
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class AndroidEncryptedGrokAuthRepository(
-    context: Context
+private val Context.grokAuthDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = AndroidEncryptedGrokAuthRepository.DATASTORE_NAME
+)
+
+class AndroidEncryptedGrokAuthRepository internal constructor(
+    private val dataStore: DataStore<Preferences>,
+    private val cipher: AndroidKeyStoreCipher = AndroidKeyStoreCipher(KEY_ALIAS)
 ) : GrokAuthRepository {
-    private val prefs = context.applicationContext.getSharedPreferences(
-        PREFS_NAME,
-        Context.MODE_PRIVATE
+    constructor(context: Context) : this(
+        context.applicationContext.grokAuthDataStore,
+        AndroidKeyStoreCipher(KEY_ALIAS)
     )
-    private val cipher = AndroidKeyStoreCipher(KEY_ALIAS)
 
     override fun loadSession(): GrokAuthSession? {
-        val encrypted = prefs.getString(KEY_SESSION, null) ?: return null
+        val encrypted = runBlocking {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .map { it[KEY_SESSION] }
+                .first()
+        } ?: return null
         val plain = cipher.decrypt(encrypted) ?: return null
         return runCatching {
             analysisJson.parseToJsonElement(plain).jsonObject.toSessionOrNull()
@@ -38,11 +58,19 @@ class AndroidEncryptedGrokAuthRepository(
             put("tokenEndpoint", JsonPrimitive(session.tokenEndpoint.orEmpty()))
             put("accountPreview", JsonPrimitive(session.accountPreview))
         }.toString()
-        prefs.edit().putString(KEY_SESSION, cipher.encrypt(payload)).apply()
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences[KEY_SESSION] = cipher.encrypt(payload)
+            }
+        }
     }
 
     override fun clearSession() {
-        prefs.edit().remove(KEY_SESSION).apply()
+        runBlocking {
+            dataStore.edit { preferences ->
+                preferences.remove(KEY_SESSION)
+            }
+        }
     }
 
     private fun JsonObject.toSessionOrNull(): GrokAuthSession? {
@@ -61,9 +89,9 @@ class AndroidEncryptedGrokAuthRepository(
         )
     }
 
-    private companion object {
-        const val PREFS_NAME = "gemgemgen_grok_auth"
-        const val KEY_SESSION = "session"
+    companion object {
+        const val DATASTORE_NAME = "gemgemgen_grok_auth"
+        val KEY_SESSION = stringPreferencesKey("session")
         const val KEY_ALIAS = "gemgemgen_grok_auth"
     }
 }

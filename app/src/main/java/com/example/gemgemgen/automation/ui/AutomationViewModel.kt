@@ -17,13 +17,10 @@ import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
-import com.example.gemgemgen.automation.usecase.PromptInstructionRepository
 import com.example.gemgemgen.automation.usecase.PromptSnippetRepository
-import com.example.gemgemgen.automation.usecase.VariationPromptRepository
 import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
 import com.example.gemgemgen.automation.usecase.VariationStartDecision
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
-import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshot
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationHistoryUseCase
@@ -48,6 +45,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,7 +66,6 @@ class AutomationViewModel(
     private val lastRunSnapshotStore: LastRunSnapshotStore,
     private val automation: ExecuteAutomationLoopUseCase,
     private val appMaintenance: AppMaintenanceUseCase,
-    checkAutomationStart: CheckAutomationStartUseCase? = null,
     private val wildcardFileRepository: WildcardFileRepository? = null,
     private val manageRemoteAutomation: ManageRemoteAutomationUseCase,
     private val soundAlertGateway: SoundAlertGateway = SoundAlertGateway {},
@@ -77,8 +74,6 @@ class AutomationViewModel(
     private val promptWorkspace: PromptWorkspace? = null,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val executeAutomation: CoordinateAutomationExecutionUseCase,
-    private val promptInstructionRepository: PromptInstructionRepository? = null,
-    private val variationPromptRepository: VariationPromptRepository? = null,
     private val promptSnippetRepository: PromptSnippetRepository? = null,
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
     private val automationSettingsStore: com.example.gemgemgen.automation.android.AutomationSettingsStore? = null,
@@ -102,7 +97,7 @@ class AutomationViewModel(
                 ?: com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
             selectedThemeMode = themePaletteStore?.currentMode?.value
                 ?: com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT,
-            copyPromptOnStart = automationSettingsStore?.copyPromptOnStart?.value ?: true
+            copyPromptOnStart = true
         )
     )
     val uiState: StateFlow<AutomationUiState> = _uiState.asStateFlow()
@@ -174,7 +169,9 @@ class AutomationViewModel(
     override fun onConfirmAccessibilityPrompt() { confirmAccessibilityPrompt() }
 
     override fun onToggleCopyPromptOnStart(enabled: Boolean) {
-        automationSettingsStore?.setCopyPromptOnStart(enabled)
+        scope.launch {
+            automationSettingsStore?.setCopyPromptOnStart(enabled)
+        }
         _uiState.update { it.copy(copyPromptOnStart = enabled) }
     }
 
@@ -307,9 +304,7 @@ class AutomationViewModel(
 
     override fun saveInstructionConfig(config: PromptInstructionConfig) {
         scope.launch {
-            withContext(dispatchers.io) {
-                promptInstructionRepository?.save(config)
-            }
+            automationSettingsStore?.setPromptInstructionConfig(config)
         }
         _uiState.update {
             it.copy(
@@ -327,9 +322,7 @@ class AutomationViewModel(
 
     override fun saveVariationPromptConfig(config: VariationPromptConfig) {
         scope.launch {
-            withContext(dispatchers.io) {
-                variationPromptRepository?.save(config)
-            }
+            automationSettingsStore?.setVariationPromptConfig(config)
         }
         _uiState.update {
             it.copy(
@@ -736,12 +729,16 @@ class AutomationViewModel(
     private fun loadInitialState() {
         scope.launch {
             val (initialState, report, candidatesAndSnippets) = withContext(dispatchers.io) {
+                val instructionConfig = automationSettingsStore?.promptInstructionConfig?.first()
+                    ?: PromptInstructionConfig.DEFAULT
+                val variationConfig = automationSettingsStore?.variationPromptConfig?.first()
+                    ?: VariationPromptConfig.DEFAULT
                 Triple(
                     AutomationInitialState(
                         lastRunSnapshotStore.load(),
                         promptHistoryStore?.load().orEmpty(),
-                        promptInstructionRepository?.load() ?: PromptInstructionConfig.DEFAULT,
-                        variationPromptRepository?.load() ?: VariationPromptConfig.DEFAULT
+                        instructionConfig,
+                        variationConfig
                     ),
                     checkEnvironmentStatus.check(),
                     loadSortedCandidatesAndSnippets()
@@ -844,4 +841,8 @@ class AutomationViewModel(
         }
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        promptWorkspace?.segmentReplacer = null
+    }
 }

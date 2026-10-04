@@ -1,4 +1,4 @@
-// 역할: GPU 레이어 캐싱과 볼드 테두리를 적용한 뉴모피즘 카드, 버튼, 인셋 베드, 칩 및 공통 다이얼로그 셸 UI 요소를 제공합니다.
+// 역할: 볼드 테두리와 섀도우를 적용한 뉴모피즘 카드, 버튼, 인셋 베드, 칩, 세그먼트 탭바 및 공통 모달·확인 다이얼로그 셸 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.animation.AnimatedContent
@@ -13,17 +13,24 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -31,14 +38,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -62,7 +73,6 @@ fun NeuCard(
 ) {
     Surface(
         modifier = modifier
-            .graphicsLayer()
             .shadow(
                 elevation = elevation,
                 shape = shape,
@@ -101,6 +111,9 @@ fun NeuInsetBed(
 /**
  * 3D 쫀득한 조약돌 칩 (Pebble Pill Chip)
  */
+/**
+ * 3D 쫀득한 조약돌 칩 (Pebble Pill Chip)
+ */
 @Composable
 fun NeuPillChip(
     text: String,
@@ -108,7 +121,9 @@ fun NeuPillChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(10.dp),
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    height: Dp? = null,
+    textStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.labelMedium
 ) {
     val containerColor = if (selected) {
         AppTheme.colors.primary
@@ -128,7 +143,7 @@ fun NeuPillChip(
 
     Box(
         modifier = modifier
-            .graphicsLayer()
+            .then(if (height != null) Modifier.height(height) else Modifier)
             .shadow(
                 elevation = if (selected) 3.dp else 0.dp,
                 shape = shape,
@@ -139,13 +154,13 @@ fun NeuPillChip(
             .background(containerColor)
             .then(if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = if (height != null) 3.dp else 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             color = contentColor,
-            fontSize = 12.sp,
+            style = textStyle,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
         )
     }
@@ -176,7 +191,6 @@ fun NeuButton(
         color = if (enabled) backgroundColor else backgroundColor.copy(alpha = 0.5f),
         contentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.5f),
         modifier = modifier
-            .graphicsLayer()
             .shadow(
                 elevation = if (enabled) elevation else 0.dp,
                 shape = shape,
@@ -322,3 +336,232 @@ fun AppConfirmDialogContent(
         }
     }
 }
+
+/**
+ * 3D 뉴모피즘 음각 베드 기반 세그먼트 탭바 (Segmented Tab Bar).
+ * 메인 상단 탭, 모드 선택, 다이얼로그 내 세그먼트 전환 등에서 일관된 조약돌 탭 UI를 제공합니다.
+ */
+@Composable
+fun <T> NeuSegmentedTabBar(
+    items: List<T>,
+    selectedItem: T,
+    onItemSelected: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    itemLabel: (T) -> String = { it.toString() },
+    enabled: Boolean = true,
+    height: Dp = 38.dp,
+    shape: Shape = RoundedCornerShape(14.dp),
+    pillShape: Shape = RoundedCornerShape(10.dp),
+    contentPadding: PaddingValues = PaddingValues(3.dp),
+    tabSpacing: Dp = 0.dp
+) {
+    NeuInsetBed(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height),
+        shape = shape,
+        backgroundColor = AppTheme.colors.insetBed,
+        borderColor = AppTheme.colors.insetBorder
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (tabSpacing > 0.dp) Arrangement.spacedBy(tabSpacing) else Arrangement.Start
+        ) {
+            items.forEach { item ->
+                val isSelected = item == selectedItem
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .then(
+                            if (isSelected) {
+                                Modifier.shadow(
+                                    elevation = 2.dp,
+                                    shape = pillShape,
+                                    ambientColor = AppTheme.colors.primary.copy(alpha = 0.35f),
+                                    spotColor = AppTheme.colors.primary.copy(alpha = 0.25f)
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .clip(pillShape)
+                        .background(
+                            if (isSelected) AppTheme.colors.primary else Color.Transparent
+                        )
+                        .clickable(enabled = enabled) {
+                            if (item != selectedItem) {
+                                onItemSelected(item)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = itemLabel(item),
+                        color = if (isSelected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 3D 뉴모피즘 모달 다이얼로그 공통 외곽 프레임.
+ * 크기 비율, 키보드 인셋(imePadding), 외부 탭 포커스 해제, 3D 조약돌 카드 컨테이너를 일관되게 제공합니다.
+ */
+@Composable
+fun NeuModalDialogFrame(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    widthFraction: Float = 0.95f,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    val clearInputFocus = remember(focusManager) {
+        { focusManager.clearFocus(force = true) }
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth(widthFraction)
+                .wrapContentHeight()
+                .imePadding()
+                .clearFocusOnOutsideTap(clearInputFocus),
+            contentAlignment = Alignment.Center
+        ) {
+            NeuCard(
+                shape = RoundedCornerShape(22.dp),
+                elevation = 6.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    content = content
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 상단 제목/설명과 하단 취소/저장 액션 버튼을 갖춘 공통 설정 다이얼로그 프레임.
+ */
+@Composable
+fun NeuConfigDialogFrame(
+    title: String,
+    subtitle: String,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    saveLabel: String = "저장",
+    dismissLabel: String = "취소",
+    content: @Composable ColumnScope.() -> Unit
+) {
+    NeuModalDialogFrame(
+        onDismiss = onDismiss,
+        modifier = modifier
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.colors.textPrimary
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.colors.textSecondary,
+                lineHeight = 16.sp
+            )
+        }
+
+        content()
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            NeuButton(
+                onClick = onDismiss,
+                isPrimary = false,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f),
+                contentModifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = dismissLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            NeuButton(
+                onClick = onSave,
+                isPrimary = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f),
+                contentModifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = saveLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 다이얼로그 내부나 툴바에서 빠른 동작(가져오기, 기본값, 복사 등)을 수행하는 컴팩트 조약돌 액션 칩.
+ */
+@Composable
+fun NeuActionChip(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    NeuCard(
+        shape = RoundedCornerShape(8.dp),
+        elevation = 2.dp,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = text }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(13.dp),
+                tint = AppTheme.colors.primary
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTheme.colors.textPrimary,
+                fontWeight = FontWeight.Medium,
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+

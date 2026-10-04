@@ -61,22 +61,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.gemgemgen.automation.domain.PromptSnippet
-import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.core.ClipboardGateway
+import com.example.gemgemgen.core.android.rememberClipboardGateway
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
-import com.example.gemgemgen.ui.theme.NeuInsetBed
+import com.example.gemgemgen.ui.theme.NeuModalDialogFrame
+import com.example.gemgemgen.ui.theme.NeuSegmentedTabBar
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlinx.coroutines.delay
 
@@ -101,11 +98,7 @@ fun PromptSnippetDialog(
     onDeleteSnippet: (id: String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val clipboardManager = LocalClipboardManager.current
-    val focusManager = LocalFocusManager.current
-    val clearInputFocus = remember(focusManager) {
-        { focusManager.clearFocus(force = true) }
-    }
+    val clipboardGateway = rememberClipboardGateway()
 
     // 현재 활성화된 탭 및 편집 상태
     var currentTab by remember { mutableStateOf(SnippetTab.VAULT) }
@@ -143,220 +136,255 @@ fun PromptSnippetDialog(
         currentTab = SnippetTab.VAULT
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    NeuModalDialogFrame(
+        onDismiss = onDismiss
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .wrapContentHeight()
-                .imePadding()
-                .clearFocusOnOutsideTap(clearInputFocus),
-            contentAlignment = Alignment.Center
+        // 1. 헤더 (타이틀 + 닫기 버튼)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            NeuCard(
-                shape = RoundedCornerShape(22.dp),
-                elevation = 6.dp,
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Surface(
+                    shape = CircleShape,
+                    color = AppTheme.colors.primary.copy(alpha = 0.12f),
+                    modifier = Modifier.size(36.dp)
                 ) {
-                    // 1. 헤더 (타이틀 + 닫기 버튼)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = AppTheme.colors.primary.copy(alpha = 0.12f),
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.Bookmarks,
-                                        contentDescription = null,
-                                        tint = AppTheme.colors.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Bookmarks,
+                            contentDescription = null,
+                            tint = AppTheme.colors.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = "프롬프트 상용구",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.colors.textPrimary
+                    )
+                    Text(
+                        text = "단축어로 긴 문장을 원터치 대치합니다",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        color = AppTheme.colors.textSecondary
+                    )
+                }
+            }
+
+            // 닫기 X 버튼 (최소 44dp 확보)
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "닫기",
+                    tint = AppTheme.colors.textSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // 2. 조약돌 세그먼트 탭바 (보관함 vs 등록/수정)
+        NeuSegmentedTabBar(
+            items = listOf(SnippetTab.VAULT, SnippetTab.FORM),
+            selectedItem = currentTab,
+            onItemSelected = { tab ->
+                if (tab == SnippetTab.VAULT) {
+                    backToVault()
+                } else if (currentTab != SnippetTab.FORM) {
+                    startNew()
+                }
+            },
+            itemLabel = { tab ->
+                when (tab) {
+                    SnippetTab.VAULT -> "보관함 (${snippets.size})"
+                    SnippetTab.FORM -> if (editingSnippet != null) "✏️ 상용구 수정" else "+ 새 상용구"
+                }
+            },
+            height = 36.dp,
+            shape = RoundedCornerShape(14.dp),
+            pillShape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(4.dp),
+            tabSpacing = 4.dp
+        )
+
+        // 3. 탭별 컨텐츠 (크로스페이드 애니메이션 전환)
+        AnimatedContent(
+            targetState = currentTab,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
+            },
+            label = "SnippetTabContentCrossfade"
+        ) { tab ->
+            when (tab) {
+                SnippetTab.VAULT -> {
+                    SnippetVaultContent(
+                        snippets = snippets,
+                        onEditSnippet = startEditing,
+                        onDeleteSnippet = onDeleteSnippet,
+                        onCopySnippet = { content ->
+                            clipboardGateway.writeText(content)
+                        },
+                        onAddNewClick = startNew
+                    )
+                }
+                SnippetTab.FORM -> {
+                    SnippetFormContent(
+                        editingSnippet = editingSnippet,
+                        shortcutInput = shortcutInput,
+                        contentInput = contentInput,
+                        errorMessage = errorMessage,
+                        currentPromptText = currentPromptText,
+                        isSelectionPrompt = isSelectionPrompt,
+                        existingShortcuts = snippets
+                            .filter { it.id != editingSnippet?.id }
+                            .map { it.shortcut.lowercase() },
+                        clipboardGateway = clipboardGateway,
+                        onShortcutChange = {
+                            shortcutInput = it.filterNot { char -> char.isWhitespace() }
+                            errorMessage = ""
+                        },
+                        onContentChange = {
+                            contentInput = it
+                            errorMessage = ""
+                        },
+                        onCancel = backToVault,
+                        onSave = {
+                            val shortcut = shortcutInput.trim()
+                            val content = contentInput.trim()
+                            when {
+                                shortcut.isEmpty() -> errorMessage = "단축어를 입력해 주세요."
+                                content.isEmpty() -> errorMessage = "프롬프트 문구를 입력해 주세요."
+                                snippets.any {
+                                    it.id != editingSnippet?.id && it.shortcut.equals(shortcut, ignoreCase = true)
+                                } -> {
+                                    errorMessage = "이미 사용 중인 단축어입니다."
+                                }
+                                else -> {
+                                    if (editingSnippet != null) {
+                                        onUpdateSnippet(editingSnippet!!.id, shortcut, content)
+                                    } else {
+                                        onAddSnippet(shortcut, content)
+                                    }
+                                    backToVault()
                                 }
                             }
-                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                                Text(
-                                    text = "프롬프트 상용구",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AppTheme.colors.textPrimary
-                                )
-                                Text(
-                                    text = "단축어로 긴 문장을 원터치 대치합니다",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    color = AppTheme.colors.textSecondary
-                                )
-                            }
                         }
-
-                        // 닫기 X 버튼 (최소 44dp 확보)
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "닫기",
-                                tint = AppTheme.colors.textSecondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    // 2. 조약돌 세그먼트 탭바 (보관함 vs 등록/수정)
-                    NeuInsetBed(
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            // 보관함 탭 버튼
-                            SegmentTabPill(
-                                title = "보관함 (${snippets.size})",
-                                isSelected = currentTab == SnippetTab.VAULT,
-                                onClick = backToVault,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            // 등록/수정 탭 버튼
-                            SegmentTabPill(
-                                title = if (editingSnippet != null) "✏️ 상용구 수정" else "+ 새 상용구",
-                                isSelected = currentTab == SnippetTab.FORM,
-                                onClick = {
-                                    if (currentTab != SnippetTab.FORM) {
-                                        startNew()
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    // 3. 탭별 컨텐츠 (크로스페이드 애니메이션 전환)
-                    AnimatedContent(
-                        targetState = currentTab,
-                        transitionSpec = {
-                            fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
-                        },
-                        label = "SnippetTabContentCrossfade"
-                    ) { tab ->
-                        when (tab) {
-                            SnippetTab.VAULT -> {
-                                SnippetVaultContent(
-                                    snippets = snippets,
-                                    onEditSnippet = startEditing,
-                                    onDeleteSnippet = onDeleteSnippet,
-                                    onCopySnippet = { content ->
-                                        clipboardManager.setText(AnnotatedString(content))
-                                    },
-                                    onAddNewClick = startNew
-                                )
-                            }
-                            SnippetTab.FORM -> {
-                                SnippetFormContent(
-                                    editingSnippet = editingSnippet,
-                                    shortcutInput = shortcutInput,
-                                    contentInput = contentInput,
-                                    errorMessage = errorMessage,
-                                    currentPromptText = currentPromptText,
-                                    isSelectionPrompt = isSelectionPrompt,
-                                    existingShortcuts = snippets
-                                        .filter { it.id != editingSnippet?.id }
-                                        .map { it.shortcut.lowercase() },
-                                    clipboardManager = clipboardManager,
-                                    onShortcutChange = {
-                                        shortcutInput = it.filterNot { char -> char.isWhitespace() }
-                                        errorMessage = ""
-                                    },
-                                    onContentChange = {
-                                        contentInput = it
-                                        errorMessage = ""
-                                    },
-                                    onCancel = backToVault,
-                                    onSave = {
-                                        val shortcut = shortcutInput.trim()
-                                        val content = contentInput.trim()
-                                        when {
-                                            shortcut.isEmpty() -> errorMessage = "단축어를 입력해 주세요."
-                                            content.isEmpty() -> errorMessage = "프롬프트 문구를 입력해 주세요."
-                                            snippets.any {
-                                                it.id != editingSnippet?.id && it.shortcut.equals(shortcut, ignoreCase = true)
-                                            } -> {
-                                                errorMessage = "이미 사용 중인 단축어입니다."
-                                            }
-                                            else -> {
-                                                if (editingSnippet != null) {
-                                                    onUpdateSnippet(editingSnippet!!.id, shortcut, content)
-                                                } else {
-                                                    onAddSnippet(shortcut, content)
-                                                }
-                                                backToVault()
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
+                    )
                 }
             }
         }
     }
 }
 
-/**
- * 3D 조약돌 세그먼트 탭 버튼
- */
+// ==========================================================================
+// 2. Dialog Chrome Components (Header & Segment Tabs)
+// ==========================================================================
+
 @Composable
-private fun SegmentTabPill(
-    title: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
+private fun SnippetDialogHeader(
+    onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = if (isSelected) AppTheme.colors.primary else Color.Transparent
-    val contentColor = if (isSelected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = backgroundColor,
-        modifier = modifier.height(36.dp)
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = contentColor
+            Surface(
+                shape = CircleShape,
+                color = AppTheme.colors.primary.copy(alpha = 0.12f),
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Bookmarks,
+                        contentDescription = null,
+                        tint = AppTheme.colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = "프롬프트 상용구",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.colors.textPrimary
+                )
+                Text(
+                    text = "단축어로 긴 문장을 원터치 대치합니다",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.sp,
+                    color = AppTheme.colors.textSecondary
+                )
+            }
+        }
+
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier.size(44.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "닫기",
+                tint = AppTheme.colors.textSecondary,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
 }
+
+@Composable
+private fun SnippetDialogTabBar(
+    currentTab: SnippetTab,
+    snippetCount: Int,
+    isEditing: Boolean,
+    onSelectVault: () -> Unit,
+    onSelectForm: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    NeuSegmentedTabBar(
+        items = listOf(SnippetTab.VAULT, SnippetTab.FORM),
+        selectedItem = currentTab,
+        onItemSelected = { tab ->
+            if (tab == SnippetTab.VAULT) {
+                onSelectVault()
+            } else {
+                onSelectForm()
+            }
+        },
+        itemLabel = { tab ->
+            when (tab) {
+                SnippetTab.VAULT -> "보관함 ($snippetCount)"
+                SnippetTab.FORM -> if (isEditing) "✏️ 상용구 수정" else "+ 새 상용구"
+            }
+        },
+        height = 36.dp,
+        shape = RoundedCornerShape(14.dp),
+        pillShape = RoundedCornerShape(10.dp),
+        contentPadding = PaddingValues(4.dp),
+        tabSpacing = 4.dp,
+        modifier = modifier
+    )
+}
+
+// ==========================================================================
+// 3. Vault Tab Components (List, Item, Actions, Delete Confirm)
+// ==========================================================================
 
 /**
  * 탭 1: 보관함 목록 컨텐츠
@@ -468,7 +496,6 @@ private fun SnippetCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 단축어 뱃지 (Pebble Pill)
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = AppTheme.colors.primary.copy(alpha = 0.12f),
@@ -483,53 +510,15 @@ private fun SnippetCardItem(
                     )
                 }
 
-                // 우측 액션 버튼들 (복사, 수정, 삭제)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    // 복사 버튼 (터치 시 체크 아이콘 피드백)
-                    IconButton(
-                        onClick = {
-                            onCopy()
-                            isCopied = true
-                        },
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
-                            contentDescription = if (isCopied) "복사됨" else "복사",
-                            tint = if (isCopied) AppTheme.colors.primary else AppTheme.colors.textSecondary,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-
-                    // 수정 버튼
-                    IconButton(
-                        onClick = onEdit,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "수정",
-                            tint = AppTheme.colors.accent,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-
-                    // 삭제 버튼
-                    IconButton(
-                        onClick = { isConfirmingDelete = true },
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "삭제",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+                SnippetCardActions(
+                    isCopied = isCopied,
+                    onCopy = {
+                        onCopy()
+                        isCopied = true
+                    },
+                    onEdit = onEdit,
+                    onDeleteRequest = { isConfirmingDelete = true }
+                )
             }
 
             // 본문 영역 (클릭 시 펼치기/접기 아코디언)
@@ -551,7 +540,6 @@ private fun SnippetCardItem(
                         lineHeight = 17.sp
                     )
 
-                    // 2줄 초과 시 안내 및 펼침/접힘 화살표
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
@@ -574,50 +562,116 @@ private fun SnippetCardItem(
             }
 
             // 삭제 확인 바 (2단계 실수 방지)
-            AnimatedVisibility(
+            SnippetDeleteConfirmBar(
                 visible = isConfirmingDelete,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                onCancel = { isConfirmingDelete = false },
+                onConfirmDelete = {
+                    isConfirmingDelete = false
+                    onDelete()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SnippetCardActions(
+    isCopied: Boolean,
+    onCopy: () -> Unit,
+    onEdit: () -> Unit,
+    onDeleteRequest: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        IconButton(
+            onClick = onCopy,
+            modifier = Modifier.size(34.dp)
+        ) {
+            Icon(
+                imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                contentDescription = if (isCopied) "복사됨" else "복사",
+                tint = if (isCopied) AppTheme.colors.primary else AppTheme.colors.textSecondary,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        IconButton(
+            onClick = onEdit,
+            modifier = Modifier.size(34.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = "수정",
+                tint = AppTheme.colors.accent,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        IconButton(
+            onClick = onDeleteRequest,
+            modifier = Modifier.size(34.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.DeleteOutline,
+                contentDescription = "삭제",
+                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SnippetDeleteConfirmBar(
+    visible: Boolean,
+    onCancel: () -> Unit,
+    onConfirmDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
+        modifier = modifier
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = "정말 삭제할까요?",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = onCancel,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
                     ) {
-                        Text(
-                            text = "정말 삭제할까요?",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(
-                                onClick = { isConfirmingDelete = false },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(28.dp)
-                            ) {
-                                Text("취소", fontSize = 11.sp, color = AppTheme.colors.textSecondary)
-                            }
-                            TextButton(
-                                onClick = {
-                                    isConfirmingDelete = false
-                                    onDelete()
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                modifier = Modifier.height(28.dp)
-                            ) {
-                                Text("삭제", fontSize = 11.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
-                            }
-                        }
+                        Text("취소", fontSize = 11.sp, color = AppTheme.colors.textSecondary)
+                    }
+                    TextButton(
+                        onClick = onConfirmDelete,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Text("삭제", fontSize = 11.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -684,6 +738,127 @@ private fun EmptySnippetVaultView(
     }
 }
 
+// ==========================================================================
+// 4. Form Tab Components (Form, Mode Banner, Content Toolbar)
+// ==========================================================================
+
+@Composable
+private fun SnippetFormHeaderBanner(
+    isEditMode: Boolean,
+    editingShortcut: String?,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (isEditMode) AppTheme.colors.accent.copy(alpha = 0.12f) else AppTheme.colors.primary.copy(alpha = 0.08f),
+        border = BorderStroke(
+            1.dp,
+            if (isEditMode) AppTheme.colors.accent.copy(alpha = 0.3f) else AppTheme.colors.primary.copy(alpha = 0.2f)
+        ),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = if (isEditMode) Icons.Default.Edit else Icons.Default.Add,
+                contentDescription = null,
+                tint = if (isEditMode) AppTheme.colors.accent else AppTheme.colors.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = if (isEditMode) {
+                    "기존 상용구 '${editingShortcut.orEmpty()}'의 내용을 수정합니다."
+                } else {
+                    "단축어를 입력창에 치면 아래 프롬프트로 자동 대치됩니다."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = AppTheme.colors.textPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun SnippetFormContentToolbar(
+    currentPromptText: String,
+    isSelectionPrompt: Boolean,
+    clipboardGateway: ClipboardGateway,
+    onContentChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (currentPromptText.isNotBlank()) {
+            Surface(
+                onClick = { onContentChange(currentPromptText) },
+                shape = RoundedCornerShape(6.dp),
+                color = AppTheme.colors.primary.copy(alpha = 0.1f),
+                border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Input,
+                        contentDescription = null,
+                        tint = AppTheme.colors.primary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = if (isSelectionPrompt) "선택 문구" else "현재 프롬프트",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppTheme.colors.primary
+                    )
+                }
+            }
+        }
+
+        Surface(
+            onClick = {
+                val clip = clipboardGateway.readText()
+                if (clip.isNotBlank()) {
+                    onContentChange(clip)
+                }
+            },
+            shape = RoundedCornerShape(6.dp),
+            color = AppTheme.colors.accent.copy(alpha = 0.1f),
+            border = BorderStroke(1.dp, AppTheme.colors.accent.copy(alpha = 0.25f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentPaste,
+                    contentDescription = null,
+                    tint = AppTheme.colors.accent,
+                    modifier = Modifier.size(12.dp)
+                )
+                Text(
+                    text = "붙여넣기",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.colors.accent
+                )
+            }
+        }
+    }
+}
+
 /**
  * 탭 2: 상용구 등록 / 수정 폼 컨텐츠
  */
@@ -696,7 +871,7 @@ private fun SnippetFormContent(
     currentPromptText: String,
     isSelectionPrompt: Boolean = false,
     existingShortcuts: List<String>,
-    clipboardManager: androidx.compose.ui.platform.ClipboardManager,
+    clipboardGateway: ClipboardGateway,
     onShortcutChange: (String) -> Unit,
     onContentChange: (String) -> Unit,
     onCancel: () -> Unit,
@@ -712,41 +887,10 @@ private fun SnippetFormContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 모드 안내 배너
-        Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = if (isEditMode) AppTheme.colors.accent.copy(alpha = 0.12f) else AppTheme.colors.primary.copy(alpha = 0.08f),
-            border = BorderStroke(
-                1.dp,
-                if (isEditMode) AppTheme.colors.accent.copy(alpha = 0.3f) else AppTheme.colors.primary.copy(alpha = 0.2f)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = if (isEditMode) Icons.Default.Edit else Icons.Default.Add,
-                    contentDescription = null,
-                    tint = if (isEditMode) AppTheme.colors.accent else AppTheme.colors.primary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    text = if (isEditMode) {
-                        "기존 상용구 '${editingSnippet.shortcut}'의 내용을 수정합니다."
-                    } else {
-                        "단축어를 입력창에 치면 아래 프롬프트로 자동 대치됩니다."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = AppTheme.colors.textPrimary
-                )
-            }
-        }
+        SnippetFormHeaderBanner(
+            isEditMode = isEditMode,
+            editingShortcut = editingSnippet?.shortcut
+        )
 
         // 1. 단축어 입력
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -776,7 +920,7 @@ private fun SnippetFormContent(
             }
         }
 
-        // 2. 치환될 프롬프트 문구 입력 & 올바르게 배치된 본문 전용 툴바!
+        // 2. 치환될 프롬프트 문구 입력 & 툴바
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -790,72 +934,12 @@ private fun SnippetFormContent(
                     color = AppTheme.colors.textPrimary
                 )
 
-                // 본문 입력 전용 툴바 버튼들 (클립보드 / 현재 프롬프트)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 현재 프롬프트 가져오기
-                    if (currentPromptText.isNotBlank()) {
-                        Surface(
-                            onClick = { onContentChange(currentPromptText) },
-                            shape = RoundedCornerShape(6.dp),
-                            color = AppTheme.colors.primary.copy(alpha = 0.1f),
-                            border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.25f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Input,
-                                    contentDescription = null,
-                                    tint = AppTheme.colors.primary,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Text(
-                                    text = if (isSelectionPrompt) "선택 문구" else "현재 프롬프트",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = AppTheme.colors.primary
-                                )
-                            }
-                        }
-                    }
-
-                    // 클립보드 붙여넣기
-                    Surface(
-                        onClick = {
-                            val clip = clipboardManager.getText()?.text.orEmpty()
-                            if (clip.isNotBlank()) {
-                                onContentChange(clip)
-                            }
-                        },
-                        shape = RoundedCornerShape(6.dp),
-                        color = AppTheme.colors.accent.copy(alpha = 0.1f),
-                        border = BorderStroke(1.dp, AppTheme.colors.accent.copy(alpha = 0.25f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentPaste,
-                                contentDescription = null,
-                                tint = AppTheme.colors.accent,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = "붙여넣기",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = AppTheme.colors.accent
-                            )
-                        }
-                    }
-                }
+                SnippetFormContentToolbar(
+                    currentPromptText = currentPromptText,
+                    isSelectionPrompt = isSelectionPrompt,
+                    clipboardGateway = clipboardGateway,
+                    onContentChange = onContentChange
+                )
             }
 
             OutlinedTextField(

@@ -374,7 +374,6 @@ internal abstract class AccessibilityPromptAutomation(
         const val INPUT_FOCUS_WAIT_MAX_MS = 1000L
         const val INPUT_FOCUS_POLL_MS = 50L
         const val INPUT_PASTE_SETTLE_MS = 100L
-        const val INPUT_SETTLE_RECHECK_MS = 60L
         const val INPUT_CONFIRM_WAIT_MS = 500L
         const val SEND_CONFIRM_WAIT_MS = 500L
     }

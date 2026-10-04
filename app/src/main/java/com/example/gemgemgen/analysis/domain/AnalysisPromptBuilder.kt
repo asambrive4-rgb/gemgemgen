@@ -67,17 +67,16 @@ Goals:
 1. Find the exact substring in the original prompt that represents the target category.
 2. Return the source phrase in exactText. Use occurrence only to distinguish repeated phrases; do not calculate character positions.
 3. Analyze viewpoint, distance, visible scope, camera angle, visible elements, hidden or unclear elements.
-4. Analyze spatial layout: subject placement, foreground, midground, background, left/center/right, above/below, behind/beside subject, fixed anchors, mutable zones.
-5. Return category constraints: allowed and avoid.
-6. Infer variationGoal: one clear Korean sentence describing what replacement fragments should achieve for this category.
+4. Return category constraints: allowed and avoid.
+5. Infer variationGoal: one clear Korean sentence describing what replacement fragments should achieve for this category.
    Base variationGoal on ALL of:
-   (a) the visual/spatial analysis of the source prompt,
+   (a) the visual analysis of the source prompt,
    (b) selected direction chips if any (length, detail, lineage shift, situational edge, etc.),
    (c) the custom user direction if any (translating abstract requests into concrete visual terms).
    Do NOT default to a fixed short/practical style unless the source and user directions actually imply that.
    If chips or custom text ask for more length or denser detail, variationGoal must reflect that.
    If chips or custom text ask for a lineage/genre shift or situational edge, variationGoal must reflect that.
-7. Keep the response strict JSON only.
+6. Keep the response strict JSON only.
         """.trimIndent()
 
         val userPrompt = """
@@ -121,7 +120,6 @@ Find the target segment, analyze the visual constraints, and set variationGoal f
             ?.joinToString(separator = "\n") { "* $it" }
             ?: "* NONE"
         val hintText = formatDirectionHints(selectedHints, emptyValue = "")
-        val layoutText = spatialLayoutText(analysisReport.spatialLayout)
         val variationGoal = analysisReport.variationGoal.trim().ifBlank {
             AnalysisCategoryRules.ruleFor(category).goal
         }
@@ -133,7 +131,7 @@ Return each candidate as an edits array, not a full rewritten text.
 Each edit has exactText (source phrase to locate) and replacement. The app locates it; do not calculate start/end character indices. If the same phrase repeats, include more context or give its 1-based occurrence in Original prompt.
 Use an empty replacement for deletion. For additions, quote an existing anchor phrase in exactText and return that phrase plus the added text in replacement. Do not use an empty exactText or guessed numeric insertion position. Combine overlapping changes into one edit.
 Only edit within [${targetSegment.startIndex}, ${targetSegment.endIndex}). Preserve all intervening unedited text; the app assembles it verbatim.
-Suggested edit locations: ${targetSegment.editableRanges}. These guide the task; refine sentence boundaries as needed within the replacement segment. Preserve unrelated text between edits.
+Suggested edit locations: ${formatRanges(targetSegment.editableRanges, targetSegment.text)}. These guide the task; refine sentence boundaries as needed within the replacement segment. Preserve unrelated text between edits.
 Resolve the conflicts identified in conflictingSegments with the necessary edits; do not mechanically replace whole sentences when a smaller change resolves them. Never edit preservedSegments. Use the original language/style for replacements; do not translate untouched text.
             """.trimIndent()
         } else {
@@ -163,19 +161,17 @@ Critical rules:
 5. Return strict JSON array only, following the output contract above.
 
 Context:
-- Variation goal: $variationGoal
 - Current viewpoint: ${analysisReport.visualContext.viewpoint}
 - Distance: ${analysisReport.visualContext.distance}
 - Current visible scope: ${analysisReport.visualContext.visibleScope}
-- Target visual context: ${analysisReport.targetVisualContext}
-- Five cascading checks: ${analysisReport.cascadingTrace}
-- Protected source ranges: ${analysisReport.preservedSegments}
 - Camera angle: ${analysisReport.visualContext.cameraAngle}
+- Target visual context: ${formatVisualContext(analysisReport.targetVisualContext)}
+- Five cascading checks: ${formatCascadingTrace(analysisReport.cascadingTrace)}
+- Protected source ranges: ${formatRanges(analysisReport.preservedSegments)}
 - Avoid:
 $avoidRules
 - Allowed:
 $allowedRules
-${if (layoutText.isBlank()) "" else "- Spatial layout:\n$layoutText"}
         """.trimIndent()
 
         val userPrompt = """
@@ -209,26 +205,32 @@ Generate exactly $count unique candidates as a JSON array following the system o
             .joinToString(separator = "\n")
     }
 
-    private fun spatialLayoutText(layout: AnalysisSpatialLayout): String {
-        return listOfNotNull(
-            layout.subjectPlacement.takeIf { it.isNotBlank() }?.let { "* Subject placement: $it" },
-            layout.foreground.line("Foreground"),
-            layout.midground.line("Midground"),
-            layout.background.line("Background"),
-            layout.leftSide.line("Left side"),
-            layout.center.line("Center"),
-            layout.rightSide.line("Right side"),
-            layout.above.line("Above"),
-            layout.below.line("Below"),
-            layout.behindSubject.line("Behind subject"),
-            layout.besideSubject.line("Beside subject"),
-            layout.fixedAnchors.line("Fixed anchors"),
-            layout.mutableZones.line("Mutable zones")
-        ).joinToString(separator = "\n")
+
+    private fun formatRanges(
+        ranges: List<AnalysisSourceRange>,
+        fallbackText: String? = null
+    ): String {
+        if (ranges.isEmpty()) {
+            return fallbackText?.takeIf { it.isNotBlank() }?.let { "\"$it\"" } ?: "NONE"
+        }
+        return ranges.joinToString(", ") { "\"${it.exactText}\"" }
     }
 
-    private fun List<String>.line(label: String): String? {
-        return takeIf { it.isNotEmpty() }?.joinToString(prefix = "* $label: ")
+    private fun formatVisualContext(context: AnalysisVisualContext): String {
+        return "viewpoint=${context.viewpoint}, distance=${context.distance}, scope=${context.visibleScope}, angle=${context.cameraAngle}"
+    }
+
+    private fun formatCascadingTrace(trace: AnalysisCascadingTrace): String {
+        val items = mutableListOf<String>()
+        if (trace.newlyVisible.isNotEmpty()) items += "newlyVisible=[${trace.newlyVisible.joinToString(", ")}]"
+        if (trace.disappearing.isNotEmpty()) items += "disappearing=[${trace.disappearing.joinToString(", ")}]"
+        if (trace.undefinedAreas.isNotEmpty()) items += "undefinedAreas=[${trace.undefinedAreas.joinToString(", ")}]"
+        if (trace.requiredAdjustments.isNotEmpty()) items += "requiredAdjustments=[${trace.requiredAdjustments.joinToString(", ")}]"
+        if (trace.conflictingSegments.isNotEmpty()) {
+            val conflicts = trace.conflictingSegments.joinToString(", ") { "\"${it.exactText}\"" }
+            items += "conflictingSegments=[$conflicts]"
+        }
+        return if (items.isEmpty()) "NONE" else items.joinToString("; ")
     }
 
     private fun analysisResponseSchema(): JsonObject {
@@ -249,24 +251,6 @@ Generate exactly $count unique candidates as a JSON array following the system o
                     distanceDesc = "Camera distance in Korean.",
                     visibleScopeDesc = "Visible crop/scope in Korean.",
                     cameraAngleDesc = "Camera angle in Korean."
-                ),
-                "spatialLayout" to obj(
-                    "type" to "object",
-                    "properties" to obj(
-                        "subjectPlacement" to stringSchema("Subject location."),
-                        "foreground" to stringArraySchema(),
-                        "midground" to stringArraySchema(),
-                        "background" to stringArraySchema(),
-                        "leftSide" to stringArraySchema(),
-                        "center" to stringArraySchema(),
-                        "rightSide" to stringArraySchema(),
-                        "above" to stringArraySchema(),
-                        "below" to stringArraySchema(),
-                        "behindSubject" to stringArraySchema(),
-                        "besideSubject" to stringArraySchema(),
-                        "fixedAnchors" to stringArraySchema(),
-                        "mutableZones" to stringArraySchema()
-                    )
                 ),
                 "categoryConstraints" to obj(
                     "type" to "object",
@@ -304,7 +288,6 @@ Generate exactly $count unique candidates as a JSON array following the system o
             "required" to arr(
                 "targetSegment",
                 "visualContext",
-                "spatialLayout",
                 "categoryConstraints",
                 "variationGoal",
                 "targetVisualContext",

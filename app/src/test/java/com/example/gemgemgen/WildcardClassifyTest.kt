@@ -65,7 +65,6 @@ class WildcardClassifyTest {
             groups
         )
         assertEquals(listOf("c"), droppedLines)
-        assertTrue(groups.none { it.name == WildcardClassifyFileName.UNCLASSIFIED_GROUP_NAME })
     }
 
     @Test

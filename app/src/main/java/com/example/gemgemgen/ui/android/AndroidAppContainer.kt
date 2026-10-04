@@ -19,16 +19,14 @@ import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
-import com.example.gemgemgen.automation.android.ActiveVariationPromptAutomationGatewayProvider
+import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
-import com.example.gemgemgen.automation.android.SharedPreferencesLastRunSnapshotRepository
-import com.example.gemgemgen.automation.android.SharedPreferencesPromptHistoryRepository
-import com.example.gemgemgen.automation.android.SharedPreferencesPromptInstructionRepository
-import com.example.gemgemgen.automation.android.SharedPreferencesPromptSnippetRepository
-import com.example.gemgemgen.automation.android.SharedPreferencesVariationPromptRepository
+import com.example.gemgemgen.automation.android.DataStoreLastRunSnapshotRepository
+import com.example.gemgemgen.automation.android.DataStorePromptHistoryRepository
+import com.example.gemgemgen.automation.android.PromptSnippetStore
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
@@ -43,7 +41,8 @@ import com.example.gemgemgen.core.PromptWorkspace
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
-import com.example.gemgemgen.wildcard.android.AndroidWildcardSetRepository
+import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
+import com.example.gemgemgen.wildcard.usecase.loadWildcardSets
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
@@ -55,12 +54,12 @@ class AndroidAppContainer(context: Context) {
     private val appContext = context.applicationContext
     private val lastRunSnapshotStore by lazy {
         LastRunSnapshotStore(
-            SharedPreferencesLastRunSnapshotRepository(appContext)
+            DataStoreLastRunSnapshotRepository(appContext)
         )
     }
     private val promptHistoryStore by lazy {
         PromptHistoryStore(
-            SharedPreferencesPromptHistoryRepository(appContext)
+            DataStorePromptHistoryRepository(appContext)
         )
     }
     private val clipboardGateway by lazy { AndroidClipboardGateway(appContext) }
@@ -92,14 +91,12 @@ class AndroidAppContainer(context: Context) {
     }
     private val environmentGateway by lazy { AndroidEnvironmentGateway(appContext) }
     private val wildcardFileRepository by lazy { AndroidWildcardFileRepository(appContext) }
-    private val wildcardSetRepository by lazy { AndroidWildcardSetRepository(wildcardFileRepository) }
+    private val wildcardSetRepository: WildcardSetRepository by lazy { WildcardSetRepository { wildcardFileRepository.loadWildcardSets() } }
     private val wildcardFolderRepository by lazy { AndroidWildcardFolderRepository(appContext) }
 
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
     val promptWorkspace = PromptWorkspace()
-    val promptInstructionRepository by lazy { SharedPreferencesPromptInstructionRepository(appContext) }
-    val variationPromptRepository by lazy { SharedPreferencesVariationPromptRepository(appContext) }
-    val promptSnippetRepository by lazy { SharedPreferencesPromptSnippetRepository(appContext) }
+    val promptSnippetRepository by lazy { PromptSnippetStore(appContext) }
     val automationSettingsStore by lazy { com.example.gemgemgen.automation.android.AutomationSettingsStore(appContext) }
 
     val automationViewModelFactory: ViewModelProvider.Factory = factory<AutomationViewModel> {
@@ -127,7 +124,6 @@ class AndroidAppContainer(context: Context) {
                 memoryCleanupGateway = AndroidMemoryCleanupGateway(appContext),
                 manageRemoteAutomation = manageRemoteAutomation
             ),
-            checkAutomationStart = checkAutomationStart,
             executeAutomation = executeAutomation,
             wildcardFileRepository = wildcardFileRepository,
             manageRemoteAutomation = manageRemoteAutomation,
@@ -135,11 +131,9 @@ class AndroidAppContainer(context: Context) {
             promptHistoryStore = promptHistoryStore,
             themePaletteStore = themePaletteStore,
             promptWorkspace = promptWorkspace,
-            promptInstructionRepository = promptInstructionRepository,
-            variationPromptRepository = variationPromptRepository,
             promptSnippetRepository = promptSnippetRepository,
             runVariationPrompt = RunVariationPromptUseCase(
-                gatewayProvider = ActiveVariationPromptAutomationGatewayProvider,
+                gatewayProvider = ActivePromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
             ),
             automationSettingsStore = automationSettingsStore

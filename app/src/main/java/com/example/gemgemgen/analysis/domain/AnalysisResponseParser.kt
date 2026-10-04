@@ -19,8 +19,6 @@ object AnalysisResponseParser {
         }
         val visualContext = root["visualContext"]?.jsonObjectOrNull()?.let(::parseVisualContext)
             ?: AnalysisVisualContext()
-        val spatialLayout = root["spatialLayout"]?.jsonObjectOrNull()?.let(::parseSpatialLayout)
-            ?: AnalysisSpatialLayout()
         val constraints = root["categoryConstraints"]?.jsonObjectOrNull()?.let {
             AnalysisCategoryConstraints(
                 allowed = it["allowed"].strings(),
@@ -34,7 +32,6 @@ object AnalysisResponseParser {
         return AnalysisReport(
             targetSegment = targetSegment,
             visualContext = visualContext,
-            spatialLayout = spatialLayout,
             categoryConstraints = constraints,
             variationGoal = variationGoal,
             warnings = warnings,
@@ -150,23 +147,6 @@ object AnalysisResponseParser {
         )
     }
 
-    private fun parseSpatialLayout(obj: JsonObject): AnalysisSpatialLayout {
-        return AnalysisSpatialLayout(
-            subjectPlacement = obj["subjectPlacement"].stringOrBlank(),
-            foreground = obj["foreground"].strings(),
-            midground = obj["midground"].strings(),
-            background = obj["background"].strings(),
-            leftSide = obj["leftSide"].strings(),
-            center = obj["center"].strings(),
-            rightSide = obj["rightSide"].strings(),
-            above = obj["above"].strings(),
-            below = obj["below"].strings(),
-            behindSubject = obj["behindSubject"].strings(),
-            besideSubject = obj["besideSubject"].strings(),
-            fixedAnchors = obj["fixedAnchors"].strings(),
-            mutableZones = obj["mutableZones"].strings()
-        )
-    }
 
     private fun JsonElement?.jsonObjectOrNull(): JsonObject? = this as? JsonObject
 

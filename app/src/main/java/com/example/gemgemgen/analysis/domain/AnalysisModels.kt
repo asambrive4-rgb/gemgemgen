@@ -48,22 +48,6 @@ data class AnalysisVisualContext(
     val cameraAngle: String = "알 수 없음"
 )
 
-data class AnalysisSpatialLayout(
-    val subjectPlacement: String = "",
-    val foreground: List<String> = emptyList(),
-    val midground: List<String> = emptyList(),
-    val background: List<String> = emptyList(),
-    val leftSide: List<String> = emptyList(),
-    val center: List<String> = emptyList(),
-    val rightSide: List<String> = emptyList(),
-    val above: List<String> = emptyList(),
-    val below: List<String> = emptyList(),
-    val behindSubject: List<String> = emptyList(),
-    val besideSubject: List<String> = emptyList(),
-    val fixedAnchors: List<String> = emptyList(),
-    val mutableZones: List<String> = emptyList()
-)
-
 data class AnalysisCategoryConstraints(
     val allowed: List<String> = emptyList(),
     val avoid: List<String> = emptyList()
@@ -72,7 +56,6 @@ data class AnalysisCategoryConstraints(
 data class AnalysisReport(
     val targetSegment: AnalysisDetectedSegment? = null,
     val visualContext: AnalysisVisualContext = AnalysisVisualContext(),
-    val spatialLayout: AnalysisSpatialLayout = AnalysisSpatialLayout(),
     val categoryConstraints: AnalysisCategoryConstraints = AnalysisCategoryConstraints(),
     /**
      * 1단계 분석 모델이 정한 변주 Goal.

@@ -70,6 +70,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -90,8 +91,13 @@ import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.TextHighlightRange
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuPillChip
 
 import com.example.gemgemgen.remote.domain.AutomationMode
+
+// ==========================================================================
+// 1. Main Editor Container & Entry Point
+// ==========================================================================
 
 @Composable
 internal fun PromptEditorSection(
@@ -106,8 +112,10 @@ internal fun PromptEditorSection(
     val lastNonEmptyCandidates = remember {
         mutableStateOf(emptyList<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>())
     }
-    if (effectiveCandidates.isNotEmpty() && lastNonEmptyCandidates.value != effectiveCandidates) {
-        lastNonEmptyCandidates.value = effectiveCandidates
+    LaunchedEffect(effectiveCandidates) {
+        if (effectiveCandidates.isNotEmpty()) {
+            lastNonEmptyCandidates.value = effectiveCandidates
+        }
     }
     val displayedCandidates = if (effectiveCandidates.isNotEmpty()) {
         effectiveCandidates
@@ -121,69 +129,14 @@ internal fun PromptEditorSection(
             .graphicsLayer(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "프롬프트 템플릿",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textPrimary
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AutomationTargetApp.entries.forEach { targetApp ->
-                        PebbleRadioChip(
-                            label = targetApp.displayName,
-                            selected = uiState.selectedTargetApp == targetApp,
-                            enabled = !uiState.isRunning,
-                            onClick = { actions.onTargetAppSelected(targetApp) }
-                        )
-                    }
-                }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                IconButton(
-                    onClick = actions::showPromptSnippetDialog,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .semantics { contentDescription = "상용구(텍스트 대치) 관리" }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Bookmarks,
-                        contentDescription = null,
-                        tint = AppTheme.colors.accent,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = { actions.toggleSearch() },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .semantics { contentDescription = "문구 찾기" }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        tint = if (uiState.editor.isSearchActive) AppTheme.colors.accent else AppTheme.colors.textSecondary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        }
+        PromptEditorHeader(
+            selectedTargetApp = uiState.selectedTargetApp,
+            isRunning = uiState.isRunning,
+            isSearchActive = uiState.editor.isSearchActive,
+            onTargetAppSelected = actions::onTargetAppSelected,
+            onShowPromptSnippetDialog = actions::showPromptSnippetDialog,
+            onToggleSearch = actions::toggleSearch
+        )
 
         AnimatedVisibility(
             visible = uiState.editor.isSearchActive,
@@ -281,6 +234,89 @@ internal fun PromptEditorSection(
     }
 }
 
+// ==========================================================================
+// 2. Header & Top Control Components
+// ==========================================================================
+
+@Composable
+internal fun PromptEditorHeader(
+    selectedTargetApp: AutomationTargetApp,
+    isRunning: Boolean,
+    isSearchActive: Boolean,
+    onTargetAppSelected: (AutomationTargetApp) -> Unit,
+    onShowPromptSnippetDialog: () -> Unit,
+    onToggleSearch: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "프롬프트 템플릿",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.colors.textPrimary
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AutomationTargetApp.entries.forEach { targetApp ->
+                    NeuPillChip(
+                        text = targetApp.displayName,
+                        selected = selectedTargetApp == targetApp,
+                        enabled = !isRunning,
+                        onClick = { onTargetAppSelected(targetApp) }
+                    )
+                }
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            IconButton(
+                onClick = onShowPromptSnippetDialog,
+                modifier = Modifier
+                    .size(36.dp)
+                    .semantics { contentDescription = "상용구(텍스트 대치) 관리" }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Bookmarks,
+                    contentDescription = null,
+                    tint = AppTheme.colors.accent,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            IconButton(
+                onClick = onToggleSearch,
+                modifier = Modifier
+                    .size(36.dp)
+                    .semantics { contentDescription = "문구 찾기" }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = if (isSearchActive) AppTheme.colors.accent else AppTheme.colors.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+// ==========================================================================
+// 3. Action Toolbar & Island Rows
+// ==========================================================================
+
 @Composable
 internal fun PromptActionRow(
     promptTemplateState: TextFieldState,
@@ -319,85 +355,18 @@ internal fun PromptActionRow(
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         // 1행: 시스템 & 디바이스 관리 바 (앱 종료, 리셋, 메모리 정리 ── 문단 편집)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 좌측: 앱 종료 + 리셋 + 메모리 정리
-            ActionIsland {
-                PebbleButton(
-                    onClick = onTerminateSelfApp,
-                    enabled = canCloseSelfApp && !isMaintenanceBusy,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.semantics { contentDescription = "GemGemGen 앱 종료" }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PowerSettingsNew,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "앱 종료",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                PebbleButton(
-                    onClick = onCloseGeminiApp,
-                    enabled = canCloseGemini && !isMaintenanceBusy,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.semantics { contentDescription = "Gemini 앱 리셋" }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Image(
-                            imageVector = GeminiGradientLogo,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "리셋",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                PebbleButton(
-                    onClick = onCleanDeviceMemory,
-                    enabled = canCleanMemory && !isMaintenanceBusy,
-                    isHighlighted = isMemoryCleanupScheduled,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.semantics {
-                        contentDescription = if (isMemoryCleanupScheduled) "메모리 정리 예약됨" else "메모리 정리"
-                    }
-                ) {
-                    Text(
-                        text = if (isMemoryCleanupScheduled) "정리 예약됨" else "메모리 정리",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isMemoryCleanupScheduled) AppTheme.colors.primary else AppTheme.colors.textPrimary
-                    )
-                }
-            }
-
-            // 우측: [문단 편집 섬]
-            ActionIsland {
-                ParagraphSelectionModeButton(
-                    selected = isParagraphSelectionMode,
-                    onClick = onToggleParagraphSelectionMode
-                )
-            }
-        }
+        PromptSystemDeviceBar(
+            canCloseSelfApp = canCloseSelfApp,
+            canCloseGemini = canCloseGemini,
+            canCleanMemory = canCleanMemory,
+            isMemoryCleanupScheduled = isMemoryCleanupScheduled,
+            isMaintenanceBusy = isMaintenanceBusy,
+            isParagraphSelectionMode = isParagraphSelectionMode,
+            onTerminateSelfApp = onTerminateSelfApp,
+            onCloseGeminiApp = onCloseGeminiApp,
+            onCleanDeviceMemory = onCleanDeviceMemory,
+            onToggleParagraphSelectionMode = onToggleParagraphSelectionMode
+        )
 
         // 2행: 프롬프트 에디터 전용 툴바 (히스토리 네비게이션 ── SI 삽입 + 복사 + 가져오기)
         Row(
@@ -405,67 +374,16 @@ internal fun PromptActionRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 좌측: 히스토리 네비게이션 (가로세로 35dp 1:1 정사각형 조약돌)
-            ActionIsland(
-                modifier = Modifier.animateContentSize()
-            ) {
-                PebbleButton(
-                    onClick = onNavigateHistoryBack,
-                    enabled = canNavigateHistoryBack,
-                    contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier
-                        .size(37.dp)
-                        .semantics { contentDescription = "이전 실행 기록" }
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = null,
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
+            PromptHistoryNavigationIsland(
+                canNavigateHistoryBack = canNavigateHistoryBack,
+                canNavigateHistoryForward = canNavigateHistoryForward,
+                isHistoryIndicatorVisible = isHistoryIndicatorVisible,
+                historyDotCount = historyDotCount,
+                activeHistoryDotIndex = activeHistoryDotIndex,
+                onNavigateHistoryBack = onNavigateHistoryBack,
+                onNavigateHistoryForward = onNavigateHistoryForward
+            )
 
-                AnimatedVisibility(
-                    visible = isHistoryIndicatorVisible && historyDotCount > 1,
-                    enter = fadeIn() + expandHorizontally(),
-                    exit = fadeOut() + shrinkHorizontally()
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        modifier = Modifier.padding(horizontal = 2.dp)
-                    ) {
-                        repeat(historyDotCount) { index ->
-                            val isSelected = index == activeHistoryDotIndex
-                            Box(
-                                modifier = Modifier
-                                    .size(if (isSelected) 7.dp else 5.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isSelected) AppTheme.colors.primary
-                                        else AppTheme.colors.textSecondary.copy(alpha = 0.35f)
-                                    )
-                            )
-                        }
-                    }
-                }
-
-                PebbleButton(
-                    onClick = onNavigateHistoryForward,
-                    enabled = canNavigateHistoryForward,
-                    contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier
-                        .size(37.dp)
-                        .semantics { contentDescription = "다음 실행 기록" }
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
-            }
-
-            // 우측: 상단 삽입 + 하단 삽입 + 변주 + 복사 + 가져오기
             PromptEditorActionGroup(
                 promptTemplateState = promptTemplateState,
                 canCopyPrompt = canCopyPrompt,
@@ -479,6 +397,170 @@ internal fun PromptActionRow(
                 variationAutomationState = variationAutomationState,
                 onRunVariation = onRunVariation,
                 onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
+            )
+        }
+    }
+}
+
+@Composable
+internal fun PromptSystemDeviceBar(
+    canCloseSelfApp: Boolean,
+    canCloseGemini: Boolean,
+    canCleanMemory: Boolean,
+    isMemoryCleanupScheduled: Boolean,
+    isMaintenanceBusy: Boolean,
+    isParagraphSelectionMode: Boolean,
+    onTerminateSelfApp: () -> Unit,
+    onCloseGeminiApp: () -> Unit,
+    onCleanDeviceMemory: () -> Unit,
+    onToggleParagraphSelectionMode: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ActionIsland {
+            PebbleButton(
+                onClick = onTerminateSelfApp,
+                enabled = canCloseSelfApp && !isMaintenanceBusy,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.semantics { contentDescription = "GemGemGen 앱 종료" }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PowerSettingsNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "앱 종료",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            PebbleButton(
+                onClick = onCloseGeminiApp,
+                enabled = canCloseGemini && !isMaintenanceBusy,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.semantics { contentDescription = "Gemini 앱 리셋" }
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Image(
+                        imageVector = GeminiGradientLogo,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "리셋",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            PebbleButton(
+                onClick = onCleanDeviceMemory,
+                enabled = canCleanMemory && !isMaintenanceBusy,
+                isHighlighted = isMemoryCleanupScheduled,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.semantics {
+                    contentDescription = if (isMemoryCleanupScheduled) "메모리 정리 예약됨" else "메모리 정리"
+                }
+            ) {
+                Text(
+                    text = if (isMemoryCleanupScheduled) "정리 예약됨" else "메모리 정리",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isMemoryCleanupScheduled) AppTheme.colors.primary else AppTheme.colors.textPrimary
+                )
+            }
+        }
+
+        ActionIsland {
+            ParagraphSelectionModeButton(
+                selected = isParagraphSelectionMode,
+                onClick = onToggleParagraphSelectionMode
+            )
+        }
+    }
+}
+
+@Composable
+internal fun PromptHistoryNavigationIsland(
+    canNavigateHistoryBack: Boolean,
+    canNavigateHistoryForward: Boolean,
+    isHistoryIndicatorVisible: Boolean,
+    historyDotCount: Int,
+    activeHistoryDotIndex: Int,
+    onNavigateHistoryBack: () -> Unit,
+    onNavigateHistoryForward: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ActionIsland(
+        modifier = modifier.animateContentSize()
+    ) {
+        PebbleButton(
+            onClick = onNavigateHistoryBack,
+            enabled = canNavigateHistoryBack,
+            contentPadding = PaddingValues(0.dp),
+            modifier = Modifier
+                .size(37.dp)
+                .semantics { contentDescription = "이전 실행 기록" }
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        AnimatedVisibility(
+            visible = isHistoryIndicatorVisible && historyDotCount > 1,
+            enter = fadeIn() + expandHorizontally(),
+            exit = fadeOut() + shrinkHorizontally()
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                modifier = Modifier.padding(horizontal = 2.dp)
+            ) {
+                repeat(historyDotCount) { index ->
+                    val isSelected = index == activeHistoryDotIndex
+                    Box(
+                        modifier = Modifier
+                            .size(if (isSelected) 7.dp else 5.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) AppTheme.colors.primary
+                                else AppTheme.colors.textSecondary.copy(alpha = 0.35f)
+                            )
+                    )
+                }
+            }
+        }
+
+        PebbleButton(
+            onClick = onNavigateHistoryForward,
+            enabled = canNavigateHistoryForward,
+            contentPadding = PaddingValues(0.dp),
+            modifier = Modifier
+                .size(37.dp)
+                .semantics { contentDescription = "다음 실행 기록" }
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp)
             )
         }
     }
@@ -596,35 +678,9 @@ internal fun PromptEditorActionGroup(
     }
 }
 
-internal fun TextFieldState.selectedTextOrNull(): String? {
-    return selectedPromptText(
-        text = text.toString(),
-        selectionStart = selection.start,
-        selectionEnd = selection.end
-    )
-}
-
-
-internal fun selectedPromptText(
-    text: String,
-    selectionStart: Int,
-    selectionEnd: Int
-): String? {
-    val rangeStart = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
-    val rangeEnd = maxOf(selectionStart, selectionEnd).coerceIn(rangeStart, text.length)
-    return text.substring(rangeStart, rangeEnd).takeIf { rangeStart != rangeEnd }
-}
-
-internal fun resolveVariationStatusText(state: AutomationRunState): String {
-    return when (state) {
-        AutomationRunState.Idle -> ""
-        is AutomationRunState.Running -> state.step
-        AutomationRunState.Success -> "변주 프롬프트를 붙여넣었습니다. 보내지 않았습니다."
-        AutomationRunState.Stopped -> "변주 작업을 중지했습니다."
-        is AutomationRunState.Failure -> "변주 실패: ${state.message}"
-    }
-}
-
+// ==========================================================================
+// 4. Search & Autocomplete Components
+// ==========================================================================
 
 @Composable
 internal fun PromptSuggestionBar(
@@ -703,295 +759,6 @@ internal fun PromptSuggestionBar(
             }
         }
     }
-}
-
-@Composable
-internal fun ActionIsland(
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(4.dp),
-    content: @Composable RowScope.() -> Unit
-) {
-    val islandShape = RoundedCornerShape(12.dp)
-    Surface(
-        shape = islandShape,
-        border = BorderStroke(1.2.dp, AppTheme.colors.insetBorder),
-        color = AppTheme.colors.insetBed,
-        modifier = modifier.graphicsLayer {
-            clip = true
-            shape = islandShape
-        }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
-            horizontalArrangement = horizontalArrangement,
-            verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PebbleButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onPointerDown: (() -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null,
-    enabled: Boolean = true,
-    isHighlighted: Boolean = false,
-    borderColor: Color = if (isHighlighted) AppTheme.colors.primary else AppTheme.colors.cardBorder,
-    containerColor: Color = AppTheme.colors.card,
-    contentColor: Color = AppTheme.colors.textPrimary,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-    content: @Composable RowScope.() -> Unit
-) {
-    val resolvedBorderColor = if (enabled) borderColor else borderColor.copy(alpha = 0.45f)
-    val resolvedContainerColor = if (enabled) containerColor else containerColor.copy(alpha = 0.65f)
-    val resolvedContentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.4f)
-
-    val shape = RoundedCornerShape(10.dp)
-    val pointerDownModifier = if (enabled) {
-        onPointerDown?.let { callback ->
-            Modifier.pointerInput(callback) {
-                awaitEachGesture {
-                    awaitFirstDown(
-                        requireUnconsumed = false,
-                        pass = PointerEventPass.Initial
-                    )
-                    callback()
-                    waitForUpOrCancellation(pass = PointerEventPass.Initial)
-                }
-            }
-        } ?: Modifier
-    } else {
-        Modifier
-    }
-    Surface(
-        modifier = modifier
-            .height(37.dp)
-            .clip(shape)
-            .then(pointerDownModifier)
-            .combinedClickable(
-                enabled = enabled,
-                onClick = onClick,
-                onLongClick = onLongClick
-            ),
-        shape = shape,
-        color = resolvedContainerColor,
-        contentColor = resolvedContentColor,
-        border = BorderStroke(if (isHighlighted) 1.5.dp else 1.2.dp, resolvedBorderColor)
-    ) {
-        Row(
-            modifier = Modifier.padding(contentPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-            content = content
-        )
-    }
-}
-
-@Composable
-private fun PebbleRadioChip(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    height: Dp = 32.dp,
-    selectedElevation: Dp = 3.dp,
-    textStyle: TextStyle = MaterialTheme.typography.labelMedium
-) {
-    val containerColor = if (selected) AppTheme.colors.primary else AppTheme.colors.card
-    val contentColor = if (selected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary
-    val shape = RoundedCornerShape(10.dp)
-
-    Surface(
-        modifier = Modifier
-            .height(height)
-            .shadow(
-                elevation = if (selected) selectedElevation else 0.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
-            .selectable(
-                selected = selected,
-                enabled = enabled,
-                role = Role.RadioButton,
-                onClick = onClick
-            ),
-        shape = shape,
-        color = containerColor,
-        contentColor = contentColor,
-        border = if (selected) BorderStroke(1.5.dp, AppTheme.colors.primary) else null
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = label,
-                style = textStyle,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-            )
-        }
-    }
-}
-
-private val GeminiGradientLogo: ImageVector by lazy {
-    ImageVector.Builder(
-        name = "GeminiGradientLogo",
-        defaultWidth = 24.dp,
-        defaultHeight = 24.dp,
-        viewportWidth = 24f,
-        viewportHeight = 24f
-    ).path(
-        fill = Brush.linearGradient(
-            colors = listOf(Color(0xFF4285F4), Color(0xFF9B72CB), Color(0xFFE8710A)),
-            start = Offset(2f, 22f),
-            end = Offset(22f, 2f)
-        )
-    ) {
-        moveTo(12f, 2f)
-        curveTo(12f, 2f, 12.5f, 9.5f, 22f, 12f)
-        curveTo(12.5f, 14.5f, 12f, 22f, 12f, 22f)
-        curveTo(12f, 22f, 11.5f, 14.5f, 2f, 12f)
-        curveTo(11.5f, 9.5f, 12f, 2f, 12f, 2f)
-        close()
-    }.build()
-}
-
-@Composable
-private fun FlowImageCountRow(
-    selectedCount: Int,
-    enabled: Boolean,
-    onCountSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = "생성 개수",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = AppTheme.colors.textSecondary
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppDefaults.FLOW_IMAGE_COUNT_OPTIONS.forEach { count ->
-                PebbleRadioChip(
-                    label = "${count}장",
-                    selected = selectedCount == count,
-                    enabled = enabled,
-                    onClick = { onCountSelected(count) },
-                    height = 30.dp,
-                    selectedElevation = 2.dp,
-                    textStyle = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
-    }
-}
-
-private fun PromptParagraphRange.toHighlightRange(): TextHighlightRange =
-    TextHighlightRange(start = start, endExclusive = endExclusive)
-
-@Composable
-internal fun ParagraphSelectionModeButton(
-    selected: Boolean,
-    enabled: Boolean = true,
-    onClick: () -> Unit
-) {
-    val containerColor = if (selected) {
-        AppTheme.colors.primary.copy(alpha = 0.16f)
-    } else {
-        AppTheme.colors.card
-    }
-    val contentColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.textSecondary
-    }
-    val borderColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.cardBorder
-    }
-    val shape = RoundedCornerShape(10.dp)
-
-    Surface(
-        modifier = Modifier
-            .height(37.dp)
-            .shadow(
-                elevation = if (selected) 2.dp else 0.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
-            .selectable(
-                selected = selected,
-                enabled = enabled,
-                role = Role.Checkbox,
-                onClick = onClick
-            ),
-        shape = shape,
-        color = containerColor,
-        contentColor = contentColor,
-        border = BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = SegmentIcon,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = contentColor
-            )
-            Text(
-                text = "문단 편집",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                color = contentColor
-            )
-        }
-    }
-}
-
-private val SegmentIcon: ImageVector by lazy {
-    ImageVector.Builder(
-        name = "Segment",
-        defaultWidth = 24.dp,
-        defaultHeight = 24.dp,
-        viewportWidth = 24f,
-        viewportHeight = 24f
-    ).path(
-        fill = SolidColor(Color.White)
-    ) {
-        moveTo(9f, 18f)
-        horizontalLineTo(21f)
-        verticalLineTo(16f)
-        horizontalLineTo(9f)
-        close()
-        moveTo(3f, 6f)
-        verticalLineTo(8f)
-        horizontalLineTo(21f)
-        verticalLineTo(6f)
-        close()
-        moveTo(9f, 13f)
-        horizontalLineTo(21f)
-        verticalLineTo(11f)
-        horizontalLineTo(9f)
-        close()
-    }.build()
 }
 
 @Composable
@@ -1122,5 +889,286 @@ internal fun PromptSearchBar(
                 )
             }
         }
+    }
+}
+
+// ==========================================================================
+// 5. Atomic Pebbles & Reusable UI Components
+// ==========================================================================
+
+@Composable
+internal fun ActionIsland(
+    modifier: Modifier = Modifier,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(4.dp),
+    content: @Composable RowScope.() -> Unit
+) {
+    val islandShape = RoundedCornerShape(12.dp)
+    Surface(
+        shape = islandShape,
+        border = BorderStroke(1.2.dp, AppTheme.colors.insetBorder),
+        color = AppTheme.colors.insetBed,
+        modifier = modifier.graphicsLayer {
+            clip = true
+            shape = islandShape
+        }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+            horizontalArrangement = horizontalArrangement,
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PebbleButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onPointerDown: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
+    isHighlighted: Boolean = false,
+    borderColor: Color = if (isHighlighted) AppTheme.colors.primary else AppTheme.colors.cardBorder,
+    containerColor: Color = AppTheme.colors.card,
+    contentColor: Color = AppTheme.colors.textPrimary,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+    content: @Composable RowScope.() -> Unit
+) {
+    val resolvedBorderColor = if (enabled) borderColor else borderColor.copy(alpha = 0.45f)
+    val resolvedContainerColor = if (enabled) containerColor else containerColor.copy(alpha = 0.65f)
+    val resolvedContentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.4f)
+
+    val shape = RoundedCornerShape(10.dp)
+    val pointerDownModifier = if (enabled) {
+        onPointerDown?.let { callback ->
+            Modifier.pointerInput(callback) {
+                awaitEachGesture {
+                    awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial
+                    )
+                    callback()
+                    waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                }
+            }
+        } ?: Modifier
+    } else {
+        Modifier
+    }
+    Surface(
+        modifier = modifier
+            .height(37.dp)
+            .clip(shape)
+            .then(pointerDownModifier)
+            .combinedClickable(
+                enabled = enabled,
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        shape = shape,
+        color = resolvedContainerColor,
+        contentColor = resolvedContentColor,
+        border = BorderStroke(if (isHighlighted) 1.5.dp else 1.2.dp, resolvedBorderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(contentPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun FlowImageCountRow(
+    selectedCount: Int,
+    enabled: Boolean,
+    onCountSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "생성 개수",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = AppTheme.colors.textSecondary
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppDefaults.FLOW_IMAGE_COUNT_OPTIONS.forEach { count ->
+                NeuPillChip(
+                    text = "${count}장",
+                    selected = selectedCount == count,
+                    enabled = enabled,
+                    onClick = { onCountSelected(count) },
+                    height = 30.dp,
+                    textStyle = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ParagraphSelectionModeButton(
+    selected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val containerColor = if (selected) {
+        AppTheme.colors.primary.copy(alpha = 0.16f)
+    } else {
+        AppTheme.colors.card
+    }
+    val contentColor = if (selected) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.textSecondary
+    }
+    val borderColor = if (selected) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.cardBorder
+    }
+    val shape = RoundedCornerShape(10.dp)
+
+    Surface(
+        modifier = Modifier
+            .height(37.dp)
+            .shadow(
+                elevation = if (selected) 2.dp else 0.dp,
+                shape = shape,
+                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+            )
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.Checkbox,
+                onClick = onClick
+            ),
+        shape = shape,
+        color = containerColor,
+        contentColor = contentColor,
+        border = BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = SegmentIcon,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = contentColor
+            )
+            Text(
+                text = "문단 편집",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor
+            )
+        }
+    }
+}
+
+// ==========================================================================
+// 6. Vector Icons & Visual Assets
+// ==========================================================================
+
+private val GeminiGradientLogo: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "GeminiGradientLogo",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = Brush.linearGradient(
+            colors = listOf(Color(0xFF4285F4), Color(0xFF9B72CB), Color(0xFFE8710A)),
+            start = Offset(2f, 22f),
+            end = Offset(22f, 2f)
+        )
+    ) {
+        moveTo(12f, 2f)
+        curveTo(12f, 2f, 12.5f, 9.5f, 22f, 12f)
+        curveTo(12.5f, 14.5f, 12f, 22f, 12f, 22f)
+        curveTo(12f, 22f, 11.5f, 14.5f, 2f, 12f)
+        curveTo(11.5f, 9.5f, 12f, 2f, 12f, 2f)
+        close()
+    }.build()
+}
+
+private val SegmentIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        name = "Segment",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = SolidColor(Color.White)
+    ) {
+        moveTo(9f, 18f)
+        horizontalLineTo(21f)
+        verticalLineTo(16f)
+        horizontalLineTo(9f)
+        close()
+        moveTo(3f, 6f)
+        verticalLineTo(8f)
+        horizontalLineTo(21f)
+        verticalLineTo(6f)
+        close()
+        moveTo(9f, 13f)
+        horizontalLineTo(21f)
+        verticalLineTo(11f)
+        horizontalLineTo(9f)
+        close()
+    }.build()
+}
+
+// ==========================================================================
+// 7. Helper Extensions & Utility Functions
+// ==========================================================================
+
+private fun PromptParagraphRange.toHighlightRange(): TextHighlightRange =
+    TextHighlightRange(start = start, endExclusive = endExclusive)
+
+internal fun TextFieldState.selectedTextOrNull(): String? {
+    return selectedPromptText(
+        text = text.toString(),
+        selectionStart = selection.start,
+        selectionEnd = selection.end
+    )
+}
+
+internal fun selectedPromptText(
+    text: String,
+    selectionStart: Int,
+    selectionEnd: Int
+): String? {
+    val rangeStart = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+    val rangeEnd = maxOf(selectionStart, selectionEnd).coerceIn(rangeStart, text.length)
+    return text.substring(rangeStart, rangeEnd).takeIf { rangeStart != rangeEnd }
+}
+
+internal fun resolveVariationStatusText(state: AutomationRunState): String {
+    return when (state) {
+        AutomationRunState.Idle -> ""
+        is AutomationRunState.Running -> state.step
+        AutomationRunState.Success -> "변주 프롬프트를 붙여넣었습니다. 보내지 않았습니다."
+        AutomationRunState.Stopped -> "변주 작업을 중지했습니다."
+        is AutomationRunState.Failure -> "변주 실패: ${state.message}"
     }
 }

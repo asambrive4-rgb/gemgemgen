@@ -1,28 +1,20 @@
-// 역할: 상단·하단 프롬프트 인스트럭션 편집 모달 다이얼로그와 프롬프트 설정 다이얼로그 공통 UI 프레임을 제공합니다.
+// 역할: 상단·하단 프롬프트 인스트럭션 편집 모달 다이얼로그를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,26 +25,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
-import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.core.android.rememberClipboardGateway
 import com.example.gemgemgen.ui.theme.AppTheme
-import com.example.gemgemgen.ui.theme.NeuButton
-import com.example.gemgemgen.ui.theme.NeuCard
-import com.example.gemgemgen.ui.theme.NeuInsetBed
-import com.example.gemgemgen.ui.theme.NeuPillChip
+import com.example.gemgemgen.ui.theme.NeuActionChip
+import com.example.gemgemgen.ui.theme.NeuConfigDialogFrame
+import com.example.gemgemgen.ui.theme.NeuSegmentedTabBar
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 
 @Composable
@@ -62,12 +44,12 @@ fun PromptInstructionDialog(
     onSave: (PromptInstructionConfig) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val clipboardManager = LocalClipboardManager.current
+    val clipboardGateway = rememberClipboardGateway()
     var activeTab by remember(initialTab) { mutableStateOf(initialTab) }
     var topText by remember(config.topInstruction) { mutableStateOf(config.topInstruction) }
     var bottomText by remember(config.bottomInstruction) { mutableStateOf(config.bottomInstruction.orEmpty()) }
 
-    PromptConfigDialogFrame(
+    NeuConfigDialogFrame(
         title = "인스트럭션 문구 관리",
         subtitle = "상단/하단 삽입 버튼에 적용될 문구를 설정합니다. (영구 보관)",
         onSave = {
@@ -81,34 +63,22 @@ fun PromptInstructionDialog(
         onDismiss = onDismiss
     ) {
         // 탭 선택 (상단 삽입 / 하단 삽입)
-        NeuInsetBed(
+        NeuSegmentedTabBar(
+            items = listOf(InstructionTab.TOP, InstructionTab.BOTTOM),
+            selectedItem = activeTab,
+            onItemSelected = { activeTab = it },
+            itemLabel = { tab ->
+                when (tab) {
+                    InstructionTab.TOP -> "상단 삽입 문구"
+                    InstructionTab.BOTTOM -> "하단 삽입 문구"
+                }
+            },
+            height = 36.dp,
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    NeuPillChip(
-                        text = "상단 삽입 문구",
-                        selected = activeTab == InstructionTab.TOP,
-                        onClick = { activeTab = InstructionTab.TOP },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    NeuPillChip(
-                        text = "하단 삽입 문구",
-                        selected = activeTab == InstructionTab.BOTTOM,
-                        onClick = { activeTab = InstructionTab.BOTTOM },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
+            pillShape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(4.dp),
+            tabSpacing = 6.dp
+        )
 
         // 간편 기능 툴바 (클립보드 가져오기, 기본값 복원, 복사)
         val currentText = if (activeTab == InstructionTab.TOP) topText else bottomText
@@ -128,11 +98,11 @@ fun PromptInstructionDialog(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                PromptConfigActionChip(
+                NeuActionChip(
                     text = "가져오기",
                     icon = Icons.Default.ContentPaste,
                     onClick = {
-                        val clip = clipboardManager.getText()?.text.orEmpty()
+                        val clip = clipboardGateway.readText()
                         if (clip.isNotBlank()) {
                             if (activeTab == InstructionTab.TOP) {
                                 topText = clip
@@ -143,7 +113,7 @@ fun PromptInstructionDialog(
                     }
                 )
 
-                PromptConfigActionChip(
+                NeuActionChip(
                     text = "기본값",
                     icon = Icons.Default.Restore,
                     onClick = {
@@ -155,12 +125,12 @@ fun PromptInstructionDialog(
                     }
                 )
 
-                PromptConfigActionChip(
+                NeuActionChip(
                     text = "복사",
                     icon = Icons.Default.ContentCopy,
                     onClick = {
                         if (currentText.isNotBlank()) {
-                            clipboardManager.setText(AnnotatedString(currentText))
+                            clipboardGateway.writeText(currentText)
                         }
                     }
                 )
@@ -205,134 +175,6 @@ fun PromptInstructionDialog(
                     color = AppTheme.colors.textPrimary,
                     lineHeight = 18.sp
                 )
-            )
-        }
-    }
-}
-
-@Composable
-internal fun PromptConfigDialogFrame(
-    title: String,
-    subtitle: String,
-    onSave: () -> Unit,
-    onDismiss: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val focusManager = LocalFocusManager.current
-    val clearInputFocus = remember(focusManager) {
-        { focusManager.clearFocus(force = true) }
-    }
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .wrapContentHeight()
-                .imePadding()
-                .clearFocusOnOutsideTap(clearInputFocus),
-            contentAlignment = Alignment.Center
-        ) {
-            NeuCard(
-                shape = RoundedCornerShape(22.dp),
-                elevation = 6.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 18.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.colors.textPrimary
-                        )
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTheme.colors.textSecondary,
-                            lineHeight = 16.sp
-                        )
-                    }
-
-                    content()
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        NeuButton(
-                            onClick = onDismiss,
-                            isPrimary = false,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f),
-                            contentModifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "취소",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        NeuButton(
-                            onClick = onSave,
-                            isPrimary = true,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f),
-                            contentModifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "저장",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun PromptConfigActionChip(
-    text: String,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    NeuCard(
-        shape = RoundedCornerShape(8.dp),
-        elevation = 2.dp,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = text }
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(13.dp),
-                tint = AppTheme.colors.primary
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTheme.colors.textPrimary,
-                fontWeight = FontWeight.Medium,
-                fontSize = 11.sp
             )
         }
     }

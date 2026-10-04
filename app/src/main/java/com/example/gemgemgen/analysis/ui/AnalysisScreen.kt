@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 다이얼로그 호스트를 액션 인터페이스로 연결해 화면에 표시합니다.
+﻿// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 서브 컴포넌트를 연결해 화면에 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -13,14 +13,11 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,8 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
@@ -77,6 +74,10 @@ import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlin.math.roundToInt
+
+// =============================================================================
+// 1. Screen Root & Layout Host
+// =============================================================================
 
 @Composable
 internal fun AnalysisScreen(
@@ -185,9 +186,12 @@ internal fun AnalysisScreen(
 
 @Composable
 private fun AnalysisBottomSpacer() {
-    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-    Spacer(modifier = Modifier.height(if (isKeyboardVisible) 260.dp else 160.dp))
+    Spacer(modifier = Modifier.height(140.dp))
 }
+
+// =============================================================================
+// 2. Header & Role Model Selector
+// =============================================================================
 
 @Composable
 private fun ApiKeyHeader(
@@ -343,7 +347,12 @@ private fun CompactOutlinedButton(
     }
 }
 
+// =============================================================================
+// 3. Source Prompt & Masking Columns
+// =============================================================================
 
+/** 좌·우 섹션 제목 줄 공통 높이 (단차 정렬용). CompactOutlinedButton과 동일. */
+private val SectionHeaderHeight = 32.dp
 
 /**
  * 원문 입력(좌)과 마스킹 결과(우)를 50:50으로 나란히 배치한다.
@@ -367,264 +376,102 @@ private fun SourcePromptAndMaskingRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // 왼쪽: 헤더 + 원문 입력 (행 높이 기준)
-        Column(
+        SourcePromptInputColumn(
+            sourcePromptState = sourcePromptState,
+            onSourcePromptChange = onSourcePromptChange,
+            onImportFromAutomation = onImportFromAutomation,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(SectionHeaderHeight),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "원문 입력",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                CompactOutlinedButton(
-                    text = "가져오기",
-                    onClick = onImportFromAutomation
-                )
-            }
-            AppMultilineTextField(
-                state = sourcePromptState,
-                onValueChange = onSourcePromptChange,
-                modifier = Modifier.fillMaxWidth(),
-                // 분석 생성에서는 편집이 드물어 높이를 고정한다. 넘치면 칸 안에서 스크롤.
-                minLines = 4,
-                maxLines = 4,
-                placeholder = "분석과 변주의 대상이 되는 전체 이미지 프롬프트를 입력하세요."
-            )
-        }
-        // 오른쪽: 동일 헤더 높이 + 본문이 왼쪽 입력 높이까지 늘어남
-        Column(
+                .fillMaxHeight()
+        )
+
+        MaskingResultColumn(
+            targetSegment = targetSegment,
+            onClearTargetSegment = onClearTargetSegment,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(SectionHeaderHeight),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (targetSegment == null) "마스킹 결과" else "자동 마스킹",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                if (targetSegment != null) {
-                    TextButton(
-                        onClick = onClearTargetSegment,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        modifier = Modifier.height(SectionHeaderHeight)
-                    ) {
-                        Text("해제", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-            TargetSegmentBody(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                targetSegment = targetSegment
-            )
-        }
+                .fillMaxHeight()
+        )
     }
 }
 
-/** 좌·우 섹션 제목 줄 공통 높이 (단차 정렬용). CompactOutlinedButton과 동일. */
-private val SectionHeaderHeight = 32.dp
-
-/** 하단 주 액션(TXT 생성 / 생성) 높이 - 터치 규격 44~52dp 가이드 준수 (48dp) */
-private val PrimaryActionButtonHeight = 48.dp
-
 @Composable
-private fun StickyBottomActionPanel(
-    uiState: AnalysisUiState,
-    onCategorySelected: (AnalysisCategory) -> Unit,
-    onGenerate: () -> Unit,
-    onGenerateTxt: () -> Unit,
-    onCancelWork: () -> Unit,
-    onRequestResetSession: () -> Unit,
-    onCopyResults: () -> Unit,
-    onSaveResults: () -> Unit
+private fun SourcePromptInputColumn(
+    sourcePromptState: TextFieldState,
+    onSourcePromptChange: (String) -> Unit,
+    onImportFromAutomation: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                .height(SectionHeaderHeight),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AnalysisCategory.entries.forEach { category ->
-                NeuPillChip(
-                    text = category.label,
-                    selected = uiState.selectedCategory == category,
-                    enabled = !uiState.isBusy,
-                    onClick = { onCategorySelected(category) },
-                    modifier = Modifier.alpha(if (uiState.isBusy) 0.45f else 1f)
-                )
-            }
+            Text(
+                text = "원문 입력",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            CompactOutlinedButton(
+                text = "가져오기",
+                onClick = onImportFromAutomation
+            )
         }
-
-        if (uiState.resultPresentation == AnalysisResultPresentation.TXT &&
-            uiState.generatedCandidates.isNotEmpty()
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = onCopyResults,
-                    enabled = uiState.canCopyOrSave,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                ) {
-                    Text("목록 복사", style = MaterialTheme.typography.labelMedium)
-                }
-                Button(
-                    onClick = onSaveResults,
-                    enabled = uiState.canCopyOrSave,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppTheme.colors.primary,
-                        contentColor = AppTheme.colors.onPrimary
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
-                ) {
-                    Text("와일드카드 파일 저장", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
-
-        val hintMessage = uiState.preconditionHintMessage
-        if (hintMessage != null && !uiState.isBusy) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = AppTheme.colors.insetBed,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = hintMessage,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTheme.colors.textSecondary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                )
-            }
-        }
-
-        val canResetSession = uiState.canResetSession
-        val canGenerate = uiState.canGenerate
-        Row(
+        AppMultilineTextField(
+            state = sourcePromptState,
+            onValueChange = onSourcePromptChange,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            minLines = 4,
+            maxLines = 4,
+            placeholder = "분석과 변주의 대상이 되는 전체 이미지 프롬프트를 입력하세요."
+        )
+    }
+}
+
+@Composable
+private fun MaskingResultColumn(
+    targetSegment: AnalysisTargetSegment?,
+    onClearTargetSegment: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SectionHeaderHeight),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = if (canResetSession) AppTheme.colors.card else AppTheme.colors.card.copy(alpha = 0.5f),
-                contentColor = if (canResetSession) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.5f),
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
-                modifier = Modifier
-                    .size(PrimaryActionButtonHeight)
-                    .shadow(
-                        elevation = if (canResetSession) 3.dp else 0.dp,
-                        shape = RoundedCornerShape(14.dp),
-                        ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                        spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-                    )
-                    .clickable(
-                        enabled = canResetSession,
-                        onClick = onRequestResetSession
-                    )
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxSize()
+            Text(
+                text = if (targetSegment == null) "마스킹 결과" else "자동 마스킹",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            if (targetSegment != null) {
+                TextButton(
+                    onClick = onClearTargetSegment,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    modifier = Modifier.height(SectionHeaderHeight)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.RestartAlt,
-                        contentDescription = "분석 세션 비우기"
-                    )
-                }
-            }
-            if (uiState.status == AnalysisStatus.GENERATING) {
-                NeuButton(
-                    onClick = onCancelWork,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(PrimaryActionButtonHeight),
-                    isPrimary = true
-                ) {
-                    Text(
-                        text = "중지",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            } else {
-                NeuButton(
-                    onClick = onGenerateTxt,
-                    enabled = canGenerate,
-                    isPrimary = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(PrimaryActionButtonHeight)
-                ) {
-                    Text(
-                        text = "TXT 생성",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Surface(
-                    onClick = onGenerate,
-                    enabled = canGenerate,
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (canGenerate) AppTheme.colors.accent else AppTheme.colors.accent.copy(alpha = 0.5f),
-                    contentColor = if (canGenerate) AppTheme.colors.onPrimary else AppTheme.colors.onPrimary.copy(alpha = 0.5f),
-                    border = BorderStroke(1.dp, AppTheme.colors.accent),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(PrimaryActionButtonHeight)
-                        .shadow(
-                            elevation = if (canGenerate) 6.dp else 0.dp,
-                            shape = RoundedCornerShape(14.dp),
-                            ambientColor = AppTheme.colors.accent.copy(alpha = 0.4f),
-                            spotColor = AppTheme.colors.accent.copy(alpha = 0.3f)
-                        )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "생성",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Text("해제", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
+        TargetSegmentBody(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            targetSegment = targetSegment
+        )
     }
 }
 
@@ -664,8 +511,8 @@ private fun TargetSegmentBody(
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
+                        .weight(1f),
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "신뢰도 ${((targetSegment.confidence * 100).roundToInt()).coerceIn(0, 100)}%",
@@ -683,6 +530,10 @@ private fun TargetSegmentBody(
         }
     }
 }
+
+// =============================================================================
+// 4. Analysis Options & Controls
+// =============================================================================
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -711,6 +562,43 @@ private fun DirectionSection(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CustomHintSection(
+    customHint: String,
+    onCustomHintChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "추가 요청사항 (선택)",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.colors.textPrimary
+            )
+            Text(
+                text = "${customHint.length}/100",
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTheme.colors.textSecondary
+            )
+        }
+        OutlinedTextField(
+            value = customHint,
+            onValueChange = onCustomHintChange,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = appTextFieldColors(),
+            singleLine = false,
+            minLines = 1,
+            maxLines = 3,
+            placeholder = { Text("예: 더 밝은 톤으로, 디테일한 묘사 추가 등") }
+        )
     }
 }
 
@@ -762,6 +650,10 @@ private fun CountSection(
         )
     }
 }
+
+// =============================================================================
+// 5. Result Presentation & Feedback
+// =============================================================================
 
 @Composable
 private fun FeedbackSection(uiState: AnalysisUiState) {
@@ -919,17 +811,22 @@ private fun TxtResultSection(
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold
         )
-        OutlinedTextField(
-            value = joinedCandidates,
-            onValueChange = {},
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 160.dp, max = 200.dp),
-            readOnly = true,
+        NeuCard(
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = appTextFieldColors(),
-            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-        )
+            elevation = 1.dp,
+            backgroundColor = AppTheme.colors.inputBackground,
+            borderColor = AppTheme.colors.inputBorder
+        ) {
+            Text(
+                text = joinedCandidates,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = AppTheme.colors.textPrimary
+            )
+        }
         OutlinedTextField(
             value = resultFileName,
             onValueChange = onResultFileNameChange,
@@ -947,41 +844,247 @@ private fun TxtResultSection(
     }
 }
 
+// =============================================================================
+// 6. Sticky Bottom Action Panel
+// =============================================================================
 
+/** 하단 주 액션(TXT 생성 / 생성) 높이 - 터치 규격 44~52dp 가이드 준수 (48dp) */
+private val PrimaryActionButtonHeight = 48.dp
 
 @Composable
-private fun CustomHintSection(
-    customHint: String,
-    onCustomHintChange: (String) -> Unit
+private fun StickyBottomActionPanel(
+    uiState: AnalysisUiState,
+    onCategorySelected: (AnalysisCategory) -> Unit,
+    onGenerate: () -> Unit,
+    onGenerateTxt: () -> Unit,
+    onCancelWork: () -> Unit,
+    onRequestResetSession: () -> Unit,
+    onCopyResults: () -> Unit,
+    onSaveResults: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        StickyCategorySelectorRow(
+            selectedCategory = uiState.selectedCategory,
+            isBusy = uiState.isBusy,
+            onCategorySelected = onCategorySelected
+        )
+
+        if (uiState.resultPresentation == AnalysisResultPresentation.TXT &&
+            uiState.generatedCandidates.isNotEmpty()
         ) {
-            Text(
-                text = "추가 요청사항 (선택)",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.textPrimary
-            )
-            Text(
-                text = "${customHint.length}/100",
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTheme.colors.textSecondary
+            StickyTxtActionRow(
+                canCopyOrSave = uiState.canCopyOrSave,
+                onCopyResults = onCopyResults,
+                onSaveResults = onSaveResults
             )
         }
-        OutlinedTextField(
-            value = customHint,
-            onValueChange = onCustomHintChange,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            colors = appTextFieldColors(),
-            singleLine = false,
-            minLines = 1,
-            maxLines = 3,
-            placeholder = { Text("예: 더 밝은 톤으로, 디테일한 묘사 추가 등") }
+
+        val hintMessage = uiState.preconditionHintMessage
+        if (hintMessage != null && !uiState.isBusy) {
+            StickyPreconditionHint(hintMessage = hintMessage)
+        }
+
+        StickyMainActionButtons(
+            canResetSession = uiState.canResetSession,
+            canGenerate = uiState.canGenerate,
+            status = uiState.status,
+            onRequestResetSession = onRequestResetSession,
+            onCancelWork = onCancelWork,
+            onGenerateTxt = onGenerateTxt,
+            onGenerate = onGenerate
         )
+    }
+}
+
+@Composable
+private fun StickyCategorySelectorRow(
+    selectedCategory: AnalysisCategory,
+    isBusy: Boolean,
+    onCategorySelected: (AnalysisCategory) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AnalysisCategory.entries.forEach { category ->
+            NeuPillChip(
+                text = category.label,
+                selected = selectedCategory == category,
+                enabled = !isBusy,
+                onClick = { onCategorySelected(category) },
+                modifier = Modifier.alpha(if (isBusy) 0.45f else 1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StickyTxtActionRow(
+    canCopyOrSave: Boolean,
+    onCopyResults: () -> Unit,
+    onSaveResults: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedButton(
+            onClick = onCopyResults,
+            enabled = canCopyOrSave,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
+        ) {
+            Text("목록 복사", style = MaterialTheme.typography.labelMedium)
+        }
+        Button(
+            onClick = onSaveResults,
+            enabled = canCopyOrSave,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AppTheme.colors.primary,
+                contentColor = AppTheme.colors.onPrimary
+            ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 40.dp)
+        ) {
+            Text("와일드카드 파일 저장", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+@Composable
+private fun StickyPreconditionHint(
+    hintMessage: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = AppTheme.colors.insetBed,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = hintMessage,
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+private fun StickyMainActionButtons(
+    canResetSession: Boolean,
+    canGenerate: Boolean,
+    status: AnalysisStatus,
+    onRequestResetSession: () -> Unit,
+    onCancelWork: () -> Unit,
+    onGenerateTxt: () -> Unit,
+    onGenerate: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = if (canResetSession) AppTheme.colors.card else AppTheme.colors.card.copy(alpha = 0.5f),
+            contentColor = if (canResetSession) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.5f),
+            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
+            modifier = Modifier
+                .size(PrimaryActionButtonHeight)
+                .shadow(
+                    elevation = if (canResetSession) 3.dp else 0.dp,
+                    shape = RoundedCornerShape(14.dp),
+                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
+                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
+                )
+                .clickable(
+                    enabled = canResetSession,
+                    onClick = onRequestResetSession
+                )
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Icon(
+                    imageVector = Icons.Default.RestartAlt,
+                    contentDescription = "분석 세션 비우기"
+                )
+            }
+        }
+        if (status == AnalysisStatus.GENERATING) {
+            NeuButton(
+                onClick = onCancelWork,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(PrimaryActionButtonHeight),
+                isPrimary = true
+            ) {
+                Text(
+                    text = "중지",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        } else {
+            NeuButton(
+                onClick = onGenerateTxt,
+                enabled = canGenerate,
+                isPrimary = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(PrimaryActionButtonHeight)
+            ) {
+                Text(
+                    text = "TXT 생성",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Surface(
+                onClick = onGenerate,
+                enabled = canGenerate,
+                shape = RoundedCornerShape(14.dp),
+                color = if (canGenerate) AppTheme.colors.accent else AppTheme.colors.accent.copy(alpha = 0.5f),
+                contentColor = if (canGenerate) AppTheme.colors.onPrimary else AppTheme.colors.onPrimary.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, AppTheme.colors.accent),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(PrimaryActionButtonHeight)
+                    .shadow(
+                        elevation = if (canGenerate) 6.dp else 0.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        ambientColor = AppTheme.colors.accent.copy(alpha = 0.4f),
+                        spotColor = AppTheme.colors.accent.copy(alpha = 0.3f)
+                    )
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "생성",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }

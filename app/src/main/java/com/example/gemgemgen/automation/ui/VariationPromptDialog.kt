@@ -21,11 +21,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
+import com.example.gemgemgen.core.android.rememberClipboardGateway
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuActionChip
+import com.example.gemgemgen.ui.theme.NeuConfigDialogFrame
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 
@@ -35,10 +37,10 @@ fun VariationPromptDialog(
     onSave: (VariationPromptConfig) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val clipboardManager = LocalClipboardManager.current
+    val clipboardGateway = rememberClipboardGateway()
     var text by remember(config.prompt) { mutableStateOf(config.prompt) }
 
-    PromptConfigDialogFrame(
+    NeuConfigDialogFrame(
         title = "변주 프롬프트 설정",
         subtitle = "변주 버튼을 누를 때 Gemini 채팅방에 붙여넣을 프롬프트를 설정합니다. (영구 보관)",
         onSave = { onSave(VariationPromptConfig(prompt = text)) },
@@ -60,17 +62,17 @@ fun VariationPromptDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        PromptConfigActionChip(
+                        NeuActionChip(
                             text = "기본값",
                             icon = Icons.Default.RestartAlt,
                             onClick = {
                                 text = VariationPromptConfig.DEFAULT_VARIATION_PROMPT
                             }
                         )
-                        PromptConfigActionChip(
+                        NeuActionChip(
                             text = "가져오기",
                             icon = Icons.Default.ContentPaste,
-                            onClick = { text = clipboardManager.getText()?.text.orEmpty() }
+                            onClick = { text = clipboardGateway.readText() }
                         )
                     }
                 }

@@ -13,7 +13,11 @@ import com.example.gemgemgen.automation.usecase.TargetAppLauncher
 import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGatewayProvider
 import com.example.gemgemgen.core.AppDefaults
-import com.example.gemgemgen.wildcard.android.AndroidWildcardSetRepository
+import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
+import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
+import com.example.gemgemgen.wildcard.usecase.loadWildcardSets
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 internal object ProcessAutomationHolder {
     @Volatile
@@ -41,15 +45,17 @@ object AndroidAutomationRuntimeProvider {
         return ProcessAutomationHolder.getOrCreate {
             ExecuteAutomationLoopUseCase(
                 manageImeUseCase = ManageImeUseCase(AndroidImeSettings(appContext)),
-                wildcardSetRepository = AndroidWildcardSetRepository(appContext),
+                wildcardSetRepository = WildcardSetRepository {
+                    AndroidWildcardFileRepository(appContext).loadWildcardSets()
+                },
                 promptGatewayProvider = ActivePromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext),
                 manageAnimationScaleUseCase = ManageAnimationScaleUseCase(
                     settings = AndroidAnimationScaleSettings(appContext),
-                    backupStore = SharedPreferencesAnimationScaleBackupStore(appContext)
+                    backupStore = DataStoreAnimationScaleBackupStore(appContext)
                 ),
                 clipboardGateway = com.example.gemgemgen.core.android.AndroidClipboardGateway(appContext),
-                isCopyPromptOnStartEnabled = { settingsStore.copyPromptOnStart.value }
+                isCopyPromptOnStartEnabled = { runBlocking { settingsStore.copyPromptOnStart.first() } }
             )
         }
     }
@@ -63,11 +69,6 @@ object ActivePromptAutomationGatewayProvider : PromptAutomationGatewayProvider, 
     override fun current(): VariationPromptAutomationGateway? {
         return current(AutomationTargetApp.GEMINI)
     }
-}
-
-object ActiveVariationPromptAutomationGatewayProvider : VariationPromptAutomationGatewayProvider {
-    override fun current(): VariationPromptAutomationGateway? =
-        ActivePromptAutomationGatewayProvider.current()
 }
 
 class AndroidTargetAppLauncher(

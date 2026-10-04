@@ -1,11 +1,25 @@
-// 역할: 자동화 관련 사용자 설정(시작 시 클립보드 복사 등)을 로컬 저장소에 저장하고 복원합니다.
+// 역할: Jetpack DataStore를 통해 자동화 설정(클립보드 복사 여부, 상/하단 인스트럭션, 변주 프롬프트)을 로컬에 영구 저장하고 Flow로 제공합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
-import android.content.SharedPreferences
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.example.gemgemgen.automation.domain.PromptInstructionConfig
+import com.example.gemgemgen.automation.domain.SystemInstructionPrompt
+import com.example.gemgemgen.automation.domain.VariationPromptConfig
+import java.io.IOException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
+
+private val Context.automationDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = AutomationSettingsStore.DATASTORE_NAME
+)
 
 /**
  * =========================================================================================
@@ -16,28 +30,84 @@ import kotlinx.coroutines.flow.asStateFlow
  *         삭제하거나 기본값을 false로 임의 변경하지 마세요.
  * =========================================================================================
  */
-class AutomationSettingsStore(context: Context) {
-    private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(
-        PREFS_NAME,
-        Context.MODE_PRIVATE
-    )
+class AutomationSettingsStore(
+    private val dataStore: DataStore<Preferences>
+) {
+    constructor(context: Context) : this(context.applicationContext.automationDataStore)
 
-    private val _copyPromptOnStart = MutableStateFlow(loadCopyPromptOnStart())
-    val copyPromptOnStart: StateFlow<Boolean> = _copyPromptOnStart.asStateFlow()
+    val copyPromptOnStart: Flow<Boolean> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[KEY_COPY_PROMPT_ON_START] ?: DEFAULT_COPY_PROMPT_ON_START
+        }
 
-    private fun loadCopyPromptOnStart(): Boolean {
-        // 기본값: true (사용자 요구사항: 기본값으로 허용)
-        return prefs.getBoolean(KEY_COPY_PROMPT_ON_START, DEFAULT_COPY_PROMPT_ON_START)
+    suspend fun setCopyPromptOnStart(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_COPY_PROMPT_ON_START] = enabled
+        }
     }
 
-    fun setCopyPromptOnStart(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_COPY_PROMPT_ON_START, enabled).apply()
-        _copyPromptOnStart.value = enabled
+    val promptInstructionConfig: Flow<PromptInstructionConfig> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val top = preferences[KEY_TOP_INSTRUCTION] ?: SystemInstructionPrompt.text
+            val bottom = preferences[KEY_BOTTOM_INSTRUCTION]
+            PromptInstructionConfig(
+                topInstruction = top,
+                bottomInstruction = bottom
+            )
+        }
+
+    suspend fun setPromptInstructionConfig(config: PromptInstructionConfig) {
+        dataStore.edit { preferences ->
+            preferences[KEY_TOP_INSTRUCTION] = config.topInstruction
+            if (config.bottomInstruction != null) {
+                preferences[KEY_BOTTOM_INSTRUCTION] = config.bottomInstruction
+            } else {
+                preferences.remove(KEY_BOTTOM_INSTRUCTION)
+            }
+        }
+    }
+
+    val variationPromptConfig: Flow<VariationPromptConfig> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val prompt = preferences[KEY_VARIATION_PROMPT] ?: VariationPromptConfig.DEFAULT_VARIATION_PROMPT
+            VariationPromptConfig(prompt = prompt)
+        }
+
+    suspend fun setVariationPromptConfig(config: VariationPromptConfig) {
+        dataStore.edit { preferences ->
+            preferences[KEY_VARIATION_PROMPT] = config.prompt
+        }
     }
 
     companion object {
-        private const val PREFS_NAME = "gemgemgen_automation_preferences"
-        private const val KEY_COPY_PROMPT_ON_START = "copy_prompt_on_start"
+        const val DATASTORE_NAME = "automation_settings"
+
+        val KEY_COPY_PROMPT_ON_START = booleanPreferencesKey("copy_prompt_on_start")
+        val KEY_TOP_INSTRUCTION = stringPreferencesKey("top_instruction")
+        val KEY_BOTTOM_INSTRUCTION = stringPreferencesKey("bottom_instruction")
+        val KEY_VARIATION_PROMPT = stringPreferencesKey("variation_prompt")
+
         const val DEFAULT_COPY_PROMPT_ON_START = true
     }
 }

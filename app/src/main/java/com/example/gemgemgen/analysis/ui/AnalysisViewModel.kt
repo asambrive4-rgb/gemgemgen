@@ -69,6 +69,11 @@ class AnalysisViewModel(
         dispatchers = dispatchers
     )
 ) : ViewModel(), AnalysisScreenActions {
+
+    // =========================================================================
+    // 1. State & Lifecycle
+    // =========================================================================
+
     private val scope = coroutineScope ?: viewModelScope
     private var runningJob: Job? = null
     private var grokLoginJob: Job? = null
@@ -82,6 +87,35 @@ class AnalysisViewModel(
     init {
         loadInitialState()
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        runningJob?.cancel()
+        runningJob = null
+        grokLoginJob?.cancel()
+        grokLoginJob = null
+    }
+
+    /**
+     * 다른 탭으로 이동하거나 자동화를 시작하는 등 탭이 비활성화될 때 호출.
+     * 진행 중인 AI 생성 작업(자동 마스킹 및 후보 생성), 결과, 원문, 설정, 타겟 구간은 모두 유지하고,
+     * 탭 밖에서 방치될 수 있는 일시적 대화상자(덮어쓰기 확인, 세션 초기화 확인)만 닫는다.
+     */
+    fun trimForInactiveTab() {
+        _uiState.update { state ->
+            if (state.pendingOverwriteFileName == null && !state.showResetConfirmation) {
+                return@update state
+            }
+            state.copy(
+                pendingOverwriteFileName = null,
+                showResetConfirmation = false
+            )
+        }
+    }
+
+    // =========================================================================
+    // 2. Source Prompt & Masking Actions
+    // =========================================================================
 
     override fun onSourcePromptChange(value: String) {
         applySourcePromptEdit(value = value, forceStateSync = false)
@@ -190,6 +224,52 @@ class AnalysisViewModel(
         }
     }
 
+    override fun onCustomHintChange(value: String) {
+        if (value.length > 100) return
+        val source = currentSourcePrompt()
+        _uiState.update { state ->
+            state.copy(
+                sourcePrompt = source,
+                customHint = value,
+                needsMaskingAnalysis = computeNeedsMaskingAnalysis(
+                    source = source,
+                    customHint = value,
+                    state = state
+                )
+            )
+        }
+    }
+
+    override fun toggleDirection(id: String) {
+        val source = currentSourcePrompt()
+        _uiState.update { state ->
+            val nextIds = if (id in state.selectedDirectionIds) {
+                state.selectedDirectionIds - id
+            } else {
+                state.selectedDirectionIds + id
+            }
+            state.copy(
+                sourcePrompt = source,
+                selectedDirectionIds = nextIds,
+                needsMaskingAnalysis = computeNeedsMaskingAnalysis(
+                    source = source,
+                    selectedDirectionIds = nextIds,
+                    state = state
+                )
+            )
+        }
+    }
+
+    override fun onTxtCountChange(value: Int) {
+        _uiState.update {
+            it.copy(txtCount = AnalysisTxtCountPolicy.coerce(value))
+        }
+    }
+
+    // =========================================================================
+    // 3. AI Generation Orchestration
+    // =========================================================================
+
     /** 「생성」모드: 고정 개수 후보를 카드로 보여 준다. */
     override fun generate() {
         startGeneration(
@@ -221,20 +301,10 @@ class AnalysisViewModel(
     ) {
         val snapshot = _uiState.value
         val source = currentSourcePrompt()
-        val directionInput = currentDirectionInput(snapshot)
-
-        val request = ExecuteAnalysisGenerationRequest(
-            sourcePrompt = source,
-            category = snapshot.selectedCategory,
-            targetSegment = snapshot.targetSegment,
-            cache = analysisCache,
+        val request = createGenerationRequest(
+            snapshot = snapshot,
+            source = source,
             count = count,
-            selectedHints = directionInput.selectedHints,
-            customHint = directionInput.customHint,
-            maskingProvider = snapshot.maskingProvider,
-            hasMaskingCredential = snapshot.hasMaskingCredential,
-            generationProvider = snapshot.generationProvider,
-            hasGenerationCredential = snapshot.hasGenerationCredential,
             failureFallback = failureFallback
         )
 
@@ -265,51 +335,13 @@ class AnalysisViewModel(
                         }
                     }
                 )
-                when (result) {
-                    is ExecuteAnalysisGenerationResult.Blocked -> {
-                        showError(AnalysisUiText.startBlockedMessage(result.reason))
-                    }
-                    is ExecuteAnalysisGenerationResult.Failure -> {
-                        analysisCache = null
-                        showError(result.message)
-                    }
-                    is ExecuteAnalysisGenerationResult.Success -> {
-                        analysisCache = result.cache
-                        val category = snapshot.selectedCategory
-                        _uiState.update {
-                            it.copy(
-                                sourcePrompt = source,
-                                targetSegment = result.targetSegment,
-                                needsMaskingAnalysis = false,
-                                generatedCandidates = result.candidates,
-                                resultPresentation = if (result.candidates.isEmpty()) {
-                                    AnalysisResultPresentation.NONE
-                                } else {
-                                    presentation
-                                },
-                                selectedCandidateIndex = candidateHandoff.currentSession
-                                    ?.appliedCandidate
-                                    ?.let(result.candidates::indexOf)
-                                    ?.takeIf { idx -> idx >= 0 },
-                                // TXT 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
-                                resultFileName = if (updateResultFileName) {
-                                    category.defaultWildcardSaveFileName()
-                                } else {
-                                    it.resultFileName
-                                },
-                                status = AnalysisStatus.SUCCESS,
-                                message = "${result.candidates.size}개 후보를 생성했습니다.",
-                                warning = result.warning,
-                                error = ""
-                            )
-                        }
-                        val usedGrok = snapshot.generationProvider == AnalysisProvider.GROK ||
-                            (result.didAnalyze && snapshot.maskingProvider == AnalysisProvider.GROK)
-                        if (usedGrok) {
-                            refreshGrokQuotaIfLoggedIn()
-                        }
-                    }
-                }
+                handleGenerationResult(
+                    result = result,
+                    snapshot = snapshot,
+                    source = source,
+                    presentation = presentation,
+                    updateResultFileName = updateResultFileName
+                )
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -322,6 +354,114 @@ class AnalysisViewModel(
             }
         }
     }
+
+    private fun createGenerationRequest(
+        snapshot: AnalysisUiState,
+        source: String,
+        count: Int,
+        failureFallback: String
+    ): ExecuteAnalysisGenerationRequest {
+        val directionInput = currentDirectionInput(snapshot)
+        return ExecuteAnalysisGenerationRequest(
+            sourcePrompt = source,
+            category = snapshot.selectedCategory,
+            targetSegment = snapshot.targetSegment,
+            cache = analysisCache,
+            count = count,
+            selectedHints = directionInput.selectedHints,
+            customHint = directionInput.customHint,
+            maskingProvider = snapshot.maskingProvider,
+            hasMaskingCredential = snapshot.hasMaskingCredential,
+            generationProvider = snapshot.generationProvider,
+            hasGenerationCredential = snapshot.hasGenerationCredential,
+            failureFallback = failureFallback
+        )
+    }
+
+    private suspend fun handleGenerationResult(
+        result: ExecuteAnalysisGenerationResult,
+        snapshot: AnalysisUiState,
+        source: String,
+        presentation: AnalysisResultPresentation,
+        updateResultFileName: Boolean
+    ) {
+        when (result) {
+            is ExecuteAnalysisGenerationResult.Blocked -> {
+                showError(AnalysisUiText.startBlockedMessage(result.reason))
+            }
+            is ExecuteAnalysisGenerationResult.Failure -> {
+                analysisCache = null
+                showError(result.message)
+            }
+            is ExecuteAnalysisGenerationResult.Success -> {
+                handleGenerationSuccess(
+                    result = result,
+                    snapshot = snapshot,
+                    source = source,
+                    presentation = presentation,
+                    updateResultFileName = updateResultFileName
+                )
+            }
+        }
+    }
+
+    private suspend fun handleGenerationSuccess(
+        result: ExecuteAnalysisGenerationResult.Success,
+        snapshot: AnalysisUiState,
+        source: String,
+        presentation: AnalysisResultPresentation,
+        updateResultFileName: Boolean
+    ) {
+        analysisCache = result.cache
+        val category = snapshot.selectedCategory
+        _uiState.update {
+            it.copy(
+                sourcePrompt = source,
+                targetSegment = result.targetSegment,
+                needsMaskingAnalysis = false,
+                generatedCandidates = result.candidates,
+                resultPresentation = if (result.candidates.isEmpty()) {
+                    AnalysisResultPresentation.NONE
+                } else {
+                    presentation
+                },
+                selectedCandidateIndex = candidateHandoff.currentSession
+                    ?.appliedCandidate
+                    ?.let(result.candidates::indexOf)
+                    ?.takeIf { idx -> idx >= 0 },
+                // TXT 생성 완료 시 카테고리명(공백 제거)으로 저장 파일명 기본값 지정.
+                resultFileName = if (updateResultFileName) {
+                    category.defaultWildcardSaveFileName()
+                } else {
+                    it.resultFileName
+                },
+                status = AnalysisStatus.SUCCESS,
+                message = "${result.candidates.size}개 후보를 생성했습니다.",
+                warning = result.warning,
+                error = ""
+            )
+        }
+        val usedGrok = snapshot.generationProvider == AnalysisProvider.GROK ||
+            (result.didAnalyze && snapshot.maskingProvider == AnalysisProvider.GROK)
+        if (usedGrok) {
+            refreshGrokQuotaIfLoggedIn()
+        }
+    }
+
+    override fun cancelActiveWork() {
+        runningJob?.cancel()
+        runningJob = null
+        _uiState.update {
+            it.copy(
+                status = AnalysisStatus.IDLE,
+                message = "작업을 중지했습니다."
+            )
+        }
+    }
+
+    // =========================================================================
+    // 4. Candidate Handoff & Clipboard
+    // =========================================================================
 
     /**
      * 「생성」카드 탭: 후보를 복사하고 자동화 프롬프트의 대상 구간에 반영한다.
@@ -401,147 +541,6 @@ class AnalysisViewModel(
         }
     }
 
-    private fun computeNeedsMaskingAnalysis(
-        source: String = currentSourcePrompt(),
-        category: AnalysisCategory = _uiState.value.selectedCategory,
-        targetSegment: AnalysisTargetSegment? = _uiState.value.targetSegment,
-        cache: AnalysisReportCache? = analysisCache,
-        state: AnalysisUiState = _uiState.value,
-        selectedDirectionIds: Set<String> = state.selectedDirectionIds,
-        customHint: String = state.customHint
-    ): Boolean = AnalysisMaskingPolicy.shouldAnalyzeMaskingFromHints(
-        source = source,
-        category = category,
-        targetSegment = targetSegment,
-        cache = cache,
-        directions = AnalysisDummyDirections.values,
-        selectedDirectionIds = selectedDirectionIds,
-        customHint = customHint
-    )
-
-    private fun currentDirectionInput(
-        state: AnalysisUiState = _uiState.value
-    ): AnalysisDirectionInput = AnalysisMaskingPolicy.extractDirectionInput(
-        directions = AnalysisDummyDirections.values,
-        selectedDirectionIds = state.selectedDirectionIds,
-        customHint = state.customHint
-    )
-
-    override fun cancelActiveWork() {
-        runningJob?.cancel()
-        runningJob = null
-        _uiState.update {
-            it.copy(
-                status = AnalysisStatus.IDLE,
-                message = "작업을 중지했습니다."
-            )
-        }
-    }
-
-    override fun requestResetSession() {
-        val state = _uiState.value
-        val source = currentSourcePrompt()
-        if (!AnalysisSessionPolicy.canResetSession(state, sourcePrompt = source)) return
-        _uiState.update { it.copy(sourcePrompt = source, showResetConfirmation = true) }
-    }
-
-    override fun dismissResetSession() {
-        _uiState.update { it.copy(showResetConfirmation = false) }
-    }
-
-    /** 계정·모델 설정과 자동화 프롬프트는 보존하고 현재 분석 작업만 초기화한다. */
-    override fun confirmResetSession() {
-        runningJob?.cancel()
-        runningJob = null
-        analysisCache = null
-        lastObservedSourcePrompt = ""
-        candidateHandoff.clearSession()
-        sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("")
-
-        _uiState.update {
-            it.clearCandidates().copy(
-                sourcePrompt = "",
-                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
-                targetSegment = null,
-                status = AnalysisStatus.IDLE,
-                error = "",
-                message = "",
-                warning = "",
-                txtCount = AnalysisTxtCountPolicy.DEFAULT_COUNT,
-                selectedDirectionIds = emptySet(),
-                customHint = "",
-                hasAppliedCandidateToAutomation = false,
-                resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
-                pendingOverwriteFileName = null,
-                showResetConfirmation = false,
-                needsMaskingAnalysis = true
-            )
-        }
-    }
-
-    /**
-     * 다른 탭으로 이동하거나 자동화를 시작하는 등 탭이 비활성화될 때 호출.
-     * 진행 중인 AI 생성 작업(자동 마스킹 및 후보 생성), 결과, 원문, 설정, 타겟 구간은 모두 유지하고,
-     * 탭 밖에서 방치될 수 있는 일시적 대화상자(덮어쓰기 확인, 세션 초기화 확인)만 닫는다.
-     */
-    fun trimForInactiveTab() {
-        _uiState.update { state ->
-            if (state.pendingOverwriteFileName == null && !state.showResetConfirmation) {
-                return@update state
-            }
-            state.copy(
-                pendingOverwriteFileName = null,
-                showResetConfirmation = false
-            )
-        }
-    }
-
-    override fun onTxtCountChange(value: Int) {
-        _uiState.update {
-            it.copy(txtCount = AnalysisTxtCountPolicy.coerce(value))
-        }
-    }
-
-    override fun onCustomHintChange(value: String) {
-        if (value.length > 100) return
-        val source = currentSourcePrompt()
-        _uiState.update { state ->
-            state.copy(
-                sourcePrompt = source,
-                customHint = value,
-                needsMaskingAnalysis = computeNeedsMaskingAnalysis(
-                    source = source,
-                    customHint = value,
-                    state = state
-                )
-            )
-        }
-    }
-
-    override fun toggleDirection(id: String) {
-        val source = currentSourcePrompt()
-        _uiState.update { state ->
-            val nextIds = if (id in state.selectedDirectionIds) {
-                state.selectedDirectionIds - id
-            } else {
-                state.selectedDirectionIds + id
-            }
-            state.copy(
-                sourcePrompt = source,
-                selectedDirectionIds = nextIds,
-                needsMaskingAnalysis = computeNeedsMaskingAnalysis(
-                    source = source,
-                    selectedDirectionIds = nextIds,
-                    state = state
-                )
-            )
-        }
-    }
-
-    override fun onResultFileNameChange(value: String) {
-        _uiState.update { it.copy(resultFileName = value, error = "", message = "") }
-    }
-
     override fun copyGeneratedResults() {
         val state = _uiState.value
         if (state.resultPresentation != AnalysisResultPresentation.TXT || state.generatedCandidates.isEmpty()) return
@@ -555,6 +554,14 @@ class AnalysisViewModel(
                 showError(error.message ?: "복사에 실패했습니다.")
             }
         }
+    }
+
+    // =========================================================================
+    // 5. Wildcard File Persistence
+    // =========================================================================
+
+    override fun onResultFileNameChange(value: String) {
+        _uiState.update { it.copy(resultFileName = value, error = "", message = "") }
     }
 
     override fun onSaveResults() {
@@ -637,6 +644,10 @@ class AnalysisViewModel(
     override fun dismissOverwrite() {
         _uiState.update { it.copy(pendingOverwriteFileName = null) }
     }
+
+    // =========================================================================
+    // 6. Gemini API Key & Role Management
+    // =========================================================================
 
     override fun showKeyDialog() {
         _uiState.update { it.copy(showKeyDialog = true, error = "", message = "") }
@@ -787,6 +798,33 @@ class AnalysisViewModel(
         }
     }
 
+    private fun applyRoleSetting(
+        role: AnalysisModelRole,
+        provider: AnalysisProvider,
+        modelId: String
+    ) {
+        _uiState.update { state ->
+            when (role) {
+                AnalysisModelRole.MASKING -> state.copy(
+                    maskingProvider = provider,
+                    maskingModel = modelId,
+                    error = "",
+                    message = ""
+                )
+                AnalysisModelRole.GENERATION -> state.copy(
+                    generationProvider = provider,
+                    generationModel = modelId,
+                    error = "",
+                    message = ""
+                )
+            }
+        }
+    }
+
+    // =========================================================================
+    // 7. Grok Authentication & Device Login
+    // =========================================================================
+
     override fun startGrokLogin() {
         if (_uiState.value.isGrokLoginPolling) return
         grokLoginJob?.cancel()
@@ -861,6 +899,103 @@ class AnalysisViewModel(
         }
     }
 
+    private suspend fun refreshGrokQuotaIfLoggedIn() {
+        if (!_uiState.value.isGrokLoggedIn) return
+        val quota = grokAuth.fetchQuota()
+        _uiState.update {
+            it.copy(grokRemainingPercent = quota?.remainingPercent)
+        }
+    }
+
+    // =========================================================================
+    // 8. Session & State Reset Policy
+    // =========================================================================
+
+    override fun requestResetSession() {
+        val state = _uiState.value
+        val source = currentSourcePrompt()
+        if (!AnalysisSessionPolicy.canResetSession(state, sourcePrompt = source)) return
+        _uiState.update { it.copy(sourcePrompt = source, showResetConfirmation = true) }
+    }
+
+    override fun dismissResetSession() {
+        _uiState.update { it.copy(showResetConfirmation = false) }
+    }
+
+    /** 계정·모델 설정과 자동화 프롬프트는 보존하고 현재 분석 작업만 초기화한다. */
+    override fun confirmResetSession() {
+        runningJob?.cancel()
+        runningJob = null
+        analysisCache = null
+        lastObservedSourcePrompt = ""
+        candidateHandoff.clearSession()
+        sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("")
+
+        _uiState.update {
+            it.clearCandidates().copy(
+                sourcePrompt = "",
+                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
+                targetSegment = null,
+                status = AnalysisStatus.IDLE,
+                error = "",
+                message = "",
+                warning = "",
+                txtCount = AnalysisTxtCountPolicy.DEFAULT_COUNT,
+                selectedDirectionIds = emptySet(),
+                customHint = "",
+                hasAppliedCandidateToAutomation = false,
+                resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
+                pendingOverwriteFileName = null,
+                showResetConfirmation = false,
+                needsMaskingAnalysis = true
+            )
+        }
+    }
+
+    // =========================================================================
+    // 9. Private Helpers & Calculations
+    // =========================================================================
+
+    private fun computeNeedsMaskingAnalysis(
+        source: String = currentSourcePrompt(),
+        category: AnalysisCategory = _uiState.value.selectedCategory,
+        targetSegment: AnalysisTargetSegment? = _uiState.value.targetSegment,
+        cache: AnalysisReportCache? = analysisCache,
+        state: AnalysisUiState = _uiState.value,
+        selectedDirectionIds: Set<String> = state.selectedDirectionIds,
+        customHint: String = state.customHint
+    ): Boolean = AnalysisMaskingPolicy.shouldAnalyzeMaskingFromHints(
+        source = source,
+        category = category,
+        targetSegment = targetSegment,
+        cache = cache,
+        directions = AnalysisDummyDirections.values,
+        selectedDirectionIds = selectedDirectionIds,
+        customHint = customHint
+    )
+
+    private fun currentDirectionInput(
+        state: AnalysisUiState = _uiState.value
+    ): AnalysisDirectionInput = AnalysisMaskingPolicy.extractDirectionInput(
+        directions = AnalysisDummyDirections.values,
+        selectedDirectionIds = state.selectedDirectionIds,
+        customHint = state.customHint
+    )
+
+    private fun currentSourcePrompt(): String =
+        sourcePromptTextFieldState.text.toString()
+
+    private fun showError(message: String) {
+        _uiState.update {
+            it.copy(
+                status = AnalysisStatus.ERROR,
+                error = message,
+                message = "",
+                pendingOverwriteFileName = null
+            )
+        }
+    }
+
     private fun loadInitialState() {
         scope.launch {
             val keys = keyManager.listKeys()
@@ -884,60 +1019,11 @@ class AnalysisViewModel(
             }
         }
     }
-
-    private fun applyRoleSetting(
-        role: AnalysisModelRole,
-        provider: AnalysisProvider,
-        modelId: String
-    ) {
-        _uiState.update { state ->
-            when (role) {
-                AnalysisModelRole.MASKING -> state.copy(
-                    maskingProvider = provider,
-                    maskingModel = modelId,
-                    error = "",
-                    message = ""
-                )
-                AnalysisModelRole.GENERATION -> state.copy(
-                    generationProvider = provider,
-                    generationModel = modelId,
-                    error = "",
-                    message = ""
-                )
-            }
-        }
-    }
-
-    private suspend fun refreshGrokQuotaIfLoggedIn() {
-        if (!_uiState.value.isGrokLoggedIn) return
-        val quota = grokAuth.fetchQuota()
-        _uiState.update {
-            it.copy(grokRemainingPercent = quota?.remainingPercent)
-        }
-    }
-
-    private fun currentSourcePrompt(): String =
-        sourcePromptTextFieldState.text.toString()
-
-    private fun showError(message: String) {
-        _uiState.update {
-            it.copy(
-                status = AnalysisStatus.ERROR,
-                error = message,
-                message = "",
-                pendingOverwriteFileName = null
-            )
-        }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        runningJob?.cancel()
-        runningJob = null
-        grokLoginJob?.cancel()
-        grokLoginJob = null
-    }
 }
+
+// =============================================================================
+// Top-Level State Extensions
+// =============================================================================
 
 private fun AnalysisUiState.clearCandidates(): AnalysisUiState = copy(
     generatedCandidates = emptyList(),

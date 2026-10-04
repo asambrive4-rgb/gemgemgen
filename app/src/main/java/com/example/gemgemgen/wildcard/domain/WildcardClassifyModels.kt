@@ -30,8 +30,6 @@ data class WildcardClassifySaveEntry(
 )
 
 object WildcardClassifyFileName {
-    const val UNCLASSIFIED_GROUP_NAME = "미분류"
-
     /**
      * 그룹명 → 기본 파일명 입력값 (확장자 없는 stem 권장 UI용).
      */

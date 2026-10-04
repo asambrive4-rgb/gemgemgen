@@ -1,7 +1,6 @@
 // 역할: 프롬프트 실행 기록 메모리 캐싱, 저장 및 조회 동작을 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.usecase.PromptHistoryRepository
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
@@ -33,7 +32,7 @@ class PromptHistoryStoreTest {
         val repo = FakePromptHistoryRepository()
         val store = PromptHistoryStore(repo)
 
-        val result = store.record("   ", AutomationTargetApp.CHATGPT)
+        val result = store.record("   ")
 
         assertTrue(result.isEmpty())
         assertTrue(repo.load().isEmpty())
@@ -44,8 +43,8 @@ class PromptHistoryStoreTest {
         val repo = FakePromptHistoryRepository()
         val store = PromptHistoryStore(repository = repo)
 
-        store.record("첫 번째 프롬프트", AutomationTargetApp.CHATGPT)
-        val result = store.record("두 번째 프롬프트", AutomationTargetApp.GEMINI)
+        store.record("첫 번째 프롬프트")
+        val result = store.record("두 번째 프롬프트")
 
         assertEquals(2, result.size)
         assertEquals("두 번째 프롬프트", result[0].prompt)
@@ -57,12 +56,12 @@ class PromptHistoryStoreTest {
         val repo = FakePromptHistoryRepository()
         val store = PromptHistoryStore(repository = repo)
 
-        store.record("A", AutomationTargetApp.CHATGPT)
-        store.record("B", AutomationTargetApp.GEMINI)
-        store.record("C", AutomationTargetApp.GEMINI)
+        store.record("A")
+        store.record("B")
+        store.record("C")
 
         // B를 다시 실행했을 때: 중복 생성 없이 B가 맨 위(0번 인덱스)로 올라와야 함 (B, C, A 순)
-        val updated = store.record("B", AutomationTargetApp.CHATGPT)
+        val updated = store.record("B")
 
         assertEquals(3, updated.size)
         assertEquals("B", updated[0].prompt)
@@ -78,10 +77,10 @@ class PromptHistoryStoreTest {
             maxCount = 3
         )
 
-        store.record("1", AutomationTargetApp.CHATGPT)
-        store.record("2", AutomationTargetApp.CHATGPT)
-        store.record("3", AutomationTargetApp.CHATGPT)
-        val result = store.record("4", AutomationTargetApp.CHATGPT)
+        store.record("1")
+        store.record("2")
+        store.record("3")
+        val result = store.record("4")
 
         assertEquals(3, result.size)
         assertEquals("4", result[0].prompt)
@@ -95,7 +94,7 @@ class PromptHistoryStoreTest {
         val store = PromptHistoryStore(repo)
 
         repeat(7) { index ->
-            store.record("Prompt $index", AutomationTargetApp.CHATGPT)
+            store.record("Prompt $index")
         }
 
         val result = store.load()
@@ -122,7 +121,7 @@ class PromptHistoryStoreTest {
         assertEquals(1, store.load().size)
         assertEquals(1, repo.loadCallCount)
 
-        val updated = store.record("새 프롬프트", AutomationTargetApp.GEMINI)
+        val updated = store.record("새 프롬프트")
         assertEquals(2, updated.size)
         assertEquals(1, repo.loadCallCount)
     }

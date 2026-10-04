@@ -234,8 +234,8 @@ class AutomationViewModelTest {
     fun navigatePromptHistoryBackAndForward_traversesExecutionHistory() {
         val repo = FakePromptHistoryRepository()
         val store = PromptHistoryStore(repo)
-        store.record("과거 프롬프트 1", AutomationTargetApp.GEMINI)
-        store.record("과거 프롬프트 2 (최신)", AutomationTargetApp.GEMINI)
+        store.record("과거 프롬프트 1")
+        store.record("과거 프롬프트 2 (최신)")
         val viewModel = viewModel(promptHistoryStore = store)
         viewModel.onPromptTemplateChange("현재 작성 중인 글")
 
@@ -271,7 +271,7 @@ class AutomationViewModelTest {
     fun runAutomation_recordsCurrentPromptAndHidesHistoryIndicator() {
         val repo = FakePromptHistoryRepository()
         val store = PromptHistoryStore(repo)
-        store.record("과거 기록 1", AutomationTargetApp.GEMINI)
+        store.record("과거 기록 1")
         val viewModel = viewModel(promptHistoryStore = store)
         viewModel.onPromptTemplateChange("신규 실행 프롬프트")
 
@@ -1342,7 +1342,7 @@ class AutomationViewModelTest {
     fun applySuggestion_and_editingActions_workWhileAutomationRunning_inNormalMode() {
         val clipboardGateway = FakeClipboardGateway()
         val historyStore = PromptHistoryStore(FakePromptHistoryRepository()).apply {
-            record("이전 기록 프롬프트", AutomationTargetApp.GEMINI)
+            record("이전 기록 프롬프트")
         }
         val holdingService = HoldingPromptAutomationGateway(
             AutomationRunState.Running("일반 모드 실행 중", currentIndex = 1, totalCount = 3)

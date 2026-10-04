@@ -155,63 +155,55 @@ val PureIndigoColors = AppColors(
     snippetShadow = Color(0xFFD9532F).copy(alpha = 0.20f)
 )
 
-// --- 다크모드 팔레트 (검은색 배경 유지 + 어두운 버튼) ---
+// --- 다크모드 팔레트 (공통 기본 베이스 + 악센트·테두리 팩토리) ---
 
-val CoralCreamDarkColors = AppColors(
+private fun createDarkAppColors(
+    accent: Color,
+    cardBorder: Color,
+    inputBorder: Color,
+    snippetPrimary: Color,
+    snippetBorder: Color
+): AppColors = AppColors(
     canvas = Color(0xFF0A0A0C),
     card = Color(0xFF16171A),
     insetBed = Color(0xFF101113),
     primary = Color(0xFF24272B),
     onPrimary = Color(0xFFEDEDF0),
-    accent = Color(0xFFFF8A65),
+    accent = accent,
     textPrimary = Color(0xFFEDEDF0),
     textSecondary = Color(0xFF8E929B),
-    cardBorder = Color(0xFF332928),
+    cardBorder = cardBorder,
     shadowDark = Color(0x66000000),
     insetBorder = Color(0xFF202227),
     inputBackground = Color(0xFF18191D),
+    inputBorder = inputBorder,
+    snippetPrimary = snippetPrimary,
+    snippetBorder = snippetBorder,
+    snippetShadow = Color(0x40000000)
+)
+
+val CoralCreamDarkColors = createDarkAppColors(
+    accent = Color(0xFFFF8A65),
+    cardBorder = Color(0xFF332928),
     inputBorder = Color(0xFF3D3230),
     snippetPrimary = Color(0xFF34D399),
-    snippetBorder = Color(0xFF205E44),
-    snippetShadow = Color(0x40000000)
+    snippetBorder = Color(0xFF205E44)
 )
 
-val SageMatchaDarkColors = AppColors(
-    canvas = Color(0xFF0A0A0C),
-    card = Color(0xFF16171A),
-    insetBed = Color(0xFF101113),
-    primary = Color(0xFF24272B),
-    onPrimary = Color(0xFFEDEDF0),
+val SageMatchaDarkColors = createDarkAppColors(
     accent = Color(0xFF34D399),
-    textPrimary = Color(0xFFEDEDF0),
-    textSecondary = Color(0xFF8E929B),
     cardBorder = Color(0xFF26302A),
-    shadowDark = Color(0x66000000),
-    insetBorder = Color(0xFF202227),
-    inputBackground = Color(0xFF18191D),
     inputBorder = Color(0xFF2D3830),
     snippetPrimary = Color(0xFF82AAFF),
-    snippetBorder = Color(0xFF435B88),
-    snippetShadow = Color(0x40000000)
+    snippetBorder = Color(0xFF435B88)
 )
 
-val PureIndigoDarkColors = AppColors(
-    canvas = Color(0xFF0A0A0C),
-    card = Color(0xFF16171A),
-    insetBed = Color(0xFF101113),
-    primary = Color(0xFF24272B),
-    onPrimary = Color(0xFFEDEDF0),
+val PureIndigoDarkColors = createDarkAppColors(
     accent = Color(0xFF6366F1),
-    textPrimary = Color(0xFFEDEDF0),
-    textSecondary = Color(0xFF8E929B),
     cardBorder = Color(0xFF262C36),
-    shadowDark = Color(0x66000000),
-    insetBorder = Color(0xFF202227),
-    inputBackground = Color(0xFF18191D),
     inputBorder = Color(0xFF2D3545),
     snippetPrimary = Color(0xFFFF8A65),
-    snippetBorder = Color(0xFF7A3B2B),
-    snippetShadow = Color(0x40000000)
+    snippetBorder = Color(0xFF7A3B2B)
 )
 
 fun AppThemePalette.toAppColors(isDark: Boolean = false): AppColors {

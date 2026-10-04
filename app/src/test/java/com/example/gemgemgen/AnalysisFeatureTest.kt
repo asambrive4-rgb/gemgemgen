@@ -1554,21 +1554,6 @@ class AnalysisFeatureTest {
                 "visibleElements": [],
                 "hiddenOrUnclearElements": []
               },
-              "spatialLayout": {
-                "subjectPlacement": "중앙",
-                "foreground": [],
-                "midground": [],
-                "background": [],
-                "leftSide": [],
-                "center": [],
-                "rightSide": [],
-                "above": [],
-                "below": [],
-                "behindSubject": [],
-                "besideSubject": [],
-                "fixedAnchors": [],
-                "mutableZones": []
-              },
               "categoryConstraints": {
                 "allowed": [],
                 "avoid": []
@@ -1802,7 +1787,6 @@ class AnalysisFeatureTest {
                     "visibleElements": [],
                     "hiddenOrUnclearElements": []
                   },
-                  "spatialLayout": {},
                   "categoryConstraints": {
                     "allowed": [],
                     "avoid": []
