@@ -47,6 +47,7 @@ import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
 sealed interface WildcardDialogType {
     data object None : WildcardDialogType
     data class NewFile(val fileName: String, val error: String) : WildcardDialogType
+    data class DeriveFile(val fileName: String, val selectedCount: Int, val error: String) : WildcardDialogType
     data class RenameFile(val fileName: String, val error: String) : WildcardDialogType
     data class DeleteConfirm(val fileName: String) : WildcardDialogType
     data object UnsavedChanges : WildcardDialogType
@@ -102,6 +103,8 @@ fun deriveActiveWildcardDialog(uiState: WildcardUiState): WildcardDialogType {
             WildcardDialogType.RenameFile(uiState.renameFileName, uiState.error)
         uiState.showNewFileDialog ->
             WildcardDialogType.NewFile(uiState.newFileName, uiState.error)
+        uiState.showDeriveFileDialog ->
+            WildcardDialogType.DeriveFile(uiState.deriveFileName, uiState.selectedLineIndices.size, uiState.error)
         else ->
             WildcardDialogType.None
     }
@@ -118,6 +121,7 @@ internal fun WildcardDialogHost(
         when (activeDialog) {
             WildcardDialogType.None -> Unit
             is WildcardDialogType.NewFile -> actions.dismissNewFileDialog()
+            is WildcardDialogType.DeriveFile -> actions.dismissDeriveFileDialog()
             is WildcardDialogType.RenameFile -> actions.dismissRenameDialog()
             is WildcardDialogType.DeleteConfirm -> actions.dismissDeleteConfirm()
             WildcardDialogType.UnsavedChanges -> actions.cancelPendingAction()
@@ -145,6 +149,17 @@ internal fun WildcardDialogHost(
                 onFileNameChange = actions::onNewFileNameChange,
                 onConfirm = actions::createNewFile,
                 onDismiss = actions::dismissNewFileDialog
+            )
+            is WildcardDialogType.DeriveFile -> FileNameInputDialogContent(
+                title = "선택 항목으로 새 파일 생성",
+                description = "선택된 ${targetDialog.selectedCount}개 항목으로 새 와일드카드 파일을 만듭니다.",
+                fileName = targetDialog.fileName,
+                placeholder = "예: hair_short",
+                error = targetDialog.error,
+                confirmLabel = "생성",
+                onFileNameChange = actions::onDeriveFileNameChange,
+                onConfirm = actions::confirmDeriveFile,
+                onDismiss = actions::dismissDeriveFileDialog
             )
             is WildcardDialogType.RenameFile -> FileNameInputDialogContent(
                 title = "파일 이름 수정",
@@ -179,6 +194,7 @@ private fun FileNameInputDialogContent(
     placeholder: String,
     error: String,
     confirmLabel: String,
+    description: String? = null,
     onFileNameChange: (String) -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
@@ -196,6 +212,13 @@ private fun FileNameInputDialogContent(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
+        if (!description.isNullOrBlank()) {
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = fileName,

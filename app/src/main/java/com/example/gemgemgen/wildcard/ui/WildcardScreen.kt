@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -49,7 +47,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -61,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.ui.rememberIsImeVisible
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
@@ -79,7 +77,7 @@ internal fun WildcardScreen(
     val focusManager = LocalFocusManager.current
     val editingText = uiState.editor.editingText
     val selectedFile = uiState.editor.selectedFile
-    val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val isKeyboardVisible = rememberIsImeVisible()
     val isDirty = uiState.editor.hasUnsavedChanges
     val fileItems = remember(uiState.files, selectedFile?.id, isDirty) {
         uiState.files.map { file ->
@@ -247,6 +245,7 @@ internal fun WildcardScreen(
                     onSelectAll = actions::selectAllLines,
                     onDeselectAll = actions::deselectAllLines,
                     onCompose = actions::composeDynamicPromptToClipboard,
+                    onDeriveFile = actions::requestDeriveFile,
                     onExit = actions::exitLineSelectionMode
                 )
             } else {
@@ -565,6 +564,7 @@ private fun LineSelectionActionBar(
     onSelectAll: () -> Unit,
     onDeselectAll: () -> Unit,
     onCompose: () -> Unit,
+    onDeriveFile: () -> Unit,
     onExit: () -> Unit
 ) {
     val barShape = RoundedCornerShape(16.dp)
@@ -600,14 +600,31 @@ private fun LineSelectionActionBar(
         NeuButton(
             onClick = onCompose,
             enabled = uiState.canComposeDynamicPrompt,
-            isPrimary = true,
+            isPrimary = false,
             shape = barShape,
             modifier = Modifier
-                .weight(2.2f)
+                .weight(1.6f)
                 .height(52.dp)
         ) {
             Text(
-                text = "다이나믹 구성",
+                text = "다이나믹",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        NeuButton(
+            onClick = onDeriveFile,
+            enabled = uiState.canDeriveFile,
+            isPrimary = true,
+            shape = barShape,
+            modifier = Modifier
+                .weight(1.8f)
+                .height(52.dp)
+        ) {
+            Text(
+                text = "새 파일로",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -620,7 +637,7 @@ private fun LineSelectionActionBar(
             isPrimary = false,
             shape = barShape,
             modifier = Modifier
-                .weight(1.2f)
+                .weight(1.1f)
                 .height(52.dp)
         ) {
             Text(text = "완료", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)

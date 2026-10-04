@@ -272,6 +272,48 @@ class WildcardViewModelTest {
     }
 
     @Test
+    fun deriveFile_flow_createsDerivedFileAndKeepsCurrentFile() {
+        val fileManager = FakeWildcardFileManager("hair.txt" to "black hair\nblonde hair\nshort hair")
+        val viewModel = viewModel(fileManager = fileManager)
+
+        viewModel.enterLineSelectionMode()
+        viewModel.toggleLineSelection(0)
+        viewModel.toggleLineSelection(2)
+
+        assertTrue(viewModel.uiState.value.canDeriveFile)
+
+        viewModel.requestDeriveFile()
+        assertTrue(viewModel.uiState.value.showDeriveFileDialog)
+
+        viewModel.onDeriveFileNameChange("hair_selected")
+        viewModel.confirmDeriveFile()
+
+        assertFalse(viewModel.uiState.value.showDeriveFileDialog)
+        assertEquals("hair.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+        assertTrue(viewModel.uiState.value.files.any { it.fileName == "hair_selected.txt" })
+        assertEquals("black hair\nshort hair", fileManager.contentOf("hair_selected.txt"))
+        assertEquals("hair_selected.txt 파일 생성 완료", viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun confirmDeriveFile_rejectsDuplicateFileName() {
+        val fileManager = FakeWildcardFileManager(
+            "hair.txt" to "black hair\nblonde hair",
+            "existing.txt" to "existing"
+        )
+        val viewModel = viewModel(fileManager = fileManager)
+
+        viewModel.enterLineSelectionMode()
+        viewModel.toggleLineSelection(0)
+        viewModel.requestDeriveFile()
+        viewModel.onDeriveFileNameChange("existing")
+        viewModel.confirmDeriveFile()
+
+        assertTrue(viewModel.uiState.value.showDeriveFileDialog)
+        assertEquals("이미 같은 이름의 파일이 있습니다.", viewModel.uiState.value.error)
+    }
+
+    @Test
     fun selectFile_exitsLineSelectionMode() {
         val fileManager = FakeWildcardFileManager(
             "a.txt" to "one",

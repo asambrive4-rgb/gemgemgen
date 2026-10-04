@@ -23,6 +23,8 @@ data class WildcardUiState(
     val showDeleteConfirm: Boolean = false,
     val showRenameDialog: Boolean = false,
     val renameFileName: String = "",
+    val showDeriveFileDialog: Boolean = false,
+    val deriveFileName: String = "",
     /** 줄 선택 모드 (다이나믹 프롬프트 구성). */
     val isLineSelectionMode: Boolean = false,
     /** [selectableLines] 인덱스 집합. 파일 순서로 조립한다. */
@@ -77,6 +79,9 @@ data class WildcardUiState(
 
     val canComposeDynamicPrompt: Boolean
         get() = isLineSelectionMode && selectedLineIndices.isNotEmpty() && !isFileOperationInProgress
+
+    val canDeriveFile: Boolean
+        get() = canModifyFiles && isLineSelectionMode && selectedLineIndices.isNotEmpty() && !isFileOperationInProgress
 
     val canRequestClassify: Boolean
         get() = canModifyFiles &&

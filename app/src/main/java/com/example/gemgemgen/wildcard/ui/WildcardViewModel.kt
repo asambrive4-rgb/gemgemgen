@@ -105,7 +105,14 @@ class WildcardViewModel(
     override fun exitLineSelectionMode() {
         if (!uiState.value.isLineSelectionMode) return
         _uiState.update {
-            it.copy(isLineSelectionMode = false, selectedLineIndices = emptySet(), message = "", error = "")
+            it.copy(
+                isLineSelectionMode = false,
+                selectedLineIndices = emptySet(),
+                showDeriveFileDialog = false,
+                deriveFileName = "",
+                message = "",
+                error = ""
+            )
         }
     }
 
@@ -143,6 +150,51 @@ class WildcardViewModel(
                 }
                 clipboardGateway.writeText(result.dynamicPrompt)
                 showMessage("다이나믹 프롬프트를 클립보드에 복사했습니다.")
+            }
+        }
+    }
+
+    override fun requestDeriveFile() {
+        val state = uiState.value
+        if (state.isFileOperationInProgress || !state.isLineSelectionMode) return
+        if (!state.canModifyFiles) return showError("새 파일을 만들려면 wildcard 폴더를 다시 선택해주세요.")
+        if (state.selectedLineIndices.isEmpty()) return showError("한 줄 이상 선택하세요.")
+        _uiState.update { it.copy(showDeriveFileDialog = true, deriveFileName = "", error = "") }
+    }
+
+    override fun onDeriveFileNameChange(name: String) {
+        _uiState.update { it.copy(deriveFileName = name, error = "") }
+    }
+
+    override fun dismissDeriveFileDialog() {
+        _uiState.update { it.copy(showDeriveFileDialog = false, deriveFileName = "", error = "") }
+    }
+
+    override fun confirmDeriveFile() {
+        val state = uiState.value
+        val input = state.deriveFileName
+        if (input.isBlank()) return showError("파일명을 입력해주세요.")
+        if (state.selectedLineIndices.isEmpty()) return showError("한 줄 이상 선택하세요.")
+
+        val selectedLines = state.selectedLineIndices.sorted().map { state.selectableLines[it] }
+        val content = selectedLines.joinToString("\n")
+        val currentSelectedFile = state.editor.selectedFile
+
+        launchFileOperation(errorMessage = "새 파일을 만들지 못했습니다.") {
+            val workspace = manageWildcardFiles.createDerivedFile(
+                fileName = input,
+                content = content,
+                keepSelectedFile = currentSelectedFile
+            )
+            val normalizedName = com.example.gemgemgen.wildcard.domain.WildcardFileName.normalize(input) ?: input
+            _uiState.update {
+                it.copy(
+                    files = workspace.files,
+                    showDeriveFileDialog = false,
+                    deriveFileName = "",
+                    message = "$normalizedName 파일 생성 완료",
+                    error = ""
+                )
             }
         }
     }
@@ -225,6 +277,8 @@ class WildcardViewModel(
                 pendingAction = null,
                 isLineSelectionMode = false,
                 selectedLineIndices = emptySet(),
+                showDeriveFileDialog = false,
+                deriveFileName = "",
                 classify = WildcardClassifyUiState(),
                 message = "wildcard 폴더를 선택했습니다.",
                 error = ""

@@ -1,4 +1,4 @@
-// 역할: 와일드카드 파일 생성, 수정, 삭제 관리 유스케이스를 검증합니다.
+// 역할: 와일드카드 파일 생성, 파생 파일 분리, 수정, 삭제 관리 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.core.AppDispatchers
@@ -23,6 +23,24 @@ class ManageWildcardFilesUseCaseTest {
 
         assertEquals("hair.txt", repository.createdFileName)
         assertEquals("hair.txt", workspace.selectedFile?.fileName)
+    }
+
+    @Test
+    fun createDerivedFile_writesContentAndKeepsSelectedFile() = runBlocking {
+        val original = WildcardTextFile("hair", "hair.txt")
+        val repository = RecordingWildcardFileRepository(original)
+        val useCase = useCase(repository)
+
+        val workspace = useCase.createDerivedFile(
+            fileName = "hair_short",
+            content = "pixie cut\nbob cut",
+            keepSelectedFile = original
+        )
+
+        assertEquals("hair_short.txt", repository.createdFileName)
+        assertEquals("pixie cut\nbob cut", repository.writtenFiles["hair_short.txt"])
+        assertEquals("hair.txt", workspace.selectedFile?.fileName)
+        assertEquals(listOf("hair.txt", "hair_short.txt"), workspace.files.map { it.fileName })
     }
 
     @Test
@@ -107,6 +125,7 @@ class ManageWildcardFilesUseCaseTest {
         vararg initialFiles: WildcardTextFile
     ) : WildcardFileRepository {
         private val files = initialFiles.associateBy { it.id }.toMutableMap()
+        val writtenFiles = mutableMapOf<String, String>()
         var createdFileName: String? = null
         var renamedFileName: String? = null
 
@@ -130,7 +149,9 @@ class ManageWildcardFilesUseCaseTest {
             return file.copy(fileName = newName).also { files[it.id] = it }
         }
 
-        override fun writeFile(file: WildcardTextFile, text: String) = Unit
+        override fun writeFile(file: WildcardTextFile, text: String) {
+            writtenFiles[file.fileName] = text
+        }
 
         override fun deleteFile(file: WildcardTextFile) {
             files.remove(file.id)

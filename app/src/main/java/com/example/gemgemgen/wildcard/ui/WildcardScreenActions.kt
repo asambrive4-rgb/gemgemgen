@@ -32,6 +32,10 @@ interface WildcardScreenActions : WildcardClassifyActions {
     fun selectAllLines() {}
     fun deselectAllLines() {}
     fun composeDynamicPromptToClipboard() {}
+    fun requestDeriveFile() {}
+    fun onDeriveFileNameChange(name: String) {}
+    fun confirmDeriveFile() {}
+    fun dismissDeriveFileDialog() {}
 
     fun onConfirmPendingSave() {}
     fun onConfirmPendingDiscard() {}

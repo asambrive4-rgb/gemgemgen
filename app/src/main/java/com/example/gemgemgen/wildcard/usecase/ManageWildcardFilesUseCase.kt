@@ -1,4 +1,4 @@
-// 역할: 와일드카드 텍스트 파일의 생성, 수정, 이름 변경, 삭제 작업을 수행합니다.
+// 역할: 와일드카드 텍스트 파일의 생성, 파생 파일 분리, 수정, 이름 변경, 삭제 작업을 수행합니다.
 package com.example.gemgemgen.wildcard.usecase
 
 import com.example.gemgemgen.wildcard.domain.WildcardFileException
@@ -38,12 +38,35 @@ class ManageWildcardFilesUseCase(
 
     suspend fun saveFile(file: WildcardTextFile, text: String) = withContext(dispatchers.io) { repository.writeFile(file, text) }
 
-    suspend fun createFile(fileName: String): WildcardWorkspace = withContext(dispatchers.io) {
+    suspend fun createFile(fileName: String, initialContent: String = ""): WildcardWorkspace = withContext(dispatchers.io) {
         val normalized = WildcardFileName.normalize(fileName) ?: throw WildcardFileException("파일명을 입력해주세요.")
         val existingFiles = ensureFileNameAvailable(normalized)
         val created = repository.createFile(normalized)
+        if (initialContent.isNotEmpty()) {
+            repository.writeFile(created, initialContent)
+        }
         val updatedFiles = (existingFiles + created).sortedBy { it.fileName.lowercase() }
-        WildcardWorkspace(files = updatedFiles, selectedFile = created, selectedText = "")
+        WildcardWorkspace(files = updatedFiles, selectedFile = created, selectedText = initialContent)
+    }
+
+    suspend fun createDerivedFile(
+        fileName: String,
+        content: String,
+        keepSelectedFile: WildcardTextFile?
+    ): WildcardWorkspace = withContext(dispatchers.io) {
+        val normalized = WildcardFileName.normalize(fileName) ?: throw WildcardFileException("파일명을 입력해주세요.")
+        val existingFiles = ensureFileNameAvailable(normalized)
+        val created = repository.createFile(normalized)
+        if (content.isNotEmpty()) {
+            repository.writeFile(created, content)
+        }
+        val updatedFiles = (existingFiles + created).sortedBy { it.fileName.lowercase() }
+        val currentFile = keepSelectedFile?.let { selected -> updatedFiles.firstOrNull { it.id == selected.id } }
+        WildcardWorkspace(
+            files = updatedFiles,
+            selectedFile = currentFile ?: created,
+            selectedText = null
+        )
     }
 
     suspend fun renameFile(file: WildcardTextFile, newName: String): WildcardWorkspace = withContext(dispatchers.io) {
