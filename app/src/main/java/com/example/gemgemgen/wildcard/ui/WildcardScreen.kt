@@ -1,4 +1,4 @@
-// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 분류 작업을 수행하는 메인 탭 화면 UI를 제공합니다.
+// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 분류 작업을 수행하는 메인 탭 화면 UI를 제공합니다 (에디터 국소 리컴포지션 격리).
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -214,25 +214,13 @@ internal fun WildcardScreen(
                                 .weight(1f)
                         )
                     } else {
-                        OutlinedTextField(
-                            value = editingText,
-                            onValueChange = actions::onTextChange,
+                        WildcardEditorTextField(
+                            editingText = editingText,
+                            canEditText = uiState.canEditText,
+                            onTextChange = actions::onTextChange,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f),
-                            enabled = uiState.canEditText,
-                            placeholder = { Text(text = "Select a file or create a new txt file.") },
-                            minLines = 8,
-                            shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
-                            textStyle = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                color = AppTheme.colors.textPrimary,
-                                fontSize = 15.sp
-                            ),
-                            colors = appTextFieldColors(
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent
-                            )
+                                .weight(1f)
                         )
                     }
                 }
@@ -746,4 +734,34 @@ private fun ActionButtonsBar(
             Icon(imageVector = Icons.Default.Undo, contentDescription = "실행 취소", modifier = Modifier.size(16.dp))
         }
     }
+}
+
+/**
+ * 와일드카드 텍스트 에디터 영역을 국소 컴포저블로 분리하여 타이핑 시 상위 전체 화면의 불필요한 리컴포지션을 격리합니다.
+ */
+@Composable
+private fun WildcardEditorTextField(
+    editingText: String,
+    canEditText: Boolean,
+    onTextChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = editingText,
+        onValueChange = onTextChange,
+        modifier = modifier,
+        enabled = canEditText,
+        placeholder = { Text(text = "Select a file or create a new txt file.") },
+        minLines = 8,
+        shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+        textStyle = TextStyle(
+            fontFamily = FontFamily.Monospace,
+            color = AppTheme.colors.textPrimary,
+            fontSize = 15.sp
+        ),
+        colors = appTextFieldColors(
+            focusedBorderColor = Color.Transparent,
+            unfocusedBorderColor = Color.Transparent
+        )
+    )
 }

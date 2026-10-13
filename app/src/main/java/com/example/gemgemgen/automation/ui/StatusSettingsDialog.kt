@@ -43,6 +43,8 @@ import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
+import com.example.gemgemgen.ui.theme.LocalAppThemeMode
+import com.example.gemgemgen.ui.theme.LocalAppThemePalette
 
 enum class SettingsDialogStage {
     ACCESSIBILITY_PROMPT,
@@ -138,7 +140,7 @@ private fun StatusSettingsDialogContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 AppThemeMode.entries.forEach { mode ->
-                    val isModeSelected = mode == uiState.selectedThemeMode
+                    val isModeSelected = mode == LocalAppThemeMode.current
                     Surface(
                         modifier = Modifier
                             .weight(1f)
@@ -191,7 +193,7 @@ private fun StatusSettingsDialogContent(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 AppThemePalette.entries.forEach { palette ->
-                    val isSelected = palette == uiState.selectedThemePalette
+                    val isSelected = palette == LocalAppThemePalette.current
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()

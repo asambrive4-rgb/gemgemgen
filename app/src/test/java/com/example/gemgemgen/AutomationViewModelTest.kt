@@ -1488,6 +1488,7 @@ class AutomationViewModelTest {
         runVariationPrompt: RunVariationPromptUseCase? = null,
         wildcardFileRepository: WildcardFileRepository? = null,
         promptSnippetRepository: PromptSnippetRepository? = null,
+        themePaletteStore: com.example.gemgemgen.ui.theme.ThemePaletteStore? = null,
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): AutomationViewModel {
@@ -1524,6 +1525,7 @@ class AutomationViewModelTest {
             manageRemoteAutomation = resolvedRemote,
             soundAlertGateway = soundAlertGateway,
             promptHistoryStore = promptHistoryStore,
+            themePaletteStore = themePaletteStore,
             runVariationPrompt = runVariationPrompt,
             dispatchers = dispatchers,
             coroutineScope = coroutineScope
@@ -1824,8 +1826,15 @@ class AutomationViewModelTest {
     }
 
     @Test
-    fun actions_themeModeAndPaletteSelected_updatesThemeState() {
-        val viewModel = viewModel()
+    fun actions_themeModeAndPaletteSelected_updatesThemePaletteStore() {
+        val tempFile = java.io.File.createTempFile("test_theme", ".preferences_pb").apply { deleteOnExit() }
+        val testScope = CoroutineScope(Dispatchers.Unconfined)
+        val dataStore = androidx.datastore.preferences.core.PreferenceDataStoreFactory.create(
+            scope = testScope,
+            produceFile = { tempFile }
+        )
+        val themeStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(dataStore, testScope)
+        val viewModel = viewModel(themePaletteStore = themeStore)
         val actions: AutomationScreenActions = viewModel
 
         actions.onSelectThemePalette(
@@ -1837,11 +1846,19 @@ class AutomationViewModelTest {
 
         assertEquals(
             com.example.gemgemgen.ui.theme.AppThemePalette.CORAL_CREAM,
-            viewModel.uiState.value.selectedThemePalette
+            themeStore.currentPalette.value
         )
         assertEquals(
             com.example.gemgemgen.ui.theme.AppThemeMode.DARK,
-            viewModel.uiState.value.selectedThemeMode
+            themeStore.currentMode.value
+        )
+        assertEquals(
+            com.example.gemgemgen.ui.theme.AppThemePalette.CORAL_CREAM,
+            viewModel.currentThemePalette
+        )
+        assertEquals(
+            com.example.gemgemgen.ui.theme.AppThemeMode.DARK,
+            viewModel.currentThemeMode
         )
     }
 

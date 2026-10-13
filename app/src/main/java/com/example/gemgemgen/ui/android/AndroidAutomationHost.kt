@@ -185,8 +185,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 if (!automationViewModel.uiState.value.isRunning) return
                 floatingBarController?.showOrUpdate(
                     uiStateFlow = automationViewModel.automationBarUiState,
-                    palette = mainUiState.selectedThemePalette,
-                    themeMode = mainUiState.selectedThemeMode,
+                    palette = container.themePaletteStore.currentPalette.value,
+                    themeMode = container.themePaletteStore.currentMode.value,
                     onCancelAutomation = automationViewModel::cancelAutomation,
                     onRepeatCountChange = automationViewModel::onRepeatCountChange,
                     onAutomationFinished = {

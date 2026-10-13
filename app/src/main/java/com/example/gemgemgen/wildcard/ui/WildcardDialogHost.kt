@@ -40,6 +40,7 @@ import com.example.gemgemgen.analysis.ui.ModelSelectorChips
 import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuConfigDialogContent
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry
@@ -200,25 +201,14 @@ private fun FileNameInputDialogContent(
     onDismiss: () -> Unit
 ) {
     val canConfirm = fileName.isNotBlank()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    NeuConfigDialogContent(
+        title = title,
+        subtitle = description,
+        confirmLabel = confirmLabel,
+        confirmEnabled = canConfirm,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        if (!description.isNullOrBlank()) {
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = fileName,
@@ -244,21 +234,6 @@ private fun FileNameInputDialogContent(
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = onDismiss) {
-                Text("취소")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(
-                onClick = onConfirm,
-                enabled = canConfirm
-            ) {
-                Text(confirmLabel)
             }
         }
     }
@@ -338,18 +313,13 @@ private fun ClassifyCriteriaContent(
     dialog: WildcardDialogType.ClassifyCriteria,
     actions: WildcardScreenActions
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    NeuConfigDialogContent(
+        title = "와일드카드 분류",
+        confirmLabel = "분류 실행",
+        confirmEnabled = dialog.canRun,
+        onConfirm = actions::runClassify,
+        onDismiss = actions::dismissClassifyCriteriaDialog
     ) {
-        Text(
-            text = "와일드카드 분류",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -399,22 +369,6 @@ private fun ClassifyCriteriaContent(
                 )
             }
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = actions::dismissClassifyCriteriaDialog) {
-                Text("취소")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(
-                onClick = actions::runClassify,
-                enabled = dialog.canRun
-            ) {
-                Text("분류 실행")
-            }
-        }
     }
 }
 
@@ -423,19 +377,14 @@ private fun ClassifyPreviewContent(
     dialog: WildcardDialogType.ClassifyPreview,
     actions: WildcardScreenActions
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+    NeuConfigDialogContent(
+        title = "분류 미리보기",
+        confirmLabel = "파일로 저장",
+        dismissLabel = "닫기",
+        confirmEnabled = dialog.canSave,
+        onConfirm = { actions.saveClassifyResult() },
+        onDismiss = actions::dismissClassifyPreview
     ) {
-        Text(
-            text = "분류 미리보기",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -579,22 +528,6 @@ private fun ClassifyPreviewContent(
                 }
             }
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = actions::dismissClassifyPreview) {
-                Text("닫기")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(
-                onClick = { actions.saveClassifyResult() },
-                enabled = dialog.canSave
-            ) {
-                Text("파일로 저장")
-            }
-        }
     }
 }
 
@@ -603,34 +536,16 @@ private fun ClassifyOverwriteContent(
     dialog: WildcardDialogType.ClassifyOverwrite,
     actions: WildcardScreenActions
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    NeuConfigDialogContent(
+        title = "파일 덮어쓰기",
+        subtitle = "같은 이름의 파일이 있습니다. 덮어쓸까요?",
+        confirmLabel = "덮어쓰기",
+        onConfirm = actions::confirmClassifyOverwrite,
+        onDismiss = actions::dismissClassifyOverwrite
     ) {
-        Text(
-            text = "파일 덮어쓰기",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("같은 이름의 파일이 있습니다. 덮어쓸까요?")
             dialog.fileNames.forEach { name ->
                 Text("· $name", fontSize = 13.sp, color = AppTheme.colors.textSecondary)
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = actions::dismissClassifyOverwrite) {
-                Text("취소")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = actions::confirmClassifyOverwrite) {
-                Text("덮어쓰기")
             }
         }
     }

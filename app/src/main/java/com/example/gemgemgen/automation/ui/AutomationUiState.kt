@@ -35,8 +35,6 @@ data class AutomationUiState(
     val promptSnippets: List<com.example.gemgemgen.automation.domain.PromptSnippet> = emptyList(),
     /** 상용구(텍스트 대치) 관리 다이얼로그 표시 여부 */
     val showPromptSnippetDialog: Boolean = false,
-    val selectedThemePalette: com.example.gemgemgen.ui.theme.AppThemePalette = com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
-    val selectedThemeMode: com.example.gemgemgen.ui.theme.AppThemeMode = com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT,
     val promptInstructionConfig: com.example.gemgemgen.automation.domain.PromptInstructionConfig =
         com.example.gemgemgen.automation.domain.PromptInstructionConfig.DEFAULT,
     val showInstructionConfigDialog: Boolean = false,

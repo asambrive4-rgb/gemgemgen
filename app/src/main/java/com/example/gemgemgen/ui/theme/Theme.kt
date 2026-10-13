@@ -1,4 +1,4 @@
-// 역할: 머티리얼 디자인 시스템, 커스텀 색상 및 상태바 명암을 동기화하여 앱의 기본 테마를 적용합니다.
+// 역할: 머티리얼 디자인 시스템, 커스텀 색상, 현재 테마 팔레트/모드 및 상태바 명암을 동기화하여 앱의 기본 테마를 적용합니다.
 package com.example.gemgemgen.ui.theme
 
 import android.app.Activity
@@ -11,9 +11,13 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+
+val LocalAppThemePalette = staticCompositionLocalOf { AppThemePalette.DEFAULT }
+val LocalAppThemeMode = staticCompositionLocalOf { AppThemeMode.DEFAULT }
 
 /**
  * GemGemGen 앱의 전역 소프트 3D 뉴모피즘 테마.
@@ -85,7 +89,11 @@ fun GemgemgenTheme(
         )
     }
 
-    CompositionLocalProvider(LocalAppColors provides appColors) {
+    CompositionLocalProvider(
+        LocalAppColors provides appColors,
+        LocalAppThemePalette provides palette,
+        LocalAppThemeMode provides themeMode
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

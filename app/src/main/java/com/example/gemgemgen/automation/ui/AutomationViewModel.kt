@@ -91,12 +91,11 @@ class AutomationViewModel(
     val promptTemplateTextFieldState: TextFieldState
         get() = promptEditor.textFieldState
 
+    override val activeSuggestions: StateFlow<List<WildcardTokenAutocomplete.Candidate>>
+        get() = promptEditor.activeSuggestions
+
     private val _uiState = MutableStateFlow(
         AutomationUiState(
-            selectedThemePalette = themePaletteStore?.currentPalette?.value
-                ?: com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT,
-            selectedThemeMode = themePaletteStore?.currentMode?.value
-                ?: com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT,
             copyPromptOnStart = true
         )
     )
@@ -177,13 +176,17 @@ class AutomationViewModel(
 
     override fun onSelectThemePalette(palette: com.example.gemgemgen.ui.theme.AppThemePalette) {
         themePaletteStore?.setPalette(palette)
-        _uiState.update { it.copy(selectedThemePalette = palette) }
     }
 
     override fun onSelectThemeMode(mode: com.example.gemgemgen.ui.theme.AppThemeMode) {
         themePaletteStore?.setThemeMode(mode)
-        _uiState.update { it.copy(selectedThemeMode = mode) }
     }
+
+    val currentThemePalette: com.example.gemgemgen.ui.theme.AppThemePalette
+        get() = themePaletteStore?.loadPalette() ?: com.example.gemgemgen.ui.theme.AppThemePalette.DEFAULT
+
+    val currentThemeMode: com.example.gemgemgen.ui.theme.AppThemeMode
+        get() = themePaletteStore?.loadMode() ?: com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT
 
     fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean = true) =
         promptEditor.onPromptTemplateChange(value, updateTextFieldState)

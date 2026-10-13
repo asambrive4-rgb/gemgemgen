@@ -87,7 +87,7 @@ class PromptHistoryNavigator(
     }
 
     companion object {
-        const val MAX_HISTORY_COUNT = 6
+        const val MAX_HISTORY_COUNT = 10
 
         fun prependPrompt(executedPrompt: String, history: List<String>): List<String> {
             if (executedPrompt.isBlank()) return history.take(MAX_HISTORY_COUNT)

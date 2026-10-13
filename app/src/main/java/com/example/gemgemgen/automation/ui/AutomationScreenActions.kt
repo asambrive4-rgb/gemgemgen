@@ -1,4 +1,4 @@
-// 역할: 자동화 화면에서 발생하는 모든 사용자 입력 인터랙션을 캡슐화한 인터페이스입니다.
+// 역할: 자동화 화면에서 발생하는 모든 사용자 입력 인터랙션 및 추천 칩 국소 관찰 상태를 캡슐화한 인터페이스입니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
@@ -10,7 +10,14 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
 interface AutomationScreenActions {
+    // 추천 칩 국소 관찰 스트림 (커서 이동 시 전체 화면 리컴포지션 차단)
+    val activeSuggestions: StateFlow<List<WildcardTokenAutocomplete.Candidate>>
+        get() = MutableStateFlow(emptyList())
+
     // 기본 실행 및 제어
     fun onTargetAppSelected(targetApp: AutomationTargetApp) {}
     fun onFlowImageCountSelected(count: Int) {}

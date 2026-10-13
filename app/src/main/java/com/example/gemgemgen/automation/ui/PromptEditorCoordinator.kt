@@ -63,6 +63,9 @@ class PromptEditorCoordinator(
     )
     val editorUiState: StateFlow<PromptEditorUiState> = _editorUiState.asStateFlow()
 
+    private val _activeSuggestions = MutableStateFlow<List<WildcardTokenAutocomplete.Candidate>>(emptyList())
+    val activeSuggestions: StateFlow<List<WildcardTokenAutocomplete.Candidate>> = _activeSuggestions.asStateFlow()
+
     init {
         if (initialPrompt.isNotEmpty()) {
             applyPromptTemplateText(initialPrompt)
@@ -122,6 +125,7 @@ class PromptEditorCoordinator(
             candidates = currentAutocompleteCandidates,
             isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode
         )
+        _activeSuggestions.value = nextCandidates
         _editorUiState.update { state ->
             if (state.promptTemplate == value && state.activeSuggestionCandidates == nextCandidates) {
                 state
@@ -512,6 +516,7 @@ class PromptEditorCoordinator(
             candidates = candidates,
             isParagraphSelectionMode = session.isParagraphSelectionMode
         )
+        _activeSuggestions.value = suggestions
         _editorUiState.update { state ->
             state.copy(
                 promptTemplate = session.text,
@@ -603,9 +608,7 @@ class PromptEditorCoordinator(
             candidates = currentAutocompleteCandidates,
             isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode
         )
-        _editorUiState.update {
-            if (it.activeSuggestionCandidates == suggestions) it else it.copy(activeSuggestionCandidates = suggestions)
-        }
+        _activeSuggestions.value = suggestions
     }
 
     companion object {

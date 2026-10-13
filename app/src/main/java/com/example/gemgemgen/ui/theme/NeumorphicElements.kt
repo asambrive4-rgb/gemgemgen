@@ -456,6 +456,108 @@ fun NeuModalDialogFrame(
 }
 
 /**
+ * 상단 제목/설명과 하단 취소/확인 액션 버튼을 갖춘 공통 설정 다이얼로그 컨텐츠.
+ * AppDialogHostShell 내부나 모달 다이얼로그 윈도우에서 재사용할 수 있는 순수 레이아웃을 제공합니다.
+ */
+@Composable
+fun NeuConfigDialogContent(
+    title: String,
+    subtitle: String? = null,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    confirmLabel: String = "저장",
+    dismissLabel: String = "취소",
+    confirmEnabled: Boolean = true,
+    contentPadding: PaddingValues = PaddingValues(24.dp),
+    useNeuButtons: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val titleStyle = if (useNeuButtons) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall
+    val titleColor = if (useNeuButtons) AppTheme.colors.textPrimary else MaterialTheme.colorScheme.onSurface
+    val subtitleStyle = if (useNeuButtons) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+    val subtitleColor = if (useNeuButtons) AppTheme.colors.textSecondary else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(contentPadding),
+        verticalArrangement = Arrangement.spacedBy(if (useNeuButtons) 12.dp else 16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = title,
+                style = titleStyle,
+                fontWeight = FontWeight.Bold,
+                color = titleColor
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = subtitleStyle,
+                    color = subtitleColor,
+                    lineHeight = if (useNeuButtons) 16.sp else 20.sp
+                )
+            }
+        }
+
+        content()
+
+        if (useNeuButtons) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                NeuButton(
+                    onClick = onDismiss,
+                    isPrimary = false,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                    contentModifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = dismissLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                NeuButton(
+                    onClick = onConfirm,
+                    isPrimary = true,
+                    enabled = confirmEnabled,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                    contentModifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = confirmLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(dismissLabel)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = onConfirm,
+                    enabled = confirmEnabled
+                ) {
+                    Text(confirmLabel)
+                }
+            }
+        }
+    }
+}
+
+/**
  * 상단 제목/설명과 하단 취소/저장 액션 버튼을 갖춘 공통 설정 다이얼로그 프레임.
  */
 @Composable
@@ -467,61 +569,25 @@ fun NeuConfigDialogFrame(
     modifier: Modifier = Modifier,
     saveLabel: String = "저장",
     dismissLabel: String = "취소",
+    confirmEnabled: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
     NeuModalDialogFrame(
         onDismiss = onDismiss,
         modifier = modifier
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.textPrimary
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTheme.colors.textSecondary,
-                lineHeight = 16.sp
-            )
-        }
-
-        content()
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            NeuButton(
-                onClick = onDismiss,
-                isPrimary = false,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(1f),
-                contentModifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = dismissLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            NeuButton(
-                onClick = onSave,
-                isPrimary = true,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(1f),
-                contentModifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = saveLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
+        NeuConfigDialogContent(
+            title = title,
+            subtitle = subtitle.ifBlank { null },
+            onConfirm = onSave,
+            onDismiss = onDismiss,
+            confirmLabel = saveLabel,
+            dismissLabel = dismissLabel,
+            confirmEnabled = confirmEnabled,
+            contentPadding = PaddingValues(0.dp),
+            useNeuButtons = true,
+            content = content
+        )
     }
 }
 

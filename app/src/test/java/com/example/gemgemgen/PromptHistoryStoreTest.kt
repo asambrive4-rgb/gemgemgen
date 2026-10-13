@@ -89,19 +89,19 @@ class PromptHistoryStoreTest {
     }
 
     @Test
-    fun record_defaultMaxCount_capsAtSix() {
+    fun record_defaultMaxCount_capsAtTen() {
         val repo = FakePromptHistoryRepository()
         val store = PromptHistoryStore(repo)
 
-        repeat(7) { index ->
+        repeat(12) { index ->
             store.record("Prompt $index")
         }
 
         val result = store.load()
         assertEquals(PromptHistoryStore.DEFAULT_MAX_HISTORY_COUNT, result.size)
-        assertEquals(6, result.size)
-        assertEquals("Prompt 6", result[0].prompt)
-        assertEquals("Prompt 1", result[5].prompt)
+        assertEquals(10, result.size)
+        assertEquals("Prompt 11", result[0].prompt)
+        assertEquals("Prompt 2", result[9].prompt)
     }
 
     @Test

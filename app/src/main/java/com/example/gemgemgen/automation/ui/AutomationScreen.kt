@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 추천 후보 바, 제어 바 및 상태 화면을 구성합니다.
+// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 추천 후보 바 국소 격리 관찰, 제어 바 및 상태 화면을 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +19,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -89,9 +90,7 @@ internal fun AutomationScreen(
                         isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
                     )
                 } else if (isKeyboardVisible) {
-                    val hasSuggestions = uiState.editor.activeSuggestionCandidates.isNotEmpty()
-                    val bottomSpacerHeight = if (hasSuggestions) 105.dp else 56.dp
-                    Spacer(modifier = Modifier.height(bottomSpacerHeight))
+                    SuggestionAwareKeyboardSpacer(actions.activeSuggestions)
                 }
 
                 if (!isKeyboardVisible) {
@@ -127,14 +126,10 @@ internal fun AutomationScreen(
                             .padding(AutomationScreenContentPadding),
                         verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
                     ) {
-                        if (uiState.editor.activeSuggestionCandidates.isNotEmpty()) {
-                            PromptSuggestionBar(
-                                suggestions = uiState.editor.activeSuggestionCandidates,
-                                onSuggestionClick = { candidate ->
-                                    actions.applySuggestion(candidate)
-                                }
-                            )
-                        }
+                        IsolatedPromptSuggestionBar(
+                            activeSuggestionsFlow = actions.activeSuggestions,
+                            onSuggestionClick = actions::applySuggestion
+                        )
 
                         KeyboardPromptAccessoryBar(
                             uiState = uiState,
@@ -259,3 +254,11 @@ internal fun AutomationFooterStatus(
     )
 }
 
+@Composable
+private fun SuggestionAwareKeyboardSpacer(
+    activeSuggestionsFlow: kotlinx.coroutines.flow.StateFlow<List<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>>
+) {
+    val suggestions by activeSuggestionsFlow.collectAsStateWithLifecycle()
+    val bottomSpacerHeight = if (suggestions.isNotEmpty()) 105.dp else 56.dp
+    Spacer(modifier = Modifier.height(bottomSpacerHeight))
+}
