@@ -1,4 +1,4 @@
-// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 분류 작업을 수행하는 메인 탭 화면 UI를 제공합니다 (에디터 국소 리컴포지션 격리).
+// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 분류 작업을 수행하는 메인 탭 화면 UI를 제공합니다 (TextFieldState 기반 에디터 국소 리컴포지션 격리).
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
@@ -59,6 +60,7 @@ import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.rememberIsImeVisible
+import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
@@ -215,6 +217,7 @@ internal fun WildcardScreen(
                         )
                     } else {
                         WildcardEditorTextField(
+                            fileKey = selectedFile?.id,
                             editingText = editingText,
                             canEditText = uiState.canEditText,
                             onTextChange = actions::onTextChange,
@@ -737,22 +740,29 @@ private fun ActionButtonsBar(
 }
 
 /**
- * 와일드카드 텍스트 에디터 영역을 국소 컴포저블로 분리하여 타이핑 시 상위 전체 화면의 불필요한 리컴포지션을 격리합니다.
+ * 와일드카드 텍스트 에디터 영역을 TextFieldState 기반 국소 컴포저블로 분리하여
+ * 한글 조합(IME) 중 커서 튐과 상위 전체 화면의 불필요한 리컴포지션을 방지합니다.
  */
 @Composable
 private fun WildcardEditorTextField(
+    fileKey: String?,
     editingText: String,
     canEditText: Boolean,
     onTextChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    OutlinedTextField(
+    val editorState = rememberSyncedTextFieldState(
         value = editingText,
         onValueChange = onTextChange,
+        resetKey = fileKey
+    )
+
+    OutlinedTextField(
+        state = editorState,
         modifier = modifier,
         enabled = canEditText,
         placeholder = { Text(text = "Select a file or create a new txt file.") },
-        minLines = 8,
+        lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 8),
         shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
         textStyle = TextStyle(
             fontFamily = FontFamily.Monospace,

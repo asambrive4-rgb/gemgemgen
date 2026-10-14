@@ -1,19 +1,17 @@
-// 역할: 상단 탭 전환과 키보드 반응형 키보드 닫기 바를 제공하고 화면 간 0ms 무지연 전환을 조율합니다.
+// 역할: 상단 고정 탭 전환과 하단 키보드 반응형 키보드 닫기 바를 제공하고 화면 간 0ms 무지연 전환을 조율합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -37,9 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
@@ -76,70 +72,102 @@ internal fun MainTabbedScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding()
+    ) {
+        // 상단 탭바는 키보드 개폐와 무관하게 고정 유지하여 상단 높이 변화로 인한 레이아웃 점프를 원천 차단한다.
         Surface(
             color = AppTheme.colors.canvas,
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer()
         ) {
-            if (!isKeyboardVisible) {
-                Row(
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NeuSegmentedTabBar(
+                    items = tabItems,
+                    selectedItem = selectedTab,
+                    onItemSelected = onSelectTab,
+                    itemLabel = { it.label },
+                    height = 38.dp,
+                    shape = RoundedCornerShape(19.dp),
+                    pillShape = RoundedCornerShape(16.dp),
+                    contentPadding = PaddingValues(2.5.dp),
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .weight(1f)
+                        .graphicsLayer()
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Surface(
+                    onClick = onShowSettings,
+                    shape = CircleShape,
+                    color = AppTheme.colors.card,
+                    border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
+                    modifier = Modifier
+                        .size(36.dp)
+                        .shadow(
+                            elevation = 3.dp,
+                            shape = CircleShape,
+                            ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
+                            spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
+                        )
                 ) {
-                    NeuSegmentedTabBar(
-                        items = tabItems,
-                        selectedItem = selectedTab,
-                        onItemSelected = onSelectTab,
-                        itemLabel = { it.label },
-                        height = 38.dp,
-                        shape = RoundedCornerShape(19.dp),
-                        pillShape = RoundedCornerShape(16.dp),
-                        contentPadding = PaddingValues(2.5.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .graphicsLayer()
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Surface(
-                        onClick = onShowSettings,
-                        shape = CircleShape,
-                        color = AppTheme.colors.card,
-                        border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
-                        modifier = Modifier
-                            .size(36.dp)
-                            .shadow(
-                                elevation = 3.dp,
-                                shape = CircleShape,
-                                ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
-                                spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
-                            )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "설정",
-                                tint = AppTheme.colors.textPrimary,
-                                modifier = Modifier.size(19.dp)
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "설정",
+                            tint = AppTheme.colors.textPrimary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxSize()
+        ) {
+            tabs.forEach { page ->
+                val isSelected = page.tab == selectedTab
+                val hasVisited = isSelected || visitedTabs.contains(page.tab)
+                if (hasVisited) {
+                    key(page.tab) {
+                        saveableStateHolder.SaveableStateProvider(page.tab) {
+                            TabPageContent(
+                                isSelected = isSelected,
+                                page = page
                             )
                         }
                     }
                 }
-            } else {
+            }
+        }
+
+        if (isKeyboardVisible) {
+            Surface(
+                color = AppTheme.colors.canvas,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer()
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
@@ -149,7 +177,7 @@ internal fun MainTabbedScreen(
                         border = BorderStroke(1.5.dp, AppTheme.colors.primary.copy(alpha = 0.45f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(38.dp)
                             .shadow(
                                 elevation = 3.dp,
                                 shape = RoundedCornerShape(14.dp),
@@ -174,28 +202,7 @@ internal fun MainTabbedScreen(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
                                 tint = AppTheme.colors.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxSize()
-        ) {
-            tabs.forEach { page ->
-                val isSelected = page.tab == selectedTab
-                val hasVisited = isSelected || visitedTabs.contains(page.tab)
-                if (hasVisited) {
-                    key(page.tab) {
-                        saveableStateHolder.SaveableStateProvider(page.tab) {
-                            TabPageContent(
-                                isSelected = isSelected,
-                                page = page
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }

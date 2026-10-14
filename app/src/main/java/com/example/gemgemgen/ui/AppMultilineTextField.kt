@@ -1,18 +1,19 @@
-// 역할: GPU 레이어 캐싱과 스크롤, 자리표시자, 문단 선택 및 문구 검색 하이라이트 처리를 지원하는 공용 다중 행 텍스트 입력창 UI를 제공합니다.
+// 역할: GPU 레이어 캐싱과 스크롤, 자리표시자, 문단 선택, 문구 검색 하이라이트 및 외부 문자열 상태와 TextFieldState 간 양방향 동기화를 지원하는 공용 텍스트 입력창 UI를 제공합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.OutputTransformation
+import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.TextFieldBuffer
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,6 +31,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -38,7 +40,6 @@ import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 import kotlin.math.abs
@@ -47,6 +48,49 @@ data class TextHighlightRange(
     val start: Int,
     val endExclusive: Int
 )
+
+/**
+ * 외부 문자열 상태(`value`)와 최신 `TextFieldState`를 양방향으로 안전하게 동기화하는 헬퍼.
+ *
+ * - 사용자가 타이핑하는 동안에는 `TextFieldState`가 내부 버퍼와 한글 조합(IME Composition) 및 커서 위치를 직접 보존합니다.
+ * - 클립보드 붙여넣기, 실행 취소, 파일 전환, 초기화처럼 외부에서 `value`가 바뀐 경우에만 `TextFieldState`를 갱신하여
+ *   빠른 타이핑 중 이전 프레임 에코로 인해 글자가 씹히거나 커서가 튀는 현상을 방지합니다.
+ */
+@Composable
+fun rememberSyncedTextFieldState(
+    value: String,
+    onValueChange: (String) -> Unit,
+    resetKey: Any? = Unit
+): TextFieldState {
+    val state = remember(resetKey) {
+        TextFieldState(
+            initialText = value,
+            initialSelection = TextRange(value.length)
+        )
+    }
+    val onValueChangeLatest by rememberUpdatedState(onValueChange)
+    val lastEmittedText = remember(resetKey) { mutableStateOf(value) }
+
+    LaunchedEffect(value, state) {
+        if (value != lastEmittedText.value && !state.text.contentEquals(value)) {
+            lastEmittedText.value = value
+            state.setTextAndPlaceCursorAtEnd(value)
+        }
+    }
+
+    LaunchedEffect(state) {
+        snapshotFlow { state.text.toString() }
+            .distinctUntilChanged()
+            .collect { currentText ->
+                if (currentText != lastEmittedText.value) {
+                    lastEmittedText.value = currentText
+                    onValueChangeLatest(currentText)
+                }
+            }
+    }
+
+    return state
+}
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -60,7 +104,7 @@ fun AppMultilineTextField(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     placeholder: String = "",
-    minLines: Int,
+    minLines: Int = 18,
     maxLines: Int = 18,
     paragraphSelectionEnabled: Boolean = false,
     highlightRange: TextHighlightRange? = null,
@@ -87,19 +131,6 @@ fun AppMultilineTextField(
             .distinctUntilChanged()
             .debounce(TEXT_CHANGE_DEBOUNCE_MILLIS)
             .collect { onValueChangeLatest(it) }
-    }
-
-    var initialScrollDone by remember(state) { mutableStateOf(false) }
-
-    LaunchedEffect(state, scrollState) {
-        if (initialScrollDone) return@LaunchedEffect
-        val (_, max) = snapshotFlow {
-            state.text.isNotEmpty() to scrollState.maxValue
-        }.first { (hasText, max) ->
-            hasText && max > 0
-        }
-        scrollState.scrollTo(max)
-        initialScrollDone = true
     }
 
     val deleteOnlyTransformation = remember(
@@ -312,4 +343,3 @@ private fun Modifier.observeSimpleTap(onTap: () -> Unit): Modifier {
         }
     }
 }
-

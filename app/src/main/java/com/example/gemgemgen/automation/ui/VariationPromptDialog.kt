@@ -1,4 +1,4 @@
-// 역할: 변주 버튼 클릭 시 Gemini 채팅방에 붙여넣을 프롬프트를 영구 편집하는 다이얼로그를 제공합니다.
+// 역할: 변주 버튼 클릭 시 Gemini 채팅방에 붙여넣을 프롬프트를 TextFieldState 기반으로 영구 편집하는 다이얼로그를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.core.android.rememberClipboardGateway
+import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuActionChip
 import com.example.gemgemgen.ui.theme.NeuConfigDialogFrame
@@ -39,6 +40,10 @@ fun VariationPromptDialog(
 ) {
     val clipboardGateway = rememberClipboardGateway()
     var text by remember(config.prompt) { mutableStateOf(config.prompt) }
+    val promptState = rememberSyncedTextFieldState(
+        value = text,
+        onValueChange = { text = it }
+    )
 
     NeuConfigDialogFrame(
         title = "변주 프롬프트 설정",
@@ -78,8 +83,7 @@ fun VariationPromptDialog(
                 }
 
                 OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
+                    state = promptState,
                     placeholder = {
                         Text(
                             text = "Gemini에 입력될 변주 생성 프롬프트를 입력하세요.",

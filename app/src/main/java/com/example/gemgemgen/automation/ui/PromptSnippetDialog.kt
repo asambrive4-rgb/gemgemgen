@@ -1,4 +1,4 @@
-// 역할: 2-in-1 조약돌 세그먼트 탭(보관함 ↔ 등록/수정)으로 상용구를 조회, 추가, 수정, 삭제하고 클립보드와 연동하는 다이얼로그를 제공합니다.
+// 역할: 2-in-1 조약돌 세그먼트 탭(보관함 ↔ 등록/수정)으로 상용구를 TextFieldState 기반으로 조회, 추가, 수정, 삭제하고 클립보드와 연동하는 다이얼로그를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -21,14 +21,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Input
@@ -60,7 +59,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.automation.domain.PromptSnippet
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.core.android.rememberClipboardGateway
+import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
@@ -488,7 +487,7 @@ private fun SnippetCardItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // 상단: 단축어 뱃지 + 우측 액션 바 (복사, 수정, 삭제)
             Row(
@@ -878,7 +877,18 @@ private fun SnippetFormContent(
     onSave: () -> Unit
 ) {
     val isEditMode = editingSnippet != null
-    val isShortcutDuplicate = shortcutInput.isNotBlank() && existingShortcuts.contains(shortcutInput.lowercase())
+    val shortcutState = rememberSyncedTextFieldState(
+        value = shortcutInput,
+        onValueChange = onShortcutChange,
+        resetKey = editingSnippet?.id
+    )
+    val contentState = rememberSyncedTextFieldState(
+        value = contentInput,
+        onValueChange = onContentChange,
+        resetKey = editingSnippet?.id
+    )
+    val currentShortcut = shortcutState.text.toString()
+    val isShortcutDuplicate = currentShortcut.isNotBlank() && existingShortcuts.contains(currentShortcut.lowercase())
 
     Column(
         modifier = Modifier
@@ -901,10 +911,15 @@ private fun SnippetFormContent(
                 color = AppTheme.colors.textPrimary
             )
             OutlinedTextField(
-                value = shortcutInput,
-                onValueChange = onShortcutChange,
+                state = shortcutState,
                 label = { Text("호출 단축어 (예: 고화질)") },
-                singleLine = true,
+                lineLimits = TextFieldLineLimits.SingleLine,
+                inputTransformation = InputTransformation {
+                    val noSpaces = asCharSequence().filterNot { it.isWhitespace() }.toString()
+                    if (asCharSequence().toString() != noSpaces) {
+                        replace(0, length, noSpaces)
+                    }
+                },
                 isError = isShortcutDuplicate,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -943,8 +958,7 @@ private fun SnippetFormContent(
             }
 
             OutlinedTextField(
-                value = contentInput,
-                onValueChange = onContentChange,
+                state = contentState,
                 placeholder = {
                     Text(
                         text = "단축어를 치면 입력창에 들어갈 실제 문구를 입력하세요.",
@@ -957,7 +971,7 @@ private fun SnippetFormContent(
                     .heightIn(min = 90.dp, max = 150.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = appTextFieldColors(),
-                maxLines = 6
+                lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 6)
             )
         }
 

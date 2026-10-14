@@ -3,6 +3,7 @@ package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.TextRange
 import com.example.gemgemgen.automation.domain.PromptEditorSession
 import com.example.gemgemgen.automation.domain.PromptHistoryNavigator
@@ -16,11 +17,10 @@ import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.ui.TextHighlightRange
 import kotlinx.coroutines.CoroutineScope
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -73,11 +73,19 @@ class PromptEditorCoordinator(
         onPromptTextChanged?.invoke(initialPrompt)
         scope.launch {
             try {
-                snapshotFlow { textFieldState.selection }
+                snapshotFlow { textFieldState.text.toString() to textFieldState.selection }
                     .distinctUntilChanged()
-                    .collect {
-                        if (textFieldState.text.contentEquals(promptEditorSession.text)) {
-                            refreshActiveSuggestions()
+                    .collect { (currentText, selection) ->
+                        // UI에서 직접 타이핑·커서 이동 시 디바운스(75ms) 대기 없이 즉시 추천 칩을 갱신하여 덜컹거림을 방지한다.
+                        if (currentText.isNotEmpty() || promptEditorSession.text.isEmpty()) {
+                            _activeSuggestions.value = resolveActiveSuggestions(
+                                text = currentText,
+                                cursor = selection.max,
+                                selectionMin = selection.min,
+                                selectionMax = selection.max,
+                                candidates = currentAutocompleteCandidates,
+                                isParagraphSelectionMode = _editorUiState.value.isParagraphSelectionMode
+                            )
                         }
                     }
             } catch (_: Throwable) {
@@ -161,7 +169,11 @@ class PromptEditorCoordinator(
             }
             _editorUiState.update { it.copy(isSearchActive = true, searchQuery = initialQuery) }
             if (initialQuery.isNotEmpty()) {
-                recalculateSearchMatches(query = initialQuery, text = textFieldState.text.toString())
+                recalculateSearchMatches(
+                    query = initialQuery,
+                    text = textFieldState.text.toString(),
+                    moveCursor = false
+                )
             }
         } else {
             closeSearch()
@@ -182,7 +194,13 @@ class PromptEditorCoordinator(
     fun setSearchQuery(query: String) {
         val text = textFieldState.text.toString()
         _editorUiState.update { it.copy(searchQuery = query) }
-        recalculateSearchMatches(query = query, text = text, resetToFirst = true)
+        // 검색어 타이핑 중에는 본문 TextFieldState 커서를 강제 이동하지 않아 포커스·스크롤 간섭을 방지한다.
+        recalculateSearchMatches(
+            query = query,
+            text = text,
+            resetToFirst = true,
+            moveCursor = false
+        )
     }
 
     fun navigateSearchNext() {

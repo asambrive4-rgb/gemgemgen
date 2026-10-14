@@ -1,6 +1,7 @@
-// 역할: 프롬프트 에디터 코디네이터의 입력 동기화, 문구 찾기(검색) 및 네비게이션 동작을 검증하는 단위 테스트입니다.
+// 역할: 프롬프트 에디터 코디네이터의 입력 동기화, 문구 찾기(검색), 커서 보존 및 네비게이션 동작을 검증하는 단위 테스트입니다.
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.ui.text.TextRange
 import com.example.gemgemgen.core.ClipboardGateway
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,23 @@ class PromptEditorCoordinatorTest {
         // 세 번째 매치: 26..31 (apple)
         assertEquals(26, state.searchMatches[2].start)
         assertEquals(31, state.searchMatches[2].endExclusive)
+    }
+
+    @Test
+    fun setSearchQuery_preservesMainEditorSelectionUntilExplicitNavigation() {
+        val initialText = "Apple banana APPLE orange apple"
+        val coordinator = createCoordinator(initialText)
+        assertEquals(TextRange(initialText.length), coordinator.textFieldState.selection)
+
+        coordinator.toggleSearch(true)
+        coordinator.setSearchQuery("apple")
+
+        // 검색창 타이핑 중에는 본문 커서를 강제로 옮기지 않아 포커스/스크롤 간섭을 막는다.
+        assertEquals(TextRange(initialText.length), coordinator.textFieldState.selection)
+
+        // 이전/다음 이동 시에는 해당 매치 위치로 본문 커서를 이동한다.
+        coordinator.navigateSearchNext()
+        assertEquals(TextRange(13), coordinator.textFieldState.selection)
     }
 
     @Test
@@ -136,4 +154,3 @@ class PromptEditorCoordinatorTest {
         assertEquals("initial prompt", coordinator.editorUiState.value.promptTemplate)
     }
 }
-

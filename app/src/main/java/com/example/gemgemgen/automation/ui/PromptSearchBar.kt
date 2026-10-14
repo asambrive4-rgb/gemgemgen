@@ -1,4 +1,4 @@
-// 역할: 프롬프트 에디터 내 텍스트 검색창과 일치 항목 이동 네비게이션 UI를 제공합니다.
+// 역할: 프롬프트 에디터 내 TextFieldState 기반 텍스트 검색창과 일치 항목 이동 네비게이션 UI를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -10,8 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 
 @Composable
@@ -42,6 +43,11 @@ internal fun PromptSearchBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val queryState = rememberSyncedTextFieldState(
+        value = query,
+        onValueChange = onQueryChange
+    )
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -69,7 +75,7 @@ internal fun PromptSearchBar(
                     .padding(vertical = 4.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                if (query.isEmpty()) {
+                if (queryState.text.isEmpty()) {
                     Text(
                         text = "문구 찾기...",
                         style = MaterialTheme.typography.bodyMedium,
@@ -77,20 +83,19 @@ internal fun PromptSearchBar(
                     )
                 }
                 BasicTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    singleLine = true,
+                    state = queryState,
+                    lineLimits = TextFieldLineLimits.SingleLine,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(
                         color = AppTheme.colors.textPrimary
                     ),
                     cursorBrush = SolidColor(AppTheme.colors.primary),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { onNavigateNext() }),
+                    onKeyboardAction = { onNavigateNext() },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            if (query.isNotEmpty()) {
+            if (queryState.text.isNotEmpty()) {
                 IconButton(
                     onClick = { onQueryChange("") },
                     modifier = Modifier.size(24.dp)
@@ -104,7 +109,7 @@ internal fun PromptSearchBar(
                 }
             }
 
-            val countText = if (query.isEmpty() || matchCount == 0) {
+            val countText = if (queryState.text.isEmpty() || matchCount == 0) {
                 "0/0"
             } else {
                 "${currentMatchIndex + 1}/$matchCount"

@@ -1,4 +1,4 @@
-﻿// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 서브 컴포넌트를 연결해 화면에 표시합니다.
+// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 TextFieldState 기반 서브 컴포넌트를 연결해 화면에 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -22,7 +22,12 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.maxLength
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -37,7 +42,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,17 +53,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.gemgemgen.ui.theme.AppTheme
-import com.example.gemgemgen.ui.theme.NeuButton
-import com.example.gemgemgen.ui.theme.NeuCard
-import com.example.gemgemgen.ui.theme.NeuPillChip
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
@@ -72,6 +70,12 @@ import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.ui.rememberIsImeVisible
+import com.example.gemgemgen.ui.rememberSyncedTextFieldState
+import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuButton
+import com.example.gemgemgen.ui.theme.NeuCard
+import com.example.gemgemgen.ui.theme.NeuPillChip
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlin.math.roundToInt
 
@@ -148,7 +152,7 @@ internal fun AnalysisScreen(
                     onRestoreOriginalPrompt = { actions.restoreOriginalPrompt() }
                 )
 
-                // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 여백 Spacer 추가
+                // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 키보드 반응형 여백 Spacer 추가
                 AnalysisBottomSpacer()
             }
 
@@ -186,7 +190,8 @@ internal fun AnalysisScreen(
 
 @Composable
 private fun AnalysisBottomSpacer() {
-    Spacer(modifier = Modifier.height(140.dp))
+    val isKeyboardVisible = rememberIsImeVisible()
+    Spacer(modifier = Modifier.height(if (isKeyboardVisible) 220.dp else 140.dp))
 }
 
 // =============================================================================
@@ -570,6 +575,11 @@ private fun CustomHintSection(
     customHint: String,
     onCustomHintChange: (String) -> Unit
 ) {
+    val hintState = rememberSyncedTextFieldState(
+        value = customHint,
+        onValueChange = onCustomHintChange
+    )
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -583,20 +593,21 @@ private fun CustomHintSection(
                 color = AppTheme.colors.textPrimary
             )
             Text(
-                text = "${customHint.length}/100",
+                text = "${hintState.text.length}/100",
                 style = MaterialTheme.typography.labelSmall,
                 color = AppTheme.colors.textSecondary
             )
         }
         OutlinedTextField(
-            value = customHint,
-            onValueChange = onCustomHintChange,
+            state = hintState,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
             colors = appTextFieldColors(),
-            singleLine = false,
-            minLines = 1,
-            maxLines = 3,
+            inputTransformation = InputTransformation.maxLength(100),
+            lineLimits = TextFieldLineLimits.MultiLine(
+                minHeightInLines = 1,
+                maxHeightInLines = 3
+            ),
             placeholder = { Text("예: 더 밝은 톤으로, 디테일한 묘사 추가 등") }
         )
     }
@@ -804,6 +815,11 @@ private fun TxtResultSection(
 ) {
     val focusManager = LocalFocusManager.current
     val joinedCandidates = remember(candidates) { candidates.joinToString(separator = "\n") }
+    val fileNameState = rememberSyncedTextFieldState(
+        value = resultFileName,
+        onValueChange = onResultFileNameChange
+    )
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
         Text(
@@ -828,16 +844,13 @@ private fun TxtResultSection(
             )
         }
         OutlinedTextField(
-            value = resultFileName,
-            onValueChange = onResultFileNameChange,
+            state = fileNameState,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = appTextFieldColors(),
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(
-                onDone = { focusManager.clearFocus(force = true) }
-            ),
+            onKeyboardAction = { focusManager.clearFocus(force = true) },
             label = { Text("저장할 와일드카드 파일명") },
             placeholder = { Text("옷.txt") }
         )

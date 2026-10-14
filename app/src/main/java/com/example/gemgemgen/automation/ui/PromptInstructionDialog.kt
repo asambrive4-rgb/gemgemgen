@@ -1,4 +1,4 @@
-// 역할: 상단·하단 프롬프트 인스트럭션 편집 모달 다이얼로그를 제공합니다.
+// 역할: 상단·하단 프롬프트 인스트럭션 편집 모달 다이얼로그를 TextFieldState 기반으로 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.core.android.rememberClipboardGateway
+import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuActionChip
 import com.example.gemgemgen.ui.theme.NeuConfigDialogFrame
@@ -149,8 +150,7 @@ fun PromptInstructionDialog(
             } else {
                 "프롬프트 맨 아래에 삽입될 문구를 입력하세요. (기본값: 비어있음)"
             }
-
-            OutlinedTextField(
+            val instructionState = rememberSyncedTextFieldState(
                 value = textValue,
                 onValueChange = { newText ->
                     if (tab == InstructionTab.TOP) {
@@ -159,6 +159,11 @@ fun PromptInstructionDialog(
                         bottomText = newText
                     }
                 },
+                resetKey = tab
+            )
+
+            OutlinedTextField(
+                state = instructionState,
                 placeholder = {
                     Text(
                         text = placeholderText,

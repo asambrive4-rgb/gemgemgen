@@ -1,4 +1,4 @@
-// 역할: 와일드카드 화면의 활성 다이얼로그 상태를 판별하고 파일 관리·AI 분류 팝업을 통합 표시합니다.
+// 역할: 와일드카드 화면의 활성 다이얼로그 상태를 판별하고 TextFieldState 기반 파일 관리·AI 분류 팝업을 통합 표시합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.ui.ModelSelectorChips
+import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.AppTheme
@@ -200,7 +201,12 @@ private fun FileNameInputDialogContent(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val canConfirm = fileName.isNotBlank()
+    val fileNameState = rememberSyncedTextFieldState(
+        value = fileName,
+        onValueChange = onFileNameChange,
+        resetKey = title
+    )
+    val canConfirm = fileNameState.text.isNotBlank()
     NeuConfigDialogContent(
         title = title,
         subtitle = description,
@@ -211,20 +217,17 @@ private fun FileNameInputDialogContent(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                value = fileName,
-                onValueChange = onFileNameChange,
-                singleLine = true,
+                state = fileNameState,
+                lineLimits = TextFieldLineLimits.SingleLine,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = appTextFieldColors(),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (canConfirm) {
-                            onConfirm()
-                        }
+                onKeyboardAction = {
+                    if (canConfirm) {
+                        onConfirm()
                     }
-                ),
+                },
                 label = { Text("파일명") },
                 placeholder = { Text(placeholder) }
             )
@@ -313,6 +316,11 @@ private fun ClassifyCriteriaContent(
     dialog: WildcardDialogType.ClassifyCriteria,
     actions: WildcardScreenActions
 ) {
+    val criteriaState = rememberSyncedTextFieldState(
+        value = dialog.criteria,
+        onValueChange = actions::onClassifyCriteriaChange
+    )
+
     NeuConfigDialogContent(
         title = "와일드카드 분류",
         confirmLabel = "분류 실행",
@@ -347,14 +355,13 @@ private fun ClassifyCriteriaContent(
             )
 
             OutlinedTextField(
-                value = dialog.criteria,
-                onValueChange = actions::onClassifyCriteriaChange,
+                state = criteriaState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 96.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = appTextFieldColors(),
-                minLines = 3,
+                lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 3),
                 label = { Text("분류 기준 (필수)") },
                 placeholder = {
                     Text("예: 머리색상별(블론드, 흑발, 은발 등)로 나누어줘. 영문 파일명 권장")
@@ -377,6 +384,11 @@ private fun ClassifyPreviewContent(
     dialog: WildcardDialogType.ClassifyPreview,
     actions: WildcardScreenActions
 ) {
+    val criteriaState = rememberSyncedTextFieldState(
+        value = dialog.criteria,
+        onValueChange = actions::onClassifyCriteriaChange
+    )
+
     NeuConfigDialogContent(
         title = "분류 미리보기",
         confirmLabel = "파일로 저장",
@@ -398,14 +410,13 @@ private fun ClassifyPreviewContent(
                 color = AppTheme.colors.textSecondary
             )
             OutlinedTextField(
-                value = dialog.criteria,
-                onValueChange = actions::onClassifyCriteriaChange,
+                state = criteriaState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 72.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = appTextFieldColors(),
-                minLines = 2,
+                lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2),
                 label = { Text("분류 기준 (다시 분류용)") },
                 placeholder = { Text("기준을 수정한 뒤 다시 분류") }
             )
@@ -448,17 +459,19 @@ private fun ClassifyPreviewContent(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (entry.isEditingFileName) {
-                            OutlinedTextField(
+                            val entryFileNameState = rememberSyncedTextFieldState(
                                 value = entry.fileNameInput,
                                 onValueChange = { actions.onClassifyFileNameChange(index, it) },
+                                resetKey = index
+                            )
+                            OutlinedTextField(
+                                state = entryFileNameState,
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = appTextFieldColors(),
-                                singleLine = true,
+                                lineLimits = TextFieldLineLimits.SingleLine,
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(
-                                    onDone = { actions.onToggleClassifyFileNameEdit(index) }
-                                ),
+                                onKeyboardAction = { actions.onToggleClassifyFileNameEdit(index) },
                                 label = { Text("파일명") },
                                 trailingIcon = {
                                     Text(

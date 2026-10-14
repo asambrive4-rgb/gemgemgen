@@ -4,10 +4,8 @@ package com.example.gemgemgen.automation.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -19,23 +17,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.gemgemgen.ui.rememberIsImeVisible
-import com.example.gemgemgen.ui.theme.AppTheme
-import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.ui.AutomationModePairDialog
 import com.example.gemgemgen.remote.ui.AutomationModePanel
 import com.example.gemgemgen.remote.ui.resolveConnectionText
+import com.example.gemgemgen.ui.clearFocusOnOutsideTap
+import com.example.gemgemgen.ui.rememberIsImeVisible
+import com.example.gemgemgen.ui.theme.AppTheme
 
 /** 스크롤 본문·키보드 하단 고정 패널이 같은 가로 폭을 쓰도록 공통 패딩 */
 private val AutomationScreenContentPadding = 8.dp
@@ -63,80 +59,80 @@ internal fun AutomationScreen(
                 .clearFocusOnOutsideTap { actions.onClearFocus() }
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(AutomationScreenContentPadding),
-                verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
+                modifier = Modifier.fillMaxSize()
             ) {
-
-                PromptEditorSection(
-                    uiState = uiState,
-                    promptTemplateState = promptTemplateState,
-                    actions = actions,
-                    showPromptActions = !isKeyboardVisible,
-                    showWildcardSuggestions = !isKeyboardVisible
-                )
-
-                if (!isKeyboardVisible && uiState.automationMode != AutomationMode.RECEIVER) {
-                    AutomationBottomBar(
-                        repeatCountText = uiState.repeatCountText,
-                        onRepeatCountChange = actions::onRepeatCountChange,
-                        onRunMvp = actions::onRunAutomation,
-                        onCancelAutomation = actions::cancelAutomation,
-                        canRun = uiState.canRun,
-                        isRunning = uiState.isRunning,
-                        automationState = automationBarUiState.automationState,
-                        isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
-                    )
-                } else if (isKeyboardVisible) {
-                    SuggestionAwareKeyboardSpacer(actions.activeSuggestions)
-                }
-
-                if (!isKeyboardVisible) {
-                    AutomationModePanel(
-                        selectedMode = uiState.automationMode,
-                        status = uiState.remoteAutomationStatus,
-                        enabled = !uiState.isRunning,
-                        onModeSelected = actions::onAutomationModeSelected,
-                        onRequestPair = { showPairDialog = true }
-                    )
-
-                    AutomationFooterStatus(
-                        maintenanceMessage = uiState.maintenanceMessage,
-                        variationAutomationState = uiState.variationAutomationState,
-                        automationMode = uiState.automationMode,
-                        remoteStatus = uiState.remoteAutomationStatus
-                    )
-                }
-            }
-
-            if (isKeyboardVisible) {
-                Surface(
+                Column(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                    tonalElevation = 3.dp,
-                    shadowElevation = 8.dp
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(AutomationScreenContentPadding),
+                    verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(AutomationScreenContentPadding),
-                        verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
-                    ) {
-                        IsolatedPromptSuggestionBar(
-                            activeSuggestionsFlow = actions.activeSuggestions,
-                            onSuggestionClick = actions::applySuggestion
+                    PromptEditorSection(
+                        uiState = uiState,
+                        promptTemplateState = promptTemplateState,
+                        actions = actions,
+                        showPromptActions = !isKeyboardVisible,
+                        showWildcardSuggestions = !isKeyboardVisible
+                    )
+
+                    if (!isKeyboardVisible && uiState.automationMode != AutomationMode.RECEIVER) {
+                        AutomationBottomBar(
+                            repeatCountText = uiState.repeatCountText,
+                            onRepeatCountChange = actions::onRepeatCountChange,
+                            onRunMvp = actions::onRunAutomation,
+                            onCancelAutomation = actions::cancelAutomation,
+                            canRun = uiState.canRun,
+                            isRunning = uiState.isRunning,
+                            automationState = automationBarUiState.automationState,
+                            isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
+                        )
+                    }
+
+                    if (!isKeyboardVisible) {
+                        AutomationModePanel(
+                            selectedMode = uiState.automationMode,
+                            status = uiState.remoteAutomationStatus,
+                            enabled = !uiState.isRunning,
+                            onModeSelected = actions::onAutomationModeSelected,
+                            onRequestPair = { showPairDialog = true }
                         )
 
-                        KeyboardPromptAccessoryBar(
-                            uiState = uiState,
-                            automationBarUiState = automationBarUiState,
-                            promptTemplateState = promptTemplateState,
-                            actions = actions
+                        AutomationFooterStatus(
+                            maintenanceMessage = uiState.maintenanceMessage,
+                            variationAutomationState = uiState.variationAutomationState,
+                            automationMode = uiState.automationMode,
+                            remoteStatus = uiState.remoteAutomationStatus
                         )
+                    }
+                }
+
+                if (isKeyboardVisible) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                        tonalElevation = 3.dp,
+                        shadowElevation = 8.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(AutomationScreenContentPadding),
+                            verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
+                        ) {
+                            IsolatedPromptSuggestionBar(
+                                activeSuggestionsFlow = actions.activeSuggestions,
+                                onSuggestionClick = actions::applySuggestion
+                            )
+
+                            KeyboardPromptAccessoryBar(
+                                uiState = uiState,
+                                automationBarUiState = automationBarUiState,
+                                promptTemplateState = promptTemplateState,
+                                actions = actions
+                            )
+                        }
                     }
                 }
             }
@@ -252,13 +248,4 @@ internal fun AutomationFooterStatus(
         },
         modifier = modifier.padding(horizontal = 4.dp, vertical = 2.dp)
     )
-}
-
-@Composable
-private fun SuggestionAwareKeyboardSpacer(
-    activeSuggestionsFlow: kotlinx.coroutines.flow.StateFlow<List<com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete.Candidate>>
-) {
-    val suggestions by activeSuggestionsFlow.collectAsStateWithLifecycle()
-    val bottomSpacerHeight = if (suggestions.isNotEmpty()) 105.dp else 56.dp
-    Spacer(modifier = Modifier.height(bottomSpacerHeight))
 }

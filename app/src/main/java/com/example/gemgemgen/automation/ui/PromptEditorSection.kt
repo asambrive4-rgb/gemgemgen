@@ -1,4 +1,4 @@
-// 역할: 프롬프트 에디터의 메인 컨테이너 레이아웃, 헤더, 추천 칩 국소 격리 및 텍스트필드 조합을 제공합니다.
+// 역할: 프롬프트 에디터의 메인 컨테이너 레이아웃, 헤더, 추천 칩 국소 격리 및 18줄 고정 높이 텍스트필드 조합을 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -32,6 +33,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
@@ -41,8 +43,6 @@ import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.TextHighlightRange
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuPillChip
-import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.StateFlow
 
 // ==========================================================================
@@ -101,17 +101,19 @@ internal fun PromptEditorSection(
             )
         }
 
-        IsolatedEditorSuggestionSection(
-            activeSuggestionsFlow = actions.activeSuggestions,
-            showWildcardSuggestions = showWildcardSuggestions,
-            onSuggestionClick = actions::applySuggestion
-        )
+        if (showWildcardSuggestions) {
+            IsolatedEditorSuggestionSection(
+                activeSuggestionsFlow = actions.activeSuggestions,
+                onSuggestionClick = actions::applySuggestion
+            )
+        }
 
         AppMultilineTextField(
             state = promptTemplateState,
             onValueChange = actions::onPromptTemplateChange,
             modifier = Modifier.fillMaxWidth(),
-            minLines = 6,
+            minLines = 18,
+            maxLines = 18,
             paragraphSelectionEnabled = uiState.editor.isParagraphSelectionMode,
             highlightRange = uiState.editor.selectedParagraphRange?.toHighlightRange(),
             selectedParagraphColor = AppTheme.colors.primary.copy(alpha = 0.22f),
@@ -289,7 +291,6 @@ private fun FlowImageCountRow(
 @Composable
 private fun IsolatedEditorSuggestionSection(
     activeSuggestionsFlow: StateFlow<List<WildcardTokenAutocomplete.Candidate>>,
-    showWildcardSuggestions: Boolean,
     onSuggestionClick: (WildcardTokenAutocomplete.Candidate) -> Unit
 ) {
     val suggestions by activeSuggestionsFlow.collectAsStateWithLifecycle()
@@ -308,7 +309,7 @@ private fun IsolatedEditorSuggestionSection(
     }
 
     AnimatedVisibility(
-        visible = showWildcardSuggestions && suggestions.isNotEmpty(),
+        visible = suggestions.isNotEmpty(),
         enter = fadeIn(tween(150)) + expandVertically(tween(150)),
         exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
     ) {

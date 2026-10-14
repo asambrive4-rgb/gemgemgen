@@ -1,4 +1,4 @@
-// 역할: 분석 화면의 API 키 관리, 인증, 알림 다이얼로그를 단일 호스트와 화면 액션 인터페이스로 표시합니다.
+// 역할: 분석 화면의 API 키 관리, 인증, 알림 다이얼로그를 단일 호스트와 TextFieldState 기반 화면 액션 인터페이스로 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -13,8 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.OutputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,8 +34,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.appTextFieldColors
@@ -125,13 +126,27 @@ internal fun AnalysisDialogHost(
     }
 }
 
+private val PasswordMaskOutputTransformation = OutputTransformation {
+    if (length > 0) {
+        replace(0, length, "\u2022".repeat(length))
+    }
+}
+
 @Composable
 private fun KeyManagementContent(
     uiState: AnalysisUiState,
     actions: AnalysisScreenActions
 ) {
     val focusManager = LocalFocusManager.current
-    val canAddKey = uiState.keyValueInput.isNotBlank()
+    val keyLabelState = rememberSyncedTextFieldState(
+        value = uiState.keyLabelInput,
+        onValueChange = actions::onKeyLabelChange
+    )
+    val keyValueState = rememberSyncedTextFieldState(
+        value = uiState.keyValueInput,
+        onValueChange = actions::onKeyValueChange
+    )
+    val canAddKey = keyValueState.text.isNotBlank()
 
     Column(
         modifier = Modifier
@@ -153,36 +168,30 @@ private fun KeyManagementContent(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             OutlinedTextField(
-                value = uiState.keyLabelInput,
-                onValueChange = actions::onKeyLabelChange,
+                state = keyLabelState,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = appTextFieldColors(),
-                singleLine = true,
+                lineLimits = TextFieldLineLimits.SingleLine,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
+                onKeyboardAction = { focusManager.moveFocus(FocusDirection.Down) },
                 label = { Text("키 이름") },
                 placeholder = { Text("개인 키") }
             )
             OutlinedTextField(
-                value = uiState.keyValueInput,
-                onValueChange = actions::onKeyValueChange,
+                state = keyValueState,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = appTextFieldColors(),
-                singleLine = true,
+                lineLimits = TextFieldLineLimits.SingleLine,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (canAddKey) {
-                            actions.addApiKey()
-                        }
+                onKeyboardAction = {
+                    if (canAddKey) {
+                        actions.addApiKey()
                     }
-                ),
+                },
                 label = { Text("API 키") },
-                visualTransformation = PasswordVisualTransformation()
+                outputTransformation = PasswordMaskOutputTransformation
             )
             Button(
                 onClick = actions::addApiKey,
@@ -261,7 +270,12 @@ private fun EditKeyLabelContent(
     dialog: AnalysisDialogType.EditKeyLabel,
     actions: AnalysisScreenActions
 ) {
-    val canSave = dialog.currentLabel.isNotBlank()
+    val editingLabelState = rememberSyncedTextFieldState(
+        value = dialog.currentLabel,
+        onValueChange = actions::onEditingKeyLabelChange,
+        resetKey = dialog.originalLabel
+    )
+    val canSave = editingLabelState.text.isNotBlank()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -275,20 +289,17 @@ private fun EditKeyLabelContent(
             color = MaterialTheme.colorScheme.onSurface
         )
         OutlinedTextField(
-            value = dialog.currentLabel,
-            onValueChange = actions::onEditingKeyLabelChange,
+            state = editingLabelState,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = appTextFieldColors(),
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(
-                onDone = {
-                    if (canSave) {
-                        actions.updateApiKeyLabel()
-                    }
+            onKeyboardAction = {
+                if (canSave) {
+                    actions.updateApiKeyLabel()
                 }
-            ),
+            },
             label = { Text("새 키 이름") },
             placeholder = { Text(dialog.originalLabel) }
         )
