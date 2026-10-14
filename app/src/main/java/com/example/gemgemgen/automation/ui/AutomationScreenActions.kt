@@ -1,4 +1,4 @@
-// 역할: 자동화 화면에서 발생하는 모든 사용자 입력 인터랙션 및 추천 칩 국소 관찰 상태를 캡슐화한 인터페이스입니다.
+// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 제미나이 사용량 조회/로그인 액션 및 추천 칩 국소 관찰 상태를 캡슐화한 인터페이스입니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
@@ -76,6 +76,12 @@ interface AutomationScreenActions {
     fun closeGeminiApp() {}
     fun terminateSelfApp() {}
     fun cleanDeviceMemory() {}
+
+    // 제미나이 사용량 한도 조회 및 인앱 로그인
+    fun refreshGeminiUsage() {}
+    fun openGeminiUsageLogin() {}
+    fun closeGeminiUsageLogin() {}
+    fun onGeminiUsageLoginCompleted() {}
 
     // 테마 및 환경 설정
     fun refreshStatus() {}

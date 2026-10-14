@@ -1,1 +1,14 @@
 # Project ProGuard/R8 rules
+# Add project specific R8 rules here.
+# AGP will combine all keep rule files in src/main/keepRules to pass to R8
+#
+# For more details, see
+#   https://d.android.com/r/tools/r8/keep-rules
+
+# Keep WebView @JavascriptInterface bridge methods for GeminiUsageFetcher
+-keepclassmembers class com.example.gemgemgen.usage.android.GeminiUsageFetcher$UsageBridge {
+    @android.webkit.JavascriptInterface <methods>;
+    public *;
+}
+-keepattributes JavascriptInterface
+-keepattributes *Annotation*

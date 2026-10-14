@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드, 누적 생성 기반 시작 전 자동 메모리 정리 및 자동화/유지보수 상태를 총괄 관리하는 뷰모델입니다.
+// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드, 제미나이 사용량 한도 상태, 누적 생성 기반 시작 전 자동 메모리 정리 및 자동화/유지보수 상태를 총괄 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -38,6 +38,7 @@ import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.core.SoundAlertGateway
 import com.example.gemgemgen.core.PromptWorkspace
 import com.example.gemgemgen.core.PromptHandoffEvent
+import com.example.gemgemgen.usage.usecase.GeminiUsageRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -80,6 +81,7 @@ class AutomationViewModel(
     private val promptSnippetRepository: PromptSnippetRepository? = null,
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
     private val automationSettingsStore: com.example.gemgemgen.automation.android.AutomationSettingsStore? = null,
+    private val geminiUsageRepository: GeminiUsageRepository? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel(), AutomationScreenActions {
     private val scope = coroutineScope ?: viewModelScope
@@ -168,6 +170,23 @@ class AutomationViewModel(
                 }
             }
         }
+        geminiUsageRepository?.let { usageRepo ->
+            scope.launch {
+                usageRepo.state.collect { usageState ->
+                    _uiState.update { it.copy(geminiUsageState = usageState) }
+                }
+            }
+            scope.launch {
+                usageRepo.cachedSuccess.collect { cached ->
+                    _uiState.update { it.copy(geminiUsageCachedSuccess = cached) }
+                }
+            }
+            scope.launch {
+                usageRepo.isRefreshing.collect { refreshing ->
+                    _uiState.update { it.copy(isRefreshingGeminiUsage = refreshing) }
+                }
+            }
+        }
         loadInitialState()
         promptWorkspace?.let { workspace ->
             workspace.segmentReplacer = ::replacePromptTemplateSegment
@@ -188,6 +207,23 @@ class AutomationViewModel(
     override fun onPromptTemplateChange(value: String) { promptEditor.onPromptTemplateChange(value, updateTextFieldState = true) }
     override fun onRunVariation(selectedText: String?) { runVariation(selectedText) }
     override fun onConfirmAccessibilityPrompt() { confirmAccessibilityPrompt() }
+
+    override fun refreshGeminiUsage() {
+        geminiUsageRepository?.triggerRefresh()
+    }
+
+    override fun openGeminiUsageLogin() {
+        _uiState.update { it.copy(showGeminiUsageLoginSheet = true) }
+    }
+
+    override fun closeGeminiUsageLogin() {
+        _uiState.update { it.copy(showGeminiUsageLoginSheet = false) }
+    }
+
+    override fun onGeminiUsageLoginCompleted() {
+        _uiState.update { it.copy(showGeminiUsageLoginSheet = false) }
+        geminiUsageRepository?.triggerRefresh()
+    }
 
     override fun onToggleCopyPromptOnStart(enabled: Boolean) {
         scope.launch {
@@ -952,6 +988,10 @@ class AutomationViewModel(
                 }
             } else {
                 0
+            }
+
+            if (generatedInSession > 0) {
+                geminiUsageRepository?.triggerRefresh()
             }
 
             var updatedCumulativeCount: Int? = null

@@ -1,4 +1,4 @@
-// 역할: 앱 전반에서 필요한 저장소, 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
+// 역할: 앱 전반에서 필요한 저장소(제미나이 사용량 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.Context
@@ -49,9 +49,17 @@ import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
 import com.example.gemgemgen.wildcard.ui.WildcardViewModel
 import com.example.gemgemgen.remote.android.AndroidRemoteAutomationGateway
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
+import com.example.gemgemgen.usage.android.DataStoreGeminiUsageCacheDataSource
+import com.example.gemgemgen.usage.android.GeminiUsageFetcher
+import com.example.gemgemgen.usage.usecase.GeminiUsageRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 class AndroidAppContainer(context: Context) {
     private val appContext = context.applicationContext
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     private val lastRunSnapshotStore by lazy {
         LastRunSnapshotStore(
             DataStoreLastRunSnapshotRepository(appContext)
@@ -98,6 +106,13 @@ class AndroidAppContainer(context: Context) {
     val promptWorkspace = PromptWorkspace()
     val promptSnippetRepository by lazy { PromptSnippetStore(appContext) }
     val automationSettingsStore by lazy { com.example.gemgemgen.automation.android.AutomationSettingsStore(appContext) }
+    val geminiUsageRepository by lazy {
+        GeminiUsageRepository(
+            remoteDataSource = GeminiUsageFetcher(appContext),
+            cacheDataSource = DataStoreGeminiUsageCacheDataSource(appContext),
+            scope = appScope
+        )
+    }
 
     val automationViewModelFactory: ViewModelProvider.Factory = factory<AutomationViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
@@ -136,7 +151,8 @@ class AndroidAppContainer(context: Context) {
                 gatewayProvider = ActivePromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
             ),
-            automationSettingsStore = automationSettingsStore
+            automationSettingsStore = automationSettingsStore,
+            geminiUsageRepository = geminiUsageRepository
         )
     }
 

@@ -16,7 +16,7 @@ class PromptWorkspace {
     private val _currentPrompt = MutableStateFlow("")
     val currentPrompt: StateFlow<String> = _currentPrompt.asStateFlow()
 
-    private val _handoffEvents = MutableSharedFlow<PromptHandoffEvent>(extraBufferCapacity = 1)
+    private val _handoffEvents = MutableSharedFlow<PromptHandoffEvent>(replay = 1, extraBufferCapacity = 1)
     val handoffEvents: SharedFlow<PromptHandoffEvent> = _handoffEvents.asSharedFlow()
 
     var segmentReplacer: ((expectedSegment: String, replacement: String, preferredStartIndex: Int) -> Int?)? = null

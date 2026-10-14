@@ -1,4 +1,4 @@
-// 역할: 자동화 메인 화면의 프롬프트 편집, 실행 상태, 추천 후보, 자동/예약 메모리 정리, 다이얼로그 가시성 등 UI 상태를 정의합니다.
+// 역할: 자동화 메인 화면의 프롬프트 편집, 실행 상태, 제미나이 사용량 한도 상태, 추천 후보, 자동/예약 메모리 정리 및 다이얼로그 가시성 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
@@ -15,6 +15,7 @@ import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
+import com.example.gemgemgen.usage.domain.GeminiUsageState
 
 data class AutomationUiState(
     val promptTemplate: String = "",
@@ -48,6 +49,14 @@ data class AutomationUiState(
     val autoMemoryCleanupEnabled: Boolean = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED,
     val autoMemoryCleanupThresholdText: String = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD.toString(),
     val cumulativeGeminiGenerationCount: Int = 0,
+    /** Google AI Pro 제미나이 사용량 한도 상태 (5시간 단기 한도 / 주간 누적 한도) */
+    val geminiUsageState: GeminiUsageState = GeminiUsageState.Loading,
+    /** 로컬에 캐싱된 마지막 제미나이 사용량 성공 스냅샷 */
+    val geminiUsageCachedSuccess: GeminiUsageState.Success? = null,
+    /** 백그라운드에서 제미나이 사용량을 갱신 중인지 여부 */
+    val isRefreshingGeminiUsage: Boolean = false,
+    /** 세션 만료 시 인앱 Google 로그인 WebView 바텀시트 표시 여부 */
+    val showGeminiUsageLoginSheet: Boolean = false,
     /**
      * =========================================================================================
      * [주의: 사용자 명시적 요구 기능 - 임의 삭제 절대 금지]
