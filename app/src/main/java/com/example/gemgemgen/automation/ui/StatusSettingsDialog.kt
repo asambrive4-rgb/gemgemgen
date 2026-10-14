@@ -1,4 +1,4 @@
-// 역할: 접근성 권한, 배터리 최적화 예외, 키보드 및 테마 설정 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
+// 역할: 접근성 권한, 원격 연결, 클립보드 복사 및 자동 메모리 정리 설정, 테마 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -373,6 +373,80 @@ private fun StatusSettingsDialogContent(
                         checked = uiState.copyPromptOnStart,
                         onCheckedChange = { actions.onToggleCopyPromptOnStart(it) }
                     )
+                }
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 12.dp)
+                        ) {
+                            Text(
+                                text = "시작 전 자동 메모리 정리 (Gemini)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "누적 생성 횟수가 임계치 이상이면 다음 Gemini 자동화 시작 직전에 Google 앱 메모리를 정리합니다. (송신 모드에서는 수신 기기가 수행)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = uiState.autoMemoryCleanupEnabled,
+                            onCheckedChange = { actions.onToggleAutoMemoryCleanup(it) }
+                        )
+                    }
+
+                    if (uiState.autoMemoryCleanupEnabled) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 12.dp)
+                            ) {
+                                Text(
+                                    text = "누적 임계 횟수",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "현재 누적 생성: ${uiState.cumulativeGeminiGenerationCount}회",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            RepeatCountStepper(
+                                repeatCountText = uiState.autoMemoryCleanupThresholdText,
+                                onRepeatCountChange = { actions.onAutoMemoryCleanupThresholdChange(it) }
+                            )
+                        }
+                    }
                 }
             }
 

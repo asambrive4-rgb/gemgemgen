@@ -91,4 +91,6 @@ interface AutomationScreenActions {
     fun onOpenAccessibilitySettings() {}
     fun onClearFocus() {}
     fun onToggleCopyPromptOnStart(enabled: Boolean) {}
+    fun onToggleAutoMemoryCleanup(enabled: Boolean) {}
+    fun onAutoMemoryCleanupThresholdChange(value: String) {}
 }

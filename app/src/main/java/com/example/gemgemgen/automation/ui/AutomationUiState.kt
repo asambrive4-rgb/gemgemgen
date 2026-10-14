@@ -1,4 +1,4 @@
-// 역할: 자동화 메인 화면의 프롬프트 편집, 실행 상태, 추천 후보, 메모리 정리 예약, 다이얼로그 가시성 등 UI 상태를 정의합니다.
+// 역할: 자동화 메인 화면의 프롬프트 편집, 실행 상태, 추천 후보, 자동/예약 메모리 정리, 다이얼로그 가시성 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
@@ -6,6 +6,7 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
+import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
@@ -44,6 +45,9 @@ data class AutomationUiState(
     val variationAutomationState: AutomationRunState = AutomationRunState.Idle,
     val showVariationPromptConfigDialog: Boolean = false,
     val isMemoryCleanupScheduled: Boolean = false,
+    val autoMemoryCleanupEnabled: Boolean = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED,
+    val autoMemoryCleanupThresholdText: String = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD.toString(),
+    val cumulativeGeminiGenerationCount: Int = 0,
     /**
      * =========================================================================================
      * [주의: 사용자 명시적 요구 기능 - 임의 삭제 절대 금지]
@@ -133,6 +137,18 @@ data class AutomationUiState(
             remoteAutomationStatus = remoteAutomationStatus,
             isMaintenanceBusy = isMaintenanceBusy
         )
+
+    val autoMemoryCleanupThreshold: Int
+        get() = RepeatCountParser.parse(
+            autoMemoryCleanupThresholdText.ifBlank {
+                AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD.toString()
+            }
+        )
+
+    val shouldAutoCleanMemoryBeforeStart: Boolean
+        get() = autoMemoryCleanupEnabled &&
+            selectedTargetApp == AutomationTargetApp.GEMINI &&
+            cumulativeGeminiGenerationCount >= autoMemoryCleanupThreshold
 }
 
 data class MaintenanceState(

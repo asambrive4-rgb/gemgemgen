@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드, 일반/변주 자동화 및 유지보수 상태를 총괄 관리하는 뷰모델입니다.
+// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드, 누적 생성 기반 시작 전 자동 메모리 정리 및 자동화/유지보수 상태를 총괄 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -57,7 +57,10 @@ private data class AutomationInitialState(
     val lastRunSnapshot: LastRunSnapshot?,
     val historyItems: List<PromptHistoryItem>,
     val instructionConfig: PromptInstructionConfig,
-    val variationConfig: VariationPromptConfig
+    val variationConfig: VariationPromptConfig,
+    val autoMemoryCleanupEnabled: Boolean = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED,
+    val autoMemoryCleanupThreshold: Int = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD,
+    val cumulativeGeminiGenerationCount: Int = 0
 )
 
 class AutomationViewModel(
@@ -82,6 +85,10 @@ class AutomationViewModel(
     private val scope = coroutineScope ?: viewModelScope
     private var automationPreparationJob: Job? = null
     private var isRemoteRunActive = false
+    private var activeRunTargetApp: AutomationTargetApp? = null
+    private var activeRunRequestedCount: Int = 0
+    private var activeRunMaxIndex: Int = 0
+    private var isPreStartCleanupInProgress: Boolean = false
     private val promptEditor = PromptEditorCoordinator(
         clipboardGateway = clipboardGateway,
         scope = scope,
@@ -145,6 +152,21 @@ class AutomationViewModel(
                     _uiState.update { it.copy(copyPromptOnStart = enabled) }
                 }
             }
+            scope.launch {
+                store.autoMemoryCleanupEnabled.collect { enabled ->
+                    _uiState.update { it.copy(autoMemoryCleanupEnabled = enabled) }
+                }
+            }
+            scope.launch {
+                store.autoMemoryCleanupThreshold.collect { threshold ->
+                    _uiState.update { it.copy(autoMemoryCleanupThresholdText = threshold.toString()) }
+                }
+            }
+            scope.launch {
+                store.geminiGenerationCountSinceCleanup.collect { count ->
+                    _uiState.update { it.copy(cumulativeGeminiGenerationCount = count) }
+                }
+            }
         }
         loadInitialState()
         promptWorkspace?.let { workspace ->
@@ -172,6 +194,27 @@ class AutomationViewModel(
             automationSettingsStore?.setCopyPromptOnStart(enabled)
         }
         _uiState.update { it.copy(copyPromptOnStart = enabled) }
+    }
+
+    override fun onToggleAutoMemoryCleanup(enabled: Boolean) {
+        scope.launch {
+            automationSettingsStore?.setAutoMemoryCleanupEnabled(enabled)
+        }
+        _uiState.update { it.copy(autoMemoryCleanupEnabled = enabled) }
+    }
+
+    override fun onAutoMemoryCleanupThresholdChange(value: String) {
+        val normalized = RepeatCountParser.normalizeInput(value)
+        if (normalized.isEmpty()) {
+            _uiState.update { it.copy(autoMemoryCleanupThresholdText = "") }
+            return
+        }
+        val parsed = RepeatCountParser.parse(normalized)
+        val text = parsed.toString()
+        _uiState.update { it.copy(autoMemoryCleanupThresholdText = text) }
+        scope.launch {
+            automationSettingsStore?.setAutoMemoryCleanupThreshold(parsed)
+        }
     }
 
     override fun onSelectThemePalette(palette: com.example.gemgemgen.ui.theme.AppThemePalette) {
@@ -511,8 +554,20 @@ class AutomationViewModel(
         )
     }
 
-    private suspend fun performMemoryCleanup(mode: AutomationMode): MaintenanceResult =
-        appMaintenance.cleanMemory(mode)
+    private suspend fun performMemoryCleanup(mode: AutomationMode): MaintenanceResult {
+        val result = appMaintenance.cleanMemory(mode)
+        if (result is MaintenanceResult.Success) {
+            resetCumulativeGeminiGenerationCount()
+        }
+        return result
+    }
+
+    private fun resetCumulativeGeminiGenerationCount() {
+        _uiState.update { it.copy(cumulativeGeminiGenerationCount = 0) }
+        scope.launch {
+            automationSettingsStore?.setGeminiGenerationCountSinceCleanup(0)
+        }
+    }
 
     private fun executeMaintenance(
         canExecute: (AutomationUiState) -> Boolean,
@@ -615,15 +670,62 @@ class AutomationViewModel(
             flowImageCount = state.flowImageCount
         )
 
+        val shouldCleanBeforeStart = state.shouldAutoCleanMemoryBeforeStart
         val isRemote = decision is AutomationStartDecision.RemoteStarted
         if (isRemote) isRemoteRunActive = true
-        val initialStep = if (isRemote) "S25 FE로 요청 전송 중" else "자동화 준비 중"
+        activeRunTargetApp = state.selectedTargetApp
+        activeRunRequestedCount = RepeatCountParser.parse(state.repeatCountText)
+        activeRunMaxIndex = 0
+        isPreStartCleanupInProgress = shouldCleanBeforeStart
+
+        val initialStep = when {
+            shouldCleanBeforeStart -> AutomationUiText.memoryCleanupStartingText(state.automationMode)
+            isRemote -> "S25 FE로 요청 전송 중"
+            else -> "자동화 준비 중"
+        }
         handleAutomationState(
             AutomationRunState.Running(initialStep),
             additionalUpdate = { it.copy(isMemoryCleanupScheduled = false) }
         )
 
         val job = scope.launch {
+            if (shouldCleanBeforeStart) {
+                val cleanupResult = try {
+                    withContext(dispatchers.io) {
+                        performMemoryCleanup(state.automationMode)
+                    }
+                } catch (error: CancellationException) {
+                    isPreStartCleanupInProgress = false
+                    handleAutomationState(AutomationRunState.Stopped)
+                    throw error
+                } catch (error: Exception) {
+                    MaintenanceResult.Failure(error.message ?: "메모리 정리 중 오류가 발생했습니다.")
+                }
+                isPreStartCleanupInProgress = false
+                if (cleanupResult !is MaintenanceResult.Success) {
+                    _uiState.update {
+                        it.copy(
+                            maintenanceState = MaintenanceState(
+                                isBusy = false,
+                                message = cleanupResult.displayMessage
+                            )
+                        )
+                    }
+                    handleAutomationState(AutomationRunState.Failure(cleanupResult.displayMessage))
+                    return@launch
+                }
+                _uiState.update {
+                    it.copy(
+                        maintenanceState = MaintenanceState(
+                            isBusy = false,
+                            message = cleanupResult.displayMessage
+                        )
+                    )
+                }
+                val postCleanupStep = if (isRemote) "S25 FE로 요청 전송 중" else "자동화 준비 중"
+                handleAutomationState(AutomationRunState.Running(postCleanupStep))
+            }
+
             if (isRemote) {
                 executeRemoteAutomationRequest(request)
             } else {
@@ -667,6 +769,7 @@ class AutomationViewModel(
 
     override fun cancelAutomation() {
         _uiState.update { it.copy(isMemoryCleanupScheduled = false) }
+        isPreStartCleanupInProgress = false
         val wasRemoteRunActive = isRemoteRunActive
         isRemoteRunActive = false
         val preparationJob = automationPreparationJob
@@ -736,12 +839,21 @@ class AutomationViewModel(
                     ?: PromptInstructionConfig.DEFAULT
                 val variationConfig = automationSettingsStore?.variationPromptConfig?.first()
                     ?: VariationPromptConfig.DEFAULT
+                val autoMemoryCleanupEnabled = automationSettingsStore?.autoMemoryCleanupEnabled?.first()
+                    ?: AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED
+                val autoMemoryCleanupThreshold = automationSettingsStore?.autoMemoryCleanupThreshold?.first()
+                    ?: AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD
+                val cumulativeGeminiCount = automationSettingsStore?.geminiGenerationCountSinceCleanup?.first()
+                    ?: 0
                 Triple(
                     AutomationInitialState(
                         lastRunSnapshotStore.load(),
                         promptHistoryStore?.load().orEmpty(),
                         instructionConfig,
-                        variationConfig
+                        variationConfig,
+                        autoMemoryCleanupEnabled,
+                        autoMemoryCleanupThreshold,
+                        cumulativeGeminiCount
                     ),
                     checkEnvironmentStatus.check(),
                     loadSortedCandidatesAndSnippets()
@@ -767,7 +879,10 @@ class AutomationViewModel(
                     environmentSetupInfo = report.setupInfo,
                     promptSnippets = snippets,
                     promptInstructionConfig = initialState.instructionConfig,
-                    variationPromptConfig = initialState.variationConfig
+                    variationPromptConfig = initialState.variationConfig,
+                    autoMemoryCleanupEnabled = initialState.autoMemoryCleanupEnabled,
+                    autoMemoryCleanupThresholdText = initialState.autoMemoryCleanupThreshold.toString(),
+                    cumulativeGeminiGenerationCount = initialState.cumulativeGeminiGenerationCount
                 )
             }
             val restoredState = uiState.value
@@ -808,16 +923,64 @@ class AutomationViewModel(
             if (it.automationState == state) it else it.copy(automationState = state)
         }
 
+        if (state is AutomationRunState.Running) {
+            state.currentIndex?.let { idx ->
+                if (idx > activeRunMaxIndex) {
+                    activeRunMaxIndex = idx
+                }
+            }
+            state.totalCount?.let { total ->
+                if (total > 0) {
+                    activeRunRequestedCount = total
+                }
+            }
+        }
+
         var shouldExecuteScheduledCleanup = false
         if (state.isTerminal()) {
+            val completedTargetApp = activeRunTargetApp
+            val wasPreStartCleanup = isPreStartCleanupInProgress
+            activeRunTargetApp = null
+            isPreStartCleanupInProgress = false
+
+            val generatedInSession = if (!wasPreStartCleanup && completedTargetApp == AutomationTargetApp.GEMINI) {
+                when (state) {
+                    AutomationRunState.Success -> activeRunRequestedCount.coerceAtLeast(activeRunMaxIndex)
+                    is AutomationRunState.Failure,
+                    AutomationRunState.Stopped -> (activeRunMaxIndex - 1).coerceAtLeast(0)
+                    else -> 0
+                }
+            } else {
+                0
+            }
+
+            var updatedCumulativeCount: Int? = null
             _uiState.update { current ->
+                val nextCount = if (generatedInSession > 0) {
+                    (current.cumulativeGeminiGenerationCount + generatedInSession).also {
+                        updatedCumulativeCount = it
+                    }
+                } else {
+                    current.cumulativeGeminiGenerationCount
+                }
                 if (current.isMemoryCleanupScheduled) {
                     if (state == AutomationRunState.Success || state is AutomationRunState.Failure) {
                         shouldExecuteScheduledCleanup = true
                     }
-                    current.copy(isMemoryCleanupScheduled = false)
+                    current.copy(
+                        isMemoryCleanupScheduled = false,
+                        cumulativeGeminiGenerationCount = nextCount
+                    )
+                } else if (nextCount != current.cumulativeGeminiGenerationCount) {
+                    current.copy(cumulativeGeminiGenerationCount = nextCount)
                 } else {
                     current
+                }
+            }
+
+            updatedCumulativeCount?.let { count ->
+                scope.launch {
+                    automationSettingsStore?.setGeminiGenerationCountSinceCleanup(count)
                 }
             }
         }

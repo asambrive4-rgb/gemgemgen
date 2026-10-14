@@ -1,4 +1,4 @@
-// 역할: AutomationSettingsStore의 Preferences DataStore 기반 읽기/쓰기 및 기본값 복원 동작을 검증합니다.
+// 역할: AutomationSettingsStore의 Preferences DataStore 기반 설정(자동 메모리 정리 포함) 읽기/쓰기 및 기본값 복원 동작을 검증합니다.
 package com.example.gemgemgen.automation.android
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -104,5 +104,20 @@ class AutomationSettingsStoreTest {
 
         val restored = store.variationPromptConfig.first()
         assertEquals(customPrompt, restored.prompt)
+    }
+
+    @Test
+    fun autoMemoryCleanupSettings_defaultValuesAndUpdates() = runBlocking {
+        assertTrue(store.autoMemoryCleanupEnabled.first())
+        assertEquals(25, store.autoMemoryCleanupThreshold.first())
+        assertEquals(0, store.geminiGenerationCountSinceCleanup.first())
+
+        store.setAutoMemoryCleanupEnabled(false)
+        store.setAutoMemoryCleanupThreshold(30)
+        store.setGeminiGenerationCountSinceCleanup(18)
+
+        assertFalse(store.autoMemoryCleanupEnabled.first())
+        assertEquals(30, store.autoMemoryCleanupThreshold.first())
+        assertEquals(18, store.geminiGenerationCountSinceCleanup.first())
     }
 }

@@ -1,4 +1,4 @@
-// 역할: 앱 전반에서 사용하는 기본 설정값과 타임아웃 상수를 정의합니다.
+// 역할: 앱 전반에서 사용하는 기본 설정값(반복 횟수, 자동 메모리 정리 임계값 등)과 상수를 정의합니다.
 package com.example.gemgemgen.core
 
 object AppDefaults {
@@ -22,4 +22,6 @@ object AppDefaults {
     const val DEFAULT_REPEAT_COUNT = 10
     const val DEFAULT_FLOW_IMAGE_COUNT = 4
     val FLOW_IMAGE_COUNT_OPTIONS: List<Int> = listOf(1, 2, 3, 4)
+    const val DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED = true
+    const val DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD = 25
 }

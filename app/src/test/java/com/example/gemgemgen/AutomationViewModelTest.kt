@@ -1862,6 +1862,142 @@ class AutomationViewModelTest {
         )
     }
 
+
+    @Test
+    fun runAutomation_geminiCumulativeCountReachesThreshold_cleansMemoryBeforeNextSessionInNormalMode() {
+        val callOrder = mutableListOf<String>()
+        val memoryGateway = object : MemoryCleanupGateway {
+            var cleanCount = 0
+            override suspend fun cleanMemory(): MemoryCleanupResult {
+                cleanCount += 1
+                callOrder += "cleanMemory"
+                return MemoryCleanupResult.Success
+            }
+        }
+        val promptService = object : PromptAutomationGateway {
+            override fun sendPrompt(
+                prompt: String,
+                newChatMode: NewChatMode,
+                onStateChange: (AutomationRunState) -> Unit,
+                onDone: () -> Unit
+            ) {
+                if (prompt != ExecuteAutomationLoopUseCase.MARKER_PROMPT) {
+                    callOrder += "sendPrompt"
+                }
+                onDone()
+            }
+            override fun cancelCurrentRun() = Unit
+        }
+        val viewModel = viewModel(
+            automationRunner = automation(service = promptService),
+            cleanMemoryGateway = memoryGateway
+        )
+        viewModel.onPromptTemplateChange("gemini prompt")
+        viewModel.onAutoMemoryCleanupThresholdChange("25")
+
+        // 1세션: 15회 생성 -> 완료 직후에는 메모리 정리를 수행하지 않음 (누적 15회)
+        viewModel.onRepeatCountChange("15")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+        waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
+        assertEquals(15, viewModel.uiState.value.cumulativeGeminiGenerationCount)
+        assertEquals(0, memoryGateway.cleanCount)
+
+        // 2세션: 15회 생성 -> 시작 전 누적 15회(<25)이므로 정리 안 함, 완료 직후에도 정리 안 함 (누적 30회)
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+        waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
+        assertEquals(30, viewModel.uiState.value.cumulativeGeminiGenerationCount)
+        assertEquals(0, memoryGateway.cleanCount)
+
+        // 3세션: 시작 시점 누적 30회(>=25)이므로 시작 직전에 메모리 정리 1회 수행 후(누적 0 초기화) 10회 생성 진행 -> 완료 후 누적 10회
+        callOrder.clear()
+        viewModel.onRepeatCountChange("10")
+        assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
+        waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
+
+        assertEquals(1, memoryGateway.cleanCount)
+        assertEquals("cleanMemory", callOrder.first())
+        assertEquals(10, viewModel.uiState.value.cumulativeGeminiGenerationCount)
+    }
+
+    @Test
+    fun runAutomation_geminiCumulativeCountReachesThreshold_cleansRemoteMemoryBeforeNextSessionInSenderMode() {
+        val callOrder = mutableListOf<String>()
+        val remoteGateway = object : RemoteAutomationGateway {
+            var cleanCount = 0
+            override val status = MutableStateFlow(
+                RemoteAutomationStatus(
+                    mode = AutomationMode.SENDER,
+                    discoveredDeviceName = "S25 FE",
+                    isPaired = true
+                )
+            )
+            override fun selectMode(mode: AutomationMode) {
+                status.value = status.value.copy(mode = mode)
+            }
+            override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
+            override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
+            override suspend fun send(request: RemoteAutomationRequest) {
+                callOrder += "remoteSend"
+                val count = RepeatCountParser.parse(request.repeatCountText)
+                status.value = status.value.copy(
+                    automationState = AutomationRunState.Running("원격 실행 중", currentIndex = count, totalCount = count)
+                )
+                status.value = status.value.copy(automationState = AutomationRunState.Success)
+            }
+            override fun forceStop(requestId: String?) = Unit
+            override suspend fun cleanMemory(): RemoteActionResult {
+                cleanCount += 1
+                callOrder += "remoteCleanMemory"
+                return RemoteActionResult.Success
+            }
+        }
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(manageRemoteAutomation = manageRemote)
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.onPromptTemplateChange("remote gemini prompt")
+        viewModel.onRepeatCountChange("25")
+
+        // 1세션(25회): 완료 직후에는 원격 메모리 정리를 수행하지 않음 (누적 25회)
+        assertEquals(AutomationStartDecision.RemoteStarted, viewModel.runAutomation())
+        assertEquals(25, viewModel.uiState.value.cumulativeGeminiGenerationCount)
+        assertEquals(0, remoteGateway.cleanCount)
+
+        // 2세션(10회): 누적 25회(>=25) 상태에서 시작 시 수신 기기에 메모리 정리 명령을 먼저 보낸 뒤 원격 실행 시작
+        callOrder.clear()
+        remoteGateway.status.value = remoteGateway.status.value.copy(automationState = AutomationRunState.Idle)
+        viewModel.onRepeatCountChange("10")
+        assertEquals(AutomationStartDecision.RemoteStarted, viewModel.runAutomation())
+        waitUntil { viewModel.uiState.value.cumulativeGeminiGenerationCount == 10 }
+        assertEquals(1, remoteGateway.cleanCount)
+        assertEquals(listOf("remoteCleanMemory", "remoteSend"), callOrder)
+        assertEquals(10, viewModel.uiState.value.cumulativeGeminiGenerationCount)
+    }
+
+    @Test
+    fun runAutomation_nonGeminiOrDisabledToggle_doesNotAutoCleanMemory() {
+        val memoryGateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
+        val viewModel = viewModel(cleanMemoryGateway = memoryGateway)
+        viewModel.onPromptTemplateChange("prompt")
+        viewModel.onRepeatCountChange("30")
+
+        // CHATGPT 대상일 때는 누적 카운트 증가 및 자동 메모리 정리 미수행
+        viewModel.onTargetAppSelected(AutomationTargetApp.CHATGPT)
+        viewModel.runAutomation()
+        waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
+        assertEquals(0, viewModel.uiState.value.cumulativeGeminiGenerationCount)
+
+        // GEMINI로 30회 실행해 누적 30회 도달 후, 자동 메모리 정리 토글 OFF 상태에서 다음 세션 실행 시 미수행
+        viewModel.onTargetAppSelected(AutomationTargetApp.GEMINI)
+        viewModel.runAutomation()
+        waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
+        assertEquals(30, viewModel.uiState.value.cumulativeGeminiGenerationCount)
+
+        viewModel.onToggleAutoMemoryCleanup(false)
+        viewModel.runAutomation()
+        waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
+        assertEquals(0, memoryGateway.cleanCount)
+    }
+
     private companion object {
         const val ORIGINAL_IME_ID = "example.keyboard/.Ime"
         const val NULL_IME_ID = "example.nullkeyboard/.NullIme"
