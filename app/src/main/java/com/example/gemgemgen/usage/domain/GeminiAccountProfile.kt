@@ -1,7 +1,15 @@
-// 역할: 다중 계정(5개 이상) 제미나이 사용량 모니터링을 위한 개별 Google 계정 프로필 메타데이터와 독립 세션 식별자 모델을 정의합니다.
+// 역할: 다중 계정(5개 이상) 제미나이 사용량 모니터링을 위한 개별 Google 계정 프로필 메타데이터(메인/서브 그룹 포함)와 독립 세션 식별자 모델을 정의합니다.
 package com.example.gemgemgen.usage.domain
 
 import java.util.UUID
+
+/**
+ * 다중 계정의 표시 탭 및 용도 구분 (메인: 주 사용 계정, 서브: 보조 계정).
+ */
+enum class GeminiAccountGroup(val label: String) {
+    MAIN("메인"),
+    SUB("서브")
+}
 
 /**
  * 제미나이 사용량 모니터링에 등록된 개별 Google 계정 프로필 도메인 모델.
@@ -12,6 +20,7 @@ import java.util.UUID
  * @property sortOrder 수직 목록 내 표시 순서 (0부터 시작)
  * @property webViewProfileName WebView 독립 세션/쿠키 저장소 격리를 위한 프로필 이름
  * @property createdAt 계정 등록 시각 (epoch millis)
+ * @property group 계정 용도 그룹 (메인: 주 사용 계정, 서브: 보조 계정)
  */
 data class GeminiAccountProfile(
     val id: String,
@@ -19,7 +28,8 @@ data class GeminiAccountProfile(
     val email: String = "",
     val sortOrder: Int = 0,
     val webViewProfileName: String = buildWebViewProfileName(id),
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    val group: GeminiAccountGroup = GeminiAccountGroup.MAIN
 ) {
     /**
      * 요약 버튼 및 카드 헤더에 표시할 대표 라벨.

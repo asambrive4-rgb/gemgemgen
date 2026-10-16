@@ -1,10 +1,11 @@
-// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), DataStore JSON 직렬화/역직렬화, Warm Start 즉시 캐시 방출, 동시 병렬 새로고침 및 독립 쿠키 세션 격리를 검증합니다.
+// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리 및 마이그레이션, DataStore JSON 직렬화/역직렬화, Warm Start 즉시 캐시 방출, 동시 병렬 새로고침 및 독립 쿠키 세션 격리를 검증합니다.
 package com.example.gemgemgen
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.usage.android.DataStoreMultiGeminiUsageDataSource
 import com.example.gemgemgen.usage.android.GeminiAccountCookieVault
+import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.domain.GeminiUsageWarningLevel
@@ -320,6 +321,92 @@ class MultiGeminiUsageRepositoryTest {
         val compassCommand = commands.single { it.second.startsWith("COMPASS=") }
         assertEquals("https://gemini.google.com" to "COMPASS=compass_gemini; Path=/; Secure", compassCommand)
         assertFalse(compassCommand.second.contains("Domain="))
+    }
+
+    @Test
+    fun legacyJsonWithoutGroup_migratesAutomaticallyToMainGroup() {
+        // 'group' 필드가 아예 없는 구버전 DataStore JSON 데이터
+        val legacyJson = """
+            [
+              {"id":"acc_1","alias":"본계정","email":"main@gmail.com","sort_order":0,"created_at":1000},
+              {"id":"acc_2","alias":"작업용 1","email":"work@gmail.com","sort_order":1,"created_at":2000}
+            ]
+        """.trimIndent()
+
+        val parsed = DataStoreMultiGeminiUsageDataSource.parseProfilesJson(legacyJson)
+        assertEquals(2, parsed.size)
+        // 두 계정 모두 자동으로 MAIN 그룹으로 마이그레이션되어야 함
+        assertEquals(GeminiAccountGroup.MAIN, parsed[0].group)
+        assertEquals(GeminiAccountGroup.MAIN, parsed[1].group)
+    }
+
+    @Test
+    fun addAccountsWithMainAndSubGroups_filtersAndSortsPerGroup() = runBlocking {
+        val fakeRemote = MultiProfileGeminiUsageRemoteDataSource { profile ->
+            GeminiUsageFetchResult(
+                usageState = GeminiUsageState.Success(
+                    fiveHourPercent = 10,
+                    fiveHourResetText = "2시간 후",
+                    weeklyPercent = 20,
+                    weeklyResetText = "내일",
+                    updatedAt = 1000L
+                )
+            )
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource()
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        // 메인 계정 2개, 서브 계정 3개 등록
+        repository.addAccount(alias = "메인1", email = "m1@gmail.com", group = GeminiAccountGroup.MAIN)
+        repository.addAccount(alias = "메인2", email = "m2@gmail.com", group = GeminiAccountGroup.MAIN)
+        repository.addAccount(alias = "서브1", email = "s1@gmail.com", group = GeminiAccountGroup.SUB)
+        repository.addAccount(alias = "서브2", email = "s2@gmail.com", group = GeminiAccountGroup.SUB)
+        repository.addAccount(alias = "서브3", email = "s3@gmail.com", group = GeminiAccountGroup.SUB)
+
+        val state = repository.state.value
+        assertEquals(5, state.accountCount)
+        assertEquals(2, state.mainAccountCount)
+        assertEquals(3, state.subAccountCount)
+
+        val mainList = state.availableAccountsSorted(group = GeminiAccountGroup.MAIN)
+        assertEquals(2, mainList.size)
+        assertTrue(mainList.all { it.profile.group == GeminiAccountGroup.MAIN })
+
+        val subList = state.availableAccountsSorted(group = GeminiAccountGroup.SUB)
+        assertEquals(3, subList.size)
+        assertTrue(subList.all { it.profile.group == GeminiAccountGroup.SUB })
+    }
+
+    @Test
+    fun moveAccountGroup_updatesTargetGroupAndPersists() = runBlocking {
+        val fakeRemote = MultiProfileGeminiUsageRemoteDataSource {
+            GeminiUsageFetchResult(usageState = GeminiUsageState.Loading)
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource()
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        val created = repository.addAccount(alias = "테스트 계정", group = GeminiAccountGroup.MAIN)
+        assertEquals(GeminiAccountGroup.MAIN, repository.state.value.accounts.single().profile.group)
+
+        // 메인 -> 서브로 이동
+        val moved = repository.moveAccountGroup(created.id, GeminiAccountGroup.SUB)
+        assertNotNull(moved)
+        assertEquals(GeminiAccountGroup.SUB, moved!!.group)
+        assertEquals(GeminiAccountGroup.SUB, repository.state.value.accounts.single().profile.group)
+        assertEquals(0, repository.state.value.mainAccountCount)
+        assertEquals(1, repository.state.value.subAccountCount)
     }
 
     private class InMemoryMultiUsageLocalDataSource(

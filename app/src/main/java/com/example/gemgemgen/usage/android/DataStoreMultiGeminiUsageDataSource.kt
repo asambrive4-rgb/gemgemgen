@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore와 JSON 직렬화를 사용해 다중 제미나이 계정 프로필 목록과 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
+// 역할: Jetpack DataStore와 JSON 직렬화를 사용해 다중 제미나이 계정 프로필 목록(메인/서브 그룹 호환)과 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
 package com.example.gemgemgen.usage.android
 
 import android.content.Context
@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.usecase.MultiGeminiUsageLocalDataSource
@@ -137,6 +138,7 @@ class DataStoreMultiGeminiUsageDataSource(
         private const val FIELD_SORT_ORDER = "sort_order"
         private const val FIELD_WEBVIEW_PROFILE_NAME = "webview_profile_name"
         private const val FIELD_CREATED_AT = "created_at"
+        private const val FIELD_GROUP = "group"
 
         private const val FIELD_FIVE_HOUR_PERCENT = "five_hour_percent"
         private const val FIELD_FIVE_HOUR_RESET_TEXT = "five_hour_reset_text"
@@ -155,6 +157,7 @@ class DataStoreMultiGeminiUsageDataSource(
                             put(FIELD_SORT_ORDER, profile.sortOrder)
                             put(FIELD_WEBVIEW_PROFILE_NAME, profile.webViewProfileName)
                             put(FIELD_CREATED_AT, profile.createdAt)
+                            put(FIELD_GROUP, profile.group.name)
                         }
                     )
                 }
@@ -180,6 +183,9 @@ class DataStoreMultiGeminiUsageDataSource(
                         ?.takeIf { it.isNotEmpty() }
                         ?: GeminiAccountProfile.buildWebViewProfileName(id)
                     val createdAt = obj[FIELD_CREATED_AT]?.jsonPrimitive?.longOrNull ?: 0L
+                    val groupStr = obj[FIELD_GROUP]?.jsonPrimitive?.content?.trim().orEmpty()
+                    val group: GeminiAccountGroup = runCatching { GeminiAccountGroup.valueOf(groupStr) }
+                        .getOrDefault(GeminiAccountGroup.MAIN)
 
                     GeminiAccountProfile(
                         id = id,
@@ -187,7 +193,8 @@ class DataStoreMultiGeminiUsageDataSource(
                         email = email,
                         sortOrder = sortOrder,
                         webViewProfileName = webViewProfileName,
-                        createdAt = createdAt
+                        createdAt = createdAt,
+                        group = group
                     )
                 }.sortedBy { it.sortOrder }
                     .mapIndexed { idx, profile -> profile.copy(sortOrder = idx) }

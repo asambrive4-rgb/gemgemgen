@@ -1,7 +1,8 @@
-// 역할: 다중 제미나이 계정(5개 이상)의 등록·수정·삭제(CRUD), 로컬 DataStore Warm Start 캐시 즉시 방출, 계정별 독립 세션 동시 병렬·개별 새로고침을 조율하는 저장소입니다.
+// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 계정 그룹 이동, DataStore Warm Start 캐시 즉시 방출, 독립 세션 동시 병렬 새로고침을 조율하는 저장소입니다.
 package com.example.gemgemgen.usage.usecase
 
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
 import com.example.gemgemgen.usage.domain.GeminiUsageState
@@ -145,6 +146,7 @@ class MultiGeminiUsageRepository(
         alias: String,
         email: String = "",
         accountId: String? = null,
+        group: GeminiAccountGroup = GeminiAccountGroup.MAIN,
         autoRefresh: Boolean = true
     ): GeminiAccountProfile {
         val createdProfile = mutationMutex.withLock {
@@ -182,7 +184,8 @@ class MultiGeminiUsageRepository(
                 email = email.trim(),
                 sortOrder = nextOrder,
                 webViewProfileName = GeminiAccountProfile.buildWebViewProfileName(resolvedId),
-                createdAt = nowProvider()
+                createdAt = nowProvider(),
+                group = group
             )
             val newEntry = GeminiAccountUsageEntry(
                 profile = newProfile,
@@ -216,6 +219,7 @@ class MultiGeminiUsageRepository(
         alias: String,
         email: String = "",
         accountId: String? = null,
+        group: GeminiAccountGroup = GeminiAccountGroup.MAIN,
         autoRefresh: Boolean = true
     ) {
         scope.launch {
@@ -223,8 +227,43 @@ class MultiGeminiUsageRepository(
                 alias = alias,
                 email = email,
                 accountId = accountId,
+                group = group,
                 autoRefresh = autoRefresh
             )
+        }
+    }
+
+    /**
+     * 계정의 소속 그룹(메인 ↔ 서브)을 이동하고 DataStore에 영속화합니다. (추후 탭 이동 기능 대비용)
+     */
+    suspend fun moveAccountGroup(
+        accountId: String,
+        targetGroup: GeminiAccountGroup
+    ): GeminiAccountProfile? {
+        return mutationMutex.withLock {
+            val currentAccounts = _state.value.accounts
+            val index = currentAccounts.indexOfFirst { it.profile.id == accountId }
+            if (index < 0) return@withLock null
+
+            val target = currentAccounts[index]
+            if (target.profile.group == targetGroup) return@withLock target.profile
+
+            val updatedProfile = target.profile.copy(group = targetGroup)
+            val updatedAccounts = currentAccounts.toMutableList().apply {
+                set(index, target.copy(profile = updatedProfile))
+            }
+            _state.update { it.copy(accounts = updatedAccounts) }
+            persistProfilesInternal(updatedAccounts.map { it.profile }, _state.value.selectedAccountId)
+            updatedProfile
+        }
+    }
+
+    /**
+     * 비동기 코루틴 스코프에서 계정 소속 그룹 이동을 트리거합니다.
+     */
+    fun triggerMoveAccountGroup(accountId: String, targetGroup: GeminiAccountGroup) {
+        scope.launch {
+            moveAccountGroup(accountId, targetGroup)
         }
     }
 

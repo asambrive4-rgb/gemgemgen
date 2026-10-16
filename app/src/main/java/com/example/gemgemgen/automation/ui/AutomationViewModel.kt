@@ -36,6 +36,7 @@ import com.example.gemgemgen.environment.usecase.EnvironmentGateway
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
+import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.usecase.GeminiUsageRepository
 import com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository
@@ -86,6 +87,7 @@ class AutomationViewModel(
 ) : ViewModel(), AutomationScreenActions {
     private val scope = coroutineScope ?: viewModelScope
     private var automationPreparationJob: Job? = null
+    private var postAutomationUsageRefreshJob: Job? = null
     private var isRemoteRunActive = false
     private var activeRunTargetApp: AutomationTargetApp? = null
     private var activeRunRequestedCount: Int = 0
@@ -241,11 +243,17 @@ class AutomationViewModel(
         _uiState.update { it.copy(showMultiGeminiUsageDialog = false) }
     }
 
-    override fun addGeminiAccount(alias: String, email: String, accountId: String?) {
+    override fun addGeminiAccount(
+        alias: String,
+        email: String,
+        accountId: String?,
+        group: GeminiAccountGroup
+    ) {
         multiGeminiUsageRepository?.triggerAddAccount(
             alias = alias,
             email = email,
             accountId = accountId,
+            group = group,
             autoRefresh = true
         )
     }
@@ -260,6 +268,10 @@ class AutomationViewModel(
 
     override fun removeGeminiAccount(accountId: String) {
         multiGeminiUsageRepository?.triggerRemoveAccount(accountId)
+    }
+
+    override fun moveGeminiAccountGroup(accountId: String, targetGroup: GeminiAccountGroup) {
+        multiGeminiUsageRepository?.triggerMoveAccountGroup(accountId, targetGroup)
     }
 
     override fun selectRepresentativeGeminiAccount(accountId: String) {
@@ -784,6 +796,7 @@ class AutomationViewModel(
         }
 
         promptEditor.onAutomationStarted(state.promptTemplate)
+        postAutomationUsageRefreshJob?.cancel()
 
         cancelParagraphSelection()
         val request = AutomationRunRequest(
@@ -1108,6 +1121,14 @@ class AutomationViewModel(
             updatedCumulativeCount?.let { count ->
                 scope.launch {
                     automationSettingsStore?.setGeminiGenerationCountSinceCleanup(count)
+                }
+            }
+
+            if (!wasPreStartCleanup && (completedTargetApp == AutomationTargetApp.GEMINI || completedTargetApp == null)) {
+                postAutomationUsageRefreshJob?.cancel()
+                postAutomationUsageRefreshJob = scope.launch {
+                    delay(10_000L)
+                    refreshAllGeminiUsage()
                 }
             }
         }

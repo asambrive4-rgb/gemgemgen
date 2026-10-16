@@ -1,4 +1,4 @@
-// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(별칭, 5시간/주간 게이지 바, 시각+남은 시간, 위험 뱃지, 새로고침 및 삭제 메뉴)를 제공합니다.
+// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(소진 Dim UI, 소진 뱃지, 5시간 만료/미시작 안내, 별칭, 게이지, 탭 간 계정 이동 메뉴)를 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -49,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -60,7 +62,9 @@ import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.ui.theme.NeuInsetBed
+import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
+import com.example.gemgemgen.usage.domain.GeminiQuotaExhaustionReason
 import com.example.gemgemgen.usage.domain.GeminiUsageParser
 import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.domain.GeminiUsageWarningLevel
@@ -87,13 +91,18 @@ fun GeminiAccountRowCard(
     onOpenLogin: () -> Unit,
     onEditAccount: () -> Unit,
     onDeleteAccount: () -> Unit,
+    onMoveAccountGroup: ((GeminiAccountGroup) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val displayedSuccess = entry.displayedSuccess
     val isLoading = entry.usageState is GeminiUsageState.Loading || entry.isRefreshing
     val overallWarning = entry.overallWarningLevel
     val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
+    val exhaustionReason = entry.quotaExhaustionReason()
+    val isExhausted = exhaustionReason != null
+
     val cardBorderColor = when {
+        isExhausted -> AppTheme.colors.cardBorder.copy(alpha = 0.45f)
         overallWarning == GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.65f)
         overallWarning == GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.65f)
         isRepresentative -> brandHighlightColor.copy(alpha = 0.7f)
@@ -110,15 +119,16 @@ fun GeminiAccountRowCard(
             .clickable(onClick = onSelectRepresentative),
         shape = RoundedCornerShape(16.dp),
         borderColor = cardBorderColor,
-        elevation = if (isRepresentative) 5.dp else 3.dp
+        elevation = if (isExhausted) 1.dp else if (isRepresentative) 5.dp else 3.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .alpha(if (isExhausted) 0.52f else 1f)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // 1. 상단 1줄 컴팩트 헤더: 별칭, 대표 뱃지, 위험 뱃지, 갱신 시각 + 우측 새로고침/메뉴 아이콘
+            // 1. 상단 1줄 컴팩트 헤더: 별칭, 대표 뱃지, 위험/소진 뱃지, 갱신 시각 + 우측 새로고침/메뉴 아이콘
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -157,7 +167,9 @@ fun GeminiAccountRowCard(
                         }
                     }
 
-                    if (overallWarning != GeminiUsageWarningLevel.NORMAL) {
+                    if (exhaustionReason != null) {
+                        GeminiQuotaExhaustionBadge(reason = exhaustionReason)
+                    } else if (overallWarning != GeminiUsageWarningLevel.NORMAL) {
                         GeminiUsageWarningBadge(
                             warningLevel = overallWarning,
                             color = resolveGeminiUsageWarningColor(overallWarning)
@@ -168,8 +180,9 @@ fun GeminiAccountRowCard(
                         Text(
                             text = "· ${formatAccountUpdatedAtTime(displayedSuccess.updatedAt)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = AppTheme.colors.textSecondary.copy(alpha = 0.8f),
-                            fontSize = 10.sp,
+                            color = AppTheme.colors.textSecondary,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.5.sp,
                             maxLines = 1
                         )
                     }
@@ -272,6 +285,28 @@ fun GeminiAccountRowCard(
                                     onEditAccount()
                                 }
                             )
+                            if (onMoveAccountGroup != null) {
+                                val targetGroup = if (entry.profile.group == GeminiAccountGroup.MAIN) {
+                                    GeminiAccountGroup.SUB
+                                } else {
+                                    GeminiAccountGroup.MAIN
+                                }
+                                val moveLabel = if (targetGroup == GeminiAccountGroup.SUB) "서브로 이동" else "메인으로 이동"
+                                DropdownMenuItem(
+                                    text = { Text(moveLabel) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.SwapHoriz,
+                                            contentDescription = null,
+                                            tint = brandHighlightColor
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onMoveAccountGroup(targetGroup)
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -300,17 +335,17 @@ fun GeminiAccountRowCard(
             // 2. 게이지 및 상태 본문
             when (val currentState = entry.usageState) {
                 is GeminiUsageState.Success -> {
-                    AccountUsageGaugesSection(success = currentState)
+                    AccountUsageGaugesSection(entry = entry, success = currentState)
                 }
                 is GeminiUsageState.AuthRequired -> {
                     if (displayedSuccess != null) {
-                        AccountUsageGaugesSection(success = displayedSuccess)
+                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess)
                     }
                     AccountAuthRequiredBanner(onOpenLogin = onOpenLogin)
                 }
                 is GeminiUsageState.Error -> {
                     if (displayedSuccess != null) {
-                        AccountUsageGaugesSection(success = displayedSuccess)
+                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess)
                     }
                     AccountErrorBanner(
                         message = currentState.message,
@@ -320,7 +355,7 @@ fun GeminiAccountRowCard(
                 }
                 GeminiUsageState.Loading -> {
                     if (displayedSuccess != null) {
-                        AccountUsageGaugesSection(success = displayedSuccess)
+                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess)
                     } else {
                         AccountLoadingRow()
                     }
@@ -382,26 +417,73 @@ fun GeminiAccountRowCard(
     }
 }
 
+/**
+ * 할당량 소진 사유 뱃지 ([5시간 소진], [주간 소진]).
+ */
+@Composable
+fun GeminiQuotaExhaustionBadge(
+    reason: GeminiQuotaExhaustionReason,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MultiUsageWarningRed.copy(alpha = 0.14f),
+        border = BorderStroke(1.dp, MultiUsageWarningRed.copy(alpha = 0.45f)),
+        modifier = modifier
+    ) {
+        Text(
+            text = reason.badgeLabel,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MultiUsageWarningRed,
+            fontSize = 10.sp,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+        )
+    }
+}
+
 @Composable
 private fun AccountUsageGaugesSection(
+    entry: GeminiAccountUsageEntry,
     success: GeminiUsageState.Success
 ) {
+    val fiveHourPercent = entry.effectiveFiveHourPercent()
+    val weeklyPercent = entry.effectiveWeeklyPercent()
+
+    val fiveHourResetText = when {
+        entry.isFiveHourWindowExpired() -> "초기화됨 (0%)"
+        entry.isFiveHourTimerUnstarted() -> "대기 중 (미시작)"
+        else -> GeminiUsageParser.formatCompactResetWithRemaining(
+            rawText = success.fiveHourResetText,
+            updatedAt = success.updatedAt,
+            isFiveHourWindow = true
+        )
+    }
+
+    val weeklyResetText = GeminiUsageParser.formatCompactResetWithRemaining(
+        rawText = success.weeklyResetText,
+        updatedAt = success.updatedAt,
+        isFiveHourWindow = false
+    )
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         AccountUsageGaugeRow(
             title = "5시간 단기",
-            percent = success.fiveHourPercent,
-            resetText = GeminiUsageParser.formatCompactResetWithRemaining(success.fiveHourResetText),
-            warningLevel = success.fiveHourWarningLevel
+            percent = fiveHourPercent,
+            resetText = fiveHourResetText,
+            warningLevel = GeminiUsageWarningLevel.fromPercent(fiveHourPercent),
+            exhaustionBadgeText = if (fiveHourPercent >= 100) "5시간 소진" else null
         )
 
         AccountUsageGaugeRow(
             title = "주간 누적",
-            percent = success.weeklyPercent,
-            resetText = GeminiUsageParser.formatCompactResetWithRemaining(success.weeklyResetText),
-            warningLevel = success.weeklyWarningLevel
+            percent = weeklyPercent,
+            resetText = weeklyResetText,
+            warningLevel = GeminiUsageWarningLevel.fromPercent(weeklyPercent),
+            exhaustionBadgeText = if (weeklyPercent >= 100) "주간 소진" else null
         )
     }
 }
@@ -411,7 +493,8 @@ private fun AccountUsageGaugeRow(
     title: String,
     percent: Int,
     resetText: String,
-    warningLevel: GeminiUsageWarningLevel
+    warningLevel: GeminiUsageWarningLevel,
+    exhaustionBadgeText: String? = null
 ) {
     val clampedPercent = percent.coerceIn(0, 100)
     val animatedProgress by animateFloatAsState(
@@ -432,7 +515,8 @@ private fun AccountUsageGaugeRow(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.weight(1f, fill = false)
             ) {
                 Text(
                     text = title,
@@ -454,7 +538,22 @@ private fun AccountUsageGaugeRow(
                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                     )
                 }
-                if (warningLevel != GeminiUsageWarningLevel.NORMAL) {
+                if (exhaustionBadgeText != null) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MultiUsageWarningRed.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, MultiUsageWarningRed.copy(alpha = 0.45f))
+                    ) {
+                        Text(
+                            text = exhaustionBadgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MultiUsageWarningRed,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                } else if (warningLevel != GeminiUsageWarningLevel.NORMAL) {
                     GeminiUsageWarningBadge(
                         warningLevel = warningLevel,
                         color = gaugeColor
@@ -464,9 +563,10 @@ private fun AccountUsageGaugeRow(
 
             Text(
                 text = resetText,
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTheme.colors.textSecondary,
-                fontSize = 11.sp,
+                style = MaterialTheme.typography.labelMedium,
+                color = AppTheme.colors.textPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.5.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 8.dp)

@@ -1,4 +1,4 @@
-// 역할: 렌더링된 제미나이 사용량 페이지의 DOM 본문 텍스트에서 5시간/주간 한도 퍼센트, 리셋 안내 문구(시각 및 남은 시간 변환 포함), 계정 이메일을 추출·가공합니다.
+// 역할: 렌더링된 제미나이 사용량 DOM 본문에서 한도 퍼센트·리셋 문구·이메일을 추출하고, 초기화까지 남은 시간 계산 및 5시간 만료 보정 로직을 제공합니다.
 package com.example.gemgemgen.usage.domain
 
 import java.util.Calendar
@@ -48,6 +48,10 @@ object GeminiUsageParser {
     private val KOREAN_TARGET_TIME_REGEX = Regex(
         pattern = """(?:(\d{1,2})\s*(?:월|/)\s*(\d{1,2})\s*일?\s*)?(?:(오전|오후)\s*)?(\d{1,2})(?::(\d{2})|\s*시(?!간)(?:\s*(\d{1,2})\s*분)?)"""
     )
+
+    private val RELATIVE_DAYS_REGEX = Regex("""(\d+)\s*(?:일|(?:d|day|days)\b)""", RegexOption.IGNORE_CASE)
+    private val RELATIVE_HOURS_REGEX = Regex("""(\d+)\s*(?:시간|(?:h|hr|hrs|hour|hours)\b)""", RegexOption.IGNORE_CASE)
+    private val RELATIVE_MINUTES_REGEX = Regex("""(\d+)\s*(?:분|(?:m|min|mins|minute|minutes)\b)""", RegexOption.IGNORE_CASE)
 
     /**
      * 이동된 URL이 구글 로그인 페이지(accounts.google.com)인지 판별합니다.
@@ -113,36 +117,144 @@ object GeminiUsageParser {
     )
 
     /**
+     * 리셋 안내 문구(상대 시간/절대 시각)에서 현재 시각([nowMillis]) 기준 초기화까지 남은 시간(밀리초)을 계산합니다.
+     * - 구체적인 시간/시각 단서가 없는 기본 문구("5시간 주기 자동 초기화" 등)는 null을 반환합니다.
+     * - [isFiveHourWindow]가 true일 때 오늘 이미 지난 시각이면 +1일로 밀리지 않고 음수(<= 0L, 초기화 만료)를 반환합니다.
+     */
+    fun computeRemainingResetMillis(
+        rawText: String,
+        nowMillis: Long = System.currentTimeMillis(),
+        updatedAt: Long = 0L,
+        isFiveHourWindow: Boolean = false
+    ): Long? {
+        val initialCleaned = cleanResetText(rawText)
+        if (initialCleaned.isBlank() ||
+            initialCleaned.contains("주기") ||
+            initialCleaned == DEFAULT_FIVE_HOUR_RESET_TEXT ||
+            initialCleaned == DEFAULT_WEEKLY_RESET_TEXT
+        ) {
+            return null
+        }
+
+        val cleaned = initialCleaned
+            .replace(RESET_PREFIX_NOISE_REGEX, "")
+            .replace(RESET_SUFFIX_NOISE_REGEX, "")
+            .trim()
+        if (cleaned.isBlank()) return null
+
+        val hasColonTimeOrAmPm = cleaned.contains(":") || cleaned.contains("오전") || cleaned.contains("오후") ||
+            Regex("""\d{1,2}\s*(?:월|/)\s*\d{1,2}""").containsMatchIn(cleaned)
+
+        if (!hasColonTimeOrAmPm || RELATIVE_TIME_REGEX.containsMatchIn(cleaned)) {
+            val daysMatch = RELATIVE_DAYS_REGEX.find(cleaned)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            val hoursMatch = RELATIVE_HOURS_REGEX.find(cleaned)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            val minutesMatch = RELATIVE_MINUTES_REGEX.find(cleaned)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            val durationMillis = daysMatch * 24 * 3600_000L + hoursMatch * 3600_000L + minutesMatch * 60_000L
+            if (durationMillis > 0L) {
+                return if (updatedAt > 0L && updatedAt <= nowMillis) {
+                    (updatedAt + durationMillis) - nowMillis
+                } else {
+                    durationMillis
+                }
+            }
+        }
+
+        val parsedTime = parseTargetTime(cleaned)
+        if (parsedTime != null) {
+            val anchorMillis = if (updatedAt > 0L && updatedAt <= nowMillis) updatedAt else nowMillis
+            val targetCal = Calendar.getInstance().apply {
+                timeInMillis = anchorMillis
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                set(Calendar.HOUR_OF_DAY, parsedTime.hour24)
+                set(Calendar.MINUTE, parsedTime.minute)
+                if (parsedTime.month != null && parsedTime.day != null) {
+                    set(Calendar.MONTH, parsedTime.month - 1)
+                    set(Calendar.DAY_OF_MONTH, parsedTime.day)
+                    if (timeInMillis < anchorMillis - 30L * 24L * 3600_000L) {
+                        add(Calendar.YEAR, 1)
+                    }
+                } else {
+                    if (timeInMillis <= anchorMillis) {
+                        add(Calendar.DAY_OF_YEAR, 1)
+                    }
+                    if (isFiveHourWindow && timeInMillis - anchorMillis > 6 * 3600_000L) {
+                        add(Calendar.DAY_OF_YEAR, -1)
+                    }
+                }
+            }
+            return targetCal.timeInMillis - nowMillis
+        }
+
+        return null
+    }
+
+    /**
      * 다이얼로그 및 카드 표시용으로 `"에 초기화"` 반복 문구를 제거하고, 24시간제/축약 일시와 함께 현재 시각 기준 남은 시간을 병기합니다.
      * 예: `"오후 2:00에 초기화"` -> `"14:00 (4시간 10분 후)"`, `"10월 20일 오후 2:00에 초기화"` -> `"10/20/14:00 (4일 4시간 후)"`
+     * [isFiveHourWindow]가 true이고 리셋 시각이 이미 지났다면 `"초기화됨 (0%)"`를 반환합니다.
      */
     fun formatCompactResetWithRemaining(
         rawText: String,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        updatedAt: Long = 0L,
+        isFiveHourWindow: Boolean = false
     ): String {
+        val remainingMillis = computeRemainingResetMillis(
+            rawText = rawText,
+            nowMillis = nowMillis,
+            updatedAt = updatedAt,
+            isFiveHourWindow = isFiveHourWindow
+        )
+        if (isFiveHourWindow && remainingMillis != null && remainingMillis <= 0L) {
+            return "초기화됨 (0%)"
+        }
+
         val cleaned = cleanResetText(rawText)
             .replace(RESET_PREFIX_NOISE_REGEX, "")
             .replace(RESET_SUFFIX_NOISE_REGEX, "")
             .trim()
         if (cleaned.isBlank()) return ""
 
-        // 이미 상대 시간("2시간 15분 후", "45분 뒤" 등) 형태인 경우 중복 계산 없이 그대로 반환
         if (RELATIVE_TIME_REGEX.containsMatchIn(cleaned)) {
+            if (updatedAt > 0L && updatedAt <= nowMillis && remainingMillis != null && remainingMillis > 0L) {
+                return formatRemainingDuration(remainingMillis)
+            }
             return cleaned
         }
 
         val parsedTime = parseTargetTime(cleaned)
         if (parsedTime != null) {
             val shortTime = parsedTime.formatFormattedTime()
-            val remaining = computeRemainingDurationText(parsedTime, nowMillis)
-            return if (!remaining.isNullOrBlank()) {
-                "$shortTime ($remaining)"
+            val durationText = if (remainingMillis != null && remainingMillis > 0L) {
+                formatRemainingDuration(remainingMillis)
+            } else {
+                computeRemainingDurationText(parsedTime, nowMillis)
+            }
+            return if (!durationText.isNullOrBlank()) {
+                "$shortTime ($durationText)"
             } else {
                 shortTime
             }
         }
 
         return cleaned.ifBlank { cleanResetText(rawText) }
+    }
+
+    private fun formatRemainingDuration(diffMillis: Long): String {
+        if (diffMillis <= 0L) return "곧 초기화"
+        val totalMinutes = (diffMillis + 30_000L) / 60_000L
+        if (totalMinutes <= 0L) return "곧 초기화"
+
+        val days = totalMinutes / (24L * 60L)
+        val hours = (totalMinutes % (24L * 60L)) / 60L
+        val minutes = totalMinutes % 60L
+
+        return when {
+            days > 0L -> if (hours > 0L) "${days}일 ${hours}시간 후" else "${days}일 후"
+            hours > 0L -> if (minutes > 0L) "${hours}시간 ${minutes}분 후" else "${hours}시간 후"
+            else -> "${minutes}분 후"
+        }
     }
 
     private data class ParsedTargetTime(

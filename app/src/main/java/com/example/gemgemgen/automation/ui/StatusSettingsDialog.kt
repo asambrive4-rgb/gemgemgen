@@ -1,4 +1,4 @@
-// 역할: 접근성 권한, 원격 연결, 클립보드 복사, 사이드바 열림 모드 및 자동 메모리 정리 설정, 테마 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
+// 역할: 자동화 편의 설정(클립보드·사이드바·메모리 정리), 원격 연결, 화면 테마 및 시스템 환경 점검 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -128,209 +128,6 @@ private fun StatusSettingsDialogContent(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 화면 테마 모드 (시스템 설정 / 라이트 / 다크)
-            Text(
-                text = "🌓 화면 테마 모드",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AppThemeMode.entries.forEach { mode ->
-                    val isModeSelected = mode == LocalAppThemeMode.current
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { actions.onSelectThemeMode(mode) },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isModeSelected) {
-                            AppTheme.colors.card
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                        },
-                        border = if (isModeSelected) {
-                            BorderStroke(2.dp, AppTheme.colors.accent)
-                        } else {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                        }
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 10.dp, horizontal = 4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = when (mode) {
-                                    AppThemeMode.SYSTEM -> "시스템 (기본)"
-                                    AppThemeMode.LIGHT -> "라이트"
-                                    AppThemeMode.DARK -> "다크"
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (isModeSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isModeSelected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // 테마 색상 팔레트 선택 섹션
-            Text(
-                text = "🎨 소프트 3D 테마 팔레트",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AppThemePalette.entries.forEach { palette ->
-                    val isSelected = palette == LocalAppThemePalette.current
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable { actions.onSelectThemePalette(palette) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isSelected) {
-                            AppTheme.colors.card
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        },
-                        border = if (isSelected) {
-                            BorderStroke(2.dp, palette.previewColor)
-                        } else {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(palette.previewColor)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = palette.title,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
-                                Text(
-                                    text = palette.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { actions.onSelectThemePalette(palette) }
-                            )
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-            // 원격 연결 섹션
-            Text(
-                text = "🌐 원격 연결",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            val isRemoteConnected = when (remoteStatus.mode) {
-                AutomationMode.SENDER -> remoteStatus.isPaired && remoteStatus.discoveredDeviceName.isNotBlank()
-                AutomationMode.RECEIVER -> remoteStatus.isPaired
-                AutomationMode.NORMAL -> false
-            }
-            val connectedDeviceName = when (remoteStatus.mode) {
-                AutomationMode.SENDER -> remoteStatus.discoveredDeviceName.ifBlank { "S25 FE" }
-                AutomationMode.RECEIVER -> "태블릿"
-                AutomationMode.NORMAL -> ""
-            }
-            val isRemoteRunning = remoteStatus.automationState is AutomationRunState.Running
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isRemoteConnected) connectedDeviceName else "연결된 기기 없음",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (isRemoteConnected) "원격 연결됨" else "원격 연결 안 됨",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isRemoteConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        StatusBadge(isReady = isRemoteConnected)
-                    }
-
-                    if (isRemoteRunning) {
-                        Text(
-                            text = "원격 자동화를 중지한 뒤 연결을 끊어주세요.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-
-                    if (uiState.remoteDisconnectMessage.isNotBlank()) {
-                        Text(
-                            text = uiState.remoteDisconnectMessage,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (uiState.remoteDisconnectMessage == "원격 연결을 끊었습니다.") {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            }
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = { actions.disconnectRemoteDevice() },
-                        enabled = isRemoteConnected && !isRemoteRunning && !uiState.isDisconnectingRemote,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (uiState.isDisconnectingRemote) "연결 끊는 중…" else "연결 끊기")
-                    }
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
             // 자동화 편의 설정 (시작 시 클립보드 복사 등)
             Text(
                 text = "📋 자동화 편의 설정",
@@ -482,6 +279,209 @@ private fun StatusSettingsDialogContent(
                             RepeatCountStepper(
                                 repeatCountText = uiState.autoMemoryCleanupThresholdText,
                                 onRepeatCountChange = { actions.onAutoMemoryCleanupThresholdChange(it) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            // 원격 연결 섹션
+            Text(
+                text = "🌐 원격 연결",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            val isRemoteConnected = when (remoteStatus.mode) {
+                AutomationMode.SENDER -> remoteStatus.isPaired && remoteStatus.discoveredDeviceName.isNotBlank()
+                AutomationMode.RECEIVER -> remoteStatus.isPaired
+                AutomationMode.NORMAL -> false
+            }
+            val connectedDeviceName = when (remoteStatus.mode) {
+                AutomationMode.SENDER -> remoteStatus.discoveredDeviceName.ifBlank { "S25 FE" }
+                AutomationMode.RECEIVER -> "태블릿"
+                AutomationMode.NORMAL -> ""
+            }
+            val isRemoteRunning = remoteStatus.automationState is AutomationRunState.Running
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isRemoteConnected) connectedDeviceName else "연결된 기기 없음",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isRemoteConnected) "원격 연결됨" else "원격 연결 안 됨",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isRemoteConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        StatusBadge(isReady = isRemoteConnected)
+                    }
+
+                    if (isRemoteRunning) {
+                        Text(
+                            text = "원격 자동화를 중지한 뒤 연결을 끊어주세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    if (uiState.remoteDisconnectMessage.isNotBlank()) {
+                        Text(
+                            text = uiState.remoteDisconnectMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (uiState.remoteDisconnectMessage == "원격 연결을 끊었습니다.") {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = { actions.disconnectRemoteDevice() },
+                        enabled = isRemoteConnected && !isRemoteRunning && !uiState.isDisconnectingRemote,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (uiState.isDisconnectingRemote) "연결 끊는 중…" else "연결 끊기")
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            // 화면 테마 모드 (시스템 설정 / 라이트 / 다크)
+            Text(
+                text = "🌓 화면 테마 모드",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AppThemeMode.entries.forEach { mode ->
+                    val isModeSelected = mode == LocalAppThemeMode.current
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { actions.onSelectThemeMode(mode) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isModeSelected) {
+                            AppTheme.colors.card
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        },
+                        border = if (isModeSelected) {
+                            BorderStroke(2.dp, AppTheme.colors.accent)
+                        } else {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = when (mode) {
+                                    AppThemeMode.SYSTEM -> "시스템 (기본)"
+                                    AppThemeMode.LIGHT -> "라이트"
+                                    AppThemeMode.DARK -> "다크"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isModeSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isModeSelected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // 테마 색상 팔레트 선택 섹션
+            Text(
+                text = "🎨 소프트 3D 테마 팔레트",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AppThemePalette.entries.forEach { palette ->
+                    val isSelected = palette == LocalAppThemePalette.current
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { actions.onSelectThemePalette(palette) },
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isSelected) {
+                            AppTheme.colors.card
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        },
+                        border = if (isSelected) {
+                            BorderStroke(2.dp, palette.previewColor)
+                        } else {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(palette.previewColor)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = palette.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                                Text(
+                                    text = palette.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { actions.onSelectThemePalette(palette) }
                             )
                         }
                     }

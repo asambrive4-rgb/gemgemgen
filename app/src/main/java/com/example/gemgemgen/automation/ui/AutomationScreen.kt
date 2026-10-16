@@ -198,8 +198,8 @@ internal fun AutomationScreen(
             if (uiState.showMultiGeminiUsageDialog) {
                 MultiGeminiUsageDialog(
                     multiUsageState = uiState.multiGeminiUsageState,
-                    onAddAccount = { alias, email, accountId ->
-                        actions.addGeminiAccount(alias = alias, email = email, accountId = accountId)
+                    onAddAccount = { alias, email, accountId, group ->
+                        actions.addGeminiAccount(alias = alias, email = email, accountId = accountId, group = group)
                     },
                     onUpdateAccount = { accountId, alias, email ->
                         actions.updateGeminiAccount(accountId = accountId, alias = alias, email = email)
@@ -208,6 +208,7 @@ internal fun AutomationScreen(
                     onSelectRepresentativeAccount = actions::selectRepresentativeGeminiAccount,
                     onRefreshAccount = actions::refreshGeminiAccountUsage,
                     onRefreshAll = actions::refreshAllGeminiUsage,
+                    onMoveAccountGroup = actions::moveGeminiAccountGroup,
                     onDismiss = actions::closeMultiGeminiUsageDialog
                 )
             }

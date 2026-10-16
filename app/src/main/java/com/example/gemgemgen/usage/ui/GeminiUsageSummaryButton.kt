@@ -175,10 +175,10 @@ fun GeminiUsageSummaryButton(
                     multiUsageState.summaryResetTimeText?.let { resetTime ->
                         Text(
                             text = resetTime,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = AppTheme.colors.textSecondary,
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppTheme.colors.textPrimary.copy(alpha = 0.88f),
+                            fontSize = 12.5.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )

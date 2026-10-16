@@ -9,6 +9,7 @@ import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
+import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -79,9 +80,15 @@ interface AutomationScreenActions {
     // 다중 계정(5개+) 제미나이 사용량 모니터링 및 모달 액션
     fun openMultiGeminiUsageDialog() {}
     fun closeMultiGeminiUsageDialog() {}
-    fun addGeminiAccount(alias: String, email: String = "", accountId: String? = null) {}
+    fun addGeminiAccount(
+        alias: String,
+        email: String = "",
+        accountId: String? = null,
+        group: GeminiAccountGroup = GeminiAccountGroup.MAIN
+    ) {}
     fun updateGeminiAccount(accountId: String, alias: String, email: String = "") {}
     fun removeGeminiAccount(accountId: String) {}
+    fun moveGeminiAccountGroup(accountId: String, targetGroup: GeminiAccountGroup) {}
     fun selectRepresentativeGeminiAccount(accountId: String) {}
     fun refreshGeminiAccountUsage(accountId: String) {}
     fun refreshAllGeminiUsage() {}

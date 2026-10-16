@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정(5개 이상)의 수직 스크롤 사용량 목록 조회, 전체/개별 새로고침, 계정 추가 및 독립 세션 구글 로그인을 단일 모달 윈도우에서 제공합니다.
+// 역할: 다중 제미나이 계정의 메인/서브 탭 분리(대표 계정 기준 자동 탭 선택), 전체/개별 새로고침, 계정 추가 및 독립 세션 로그인을 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import android.annotation.SuppressLint
@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -72,6 +74,7 @@ import com.example.gemgemgen.ui.theme.NeuModalDialogFrame
 import com.example.gemgemgen.ui.theme.NeuPillChip
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import com.example.gemgemgen.usage.android.MultiProfileGeminiUsageFetcher
+import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiUsageParser
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
@@ -97,31 +100,42 @@ private val PRESET_ACCOUNT_ALIASES = listOf(
 )
 
 /**
- * 다중 Google Gemini 계정(5개 이상)의 사용량을 수직 스크롤 목록으로 확인·감시하는 모달 다이얼로그.
+ * 다중 Google Gemini 계정(5개 이상)의 사용량을 메인/서브 탭 분리 수직 스크롤 목록으로 확인·감시하는 모달 다이얼로그.
  *
  * - 상단 헤더: "Gemini 계정 사용량" 타이틀 + [+ 계정 추가], [전체 새로고침(🔄)], 닫기(✕) 버튼
- * - 수직 스크롤 목록: 등록된 5개 이상의 계정 카드([GeminiAccountRowCard]) 나열
- * - 빈 상태(Empty State): 등록된 계정이 없을 때 계정 추가 안내 화면 제공
+ * - 탭 바: [메인 (N개)] / [서브 (N개)] 세그먼트 전환
+ * - 수직 스크롤 목록: 등록된 계정 카드([GeminiAccountRowCard]) 나열
+ * - 빈 상태(Empty State): 전체 빈 상태 및 탭별 빈 상태 안내 화면 제공
  * - 인앱 [계정 추가] / [로그인]: 해당 계정 전용 독립 세션 웹뷰로 구글 로그인 및 쿠키 격리 저장
  */
 @Composable
 fun MultiGeminiUsageDialog(
     multiUsageState: MultiGeminiUsageState,
-    onAddAccount: (alias: String, email: String, accountId: String) -> Unit,
+    onAddAccount: (alias: String, email: String, accountId: String, group: GeminiAccountGroup) -> Unit,
     onUpdateAccount: (accountId: String, alias: String, email: String) -> Unit,
     onRemoveAccount: (accountId: String) -> Unit,
     onSelectRepresentativeAccount: (accountId: String) -> Unit,
     onRefreshAccount: (accountId: String) -> Unit,
     onRefreshAll: () -> Unit,
+    onMoveAccountGroup: ((accountId: String, targetGroup: GeminiAccountGroup) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     var activeStage by remember {
         mutableStateOf<MultiUsageModalStage>(MultiUsageModalStage.AccountList)
     }
+    var selectedTab by remember(multiUsageState.representativeAccount?.profile?.id) {
+        mutableStateOf(
+            multiUsageState.representativeAccount?.profile?.group ?: GeminiAccountGroup.MAIN
+        )
+    }
 
     val openNewAccountStage = {
-        val nextIndex = multiUsageState.accountCount + 1
-        val defaultAlias = if (nextIndex == 1) "개인 본계정" else "작업용 ${nextIndex - 1}"
+        val currentGroupCount = multiUsageState.accountCountForGroup(selectedTab)
+        val defaultAlias = if (selectedTab == GeminiAccountGroup.MAIN) {
+            if (currentGroupCount == 0) "개인 본계정" else "작업용 $currentGroupCount"
+        } else {
+            "서브 계정 ${currentGroupCount + 1}"
+        }
         val freshId = GeminiAccountProfile.generateAccountId()
         val draftProfile = GeminiAccountProfile(
             id = freshId,
@@ -129,7 +143,8 @@ fun MultiGeminiUsageDialog(
             email = "",
             sortOrder = multiUsageState.accountCount,
             webViewProfileName = GeminiAccountProfile.buildWebViewProfileName(freshId),
-            createdAt = System.currentTimeMillis()
+            createdAt = System.currentTimeMillis(),
+            group = selectedTab
         )
         activeStage = MultiUsageModalStage.AccountLoginOrSetup(
             targetProfile = draftProfile,
@@ -171,6 +186,8 @@ fun MultiGeminiUsageDialog(
                 MultiUsageModalStage.AccountList -> {
                     MultiAccountListContent(
                         multiUsageState = multiUsageState,
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it },
                         onAddAccountClick = openNewAccountStage,
                         onRefreshAll = onRefreshAll,
                         onSelectRepresentativeAccount = onSelectRepresentativeAccount,
@@ -178,6 +195,7 @@ fun MultiGeminiUsageDialog(
                         onOpenAccountLogin = openExistingAccountStage,
                         onEditAccount = openExistingAccountStage,
                         onRemoveAccount = onRemoveAccount,
+                        onMoveAccountGroup = onMoveAccountGroup,
                         onDismiss = onDismiss
                     )
                 }
@@ -187,7 +205,7 @@ fun MultiGeminiUsageDialog(
                         isNewAccount = stage.isNewAccount,
                         onSaveAndFinish = { alias, email ->
                             if (stage.isNewAccount) {
-                                onAddAccount(alias, email, stage.targetProfile.id)
+                                onAddAccount(alias, email, stage.targetProfile.id, stage.targetProfile.group)
                             } else {
                                 onUpdateAccount(stage.targetProfile.id, alias, email)
                                 onRefreshAccount(stage.targetProfile.id)
@@ -207,6 +225,8 @@ fun MultiGeminiUsageDialog(
 @Composable
 private fun MultiAccountListContent(
     multiUsageState: MultiGeminiUsageState,
+    selectedTab: GeminiAccountGroup,
+    onTabSelected: (GeminiAccountGroup) -> Unit,
     onAddAccountClick: () -> Unit,
     onRefreshAll: () -> Unit,
     onSelectRepresentativeAccount: (String) -> Unit,
@@ -214,13 +234,15 @@ private fun MultiAccountListContent(
     onOpenAccountLogin: (GeminiAccountProfile) -> Unit,
     onEditAccount: (GeminiAccountProfile) -> Unit,
     onRemoveAccount: (String) -> Unit,
+    onMoveAccountGroup: ((String, GeminiAccountGroup) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val representativeId = multiUsageState.representativeAccount?.profile?.id
+    val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // 모달 상단 헤더: 타이틀 + [+ 계정 추가], [전체 새로고침(🔄)], 닫기(✕)
         Row(
@@ -249,7 +271,7 @@ private fun MultiAccountListContent(
                         text = if (multiUsageState.isEmpty) {
                             "5개 이상의 계정을 독립 세션으로 등록해 잔여 한도를 감시하세요"
                         } else {
-                            "등록된 계정 ${multiUsageState.accountCount}개 · 카드를 탭하면 메인 대표 계정으로 전환됩니다"
+                            "등록된 계정 ${multiUsageState.accountCount}개 · 메인 ${multiUsageState.mainAccountCount}개 / 서브 ${multiUsageState.subAccountCount}개"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = AppTheme.colors.textSecondary,
@@ -284,7 +306,6 @@ private fun MultiAccountListContent(
         }
 
         // 상단 액션 툴바: [계정 추가] 버튼 & [전체 새로고침(🔄)] 버튼
-        val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -307,7 +328,7 @@ private fun MultiAccountListContent(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "계정 추가",
+                    text = "${selectedTab.label} 계정 추가",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -348,10 +369,30 @@ private fun MultiAccountListContent(
             }
         }
 
+        // 메인 / 서브 탭 세그먼트 전환 바
+        MultiAccountGroupTabBar(
+            selectedGroup = selectedTab,
+            onGroupSelected = onTabSelected,
+            multiUsageState = multiUsageState
+        )
+
         // 본문: 빈 상태(Empty State) 또는 5개+ 수직 스크롤 목록(LazyColumn)
         if (multiUsageState.isEmpty) {
             MultiAccountEmptyStateView(onAddAccountClick = onAddAccountClick)
+        } else if (multiUsageState.isGroupEmpty(selectedTab)) {
+            MultiAccountGroupEmptyStateView(
+                group = selectedTab,
+                onAddAccountClick = onAddAccountClick
+            )
         } else {
+            val nowMillis = remember(multiUsageState) { System.currentTimeMillis() }
+            val usableOrPendingAccounts = remember(multiUsageState, selectedTab, nowMillis) {
+                multiUsageState.availableAccountsSorted(group = selectedTab, nowMillis = nowMillis)
+            }
+            val exhaustedAccounts = remember(multiUsageState, selectedTab, nowMillis) {
+                multiUsageState.exhaustedAccountsSorted(group = selectedTab, nowMillis = nowMillis)
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -359,32 +400,268 @@ private fun MultiAccountListContent(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(vertical = 2.dp)
             ) {
-                items(
-                    items = multiUsageState.accounts,
-                    key = { it.profile.id }
-                ) { accountEntry ->
-                    GeminiAccountRowCard(
-                        entry = accountEntry,
-                        isRepresentative = accountEntry.profile.id == representativeId,
-                        onSelectRepresentative = {
-                            onSelectRepresentativeAccount(accountEntry.profile.id)
-                        },
-                        onRefresh = {
-                            onRefreshAccount(accountEntry.profile.id)
-                        },
-                        onOpenLogin = {
-                            onOpenAccountLogin(accountEntry.profile)
-                        },
-                        onEditAccount = {
-                            onEditAccount(accountEntry.profile)
-                        },
-                        onDeleteAccount = {
-                            onRemoveAccount(accountEntry.profile.id)
+                if (usableOrPendingAccounts.isNotEmpty()) {
+                    item(key = "header_usable_${selectedTab.name}") {
+                        AccountSectionHeader(
+                            title = "사용 가능 ${usableOrPendingAccounts.size}개",
+                            hint = "5시간 초기화 임박 순",
+                            indicatorColor = brandHighlightColor
+                        )
+                    }
+                    items(
+                        items = usableOrPendingAccounts,
+                        key = { it.profile.id }
+                    ) { accountEntry ->
+                        GeminiAccountRowCard(
+                            entry = accountEntry,
+                            isRepresentative = accountEntry.profile.id == representativeId,
+                            onSelectRepresentative = {
+                                onSelectRepresentativeAccount(accountEntry.profile.id)
+                            },
+                            onRefresh = {
+                                onRefreshAccount(accountEntry.profile.id)
+                            },
+                            onOpenLogin = {
+                                onOpenAccountLogin(accountEntry.profile)
+                            },
+                            onEditAccount = {
+                                onEditAccount(accountEntry.profile)
+                            },
+                            onDeleteAccount = {
+                                onRemoveAccount(accountEntry.profile.id)
+                            },
+                            onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
+                                { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
+                            }
+                        )
+                    }
+                }
+
+                if (exhaustedAccounts.isNotEmpty()) {
+                    item(key = "header_exhausted_${selectedTab.name}") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(AppTheme.colors.cardBorder.copy(alpha = 0.5f))
+                            )
+                            AccountSectionHeader(
+                                title = "사용 불가 ${exhaustedAccounts.size}개",
+                                hint = "해제 임박 순 · 탭하여 선택 가능",
+                                indicatorColor = MultiUsageWarningRed
+                            )
                         }
-                    )
+                    }
+                    items(
+                        items = exhaustedAccounts,
+                        key = { it.profile.id }
+                    ) { accountEntry ->
+                        GeminiAccountRowCard(
+                            entry = accountEntry,
+                            isRepresentative = accountEntry.profile.id == representativeId,
+                            onSelectRepresentative = {
+                                onSelectRepresentativeAccount(accountEntry.profile.id)
+                            },
+                            onRefresh = {
+                                onRefreshAccount(accountEntry.profile.id)
+                            },
+                            onOpenLogin = {
+                                onOpenAccountLogin(accountEntry.profile)
+                            },
+                            onEditAccount = {
+                                onEditAccount(accountEntry.profile)
+                            },
+                            onDeleteAccount = {
+                                onRemoveAccount(accountEntry.profile.id)
+                            },
+                            onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
+                                { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
+                            }
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+/**
+ * 다이얼로그 내부 '메인' / '서브' 세그먼트 탭 바.
+ */
+@Composable
+private fun MultiAccountGroupTabBar(
+    selectedGroup: GeminiAccountGroup,
+    onGroupSelected: (GeminiAccountGroup) -> Unit,
+    multiUsageState: MultiGeminiUsageState,
+    modifier: Modifier = Modifier
+) {
+    NeuInsetBed(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(38.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            AccountTabSegmentItem(
+                title = "메인 (${multiUsageState.mainAccountCount})",
+                isSelected = selectedGroup == GeminiAccountGroup.MAIN,
+                onClick = { onGroupSelected(GeminiAccountGroup.MAIN) },
+                modifier = Modifier.weight(1f)
+            )
+
+            AccountTabSegmentItem(
+                title = "서브 (${multiUsageState.subAccountCount})",
+                isSelected = selectedGroup == GeminiAccountGroup.SUB,
+                onClick = { onGroupSelected(GeminiAccountGroup.SUB) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccountTabSegmentItem(
+    title: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (isSelected) AppTheme.colors.card else androidx.compose.ui.graphics.Color.Transparent,
+        border = if (isSelected) BorderStroke(1.dp, AppTheme.colors.cardBorder) else null,
+        shadowElevation = if (isSelected) 2.dp else 0.dp,
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) brandHighlightColor else AppTheme.colors.textSecondary,
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+/**
+ * 특정 탭(메인 또는 서브)에 계정이 등록되어 있지 않을 때 표시하는 가이드 뷰.
+ */
+@Composable
+private fun MultiAccountGroupEmptyStateView(
+    group: GeminiAccountGroup,
+    onAddAccountClick: () -> Unit
+) {
+    val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
+    NeuInsetBed(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "등록된 ${group.label} 계정이 없습니다",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.colors.textPrimary
+            )
+            Text(
+                text = if (group == GeminiAccountGroup.MAIN) {
+                    "주로 사용하는 계정을 메인 탭에 등록해 잔여 한도를 집중 모니터링하세요."
+                } else {
+                    "자주 사용하지 않는 보조 계정을 서브 탭에 추가해 관리하세요."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 11.5.sp,
+                color = AppTheme.colors.textSecondary,
+                textAlign = TextAlign.Center
+            )
+            NeuButton(
+                onClick = onAddAccountClick,
+                isPrimary = true,
+                shape = RoundedCornerShape(10.dp),
+                contentModifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${group.label} 계정 추가하기",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountSectionHeader(
+    title: String,
+    hint: String,
+    indicatorColor: androidx.compose.ui.graphics.Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(indicatorColor)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.colors.textPrimary,
+                fontSize = 11.sp
+            )
+        }
+
+        Text(
+            text = hint,
+            style = MaterialTheme.typography.labelSmall,
+            color = AppTheme.colors.textSecondary,
+            fontSize = 10.sp
+        )
     }
 }
 
