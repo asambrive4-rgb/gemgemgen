@@ -218,20 +218,13 @@ class GeminiUsageFetcher(
                 bodyText = rawBodyText,
                 updatedAt = timestamp
             )
-            val success = if (parsedFromBody != null) {
-                parsedFromBody.copy(
-                    fiveHourResetText = fiveHourResetText.trim().ifBlank { parsedFromBody.fiveHourResetText },
-                    weeklyResetText = weeklyResetText.trim().ifBlank { parsedFromBody.weeklyResetText }
-                )
-            } else {
-                GeminiUsageParser.createSuccess(
-                    fiveHourPercent = fiveHourPercent,
-                    fiveHourResetText = fiveHourResetText,
-                    weeklyPercent = weeklyPercent,
-                    weeklyResetText = weeklyResetText,
-                    updatedAt = timestamp
-                )
-            }
+            val success = parsedFromBody ?: GeminiUsageParser.createSuccess(
+                fiveHourPercent = fiveHourPercent,
+                fiveHourResetText = fiveHourResetText,
+                weeklyPercent = weeklyPercent,
+                weeklyResetText = weeklyResetText,
+                updatedAt = timestamp
+            )
             onResult(success)
         }
 
@@ -279,10 +272,10 @@ class GeminiUsageFetcher(
                 var attempts = 0;
                 var maxAttempts = $MAX_POLL_ATTEMPTS;
 
-                function extractResetLine(segment, fallbackSegment, defaultLabel) {
+                function extractResetLine(segment, fallbackSegment, defaultLabel, excludeLine) {
                     var combined = [segment || '', fallbackSegment || ''];
                     var resetKeywordRegex = /(?:resets?\b[^\n\r]*|[^\n\r]*(?:초기화|재설정|리셋|갱신)[^\n\r]*)/i;
-                    var timeHintRegex = /(?:[^\n\r]*\b(?:\d+\s*(?:h|hr|hrs|hour|hours|m|min|mins|minute|minutes|d|day|days|시간|분|일)\b|\d{1,2}:\d{2})[^\n\r]*)/i;
+                    var timeHintRegex = /(?:[^\n\r]*(?:\d+\s*(?:(?:h|hr|hrs|hour|hours|m|min|mins|minute|minutes|d|day|days)\b|(?:개월|주|일|시간|시|분|초))|\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}:\d{2}|\d{1,2}\s*\/\s*\d{1,2})[^\n\r]*)/i;
                     var noisePrefixRegex = /^(?:used|remaining|사용됨|사용중|사용|남음)\s*[-·•:|]?\s*/i;
                     var headerRegex = /^(?:5\s*[- ]?\s*hour|five\s*[- ]?\s*hour|current|daily|weekly|5\s*시간|단기|주간|일일|한도|사용량|limit|usage|quota)\b/i;
 
@@ -293,12 +286,15 @@ class GeminiUsageFetcher(
                             if (!cleaned) continue;
                             var explicitMatch = cleaned.match(resetKeywordRegex);
                             if (explicitMatch && explicitMatch[0]) {
-                                return explicitMatch[0].trim();
+                                var matchedText = explicitMatch[0].trim();
+                                if (excludeLine && matchedText === excludeLine) continue;
+                                return matchedText;
                             }
                         }
                         for (var j = 0; j < lines.length; j++) {
                             var candidate = lines[j].trim().replace(noisePrefixRegex, '').replace(/^[-·•:|]+|[-·•:|]+$/g, '').trim();
                             if (!candidate || headerRegex.test(candidate)) continue;
+                            if (excludeLine && candidate === excludeLine) continue;
                             if (timeHintRegex.test(candidate)) {
                                 return candidate;
                             }
@@ -341,8 +337,8 @@ class GeminiUsageFetcher(
                         var beforeFirst = bodyText.substring(Math.max(0, first.start - 200), first.start);
                         var afterSecond = bodyText.substring(second.end, Math.min(bodyText.length, second.end + 400));
 
-                        var firstReset = extractResetLine(betweenSegment, beforeFirst, '5시간 주기 자동 초기화');
-                        var secondReset = extractResetLine(afterSecond, betweenSegment.slice(-200), '주간 주기 자동 초기화');
+                        var firstReset = extractResetLine(betweenSegment, beforeFirst, '5시간 주기 자동 초기화', '');
+                        var secondReset = extractResetLine(afterSecond, betweenSegment.slice(-200), '주간 주기 자동 초기화', firstReset);
 
                         if (window.$BRIDGE_NAME && window.$BRIDGE_NAME.onUsageParsed) {
                             window.$BRIDGE_NAME.onUsageParsed(

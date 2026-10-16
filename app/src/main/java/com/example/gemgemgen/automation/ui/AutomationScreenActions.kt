@@ -1,4 +1,4 @@
-// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 제미나이 사용량 조회/로그인 액션 및 추천 칩 국소 관찰 상태를 캡슐화한 인터페이스입니다.
+// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 다중 계정 제미나이 사용량 모달/CRUD/새로고침 액션 및 추천 칩 국소 관찰 상태를 캡슐화한 인터페이스입니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
@@ -9,7 +9,6 @@ import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
-
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -77,7 +76,17 @@ interface AutomationScreenActions {
     fun terminateSelfApp() {}
     fun cleanDeviceMemory() {}
 
-    // 제미나이 사용량 한도 조회 및 인앱 로그인
+    // 다중 계정(5개+) 제미나이 사용량 모니터링 및 모달 액션
+    fun openMultiGeminiUsageDialog() {}
+    fun closeMultiGeminiUsageDialog() {}
+    fun addGeminiAccount(alias: String, email: String = "", accountId: String? = null) {}
+    fun updateGeminiAccount(accountId: String, alias: String, email: String = "") {}
+    fun removeGeminiAccount(accountId: String) {}
+    fun selectRepresentativeGeminiAccount(accountId: String) {}
+    fun refreshGeminiAccountUsage(accountId: String) {}
+    fun refreshAllGeminiUsage() {}
+
+    // 단일/공통 사용량 액션 위임
     fun refreshGeminiUsage() {}
     fun openGeminiUsageLogin() {}
     fun closeGeminiUsageLogin() {}
@@ -97,6 +106,7 @@ interface AutomationScreenActions {
     fun onOpenAccessibilitySettings() {}
     fun onClearFocus() {}
     fun onToggleCopyPromptOnStart(enabled: Boolean) {}
+    fun onToggleGeminiSidebarOpenMode(enabled: Boolean) {}
     fun onToggleAutoMemoryCleanup(enabled: Boolean) {}
     fun onAutoMemoryCleanupThresholdChange(value: String) {}
 }

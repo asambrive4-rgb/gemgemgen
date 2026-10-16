@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드, 제미나이 사용량 한도 상태, 누적 생성 기반 시작 전 자동 메모리 정리 및 자동화/유지보수 상태를 총괄 관리하는 뷰모델입니다.
+// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드, 다중 계정 제미나이 사용량 모니터링 상태 및 모달 제어, 자동/예약 메모리 정리를 총괄 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -14,31 +14,32 @@ import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.domain.isTerminal
-import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
+import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
+import com.example.gemgemgen.automation.usecase.AutomationStartDecision
+import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
+import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
+import com.example.gemgemgen.automation.usecase.LastRunSnapshot
+import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
+import com.example.gemgemgen.automation.usecase.MaintenanceResult
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.PromptSnippetRepository
 import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
 import com.example.gemgemgen.automation.usecase.VariationStartDecision
-import com.example.gemgemgen.automation.usecase.AutomationStartDecision
-import com.example.gemgemgen.automation.usecase.LastRunSnapshot
-import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
-import com.example.gemgemgen.automation.usecase.RecordAutomationHistoryUseCase
-import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
-import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
-import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
+import com.example.gemgemgen.core.PromptHandoffEvent
+import com.example.gemgemgen.core.PromptWorkspace
+import com.example.gemgemgen.core.SoundAlertGateway
 import com.example.gemgemgen.environment.usecase.EnvironmentGateway
-import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
-import com.example.gemgemgen.core.SoundAlertGateway
-import com.example.gemgemgen.core.PromptWorkspace
-import com.example.gemgemgen.core.PromptHandoffEvent
+import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.usecase.GeminiUsageRepository
+import com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository
+import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -51,14 +52,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
-import com.example.gemgemgen.automation.usecase.MaintenanceResult
-
 private data class AutomationInitialState(
     val lastRunSnapshot: LastRunSnapshot?,
     val historyItems: List<PromptHistoryItem>,
     val instructionConfig: PromptInstructionConfig,
     val variationConfig: VariationPromptConfig,
+    val geminiSidebarOpenMode: Boolean = AppDefaults.DEFAULT_GEMINI_SIDEBAR_OPEN_MODE,
     val autoMemoryCleanupEnabled: Boolean = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED,
     val autoMemoryCleanupThreshold: Int = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD,
     val cumulativeGeminiGenerationCount: Int = 0
@@ -81,6 +80,7 @@ class AutomationViewModel(
     private val promptSnippetRepository: PromptSnippetRepository? = null,
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
     private val automationSettingsStore: com.example.gemgemgen.automation.android.AutomationSettingsStore? = null,
+    private val multiGeminiUsageRepository: MultiGeminiUsageRepository? = null,
     private val geminiUsageRepository: GeminiUsageRepository? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel(), AutomationScreenActions {
@@ -155,6 +155,11 @@ class AutomationViewModel(
                 }
             }
             scope.launch {
+                store.geminiSidebarOpenMode.collect { enabled ->
+                    _uiState.update { it.copy(geminiSidebarOpenMode = enabled) }
+                }
+            }
+            scope.launch {
                 store.autoMemoryCleanupEnabled.collect { enabled ->
                     _uiState.update { it.copy(autoMemoryCleanupEnabled = enabled) }
                 }
@@ -170,20 +175,37 @@ class AutomationViewModel(
                 }
             }
         }
-        geminiUsageRepository?.let { usageRepo ->
+        multiGeminiUsageRepository?.let { multiRepo ->
             scope.launch {
-                usageRepo.state.collect { usageState ->
-                    _uiState.update { it.copy(geminiUsageState = usageState) }
+                multiRepo.state.collect { multiState ->
+                    val rep = multiState.representativeAccount
+                    _uiState.update {
+                        it.copy(
+                            multiGeminiUsageState = multiState,
+                            geminiUsageState = rep?.usageState ?: GeminiUsageState.Loading,
+                            geminiUsageCachedSuccess = rep?.cachedSuccess,
+                            isRefreshingGeminiUsage = multiState.isAnyRefreshing
+                        )
+                    }
                 }
             }
-            scope.launch {
-                usageRepo.cachedSuccess.collect { cached ->
-                    _uiState.update { it.copy(geminiUsageCachedSuccess = cached) }
+        }
+        if (multiGeminiUsageRepository == null) {
+            geminiUsageRepository?.let { usageRepo ->
+                scope.launch {
+                    usageRepo.state.collect { usageState ->
+                        _uiState.update { it.copy(geminiUsageState = usageState) }
+                    }
                 }
-            }
-            scope.launch {
-                usageRepo.isRefreshing.collect { refreshing ->
-                    _uiState.update { it.copy(isRefreshingGeminiUsage = refreshing) }
+                scope.launch {
+                    usageRepo.cachedSuccess.collect { cached ->
+                        _uiState.update { it.copy(geminiUsageCachedSuccess = cached) }
+                    }
+                }
+                scope.launch {
+                    usageRepo.isRefreshing.collect { refreshing ->
+                        _uiState.update { it.copy(isRefreshingGeminiUsage = refreshing) }
+                    }
                 }
             }
         }
@@ -208,21 +230,79 @@ class AutomationViewModel(
     override fun onRunVariation(selectedText: String?) { runVariation(selectedText) }
     override fun onConfirmAccessibilityPrompt() { confirmAccessibilityPrompt() }
 
+    override fun openMultiGeminiUsageDialog() {
+        _uiState.update { it.copy(showMultiGeminiUsageDialog = true) }
+        if (_uiState.value.multiGeminiUsageState.accounts.isNotEmpty()) {
+            multiGeminiUsageRepository?.triggerRefreshAll()
+        }
+    }
+
+    override fun closeMultiGeminiUsageDialog() {
+        _uiState.update { it.copy(showMultiGeminiUsageDialog = false) }
+    }
+
+    override fun addGeminiAccount(alias: String, email: String, accountId: String?) {
+        multiGeminiUsageRepository?.triggerAddAccount(
+            alias = alias,
+            email = email,
+            accountId = accountId,
+            autoRefresh = true
+        )
+    }
+
+    override fun updateGeminiAccount(accountId: String, alias: String, email: String) {
+        multiGeminiUsageRepository?.triggerUpdateAccountProfile(
+            accountId = accountId,
+            alias = alias,
+            email = email
+        )
+    }
+
+    override fun removeGeminiAccount(accountId: String) {
+        multiGeminiUsageRepository?.triggerRemoveAccount(accountId)
+    }
+
+    override fun selectRepresentativeGeminiAccount(accountId: String) {
+        multiGeminiUsageRepository?.triggerSelectRepresentativeAccount(accountId)
+    }
+
+    override fun refreshGeminiAccountUsage(accountId: String) {
+        multiGeminiUsageRepository?.triggerRefreshAccount(accountId)
+    }
+
+    override fun refreshAllGeminiUsage() {
+        if (multiGeminiUsageRepository != null) {
+            multiGeminiUsageRepository.triggerRefreshAll()
+        } else {
+            geminiUsageRepository?.triggerRefresh()
+        }
+    }
+
     override fun refreshGeminiUsage() {
-        geminiUsageRepository?.triggerRefresh()
+        refreshAllGeminiUsage()
     }
 
     override fun openGeminiUsageLogin() {
-        _uiState.update { it.copy(showGeminiUsageLoginSheet = true) }
+        _uiState.update {
+            it.copy(
+                showMultiGeminiUsageDialog = true,
+                showGeminiUsageLoginSheet = true
+            )
+        }
     }
 
     override fun closeGeminiUsageLogin() {
-        _uiState.update { it.copy(showGeminiUsageLoginSheet = false) }
+        _uiState.update {
+            it.copy(
+                showMultiGeminiUsageDialog = false,
+                showGeminiUsageLoginSheet = false
+            )
+        }
     }
 
     override fun onGeminiUsageLoginCompleted() {
         _uiState.update { it.copy(showGeminiUsageLoginSheet = false) }
-        geminiUsageRepository?.triggerRefresh()
+        refreshAllGeminiUsage()
     }
 
     override fun onToggleCopyPromptOnStart(enabled: Boolean) {
@@ -230,6 +310,13 @@ class AutomationViewModel(
             automationSettingsStore?.setCopyPromptOnStart(enabled)
         }
         _uiState.update { it.copy(copyPromptOnStart = enabled) }
+    }
+
+    override fun onToggleGeminiSidebarOpenMode(enabled: Boolean) {
+        scope.launch {
+            automationSettingsStore?.setGeminiSidebarOpenMode(enabled)
+        }
+        _uiState.update { it.copy(geminiSidebarOpenMode = enabled) }
     }
 
     override fun onToggleAutoMemoryCleanup(enabled: Boolean) {
@@ -875,6 +962,8 @@ class AutomationViewModel(
                     ?: PromptInstructionConfig.DEFAULT
                 val variationConfig = automationSettingsStore?.variationPromptConfig?.first()
                     ?: VariationPromptConfig.DEFAULT
+                val geminiSidebarOpenMode = automationSettingsStore?.geminiSidebarOpenMode?.first()
+                    ?: AppDefaults.DEFAULT_GEMINI_SIDEBAR_OPEN_MODE
                 val autoMemoryCleanupEnabled = automationSettingsStore?.autoMemoryCleanupEnabled?.first()
                     ?: AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED
                 val autoMemoryCleanupThreshold = automationSettingsStore?.autoMemoryCleanupThreshold?.first()
@@ -887,6 +976,7 @@ class AutomationViewModel(
                         promptHistoryStore?.load().orEmpty(),
                         instructionConfig,
                         variationConfig,
+                        geminiSidebarOpenMode,
                         autoMemoryCleanupEnabled,
                         autoMemoryCleanupThreshold,
                         cumulativeGeminiCount
@@ -916,6 +1006,7 @@ class AutomationViewModel(
                     promptSnippets = snippets,
                     promptInstructionConfig = initialState.instructionConfig,
                     variationPromptConfig = initialState.variationConfig,
+                    geminiSidebarOpenMode = initialState.geminiSidebarOpenMode,
                     autoMemoryCleanupEnabled = initialState.autoMemoryCleanupEnabled,
                     autoMemoryCleanupThresholdText = initialState.autoMemoryCleanupThreshold.toString(),
                     cumulativeGeminiGenerationCount = initialState.cumulativeGeminiGenerationCount
@@ -988,10 +1079,6 @@ class AutomationViewModel(
                 }
             } else {
                 0
-            }
-
-            if (generatedInSession > 0) {
-                geminiUsageRepository?.triggerRefresh()
             }
 
             var updatedCumulativeCount: Int? = null

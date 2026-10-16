@@ -1,4 +1,4 @@
-// 역할: 사이드바/툴바 단계별 실패 감지 및 탈출 경로를 제공하여 Gemini 앱 새 대화 전환 및 프롬프트를 자동 전송합니다.
+// 역할: 사이드바 열림/닫힘 설정과 단계별 실패 감지·탈출 경로에 따라 Gemini 앱 새 대화 전환 및 프롬프트를 자동 전송합니다.
 package com.example.gemgemgen.automation.android
 
 import android.view.accessibility.AccessibilityNodeInfo
@@ -14,7 +14,8 @@ internal class GeminiPromptAutomation(
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     rootProvider: () -> AccessibilityNodeInfo?,
-    copyToClipboard: ((String) -> Unit)? = null
+    copyToClipboard: ((String) -> Unit)? = null,
+    private val isSidebarOpenModeEnabled: suspend () -> Boolean = { false }
 ) : AccessibilityPromptAutomation(
     coroutineScope = coroutineScope,
     dispatcher = dispatcher,
@@ -35,6 +36,16 @@ internal class GeminiPromptAutomation(
         newChatMode: NewChatMode,
         notifyState: suspend (AutomationRunState) -> Unit
     ): Boolean {
+        if (isSidebarOpenModeEnabled()) {
+            // 태블릿 가로 화면 등 사이드바가 항상 열려 있는 모드에서는
+            // 1회차(Initial)와 2회차 이후(Subsequent) 모두 '사이드바 열기'를 건너뛰고
+            // 열려 있는 사이드바 내 '채팅 검색' 근처의 '새 채팅'을 바로 클릭합니다.
+            return clickNewChatNearSearch(
+                notifyState = notifyState,
+                assumeSidebarOpen = true
+            )
+        }
+
         return when (newChatMode) {
             NewChatMode.Initial -> {
                 // 최초 1회 실행 시에는 이전 대화 잔류 상태나 임시채팅 오진입을 방지하기 위해
@@ -62,9 +73,14 @@ internal class GeminiPromptAutomation(
     override suspend fun recoverFromInputFailure(
         notifyState: suspend (AutomationRunState) -> Unit
     ) {
-        // 이전 오류 화면(안전 가이드라인 경고 등)에 갇히지 않도록 상단 툴바의 고정 진입점("새 채팅" 버튼 등)을 직접 식별하고 클릭 후 안정화
+        // 이전 오류 화면(안전 가이드라인 경고 등)에 갇히지 않도록 고정 진입점("새 채팅" 버튼 등)을 직접 식별하고 클릭 후 안정화
         notifyState(AutomationRunState.Running("Gemini 오류 화면 탈출을 위한 새 채팅 전환 중"))
-        if (tryToolbarNewChat(notifyState)) {
+        val recovered = if (isSidebarOpenModeEnabled()) {
+            trySidebarNewChatNearSearch(notifyState) || tryToolbarNewChat(notifyState)
+        } else {
+            tryToolbarNewChat(notifyState)
+        }
+        if (recovered) {
             notifyState(AutomationRunState.Running("Gemini 오류 화면 탈출 완료"))
         }
     }
@@ -103,6 +119,20 @@ internal class GeminiPromptAutomation(
                 null
             }
         } == true
+    }
+
+    private suspend fun trySidebarNewChatNearSearch(
+        notifyState: suspend (AutomationRunState) -> Unit
+    ): Boolean {
+        val sidebarNewChat = nodeFinder.findNewChatNearestToSearch() ?: return false
+        return if (clickNodeOrParent(sidebarNewChat)) {
+            notifyState(AutomationRunState.Running("사이드바 새 채팅 진입 완료"))
+            nodeFinder.invalidateCache()
+            delay(NEW_CHAT_SETTLE_MS)
+            true
+        } else {
+            false
+        }
     }
 
     private suspend fun tryToolbarNewChat(
@@ -152,7 +182,8 @@ internal class GeminiPromptAutomation(
     }
 
     private suspend fun clickNewChatNearSearch(
-        notifyState: suspend (AutomationRunState) -> Unit
+        notifyState: suspend (AutomationRunState) -> Unit,
+        assumeSidebarOpen: Boolean = false
     ): Boolean {
         return retryUntilFound(
             actionName = "채팅 검색 근처 새 채팅 찾는 중",
@@ -166,16 +197,17 @@ internal class GeminiPromptAutomation(
                 delay(NEW_CHAT_SETTLE_MS)
                 true
             } else {
-                restoreSidebarTopOnce(notifyState)
+                restoreSidebarTopOnce(notifyState, assumeSidebarOpen = assumeSidebarOpen)
                 null
             }
         } == true
     }
 
     private suspend fun restoreSidebarTopOnce(
-        notifyState: suspend (AutomationRunState) -> Unit
+        notifyState: suspend (AutomationRunState) -> Unit,
+        assumeSidebarOpen: Boolean = false
     ) {
-        val node = nodeFinder.findSidebarScrollableNode()
+        val node = nodeFinder.findSidebarScrollableNode(assumeSidebarOpen = assumeSidebarOpen)
         if (node == null) {
             notifyState(AutomationRunState.Running("사이드바 스크롤 영역 못 찾음"))
             return

@@ -218,7 +218,7 @@ private fun GeminiUsageHeaderRow(
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
-                            color = AppTheme.colors.primary
+                            color = resolveGeminiUsageNormalHighlightColor()
                         )
                     } else {
                         Icon(
@@ -245,14 +245,14 @@ private fun GeminiUsageGaugesSection(
         UsageGaugeRow(
             title = "5시간 단기",
             percent = success.fiveHourPercent,
-            resetText = success.fiveHourResetText,
+            resetText = GeminiUsageParser.formatCompactResetWithRemaining(success.fiveHourResetText),
             warningLevel = success.fiveHourWarningLevel
         )
 
         UsageGaugeRow(
             title = "주간 누적",
             percent = success.weeklyPercent,
-            resetText = success.weeklyResetText,
+            resetText = GeminiUsageParser.formatCompactResetWithRemaining(success.weeklyResetText),
             warningLevel = success.weeklyWarningLevel
         )
     }
@@ -459,7 +459,7 @@ private fun GeminiUsageLoadingRow() {
         CircularProgressIndicator(
             modifier = Modifier.size(14.dp),
             strokeWidth = 2.dp,
-            color = AppTheme.colors.primary
+            color = resolveGeminiUsageNormalHighlightColor()
         )
         Text(
             text = "제미나이 사용량 한도를 불러오는 중…",
@@ -494,7 +494,7 @@ private fun CompactUsageActionButton(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = AppTheme.colors.primary,
+                tint = resolveGeminiUsageNormalHighlightColor(),
                 modifier = Modifier.size(14.dp)
             )
             Text(
@@ -510,7 +510,7 @@ private fun CompactUsageActionButton(
 @Composable
 internal fun resolveWarningColor(level: GeminiUsageWarningLevel): Color {
     return when (level) {
-        GeminiUsageWarningLevel.NORMAL -> AppTheme.colors.primary
+        GeminiUsageWarningLevel.NORMAL -> resolveGeminiUsageNormalHighlightColor()
         GeminiUsageWarningLevel.CAUTION -> UsageCautionAmber
         GeminiUsageWarningLevel.WARNING -> UsageWarningRed
     }

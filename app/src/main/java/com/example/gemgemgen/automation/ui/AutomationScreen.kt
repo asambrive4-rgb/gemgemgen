@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 제미나이 사용량 카드 및 로그인 웹뷰 시트, 추천 후보 바 국소 격리 관찰, 제어 바 및 상태 화면을 구성합니다.
+// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 추천 후보 바 국소 격리 관찰, 제어 바 및 상태 화면을 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -32,8 +32,8 @@ import com.example.gemgemgen.remote.ui.resolveConnectionText
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.rememberIsImeVisible
 import com.example.gemgemgen.ui.theme.AppTheme
-import com.example.gemgemgen.usage.ui.GeminiUsageCard
-import com.example.gemgemgen.usage.ui.GeminiUsageLoginBottomSheet
+import com.example.gemgemgen.usage.ui.GeminiUsageSummaryButton
+import com.example.gemgemgen.usage.ui.MultiGeminiUsageDialog
 
 /** 스크롤 본문·키보드 하단 고정 패널이 같은 가로 폭을 쓰도록 공통 패딩 */
 private val AutomationScreenContentPadding = 8.dp
@@ -80,12 +80,10 @@ internal fun AutomationScreen(
                     )
 
                     if (!isKeyboardVisible) {
-                        GeminiUsageCard(
-                            usageState = uiState.geminiUsageState,
-                            cachedSuccess = uiState.geminiUsageCachedSuccess,
-                            isRefreshing = uiState.isRefreshingGeminiUsage,
-                            onRefresh = actions::refreshGeminiUsage,
-                            onOpenLogin = actions::openGeminiUsageLogin
+                        GeminiUsageSummaryButton(
+                            multiUsageState = uiState.multiGeminiUsageState,
+                            onClick = actions::openMultiGeminiUsageDialog,
+                            onRefreshClick = actions::refreshAllGeminiUsage
                         )
                     }
 
@@ -197,10 +195,20 @@ internal fun AutomationScreen(
                 )
             }
 
-            if (uiState.showGeminiUsageLoginSheet) {
-                GeminiUsageLoginBottomSheet(
-                    onLoginCompleted = actions::onGeminiUsageLoginCompleted,
-                    onDismiss = actions::closeGeminiUsageLogin
+            if (uiState.showMultiGeminiUsageDialog) {
+                MultiGeminiUsageDialog(
+                    multiUsageState = uiState.multiGeminiUsageState,
+                    onAddAccount = { alias, email, accountId ->
+                        actions.addGeminiAccount(alias = alias, email = email, accountId = accountId)
+                    },
+                    onUpdateAccount = { accountId, alias, email ->
+                        actions.updateGeminiAccount(accountId = accountId, alias = alias, email = email)
+                    },
+                    onRemoveAccount = actions::removeGeminiAccount,
+                    onSelectRepresentativeAccount = actions::selectRepresentativeGeminiAccount,
+                    onRefreshAccount = actions::refreshGeminiAccountUsage,
+                    onRefreshAll = actions::refreshAllGeminiUsage,
+                    onDismiss = actions::closeMultiGeminiUsageDialog
                 )
             }
         }

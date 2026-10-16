@@ -4,8 +4,12 @@
 # For more details, see
 #   https://d.android.com/r/tools/r8/keep-rules
 
-# Keep WebView @JavascriptInterface bridge methods for GeminiUsageFetcher
+# Keep WebView @JavascriptInterface bridge methods for Gemini usage fetchers
 -keepclassmembers class com.example.gemgemgen.usage.android.GeminiUsageFetcher$UsageBridge {
+    @android.webkit.JavascriptInterface <methods>;
+    public *;
+}
+-keepclassmembers class com.example.gemgemgen.usage.android.MultiProfileGeminiUsageFetcher$UsageBridge {
     @android.webkit.JavascriptInterface <methods>;
     public *;
 }

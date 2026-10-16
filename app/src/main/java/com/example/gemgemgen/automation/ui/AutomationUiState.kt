@@ -1,4 +1,4 @@
-// 역할: 자동화 메인 화면의 프롬프트 편집, 실행 상태, 제미나이 사용량 한도 상태, 추천 후보, 자동/예약 메모리 정리 및 다이얼로그 가시성 등 UI 상태를 정의합니다.
+// 역할: 자동화 메인 화면의 프롬프트 편집, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
@@ -16,6 +16,7 @@ import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.usage.domain.GeminiUsageState
+import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 
 data class AutomationUiState(
     val promptTemplate: String = "",
@@ -49,13 +50,17 @@ data class AutomationUiState(
     val autoMemoryCleanupEnabled: Boolean = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED,
     val autoMemoryCleanupThresholdText: String = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD.toString(),
     val cumulativeGeminiGenerationCount: Int = 0,
-    /** Google AI Pro 제미나이 사용량 한도 상태 (5시간 단기 한도 / 주간 누적 한도) */
+    /** 다중 계정(5개 이상) Google AI Pro 제미나이 사용량 모니터링 상태 */
+    val multiGeminiUsageState: MultiGeminiUsageState = MultiGeminiUsageState(),
+    /** 다중 계정 사용량 수직 목록 모달 다이얼로그 표시 여부 */
+    val showMultiGeminiUsageDialog: Boolean = false,
+    /** 대표 계정의 제미나이 사용량 한도 상태 */
     val geminiUsageState: GeminiUsageState = GeminiUsageState.Loading,
-    /** 로컬에 캐싱된 마지막 제미나이 사용량 성공 스냅샷 */
+    /** 대표 계정의 로컬에 캐싱된 마지막 제미나이 사용량 성공 스냅샷 */
     val geminiUsageCachedSuccess: GeminiUsageState.Success? = null,
     /** 백그라운드에서 제미나이 사용량을 갱신 중인지 여부 */
     val isRefreshingGeminiUsage: Boolean = false,
-    /** 세션 만료 시 인앱 Google 로그인 WebView 바텀시트 표시 여부 */
+    /** 세션 만료 시 인앱 Google 로그인 시트/모달 표시 여부 */
     val showGeminiUsageLoginSheet: Boolean = false,
     /**
      * =========================================================================================
@@ -63,7 +68,9 @@ data class AutomationUiState(
      * - 기능: 자동화 시작 시 사용자의 원본 프롬프트 템플릿을 시스템 클립보드에 1회 백업할지 여부
      * =========================================================================================
      */
-    val copyPromptOnStart: Boolean = true
+    val copyPromptOnStart: Boolean = true,
+    /** 태블릿 가로 화면 등 Gemini 사이드바가 열려 있는 상태에서 자동화를 진행할지 여부 (기본값 OFF) */
+    val geminiSidebarOpenMode: Boolean = AppDefaults.DEFAULT_GEMINI_SIDEBAR_OPEN_MODE
 ) {
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()

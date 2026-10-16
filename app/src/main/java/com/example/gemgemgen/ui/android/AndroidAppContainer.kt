@@ -1,4 +1,4 @@
-// 역할: 앱 전반에서 필요한 저장소(제미나이 사용량 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
+// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.Context
@@ -12,46 +12,46 @@ import com.example.gemgemgen.analysis.android.AndroidGrokBillingGateway
 import com.example.gemgemgen.analysis.android.AndroidGrokOAuthGateway
 import com.example.gemgemgen.analysis.android.RoutingAnalysisAiGateway
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
+import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
-import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
-import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
+import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
+import com.example.gemgemgen.automation.android.AndroidTargetAppLauncher
 import com.example.gemgemgen.automation.android.DataStoreLastRunSnapshotRepository
 import com.example.gemgemgen.automation.android.DataStorePromptHistoryRepository
 import com.example.gemgemgen.automation.android.PromptSnippetStore
+import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
+import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.RecordAutomationHistoryUseCase
-import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
 import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
-import com.example.gemgemgen.automation.ui.AutomationViewModel
+import com.example.gemgemgen.core.PromptWorkspace
 import com.example.gemgemgen.core.android.AndroidClipboardGateway
 import com.example.gemgemgen.core.android.AndroidSoundAlertGateway
-import com.example.gemgemgen.core.PromptWorkspace
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
+import com.example.gemgemgen.remote.android.AndroidRemoteAutomationGateway
+import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
+import com.example.gemgemgen.usage.android.DataStoreMultiGeminiUsageDataSource
+import com.example.gemgemgen.usage.android.MultiProfileGeminiUsageFetcher
+import com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
-import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
-import com.example.gemgemgen.wildcard.usecase.loadWildcardSets
+import com.example.gemgemgen.wildcard.ui.WildcardViewModel
 import com.example.gemgemgen.wildcard.usecase.ClassifyWildcardLinesUseCase
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
-import com.example.gemgemgen.wildcard.ui.WildcardViewModel
-import com.example.gemgemgen.remote.android.AndroidRemoteAutomationGateway
-import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
-import com.example.gemgemgen.usage.android.DataStoreGeminiUsageCacheDataSource
-import com.example.gemgemgen.usage.android.GeminiUsageFetcher
-import com.example.gemgemgen.usage.usecase.GeminiUsageRepository
+import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
+import com.example.gemgemgen.wildcard.usecase.loadWildcardSets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -106,10 +106,10 @@ class AndroidAppContainer(context: Context) {
     val promptWorkspace = PromptWorkspace()
     val promptSnippetRepository by lazy { PromptSnippetStore(appContext) }
     val automationSettingsStore by lazy { com.example.gemgemgen.automation.android.AutomationSettingsStore(appContext) }
-    val geminiUsageRepository by lazy {
-        GeminiUsageRepository(
-            remoteDataSource = GeminiUsageFetcher(appContext),
-            cacheDataSource = DataStoreGeminiUsageCacheDataSource(appContext),
+    val multiGeminiUsageRepository by lazy {
+        MultiGeminiUsageRepository(
+            remoteDataSource = MultiProfileGeminiUsageFetcher(appContext),
+            localDataSource = DataStoreMultiGeminiUsageDataSource(appContext),
             scope = appScope
         )
     }
@@ -152,7 +152,7 @@ class AndroidAppContainer(context: Context) {
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
             ),
             automationSettingsStore = automationSettingsStore,
-            geminiUsageRepository = geminiUsageRepository
+            multiGeminiUsageRepository = multiGeminiUsageRepository
         )
     }
 

@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore를 통해 자동화 설정(클립보드 복사, 인스트럭션, 변주 프롬프트, 자동 메모리 정리 및 누적 횟수)을 영구 저장하고 Flow로 제공합니다.
+// 역할: Jetpack DataStore를 통해 자동화 설정(클립보드 복사, 사이드바 열림 모드, 인스트럭션, 변주 프롬프트, 자동 메모리 정리 및 누적 횟수)을 영구 저장하고 Flow로 제공합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -52,6 +52,24 @@ class AutomationSettingsStore(
     suspend fun setCopyPromptOnStart(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_COPY_PROMPT_ON_START] = enabled
+        }
+    }
+
+    val geminiSidebarOpenMode: Flow<Boolean> = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[KEY_GEMINI_SIDEBAR_OPEN_MODE] ?: DEFAULT_GEMINI_SIDEBAR_OPEN_MODE
+        }
+
+    suspend fun setGeminiSidebarOpenMode(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_GEMINI_SIDEBAR_OPEN_MODE] = enabled
         }
     }
 
@@ -163,6 +181,7 @@ class AutomationSettingsStore(
         const val DATASTORE_NAME = "automation_settings"
 
         val KEY_COPY_PROMPT_ON_START = booleanPreferencesKey("copy_prompt_on_start")
+        val KEY_GEMINI_SIDEBAR_OPEN_MODE = booleanPreferencesKey("gemini_sidebar_open_mode")
         val KEY_AUTO_MEMORY_CLEANUP_ENABLED = booleanPreferencesKey("auto_memory_cleanup_enabled")
         val KEY_AUTO_MEMORY_CLEANUP_THRESHOLD = intPreferencesKey("auto_memory_cleanup_threshold")
         val KEY_GEMINI_GENERATION_COUNT_SINCE_CLEANUP = intPreferencesKey("gemini_generation_count_since_cleanup")
@@ -171,6 +190,7 @@ class AutomationSettingsStore(
         val KEY_VARIATION_PROMPT = stringPreferencesKey("variation_prompt")
 
         const val DEFAULT_COPY_PROMPT_ON_START = true
+        const val DEFAULT_GEMINI_SIDEBAR_OPEN_MODE = AppDefaults.DEFAULT_GEMINI_SIDEBAR_OPEN_MODE
         const val DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED
         const val DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD
     }

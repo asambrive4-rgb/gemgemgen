@@ -187,6 +187,11 @@ class AutomationUiStateTest {
         )
     }
 
+    @Test
+    fun geminiSidebarOpenMode_defaultsToFalse() {
+        assertFalse(AutomationUiState().geminiSidebarOpenMode)
+    }
+
     private fun readyEnvironment(): EnvironmentStatus {
         return EnvironmentStatus(
             isGeminiInstalled = true,

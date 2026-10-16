@@ -52,17 +52,19 @@ internal class GeminiAccessibilityNodeFinder(
         ) { it.second }?.first
     }
 
-    fun findSidebarScrollableNode(): AccessibilityNodeInfo? {
+    fun findSidebarScrollableNode(assumeSidebarOpen: Boolean = false): AccessibilityNodeInfo? {
         val root = rootProvider() ?: return null
         val rootBounds = root.nodeBounds()
 
-        // 1) 사이드바 신호를 네이티브 텍스트 인덱스로 먼저 고속 확인 (.toList() 전수 순회 완전 차단)
-        val closeSidebarNodes = findNodesByText(root, "사이드바 닫기")
-        val geminiTitleNodes = findNodesByText(root, "Gemini")
-        val hasSidebarSignal = closeSidebarNodes.any { it.matchesTextOrDescription("사이드바 닫기") } ||
-            geminiTitleNodes.any { it.matchesTextOrDescription("Gemini") && it.nodeBounds()?.isLikelySidebarHeader(rootBounds) == true }
+        if (!assumeSidebarOpen) {
+            // 1) 사이드바 신호를 네이티브 텍스트 인덱스로 먼저 고속 확인 (.toList() 전수 순회 완전 차단)
+            val closeSidebarNodes = findNodesByText(root, "사이드바 닫기")
+            val geminiTitleNodes = findNodesByText(root, "Gemini")
+            val hasSidebarSignal = closeSidebarNodes.any { it.matchesTextOrDescription("사이드바 닫기") } ||
+                geminiTitleNodes.any { it.matchesTextOrDescription("Gemini") && it.nodeBounds()?.isLikelySidebarHeader(rootBounds) == true }
 
-        if (!hasSidebarSignal) return null
+            if (!hasSidebarSignal) return null
+        }
 
         // 2) 사이드바 신호가 확인되었을 때만 지연 순회로 적합한 스크롤 영역 선택
         return traverseTargetPackage(root)

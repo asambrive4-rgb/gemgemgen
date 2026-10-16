@@ -29,6 +29,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -42,11 +43,13 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var memoryCleanupAutomation: GoogleAppForceStopAutomation? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
+    private val settingsStore by lazy { AutomationSettingsStore(applicationContext) }
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
             coroutineScope = serviceScope,
             rootProvider = { rootInActiveWindow },
-            copyToClipboard = ::copyTextToClipboard
+            copyToClipboard = ::copyTextToClipboard,
+            isSidebarOpenModeEnabled = { settingsStore.geminiSidebarOpenMode.first() }
         )
     }
     private val chatGptAutomation by lazy {

@@ -32,6 +32,14 @@ sealed interface GeminiUsageState {
 
         val weeklyWarningLevel: GeminiUsageWarningLevel
             get() = GeminiUsageWarningLevel.fromPercent(weeklyPercent)
+
+        /** 5시간 단기 한도와 주간 누적 한도 중 더 높은 사용률(%) */
+        val peakPercent: Int
+            get() = maxOf(fiveHourPercent, weeklyPercent).coerceIn(0, 100)
+
+        /** 두 한도 중 더 높은 위험 단계를 반환합니다. */
+        val overallWarningLevel: GeminiUsageWarningLevel
+            get() = GeminiUsageWarningLevel.fromPercent(peakPercent)
     }
 
     /** 네트워크 오류 또는 파싱 타임아웃 등 에러 상태 */

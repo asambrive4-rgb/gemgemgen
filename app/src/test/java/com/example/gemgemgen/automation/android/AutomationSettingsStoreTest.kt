@@ -1,4 +1,4 @@
-// 역할: AutomationSettingsStore의 Preferences DataStore 기반 설정(자동 메모리 정리 포함) 읽기/쓰기 및 기본값 복원 동작을 검증합니다.
+// 역할: AutomationSettingsStore의 Preferences DataStore 기반 설정(사이드바 열림 모드, 자동 메모리 정리 포함) 읽기/쓰기 및 기본값 복원 동작을 검증합니다.
 package com.example.gemgemgen.automation.android
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -63,6 +63,17 @@ class AutomationSettingsStoreTest {
         store.setCopyPromptOnStart(true)
         val reEnabled = store.copyPromptOnStart.first()
         assertTrue("다시 true로 변경되어야 합니다.", reEnabled)
+    }
+
+    @Test
+    fun geminiSidebarOpenMode_defaultsToFalseAndUpdatesValue() = runBlocking {
+        assertFalse("사이드바 열림 모드 기본값은 false(OFF)여야 합니다.", store.geminiSidebarOpenMode.first())
+
+        store.setGeminiSidebarOpenMode(true)
+        assertTrue("설정된 true 값이 반환되어야 합니다.", store.geminiSidebarOpenMode.first())
+
+        store.setGeminiSidebarOpenMode(false)
+        assertFalse("다시 false로 변경되어야 합니다.", store.geminiSidebarOpenMode.first())
     }
 
     @Test
