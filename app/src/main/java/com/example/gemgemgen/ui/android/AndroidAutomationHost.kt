@@ -1,4 +1,4 @@
-// 역할: 접근성 서비스 연결, 액션 바인딩 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
+// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함) 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
@@ -351,6 +351,10 @@ private fun createAutomationActions(
 
     override fun onClearFocus() {
         clearInputFocus()
+    }
+
+    override fun switchGeminiAccount(accountId: String) {
+        automationViewModel.switchGeminiAccount(accountId)
     }
 }
 

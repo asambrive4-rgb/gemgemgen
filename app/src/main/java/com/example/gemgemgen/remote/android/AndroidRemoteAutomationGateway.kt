@@ -1,4 +1,4 @@
-// 역할: 네트워크 소켓과 NSD 탐색을 통해 원격 수신 기기와 통신하고 진행 상태를 상태 허브로 전파합니다.
+// 역할: 네트워크 소켓과 NSD 탐색을 통해 원격 수신 기기와 통신(자동화, 메모리 정리, Gemini 계정 전환)하고 진행 상태를 상태 허브로 전파합니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
@@ -317,6 +317,42 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                     RemoteActionResult.Success
                 } else {
                     RemoteActionResult.Failure(message.message.ifBlank { "수신 기기 메모리 정리에 실패했습니다." })
+                }
+            },
+            onFailure = { error ->
+                RemoteActionResult.Failure("수신 기기 통신 실패: ${error.message ?: "알 수 없는 오류"}")
+            }
+        )
+    }
+
+    override suspend fun switchGeminiAccount(
+        email: String,
+        alias: String
+    ): RemoteActionResult = withContext(Dispatchers.IO) {
+        val target = endpoint
+            ?: return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
+        val paired = store.pairedReceiver()
+            ?: return@withContext RemoteActionResult.Failure("수신 기기와 먼저 페어링해주세요.")
+
+        requestOnce(
+            target = target,
+            request = RemoteProtocolMessage.SwitchAccountRequest(
+                senderId = store.installationId(),
+                token = paired.token,
+                email = email,
+                alias = alias
+            ),
+            timeoutMillis = 20_000
+        ).fold(
+            onSuccess = { responseLine ->
+                val line = responseLine
+                    ?: return@withContext RemoteActionResult.Failure("수신 기기 응답이 없습니다.")
+                val message = RemoteAutomationProtocol.decode(line) as? RemoteProtocolMessage.SwitchAccountResult
+                    ?: return@withContext RemoteActionResult.Failure("수신 기기 응답 형식이 올바르지 않습니다.")
+                if (message.success) {
+                    RemoteActionResult.Success
+                } else {
+                    RemoteActionResult.Failure(message.message.ifBlank { "수신 기기 계정 전환에 실패했습니다." })
                 }
             },
             onFailure = { error ->

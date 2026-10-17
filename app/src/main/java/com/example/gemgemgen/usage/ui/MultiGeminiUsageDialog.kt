@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정의 메인/서브 탭 분리(대표 계정 기준 자동 탭 선택), 전체/개별 새로고침, 계정 추가 및 독립 세션 로그인을 제공합니다.
+// 역할: 다중 제미나이 계정의 메인/서브 탭 분리(대표 계정 기준 자동 탭 선택), 계정 전환 액션 연결, 선택 탭 우선 스마트 새로고침, 실시간 초기화 만료 반영, 계정 추가 및 독립 세션 로그인을 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import android.annotation.SuppressLint
@@ -52,7 +52,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -78,6 +80,7 @@ import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiUsageParser
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
+import kotlinx.coroutines.delay
 
 /**
  * 모달 내부 화면 단계 (Single Dialog Host 원칙에 따라 단일 모달 창 안에서 크로스페이드 전환).
@@ -116,7 +119,8 @@ fun MultiGeminiUsageDialog(
     onRemoveAccount: (accountId: String) -> Unit,
     onSelectRepresentativeAccount: (accountId: String) -> Unit,
     onRefreshAccount: (accountId: String) -> Unit,
-    onRefreshAll: () -> Unit,
+    onRefreshAll: (GeminiAccountGroup?) -> Unit,
+    onSwitchAccount: ((accountId: String) -> Unit)? = null,
     onMoveAccountGroup: ((accountId: String, targetGroup: GeminiAccountGroup) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
@@ -189,12 +193,13 @@ fun MultiGeminiUsageDialog(
                         selectedTab = selectedTab,
                         onTabSelected = { selectedTab = it },
                         onAddAccountClick = openNewAccountStage,
-                        onRefreshAll = onRefreshAll,
+                        onRefreshAll = { onRefreshAll(selectedTab) },
                         onSelectRepresentativeAccount = onSelectRepresentativeAccount,
                         onRefreshAccount = onRefreshAccount,
                         onOpenAccountLogin = openExistingAccountStage,
                         onEditAccount = openExistingAccountStage,
                         onRemoveAccount = onRemoveAccount,
+                        onSwitchAccount = onSwitchAccount,
                         onMoveAccountGroup = onMoveAccountGroup,
                         onDismiss = onDismiss
                     )
@@ -234,11 +239,22 @@ private fun MultiAccountListContent(
     onOpenAccountLogin: (GeminiAccountProfile) -> Unit,
     onEditAccount: (GeminiAccountProfile) -> Unit,
     onRemoveAccount: (String) -> Unit,
+    onSwitchAccount: ((String) -> Unit)? = null,
     onMoveAccountGroup: ((String, GeminiAccountGroup) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val representativeId = multiUsageState.representativeAccount?.profile?.id
     val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
+
+    var nowMillis by remember(multiUsageState) {
+        mutableLongStateOf(System.currentTimeMillis())
+    }
+    LaunchedEffect(multiUsageState.accounts) {
+        while (true) {
+            delay(30_000L)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -385,7 +401,6 @@ private fun MultiAccountListContent(
                 onAddAccountClick = onAddAccountClick
             )
         } else {
-            val nowMillis = remember(multiUsageState) { System.currentTimeMillis() }
             val usableOrPendingAccounts = remember(multiUsageState, selectedTab, nowMillis) {
                 multiUsageState.availableAccountsSorted(group = selectedTab, nowMillis = nowMillis)
             }
@@ -430,9 +445,13 @@ private fun MultiAccountListContent(
                             onDeleteAccount = {
                                 onRemoveAccount(accountEntry.profile.id)
                             },
+                            onSwitchAccount = onSwitchAccount?.let { switchFn ->
+                                { switchFn(accountEntry.profile.id) }
+                            },
                             onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
                                 { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
-                            }
+                            },
+                            nowMillis = nowMillis
                         )
                     }
                 }
@@ -480,9 +499,13 @@ private fun MultiAccountListContent(
                             onDeleteAccount = {
                                 onRemoveAccount(accountEntry.profile.id)
                             },
+                            onSwitchAccount = onSwitchAccount?.let { switchFn ->
+                                { switchFn(accountEntry.profile.id) }
+                            },
                             onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
                                 { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
-                            }
+                            },
+                            nowMillis = nowMillis
                         )
                     }
                 }
@@ -757,7 +780,7 @@ private fun AccountIsolatedLoginContent(
 
     val completeAndCommit = {
         MultiProfileGeminiUsageFetcher.currentInstance()?.commitInteractiveLoginSession(targetProfile)
-        MultiProfileGeminiUsageFetcher.resolveCookieManager(targetProfile.webViewProfileName).flush()
+        CookieManager.getInstance().flush()
         val finalAlias = aliasInput.trim().ifEmpty { targetProfile.displayAlias }
         onSaveAndFinish(finalAlias, emailInput.trim())
     }
@@ -770,10 +793,12 @@ private fun AccountIsolatedLoginContent(
                         MultiProfileGeminiUsageFetcher.currentInstance()
                             ?.commitInteractiveLoginSession(targetProfile)
                     }
-                    MultiProfileGeminiUsageFetcher.resolveCookieManager(targetProfile.webViewProfileName).flush()
+                    CookieManager.getInstance().flush()
                     webView.stopLoading()
                     webView.loadUrl(MultiProfileGeminiUsageFetcher.BLANK_URL)
                     webView.clearHistory()
+                    (webView.parent as? ViewGroup)?.removeView(webView)
+                    webView.destroy()
                 }
             }
             webViewRef = null
@@ -823,7 +848,7 @@ private fun AccountIsolatedLoginContent(
                         color = AppTheme.colors.textPrimary
                     )
                     Text(
-                        text = "독립 프로필(${targetProfile.webViewProfileName})에 쿠키가 격리 저장됩니다",
+                        text = "독립 쿠키 금고(${targetProfile.webViewProfileName})에 쿠키가 격리 저장됩니다",
                         style = MaterialTheme.typography.labelSmall,
                         color = AppTheme.colors.textSecondary,
                         fontSize = 10.sp
@@ -911,22 +936,15 @@ private fun AccountIsolatedLoginContent(
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
 
-                        // 중요: settings 및 loadUrl 호출 전에 동기적으로 WebView 프로필 바인딩 및 쿠키 정제를 완료합니다.
+                        // 중요: settings 및 loadUrl 호출 전에 동기적으로 쿠키 금고 복원 및 정제를 완료합니다.
                         MultiProfileGeminiUsageFetcher.currentInstance()
                             ?.prepareInteractiveLoginWebView(
                                 webView = this,
                                 profile = targetProfile,
                                 clearExistingProfileCookies = isNewAccount
-                            ) ?: run {
-                            MultiProfileGeminiUsageFetcher.tryBindWebViewProfile(
-                                this,
-                                targetProfile.webViewProfileName
                             )
-                        }
 
-                        val cookieManager = MultiProfileGeminiUsageFetcher.resolveCookieManager(
-                            targetProfile.webViewProfileName
-                        )
+                        val cookieManager = CookieManager.getInstance()
                         cookieManager.setAcceptCookie(true)
                         cookieManager.setAcceptThirdPartyCookies(this, true)
 

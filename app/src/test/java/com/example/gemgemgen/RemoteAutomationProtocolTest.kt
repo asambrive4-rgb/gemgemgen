@@ -1,4 +1,4 @@
-// 역할: 원격 기기 간 통신 패킷 직렬화 및 역직렬화 프로토콜을 검증합니다.
+// 역할: 원격 기기 간 통신 패킷(실행, 메모리 정리, 계정 전환 등) 직렬화 및 역직렬화 프로토콜을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -127,5 +127,32 @@ class RemoteAutomationProtocolTest {
             message = "접근성 서비스가 꺼져 있습니다."
         )
         assertEquals(success, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(success)))
+        assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))
+    }
+
+    @Test
+    fun switchAccountRequest_roundTripsEmailAndAlias() {
+        val message = RemoteProtocolMessage.SwitchAccountRequest(
+            senderId = "tablet-id",
+            token = "sample-token-123",
+            email = "jjoajjoajjoa31@gmail.com",
+            alias = "계정 2"
+        )
+        assertEquals(message, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(message)))
+    }
+
+    @Test
+    fun switchAccountResult_roundTrips() {
+        val success = RemoteProtocolMessage.SwitchAccountResult(
+            success = true,
+            message = "수신 기기 Gemini 계정을 전환했습니다."
+        )
+        val failure = RemoteProtocolMessage.SwitchAccountResult(
+            success = false,
+            message = "Gemini에서 일치하는 구글 계정을 찾지 못했습니다."
+        )
+        assertEquals(success, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(success)))
+        assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))
     }
 }
+

@@ -1,7 +1,6 @@
-// 역할: 제미나이 사용량 DOM 본문 파싱, 리셋 시간 계산·만료 보정, 계정 정렬(최적 사용 순서 및 소진 분리) 및 요약 상태를 검증합니다.
+// 역할: 제미나이 사용량 DOM 본문 파싱, 리셋 시간 계산·만료 시 경고/뱃지 0% 자동 보정, 불필요 리소스 차단, 계정 정렬 및 요약 상태를 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.usage.android.GeminiUsageFetcher
 import com.example.gemgemgen.usage.android.MultiProfileGeminiUsageFetcher
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
@@ -147,9 +146,10 @@ class GeminiUsageParserTest {
 
     @Test
     fun multiGeminiUsageState_formatsRepresentativeSummaryButtonTextAndWarningLevel() {
+        val nowMillis = 1_760_000_000_000L
         val emptyState = MultiGeminiUsageState()
-        assertEquals("계정 추가 ▾", emptyState.summaryButtonText)
-        assertEquals(GeminiUsageWarningLevel.NORMAL, emptyState.summaryWarningLevel)
+        assertEquals("계정 추가 ▾", emptyState.summaryButtonText(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.NORMAL, emptyState.summaryWarningLevel(nowMillis))
 
         val account1 = GeminiAccountUsageEntry(
             profile = GeminiAccountProfile(id = "acc_1", alias = "본계정", email = "main@gmail.com", sortOrder = 0),
@@ -157,8 +157,8 @@ class GeminiUsageParserTest {
                 fiveHourPercent = 42,
                 fiveHourResetText = "2시간 15분 후",
                 weeklyPercent = 30,
-                weeklyResetText = "10/19 오전 9시",
-                updatedAt = 1000L
+                weeklyResetText = "3일 후 초기화",
+                updatedAt = nowMillis
             )
         )
         val account2 = GeminiAccountUsageEntry(
@@ -167,8 +167,8 @@ class GeminiUsageParserTest {
                 fiveHourPercent = 75,
                 fiveHourResetText = "1시간 10분 후",
                 weeklyPercent = 50,
-                weeklyResetText = "10/19 오전 9시",
-                updatedAt = 1000L
+                weeklyResetText = "3일 후 초기화",
+                updatedAt = nowMillis
             )
         )
         val account3 = GeminiAccountUsageEntry(
@@ -177,8 +177,8 @@ class GeminiUsageParserTest {
                 fiveHourPercent = 94,
                 fiveHourResetText = "25분 후",
                 weeklyPercent = 88,
-                weeklyResetText = "10/19 오전 9시",
-                updatedAt = 1000L
+                weeklyResetText = "3일 후 초기화",
+                updatedAt = nowMillis
             )
         )
 
@@ -186,29 +186,34 @@ class GeminiUsageParserTest {
             accounts = listOf(account1, account2, account3),
             selectedAccountId = "acc_1"
         )
-        assertEquals("본계정 42% ▾", stateWithMainSelected.summaryButtonText)
-        assertEquals(GeminiUsageWarningLevel.NORMAL, stateWithMainSelected.summaryWarningLevel)
+        assertEquals("본계정 42% ▾", stateWithMainSelected.summaryButtonText(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.NORMAL, stateWithMainSelected.summaryWarningLevel(nowMillis))
 
         val stateWithCautionSelected = stateWithMainSelected.copy(selectedAccountId = "acc_2")
-        assertEquals("작업용 1 75% ▾", stateWithCautionSelected.summaryButtonText)
-        assertEquals(GeminiUsageWarningLevel.CAUTION, stateWithCautionSelected.summaryWarningLevel)
+        assertEquals("작업용 1 75% ▾", stateWithCautionSelected.summaryButtonText(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.CAUTION, stateWithCautionSelected.summaryWarningLevel(nowMillis))
 
         val stateWithWarningSelected = stateWithMainSelected.copy(selectedAccountId = "acc_3")
-        assertEquals("작업용 2 94% ▾", stateWithWarningSelected.summaryButtonText)
-        assertEquals(GeminiUsageWarningLevel.WARNING, stateWithWarningSelected.summaryWarningLevel)
+        assertEquals("작업용 2 94% ▾", stateWithWarningSelected.summaryButtonText(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.WARNING, stateWithWarningSelected.summaryWarningLevel(nowMillis))
     }
 
     @Test
-    fun sanitizeWebViewUserAgent_removesWebViewMarkerToken() {
+    fun sanitizeWebViewUserAgent_andSubresourceBlocker_workAsExpected() {
         val rawUa =
             "Mozilla/5.0 (Linux; Android 14; SM-S711N Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.106 Mobile Safari/537.36"
-        val sanitized = GeminiUsageFetcher.sanitizeWebViewUserAgent(rawUa)
         val multiSanitized = MultiProfileGeminiUsageFetcher.sanitizeWebViewUserAgent(rawUa)
 
-        assertFalse(sanitized.contains("; wv"))
-        assertFalse(sanitized.contains("Version/4.0"))
-        assertTrue(sanitized.contains("Chrome/130.0.6723.106"))
-        assertEquals(sanitized, multiSanitized)
+        assertFalse(multiSanitized.contains("; wv"))
+        assertFalse(multiSanitized.contains("Version/4.0"))
+        assertTrue(multiSanitized.contains("Chrome/130.0.6723.106"))
+
+        // 불필요한 폰트·이미지·애널리틱스 요청은 차단하고 문서/스크립트는 허용하는지 검증
+        assertTrue(MultiProfileGeminiUsageFetcher.shouldBlockSubresourceRequest("https://fonts.gstatic.com/s/googlesans/v58/font.woff2"))
+        assertTrue(MultiProfileGeminiUsageFetcher.shouldBlockSubresourceRequest("https://www.google-analytics.com/collect?v=2"))
+        assertTrue(MultiProfileGeminiUsageFetcher.shouldBlockSubresourceRequest("https://lh3.googleusercontent.com/a/avatar.png"))
+        assertFalse(MultiProfileGeminiUsageFetcher.shouldBlockSubresourceRequest("https://gemini.google.com/usage"))
+        assertFalse(MultiProfileGeminiUsageFetcher.shouldBlockSubresourceRequest("https://www.gstatic.com/_/mss/boq-bard/_/js/main.js"))
     }
 
     @Test
@@ -525,5 +530,58 @@ class GeminiUsageParserTest {
                 isFiveHourWindow = true
             )
         )
+    }
+
+    @Test
+    fun expiredFiveHourAndWeeklyCaches_resetSummaryWarningBadgeAndCardLevelsToNormal() {
+        val nowMillis = 1_760_500_000_000L
+
+        // 1. 5시간 한도가 95%(경고)였으나 초기화 예정 시각("25분 후")이 이미 지난 경우 (1시간 전 갱신)
+        val expiredByResetTimeAccount = GeminiAccountUsageEntry(
+            profile = GeminiAccountProfile(id = "acc_1", alias = "본계정", email = "main@gmail.com", sortOrder = 0),
+            usageState = GeminiUsageState.Success(
+                fiveHourPercent = 95,
+                fiveHourResetText = "25분 후 초기화",
+                weeklyPercent = 30,
+                weeklyResetText = "3일 후 초기화",
+                updatedAt = nowMillis - 60 * 60_000L
+            )
+        )
+        val state1 = MultiGeminiUsageState(
+            accounts = listOf(expiredByResetTimeAccount),
+            selectedAccountId = "acc_1"
+        )
+        assertTrue(expiredByResetTimeAccount.isFiveHourWindowExpired(nowMillis))
+        assertEquals(0, expiredByResetTimeAccount.effectiveFiveHourPercent(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.NORMAL, expiredByResetTimeAccount.fiveHourWarningLevel(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.NORMAL, expiredByResetTimeAccount.overallWarningLevel(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.NORMAL, state1.summaryWarningLevel(nowMillis))
+        assertEquals("0%", state1.summaryBadgeText(nowMillis))
+        assertEquals("본계정 0% ▾", state1.summaryButtonText(nowMillis))
+        assertNull(state1.summaryResetTimeText(nowMillis))
+
+        // 2. 리셋 문구가 기본 문구("5시간 주기 자동 초기화")여도 갱신 후 5시간 이상 경과한 경우 자동 만료
+        val expiredByFiveHourElapsedAccount = GeminiAccountUsageEntry(
+            profile = GeminiAccountProfile(id = "acc_2", alias = "작업용 1", email = "work1@gmail.com", sortOrder = 1),
+            usageState = GeminiUsageState.Success(
+                fiveHourPercent = 98,
+                fiveHourResetText = "5시간 주기 자동 초기화",
+                weeklyPercent = 96,
+                weeklyResetText = "주간 주기 자동 초기화",
+                updatedAt = nowMillis - GeminiUsageParser.WEEKLY_WINDOW_MILLIS - 1_000L
+            )
+        )
+        val state2 = MultiGeminiUsageState(
+            accounts = listOf(expiredByFiveHourElapsedAccount),
+            selectedAccountId = "acc_2"
+        )
+        assertTrue(expiredByFiveHourElapsedAccount.isFiveHourWindowExpired(nowMillis))
+        assertTrue(expiredByFiveHourElapsedAccount.isWeeklyWindowExpired(nowMillis))
+        assertEquals(0, expiredByFiveHourElapsedAccount.effectiveFiveHourPercent(nowMillis))
+        assertEquals(0, expiredByFiveHourElapsedAccount.effectiveWeeklyPercent(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.NORMAL, expiredByFiveHourElapsedAccount.overallWarningLevel(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.NORMAL, state2.summaryWarningLevel(nowMillis))
+        assertEquals("0%", state2.summaryBadgeText(nowMillis))
+        assertNull(expiredByFiveHourElapsedAccount.quotaExhaustionReason(nowMillis))
     }
 }

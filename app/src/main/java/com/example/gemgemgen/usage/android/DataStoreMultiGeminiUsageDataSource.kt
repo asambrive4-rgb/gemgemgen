@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore와 JSON 직렬화를 사용해 다중 제미나이 계정 프로필 목록(메인/서브 그룹 호환)과 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
+// 역할: Jetpack DataStore와 JSON 직렬화를 사용해 다중 제미나이 계정 프로필 목록, 대표 계정 선택 상태 및 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
 package com.example.gemgemgen.usage.android
 
 import android.content.Context
@@ -16,6 +16,7 @@ import com.example.gemgemgen.usage.usecase.PersistedMultiGeminiUsageSnapshot
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
@@ -56,6 +57,10 @@ class DataStoreMultiGeminiUsageDataSource(
                 selectedAccountId = selectedAccountId
             )
         }
+
+    override val selectedAccountIdFlow: Flow<String?> = snapshotFlow
+        .map { it.selectedAccountId }
+        .distinctUntilChanged()
 
     override suspend fun loadSnapshot(): PersistedMultiGeminiUsageSnapshot {
         return snapshotFlow.first()
@@ -123,6 +128,31 @@ class DataStoreMultiGeminiUsageDataSource(
                 preferences[KEY_SELECTED_ACCOUNT_ID] = accountId
             }
         }
+    }
+
+    suspend fun selectAccountByEmailOrAlias(email: String, alias: String): String? {
+        val normEmail = email.trim().lowercase()
+        val normAlias = alias.trim().lowercase()
+        if (normEmail.isBlank() && normAlias.isBlank()) return null
+
+        var matchedId: String? = null
+        dataStore.edit { preferences ->
+            val profiles = parseProfilesJson(preferences[KEY_ACCOUNTS_JSON])
+            val matched = profiles.firstOrNull { profile ->
+                normEmail.isNotBlank() && profile.email.trim().lowercase() == normEmail
+            } ?: profiles.firstOrNull { profile ->
+                val localPart = profile.email.trim().lowercase().substringBefore("@")
+                val targetLocal = normEmail.substringBefore("@")
+                targetLocal.isNotBlank() && localPart.isNotBlank() && localPart == targetLocal
+            } ?: profiles.firstOrNull { profile ->
+                normAlias.isNotBlank() && profile.alias.trim().lowercase() == normAlias
+            }
+            if (matched != null) {
+                preferences[KEY_SELECTED_ACCOUNT_ID] = matched.id
+                matchedId = matched.id
+            }
+        }
+        return matchedId
     }
 
     companion object {

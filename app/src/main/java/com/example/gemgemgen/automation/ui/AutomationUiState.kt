@@ -15,7 +15,6 @@ import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
-import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 
 data class AutomationUiState(
@@ -54,14 +53,6 @@ data class AutomationUiState(
     val multiGeminiUsageState: MultiGeminiUsageState = MultiGeminiUsageState(),
     /** 다중 계정 사용량 수직 목록 모달 다이얼로그 표시 여부 */
     val showMultiGeminiUsageDialog: Boolean = false,
-    /** 대표 계정의 제미나이 사용량 한도 상태 */
-    val geminiUsageState: GeminiUsageState = GeminiUsageState.Loading,
-    /** 대표 계정의 로컬에 캐싱된 마지막 제미나이 사용량 성공 스냅샷 */
-    val geminiUsageCachedSuccess: GeminiUsageState.Success? = null,
-    /** 백그라운드에서 제미나이 사용량을 갱신 중인지 여부 */
-    val isRefreshingGeminiUsage: Boolean = false,
-    /** 세션 만료 시 인앱 Google 로그인 시트/모달 표시 여부 */
-    val showGeminiUsageLoginSheet: Boolean = false,
     /**
      * =========================================================================================
      * [주의: 사용자 명시적 요구 기능 - 임의 삭제 절대 금지]
@@ -151,6 +142,16 @@ data class AutomationUiState(
             mode = automationMode,
             environmentStatus = environmentStatus,
             remoteAutomationStatus = remoteAutomationStatus,
+            isMaintenanceBusy = isMaintenanceBusy
+        )
+
+    val canSwitchGeminiAccount: Boolean
+        get() = AutomationExecutionPolicy.canSwitchGeminiAccount(
+            mode = automationMode,
+            environmentStatus = environmentStatus,
+            remoteAutomationStatus = remoteAutomationStatus,
+            isRunning = isRunning,
+            isVariationRunning = isVariationRunning,
             isMaintenanceBusy = isMaintenanceBusy
         )
 

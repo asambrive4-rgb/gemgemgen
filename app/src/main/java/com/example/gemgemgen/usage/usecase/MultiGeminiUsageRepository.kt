@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 계정 그룹 이동, DataStore Warm Start 캐시 즉시 방출, 독립 세션 동시 병렬 새로고침을 조율하는 저장소입니다.
+// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 계정 그룹 이동, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
 package com.example.gemgemgen.usage.usecase
 
 import com.example.gemgemgen.core.AppDispatchers
@@ -9,12 +9,11 @@ import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -33,13 +32,16 @@ data class GeminiUsageFetchResult(
 )
 
 /**
- * 각 계정의 독립된 WebView 세션 프로필을 사용해 제미나이 사용량 페이지를 스크래핑하는 포트 인터페이스.
+ * 각 계정의 격리된 쿠키 세션을 사용해 제미나이 사용량 페이지를 스크래핑하는 포트 인터페이스.
  */
 fun interface MultiProfileGeminiUsageRemoteDataSource {
     suspend fun fetchUsage(profile: GeminiAccountProfile): GeminiUsageFetchResult
 
     /** 계정 삭제 시 해당 계정의 독립 WebView 쿠키/세션 데이터를 정리합니다. */
     suspend fun clearAccountSession(profile: GeminiAccountProfile) {}
+
+    /** 모든 새로고침이 끝난 유휴 시점에 공유 WebView 인스턴스를 해제하여 RAM을 즉시 반환합니다. */
+    suspend fun releaseIdleResources() {}
 }
 
 /**
@@ -55,6 +57,8 @@ data class PersistedMultiGeminiUsageSnapshot(
  * 다중 계정 메타데이터와 각 계정별 마지막 성공 사용량 스냅샷을 영구 저장하는 포트 인터페이스.
  */
 interface MultiGeminiUsageLocalDataSource {
+    val selectedAccountIdFlow: Flow<String?>
+        get() = emptyFlow()
     suspend fun loadSnapshot(): PersistedMultiGeminiUsageSnapshot
     suspend fun saveProfiles(
         profiles: List<GeminiAccountProfile>,
@@ -70,7 +74,8 @@ interface MultiGeminiUsageLocalDataSource {
  *
  * - 앱 시작 시 DataStore에 보관된 계정 목록과 마지막 성공 스냅샷을 0.01초 내 즉시 방출하여
  *   로딩 깜빡임 없이 캐시 데이터를 먼저 표시합니다.
- * - 이후 백그라운드에서 각 계정의 독립 WebView 세션으로 `gemini.google.com/usage`를 동시에 병렬 동기화합니다.
+ * - 새로고침 시 대표 계정 및 현재 보고 있는 탭의 계정을 우선 순회하며,
+ *   모든 조회가 끝나면 공유 WebView 메모리를 즉시 해제합니다.
  */
 class MultiGeminiUsageRepository(
     private val remoteDataSource: MultiProfileGeminiUsageRemoteDataSource,
@@ -134,7 +139,23 @@ class MultiGeminiUsageRepository(
             }
 
             if (autoRefreshOnInit && _state.value.accounts.isNotEmpty()) {
-                refreshAll()
+                refreshRepresentativeAccount()
+            }
+        }
+
+        scope.launch {
+            localDataSource.selectedAccountIdFlow.collect { externalSelectedId ->
+                if (!externalSelectedId.isNullOrBlank()) {
+                    mutationMutex.withLock {
+                        val current = _state.value
+                        if (current.isInitialized &&
+                            current.selectedAccountId != externalSelectedId &&
+                            current.accounts.any { it.profile.id == externalSelectedId }
+                        ) {
+                            _state.value = current.copy(selectedAccountId = externalSelectedId)
+                        }
+                    }
+                }
             }
         }
     }
@@ -234,7 +255,7 @@ class MultiGeminiUsageRepository(
     }
 
     /**
-     * 계정의 소속 그룹(메인 ↔ 서브)을 이동하고 DataStore에 영속화합니다. (추후 탭 이동 기능 대비용)
+     * 계정의 소속 그룹(메인 ↔ 서브)을 이동하고 DataStore에 영속화합니다.
      */
     suspend fun moveAccountGroup(
         accountId: String,
@@ -372,9 +393,19 @@ class MultiGeminiUsageRepository(
     }
 
     /**
-     * 특정 계정의 독립 WebView 세션을 사용해 사용량을 개별 새로고침합니다.
+     * 특정 계정의 세션을 사용해 사용량을 개별 새로고침합니다.
      */
     suspend fun refreshAccount(accountId: String): GeminiUsageState? {
+        return try {
+            refreshAccountInternal(accountId)
+        } finally {
+            if (!_state.value.isAnyRefreshing) {
+                runCatching { remoteDataSource.releaseIdleResources() }
+            }
+        }
+    }
+
+    private suspend fun refreshAccountInternal(accountId: String): GeminiUsageState? {
         val accountMutex = getAccountMutex(accountId)
         return accountMutex.withLock {
             val initialEntry = _state.value.accounts.firstOrNull { it.profile.id == accountId }
@@ -492,24 +523,71 @@ class MultiGeminiUsageRepository(
     }
 
     /**
-     * 등록된 모든 계정의 사용량을 동시에 병렬로 새로고침합니다.
+     * 대표 계정 1개만 새로고침합니다. (앱 시작/자동화 완료 후 가벼운 갱신용)
      */
-    suspend fun refreshAll(): Map<String, GeminiUsageState> {
+    suspend fun refreshRepresentativeAccount(): GeminiUsageState? {
+        val repId = _state.value.representativeAccount?.profile?.id ?: return null
+        return refreshAccount(repId)
+    }
+
+    fun triggerRefreshRepresentativeAccount() {
+        scope.launch {
+            refreshRepresentativeAccount()
+        }
+    }
+
+    /**
+     * 등록된 계정을 스마트 순서(대표 계정 → 우선 그룹(현재 보고 있는 탭) → 나머지 그룹)로 1개씩 순차 새로고침합니다.
+     *
+     * @param prioritizedGroup 우선 새로고침할 탭 그룹 (미지정 시 대표 계정이 속한 그룹 우선)
+     * @param skipFreshWithinMillis 방금 조회된 신선한 계정을 건너뛸 기준 시간(ms). 0이면 건너뛰지 않고 모두 조회.
+     */
+    suspend fun refreshAll(
+        prioritizedGroup: GeminiAccountGroup? = null,
+        skipFreshWithinMillis: Long = 0L
+    ): Map<String, GeminiUsageState> {
         return refreshAllMutex.withLock {
-            val accountIds = _state.value.accounts.map { it.profile.id }
-            if (accountIds.isEmpty()) return@withLock emptyMap()
+            val currentState = _state.value
+            val entries = currentState.accounts
+            if (entries.isEmpty()) return@withLock emptyMap()
 
             _state.update { it.copy(isRefreshingAll = true) }
             val results = linkedMapOf<String, GeminiUsageState>()
             try {
-                val fetchedPairs = coroutineScope {
-                    accountIds.map { accountId ->
-                        async {
-                            accountId to refreshAccount(accountId)
-                        }
-                    }.awaitAll()
+                val repEntry = currentState.representativeAccount
+                val repId = repEntry?.profile?.id
+                val targetPrimaryGroup = prioritizedGroup ?: repEntry?.profile?.group
+
+                val orderedEntries = buildList {
+                    if (repEntry != null) add(repEntry)
+                    if (targetPrimaryGroup != null) {
+                        entries.filter { it.profile.id != repId && it.profile.group == targetPrimaryGroup }
+                            .forEach(::add)
+                        entries.filter { it.profile.id != repId && it.profile.group != targetPrimaryGroup }
+                            .forEach(::add)
+                    } else {
+                        entries.filterNot { it.profile.id == repId }.forEach(::add)
+                    }
                 }
-                for ((accountId, result) in fetchedPairs) {
+
+                for (entry in orderedEntries) {
+                    val accountId = entry.profile.id
+                    if (skipFreshWithinMillis > 0L) {
+                        val latestEntry = _state.value.accounts.firstOrNull { it.profile.id == accountId }
+                        val latestSuccess = latestEntry?.usageState as? GeminiUsageState.Success
+                        val now = nowProvider()
+                        if (latestSuccess != null &&
+                            latestSuccess.updatedAt > 0L &&
+                            now >= latestSuccess.updatedAt &&
+                            now - latestSuccess.updatedAt < skipFreshWithinMillis &&
+                            !latestEntry.isFiveHourWindowExpired(now)
+                        ) {
+                            results[accountId] = latestSuccess
+                            continue
+                        }
+                    }
+
+                    val result = refreshAccountInternal(accountId)
                     if (result != null) {
                         results[accountId] = result
                     }
@@ -517,13 +595,22 @@ class MultiGeminiUsageRepository(
                 results
             } finally {
                 _state.update { it.copy(isRefreshingAll = false) }
+                if (!_state.value.isAnyRefreshing) {
+                    runCatching { remoteDataSource.releaseIdleResources() }
+                }
             }
         }
     }
 
-    fun triggerRefreshAll() {
+    fun triggerRefreshAll(
+        prioritizedGroup: GeminiAccountGroup? = null,
+        skipFreshWithinMillis: Long = DEFAULT_SMART_SKIP_FRESH_MS
+    ) {
         scope.launch {
-            refreshAll()
+            refreshAll(
+                prioritizedGroup = prioritizedGroup,
+                skipFreshWithinMillis = skipFreshWithinMillis
+            )
         }
     }
 
@@ -559,5 +646,10 @@ class MultiGeminiUsageRepository(
                 )
             }
         }
+    }
+
+    companion object {
+        /** 연속 새로고침 시 45초 이내에 이미 정상 조회된 계정은 중복 스크래핑을 생략합니다. */
+        const val DEFAULT_SMART_SKIP_FRESH_MS = 45_000L
     }
 }

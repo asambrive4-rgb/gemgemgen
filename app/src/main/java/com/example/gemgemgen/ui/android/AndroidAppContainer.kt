@@ -1,4 +1,4 @@
-// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
+// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량 저장소 포함), 유스케이스, 게이트웨이(Gemini 계정 자동 전환 포함) 인스턴스를 주입하는 의존성 컨테이너입니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.Context
@@ -20,6 +20,7 @@ import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
+import com.example.gemgemgen.automation.android.AndroidGeminiAccountSwitcher
 import com.example.gemgemgen.automation.android.AndroidGeminiAppCloser
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.android.AndroidSelfAppCloser
@@ -137,6 +138,7 @@ class AndroidAppContainer(context: Context) {
                 geminiRestartCloser = AndroidGeminiAppCloser(appContext),
                 selfAppCloser = AndroidSelfAppCloser(appContext),
                 memoryCleanupGateway = AndroidMemoryCleanupGateway(appContext),
+                geminiAccountSwitchGateway = AndroidGeminiAccountSwitcher(appContext),
                 manageRemoteAutomation = manageRemoteAutomation
             ),
             executeAutomation = executeAutomation,

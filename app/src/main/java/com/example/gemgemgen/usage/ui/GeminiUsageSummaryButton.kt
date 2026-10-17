@@ -1,4 +1,4 @@
-// 역할: 메인 화면 프롬프트 에디터 하단에 대표 계정의 제미나이 사용률(%)과 70%/90% 주의·경고 컬러를 표시하고, 모달 진입 없이 즉시 새로고침하거나 다중 계정 모달을 여는 요약 바입니다.
+// 역할: 메인 화면 프롬프트 에디터 하단에 대표 계정의 제미나이 사용률(%·만료 자동 보정)과 70%/90% 주의·경고 컬러를 표시하고, 모달 진입 없이 즉시 새로고침하거나 다중 계정 모달을 여는 요약 바입니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -22,6 +22,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +45,7 @@ import com.example.gemgemgen.automation.ui.GeminiGradientLogo
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.usage.domain.GeminiUsageWarningLevel
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
+import kotlinx.coroutines.delay
 
 internal val MultiUsageCautionAmber = Color(0xFFE67E22)
 internal val MultiUsageWarningRed = Color(0xFFD93025)
@@ -66,10 +72,10 @@ internal fun resolveGeminiUsageWarningColor(level: GeminiUsageWarningLevel): Col
 /**
  * 프롬프트 에디터 하단(상태 영역)에 배치되는 미니멀 뉴모피즘 제미나이 사용량 요약 바 및 즉시 새로고침 버튼.
  *
- * - 표시 내용: 대표/현재 계정 별칭 + 사용률(%) (예: `Gemini [본계정 42%] ▾`)
- * - 시각 피드백: 70% 이상 시 주황색(주의), 90% 이상 시 빨간색(경고) 포인트 컬러 적용
+ * - 표시 내용: 대표/현재 계정 별칭 + 사용률(%) (예: `본계정 42% ▾`)
+ * - 시각 피드백: 70% 이상 시 주황색(주의), 90% 이상 시 빨간색(경고) 포인트 컬러 적용 (초기화 경과 시 자동으로 0%·정상 보정)
  * - 좌측 요약 바 클릭 동작: 'Gemini Pro 계정별 사용량' 다중 계정 수직 목록 모달 오픈
- * - 우측 새로고침 버튼 클릭 동작: 모달 진입 없이 메인 화면에서 즉시 전체 계정 사용량 동시 새로고침
+ * - 우측 새로고침 버튼 클릭 동작: 모달 진입 없이 메인 화면에서 즉시 계정 사용량 새로고침
  */
 @Composable
 fun GeminiUsageSummaryButton(
@@ -78,9 +84,20 @@ fun GeminiUsageSummaryButton(
     onRefreshClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val warningLevel = multiUsageState.summaryWarningLevel
+    var nowMillis by remember(multiUsageState) { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(multiUsageState.representativeAccount?.displayedSuccess) {
+        while (true) {
+            delay(30_000L)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
+
+    val warningLevel = multiUsageState.summaryWarningLevel(nowMillis)
     val accentColor = resolveGeminiUsageWarningColor(warningLevel)
     val isWarningOrCaution = warningLevel != GeminiUsageWarningLevel.NORMAL
+    val badgeText = multiUsageState.summaryBadgeText(nowMillis)
+    val resetTimeText = multiUsageState.summaryResetTimeText(nowMillis)
+    val summaryButtonText = multiUsageState.summaryButtonText(nowMillis)
 
     val containerColor = when (warningLevel) {
         GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.11f)
@@ -125,7 +142,7 @@ fun GeminiUsageSummaryButton(
                 .clickable(onClick = onClick)
                 .semantics {
                     role = Role.Button
-                    contentDescription = "Gemini 계정별 사용량 모달 열기: ${multiUsageState.summaryButtonText}"
+                    contentDescription = "Gemini 계정별 사용량 모달 열기: $summaryButtonText"
                 }
         ) {
             Row(
@@ -155,14 +172,14 @@ fun GeminiUsageSummaryButton(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    multiUsageState.summaryBadgeText?.let { badgeText ->
+                    badgeText?.let { badge ->
                         Surface(
                             shape = RoundedCornerShape(7.dp),
                             color = accentColor.copy(alpha = 0.16f),
                             border = BorderStroke(1.dp, accentColor.copy(alpha = 0.55f))
                         ) {
                             Text(
-                                text = badgeText,
+                                text = badge,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = accentColor,
@@ -172,7 +189,7 @@ fun GeminiUsageSummaryButton(
                         }
                     }
 
-                    multiUsageState.summaryResetTimeText?.let { resetTime ->
+                    resetTimeText?.let { resetTime ->
                         Text(
                             text = resetTime,
                             style = MaterialTheme.typography.labelMedium,

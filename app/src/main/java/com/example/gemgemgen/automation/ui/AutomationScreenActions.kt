@@ -90,14 +90,9 @@ interface AutomationScreenActions {
     fun removeGeminiAccount(accountId: String) {}
     fun moveGeminiAccountGroup(accountId: String, targetGroup: GeminiAccountGroup) {}
     fun selectRepresentativeGeminiAccount(accountId: String) {}
+    fun switchGeminiAccount(accountId: String) {}
     fun refreshGeminiAccountUsage(accountId: String) {}
-    fun refreshAllGeminiUsage() {}
-
-    // 단일/공통 사용량 액션 위임
-    fun refreshGeminiUsage() {}
-    fun openGeminiUsageLogin() {}
-    fun closeGeminiUsageLogin() {}
-    fun onGeminiUsageLoginCompleted() {}
+    fun refreshAllGeminiUsage(prioritizedGroup: GeminiAccountGroup? = null) {}
 
     // 테마 및 환경 설정
     fun refreshStatus() {}

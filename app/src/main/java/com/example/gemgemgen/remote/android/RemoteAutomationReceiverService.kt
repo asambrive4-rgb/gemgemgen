@@ -1,4 +1,4 @@
-// 역할: 백그라운드 포그라운드 서비스로 상주하며 원격 기기의 자동화 요청을 수신합니다.
+// 역할: 백그라운드 포그라운드 서비스로 상주하며 원격 기기의 자동화·메모리 정리·Gemini 계정 전환 요청을 수신합니다.
 package com.example.gemgemgen.remote.android
 
 import android.app.KeyguardManager
@@ -19,9 +19,11 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.example.gemgemgen.R
 import com.example.gemgemgen.automation.android.AndroidAutomationRuntimeProvider
+import com.example.gemgemgen.automation.android.AndroidGeminiAccountSwitcher
 import com.example.gemgemgen.automation.android.AndroidMemoryCleanupGateway
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
+import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountResult
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
 import com.example.gemgemgen.remote.domain.AutomationMode
@@ -29,6 +31,7 @@ import com.example.gemgemgen.remote.domain.RemoteExecutionConditions
 import com.example.gemgemgen.remote.usecase.ExecuteRemoteAutomationUseCase
 import com.example.gemgemgen.remote.usecase.CheckRemoteExecutionUseCase
 import com.example.gemgemgen.ui.MainActivity
+import com.example.gemgemgen.usage.android.DataStoreMultiGeminiUsageDataSource
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintWriter
@@ -168,6 +171,7 @@ class RemoteAutomationReceiverService : Service() {
                 is RemoteProtocolMessage.RunRequest -> handleRun(message, writer, socket)
                 is RemoteProtocolMessage.CancelRequest -> handleCancel(message)
                 is RemoteProtocolMessage.CleanMemoryRequest -> handleCleanMemory(message, writer)
+                is RemoteProtocolMessage.SwitchAccountRequest -> handleSwitchAccount(message, writer)
                 else -> Unit
             }
         }
@@ -400,6 +404,93 @@ class RemoteAutomationReceiverService : Service() {
                         RemoteProtocolMessage.CleanMemoryResult(
                             success = false,
                             message = "수신 기기 메모리 정리 실패: ${result.message}"
+                        )
+                    )
+                )
+            }
+        }
+    }
+
+    private suspend fun handleSwitchAccount(
+        message: RemoteProtocolMessage.SwitchAccountRequest,
+        writer: PrintWriter
+    ) {
+        if (!isAuthenticated(message.senderId, message.token)) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.SwitchAccountResult(
+                        success = false,
+                        message = "등록되지 않은 송신 기기입니다."
+                    )
+                )
+            )
+            return
+        }
+
+        val runState = AndroidAutomationRuntimeProvider.get(this).runState.value
+        if (runState is AutomationRunState.Running || activeSession != null) {
+            writer.println(
+                RemoteAutomationProtocol.encode(
+                    RemoteProtocolMessage.SwitchAccountResult(
+                        success = false,
+                        message = "수신 기기에서 자동화 실행 중에는 계정을 전환할 수 없습니다."
+                    )
+                )
+            )
+            return
+        }
+
+        val displayLabel = message.alias.trim().ifBlank { message.email.trim().ifBlank { "선택한 계정" } }
+        runCatching {
+            DataStoreMultiGeminiUsageDataSource(this)
+                .selectAccountByEmailOrAlias(email = message.email, alias = message.alias)
+        }
+        val switcher = AndroidGeminiAccountSwitcher(this)
+        val result = switcher.switchAccount(
+            email = message.email,
+            alias = message.alias,
+            returnToHostApp = true
+        )
+        when (result) {
+            SwitchGeminiAccountResult.Success -> {
+                RemoteAutomationStateHub.update {
+                    it.copy(message = "원격 요청으로 Gemini 계정을 '$displayLabel'(으)로 전환했습니다.")
+                }
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.SwitchAccountResult(
+                            success = true,
+                            message = "수신 기기 Gemini 계정을 '$displayLabel'(으)로 전환했습니다."
+                        )
+                    )
+                )
+            }
+            SwitchGeminiAccountResult.AccessibilityUnavailable -> {
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.SwitchAccountResult(
+                            success = false,
+                            message = "수신 기기의 접근성 서비스가 꺼져 있습니다."
+                        )
+                    )
+                )
+            }
+            SwitchGeminiAccountResult.InProgress -> {
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.SwitchAccountResult(
+                            success = false,
+                            message = "수신 기기에서 계정 전환이 이미 진행 중입니다."
+                        )
+                    )
+                )
+            }
+            is SwitchGeminiAccountResult.Failure -> {
+                writer.println(
+                    RemoteAutomationProtocol.encode(
+                        RemoteProtocolMessage.SwitchAccountResult(
+                            success = false,
+                            message = result.message
                         )
                     )
                 )

@@ -1,4 +1,4 @@
-// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리 및 마이그레이션, DataStore JSON 직렬화/역직렬화, Warm Start 즉시 캐시 방출, 동시 병렬 새로고침 및 독립 쿠키 세션 격리를 검증합니다.
+// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션 격리를 검증합니다.
 package com.example.gemgemgen
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -54,6 +54,7 @@ class MultiGeminiUsageRepositoryTest {
 
     @Test
     fun addAndRemoveFivePlusAccounts_maintainsSortOrderAndClearsRemovedSession() = runBlocking {
+        val baseNow = System.currentTimeMillis()
         val clearedProfiles = mutableListOf<String>()
         val fakeRemote = object : MultiProfileGeminiUsageRemoteDataSource {
             override suspend fun fetchUsage(profile: GeminiAccountProfile): GeminiUsageFetchResult {
@@ -63,8 +64,8 @@ class MultiGeminiUsageRepositoryTest {
                         fiveHourPercent = basePct.coerceAtMost(95),
                         fiveHourResetText = "2시간 15분 후",
                         weeklyPercent = (basePct + 10).coerceAtMost(99),
-                        weeklyResetText = "10/19 오전 9시",
-                        updatedAt = 1_000L + profile.sortOrder
+                        weeklyResetText = "3일 후 초기화",
+                        updatedAt = baseNow + profile.sortOrder
                     )
                 )
             }
@@ -125,6 +126,8 @@ class MultiGeminiUsageRepositoryTest {
 
     @Test
     fun warmStart_withFiveCachedAccounts_immediatelyEmitsSnapshotsBeforeNetworkSync() = runBlocking {
+        val initialUpdatedAt = System.currentTimeMillis() - 10_000L
+        val syncedUpdatedAt = initialUpdatedAt + 5_000L
         val initialProfiles = (1..5).map { idx ->
             GeminiAccountProfile(
                 id = "acc_$idx",
@@ -139,8 +142,8 @@ class MultiGeminiUsageRepositoryTest {
                 fiveHourPercent = 42 + profile.sortOrder * 10,
                 fiveHourResetText = "2시간 15분 후",
                 weeklyPercent = 50 + profile.sortOrder * 10,
-                weeklyResetText = "10/19 오전 9시",
-                updatedAt = 10_000L
+                weeklyResetText = "3일 후 초기화",
+                updatedAt = initialUpdatedAt
             )
         }
 
@@ -162,8 +165,8 @@ class MultiGeminiUsageRepositoryTest {
                         fiveHourPercent = 50 + profile.sortOrder * 10,
                         fiveHourResetText = "1시간 50분 후",
                         weeklyPercent = 60 + profile.sortOrder * 10,
-                        weeklyResetText = "10/19 오전 9시",
-                        updatedAt = 20_000L
+                        weeklyResetText = "3일 후 초기화",
+                        updatedAt = syncedUpdatedAt
                     )
                 )
             },
@@ -180,18 +183,71 @@ class MultiGeminiUsageRepositoryTest {
         assertEquals("본계정 42% ▾", warmState.summaryButtonText)
         assertEquals(42, warmState.accounts[0].displayedSuccess?.fiveHourPercent)
         assertEquals(82, warmState.accounts[4].displayedSuccess?.fiveHourPercent)
-        assertTrue(warmState.isRefreshingAll)
-        assertTrue(warmState.accounts.all { it.isRefreshing })
+        // 앱 시작 시에는 대표 계정(acc_1) 1개만 백그라운드 새로고침됨
+        assertFalse(warmState.isRefreshingAll)
+        assertTrue(warmState.accounts[0].isRefreshing)
+        assertTrue(warmState.accounts.drop(1).none { it.isRefreshing })
 
-        // 백그라운드 동기화 완료 후 최신 수치로 갱신됨
+        // 백그라운드 동기화 완료 후 대표 계정만 최신 수치로 갱신되고 나머지는 캐시 유지
         networkBarrier.complete(Unit)
 
         val syncedState = repository.state.value
         assertFalse(syncedState.isRefreshingAll)
         assertEquals("본계정 50% ▾", syncedState.summaryButtonText)
         assertEquals(50, syncedState.accounts[0].displayedSuccess?.fiveHourPercent)
-        assertEquals(90, syncedState.accounts[4].displayedSuccess?.fiveHourPercent)
-        assertEquals(GeminiUsageWarningLevel.WARNING, syncedState.accounts[4].overallWarningLevel)
+        assertEquals(82, syncedState.accounts[4].displayedSuccess?.fiveHourPercent)
+        assertEquals(initialUpdatedAt, syncedState.accounts[4].displayedSuccess?.updatedAt)
+    }
+
+    @Test
+    fun refreshAll_executesSequentiallyStartingWithRepresentativeAccount() = runBlocking {
+        val profiles = (1..5).map { idx ->
+            GeminiAccountProfile(
+                id = "acc_$idx",
+                alias = "계정 $idx",
+                email = "account$idx@gmail.com",
+                sortOrder = idx - 1,
+                createdAt = 1000L * idx
+            )
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource(
+            PersistedMultiGeminiUsageSnapshot(
+                profiles = profiles,
+                selectedAccountId = "acc_3"
+            )
+        )
+        val fetchOrder = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val concurrent = java.util.concurrent.atomic.AtomicInteger(0)
+        val maxConcurrent = java.util.concurrent.atomic.AtomicInteger(0)
+
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = { profile ->
+                val now = concurrent.incrementAndGet()
+                maxConcurrent.updateAndGet { maxOf(it, now) }
+                fetchOrder.add(profile.id)
+                kotlinx.coroutines.delay(20L)
+                concurrent.decrementAndGet()
+                GeminiUsageFetchResult(
+                    usageState = GeminiUsageState.Success(
+                        fiveHourPercent = 10,
+                        fiveHourResetText = "1시간 후",
+                        weeklyPercent = 20,
+                        weeklyResetText = "10/19 오전 9시",
+                        updatedAt = 1L
+                    )
+                )
+            },
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        val results = repository.refreshAll(skipFreshWithinMillis = 0L)
+
+        assertEquals(5, results.size)
+        assertEquals(1, maxConcurrent.get())
+        assertEquals(listOf("acc_3", "acc_1", "acc_2", "acc_4", "acc_5"), fetchOrder.toList())
     }
 
     @Test
@@ -407,6 +463,74 @@ class MultiGeminiUsageRepositoryTest {
         assertEquals(GeminiAccountGroup.SUB, repository.state.value.accounts.single().profile.group)
         assertEquals(0, repository.state.value.mainAccountCount)
         assertEquals(1, repository.state.value.subAccountCount)
+    }
+
+    @Test
+    fun refreshAll_prioritizesSelectedGroup_skipsFreshAccounts_andReleasesIdleResources() = runBlocking {
+        val nowMillis = System.currentTimeMillis()
+        val profiles = listOf(
+            GeminiAccountProfile(id = "main_1", alias = "메인1", sortOrder = 0, group = GeminiAccountGroup.MAIN),
+            GeminiAccountProfile(id = "main_2", alias = "메인2(최신)", sortOrder = 1, group = GeminiAccountGroup.MAIN),
+            GeminiAccountProfile(id = "sub_1", alias = "서브1", sortOrder = 2, group = GeminiAccountGroup.SUB),
+            GeminiAccountProfile(id = "sub_2", alias = "서브2", sortOrder = 3, group = GeminiAccountGroup.SUB)
+        )
+        // main_2는 5초 전에 이미 새로고침됨 (45초 이내이므로 스킵 대상)
+        val cachedMap = mapOf(
+            "main_2" to GeminiUsageState.Success(
+                fiveHourPercent = 12,
+                fiveHourResetText = "4시간 후",
+                weeklyPercent = 20,
+                weeklyResetText = "5일 후",
+                updatedAt = nowMillis - 5_000L
+            )
+        )
+        val fakeLocal = InMemoryMultiUsageLocalDataSource(
+            PersistedMultiGeminiUsageSnapshot(
+                profiles = profiles,
+                cachedUsageByAccountId = cachedMap,
+                selectedAccountId = "main_1"
+            )
+        )
+        val fetchedIds = mutableListOf<String>()
+        val releaseCalls = java.util.concurrent.atomic.AtomicInteger(0)
+
+        val fakeRemote = object : MultiProfileGeminiUsageRemoteDataSource {
+            override suspend fun fetchUsage(profile: GeminiAccountProfile): GeminiUsageFetchResult {
+                fetchedIds.add(profile.id)
+                return GeminiUsageFetchResult(
+                    usageState = GeminiUsageState.Success(
+                        fiveHourPercent = 25,
+                        fiveHourResetText = "3시간 후",
+                        weeklyPercent = 40,
+                        weeklyResetText = "4일 후",
+                        updatedAt = nowMillis
+                    )
+                )
+            }
+
+            override suspend fun releaseIdleResources() {
+                releaseCalls.incrementAndGet()
+            }
+        }
+
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        // 서브 탭(SUB) 우선 새로고침 실행:
+        // 기대 순서: 대표 계정(main_1) -> 우선 그룹(sub_1, sub_2) -> 나머지 그룹 중 신선하지 않은 계정(main_2는 5초 전 갱신이므로 스킵!)
+        val results = repository.refreshAll(
+            prioritizedGroup = GeminiAccountGroup.SUB,
+            skipFreshWithinMillis = 45_000L
+        )
+
+        assertEquals(listOf("main_1", "sub_1", "sub_2"), fetchedIds)
+        assertEquals(12, (results["main_2"] as? GeminiUsageState.Success)?.fiveHourPercent)
+        assertTrue("새로고침 완료 후 유휴 WebView 리소스 해제가 호출되어야 함", releaseCalls.get() >= 1)
     }
 
     private class InMemoryMultiUsageLocalDataSource(

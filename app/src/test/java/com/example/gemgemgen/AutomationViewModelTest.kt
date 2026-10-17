@@ -1471,6 +1471,79 @@ class AutomationViewModelTest {
         assertEquals("인물 8k masterpiece __장소__", viewModel.promptTemplateTextFieldState.text.toString())
     }
 
+    @Test
+    fun openMultiGeminiUsageDialog_withCachedRepresentative_doesNotTriggerAnyRefresh() {
+        val fetched = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val repository = multiUsageRepository(fetched, withCache = true)
+        val viewModel = viewModel(multiGeminiUsageRepository = repository)
+
+        viewModel.openMultiGeminiUsageDialog()
+
+        assertTrue(viewModel.uiState.value.showMultiGeminiUsageDialog)
+        assertTrue(fetched.isEmpty())
+    }
+
+    @Test
+    fun openMultiGeminiUsageDialog_withoutCachedRepresentative_refreshesOnlyRepresentative() {
+        val fetched = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val repository = multiUsageRepository(fetched, withCache = false)
+        val viewModel = viewModel(multiGeminiUsageRepository = repository)
+
+        viewModel.openMultiGeminiUsageDialog()
+
+        assertEquals(listOf("acc_1"), fetched.toList())
+    }
+
+    private fun multiUsageRepository(
+        fetched: MutableList<String>,
+        withCache: Boolean
+    ): com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository {
+        val profiles = (1..3).map { idx ->
+            com.example.gemgemgen.usage.domain.GeminiAccountProfile(
+                id = "acc_$idx",
+                alias = "계정 $idx",
+                email = "account$idx@gmail.com",
+                sortOrder = idx - 1,
+                createdAt = 1000L * idx
+            )
+        }
+        val success = com.example.gemgemgen.usage.domain.GeminiUsageState.Success(
+            fiveHourPercent = 10,
+            fiveHourResetText = "1시간 후",
+            weeklyPercent = 20,
+            weeklyResetText = "10/19 오전 9시",
+            updatedAt = 1L
+        )
+        val snapshot = com.example.gemgemgen.usage.usecase.PersistedMultiGeminiUsageSnapshot(
+            profiles = profiles,
+            cachedUsageByAccountId = if (withCache) profiles.associate { it.id to success } else emptyMap(),
+            selectedAccountId = "acc_1"
+        )
+        val local = object : com.example.gemgemgen.usage.usecase.MultiGeminiUsageLocalDataSource {
+            override suspend fun loadSnapshot() = snapshot
+            override suspend fun saveProfiles(
+                profiles: List<com.example.gemgemgen.usage.domain.GeminiAccountProfile>,
+                selectedAccountId: String?
+            ) {}
+            override suspend fun saveAccountSuccess(
+                accountId: String,
+                state: com.example.gemgemgen.usage.domain.GeminiUsageState.Success
+            ) {}
+            override suspend fun removeAccountData(accountId: String) {}
+            override suspend fun saveSelectedAccountId(accountId: String?) {}
+        }
+        return com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository(
+            remoteDataSource = { profile ->
+                fetched.add(profile.id)
+                com.example.gemgemgen.usage.usecase.GeminiUsageFetchResult(success)
+            },
+            localDataSource = local,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+    }
+
     private fun viewModel(
         environmentStatusReader: FakeEnvironmentStatusReader = FakeEnvironmentStatusReader(readyEnvironment()),
         clipboardText: String = "",
@@ -1489,6 +1562,7 @@ class AutomationViewModelTest {
         wildcardFileRepository: WildcardFileRepository? = null,
         promptSnippetRepository: PromptSnippetRepository? = null,
         themePaletteStore: com.example.gemgemgen.ui.theme.ThemePaletteStore? = null,
+        multiGeminiUsageRepository: com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository? = null,
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
         coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
     ): AutomationViewModel {
@@ -1526,6 +1600,7 @@ class AutomationViewModelTest {
             soundAlertGateway = soundAlertGateway,
             promptHistoryStore = promptHistoryStore,
             themePaletteStore = themePaletteStore,
+            multiGeminiUsageRepository = multiGeminiUsageRepository,
             runVariationPrompt = runVariationPrompt,
             dispatchers = dispatchers,
             coroutineScope = coroutineScope

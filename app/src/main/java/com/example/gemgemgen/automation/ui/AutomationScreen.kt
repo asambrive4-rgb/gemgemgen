@@ -83,7 +83,7 @@ internal fun AutomationScreen(
                         GeminiUsageSummaryButton(
                             multiUsageState = uiState.multiGeminiUsageState,
                             onClick = actions::openMultiGeminiUsageDialog,
-                            onRefreshClick = actions::refreshAllGeminiUsage
+                            onRefreshClick = { actions.refreshAllGeminiUsage(null) }
                         )
                     }
 
@@ -208,6 +208,7 @@ internal fun AutomationScreen(
                     onSelectRepresentativeAccount = actions::selectRepresentativeGeminiAccount,
                     onRefreshAccount = actions::refreshGeminiAccountUsage,
                     onRefreshAll = actions::refreshAllGeminiUsage,
+                    onSwitchAccount = actions::switchGeminiAccount,
                     onMoveAccountGroup = actions::moveGeminiAccountGroup,
                     onDismiss = actions::closeMultiGeminiUsageDialog
                 )

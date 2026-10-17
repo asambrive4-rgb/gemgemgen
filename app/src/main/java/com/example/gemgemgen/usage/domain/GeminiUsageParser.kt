@@ -1,4 +1,4 @@
-// 역할: 렌더링된 제미나이 사용량 DOM 본문에서 한도 퍼센트·리셋 문구·이메일을 추출하고, 초기화까지 남은 시간 계산 및 5시간 만료 보정 로직을 제공합니다.
+// 역할: 렌더링된 제미나이 사용량 DOM 본문에서 한도 퍼센트·리셋 문구·이메일을 추출하고, 초기화까지 남은 시간 계산 및 5시간·주간 만료 보정 로직을 제공합니다.
 package com.example.gemgemgen.usage.domain
 
 import java.util.Calendar
@@ -7,6 +7,9 @@ object GeminiUsageParser {
     const val USAGE_URL = "https://gemini.google.com/usage"
     const val LOGIN_URL =
         "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fgemini.google.com%2Fusage"
+
+    const val FIVE_HOUR_WINDOW_MILLIS = 5L * 3600_000L
+    const val WEEKLY_WINDOW_MILLIS = 7L * 24L * 3600_000L
 
     private const val DEFAULT_FIVE_HOUR_RESET_TEXT = "5시간 주기 자동 초기화"
     private const val DEFAULT_WEEKLY_RESET_TEXT = "주간 주기 자동 초기화"
@@ -192,7 +195,7 @@ object GeminiUsageParser {
     /**
      * 다이얼로그 및 카드 표시용으로 `"에 초기화"` 반복 문구를 제거하고, 24시간제/축약 일시와 함께 현재 시각 기준 남은 시간을 병기합니다.
      * 예: `"오후 2:00에 초기화"` -> `"14:00 (4시간 10분 후)"`, `"10월 20일 오후 2:00에 초기화"` -> `"10/20/14:00 (4일 4시간 후)"`
-     * [isFiveHourWindow]가 true이고 리셋 시각이 이미 지났다면 `"초기화됨 (0%)"`를 반환합니다.
+     * 리셋 시각이 이미 지났다면 `"초기화됨 (0%)"`를 반환합니다.
      */
     fun formatCompactResetWithRemaining(
         rawText: String,
@@ -200,13 +203,21 @@ object GeminiUsageParser {
         updatedAt: Long = 0L,
         isFiveHourWindow: Boolean = false
     ): String {
+        val elapsedSinceUpdate = if (updatedAt > 0L && nowMillis >= updatedAt) nowMillis - updatedAt else 0L
+        if (isFiveHourWindow && elapsedSinceUpdate >= FIVE_HOUR_WINDOW_MILLIS) {
+            return "초기화됨 (0%)"
+        }
+        if (!isFiveHourWindow && elapsedSinceUpdate >= WEEKLY_WINDOW_MILLIS) {
+            return "초기화됨 (0%)"
+        }
+
         val remainingMillis = computeRemainingResetMillis(
             rawText = rawText,
             nowMillis = nowMillis,
             updatedAt = updatedAt,
             isFiveHourWindow = isFiveHourWindow
         )
-        if (isFiveHourWindow && remainingMillis != null && remainingMillis <= 0L) {
+        if (remainingMillis != null && remainingMillis <= 0L) {
             return "초기화됨 (0%)"
         }
 
@@ -228,8 +239,10 @@ object GeminiUsageParser {
             val shortTime = parsedTime.formatFormattedTime()
             val durationText = if (remainingMillis != null && remainingMillis > 0L) {
                 formatRemainingDuration(remainingMillis)
-            } else {
+            } else if (updatedAt <= 0L) {
                 computeRemainingDurationText(parsedTime, nowMillis)
+            } else {
+                null
             }
             return if (!durationText.isNullOrBlank()) {
                 "$shortTime ($durationText)"

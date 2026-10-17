@@ -1,4 +1,4 @@
-// 역할: 최근 앱 제어, 제스처 주입, 공통 노드 클릭 위임 및 앱별 자동화 게이트웨이를 제공하는 접근성 인프라 서비스
+// 역할: 최근 앱 제어, 제스처 주입, 메모리 정리, Gemini 구글 계정 자동 전환 및 앱별 자동화 게이트웨이를 제공하는 접근성 인프라 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -22,6 +22,7 @@ import com.example.gemgemgen.automation.usecase.CloseGeminiAppResult
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
+import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountResult
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,9 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var memoryCleanupToken: Any? = null
     private var memoryCleanupCompletion: ((MemoryCleanupResult) -> Unit)? = null
     private var memoryCleanupAutomation: GoogleAppForceStopAutomation? = null
+    private var accountSwitchToken: Any? = null
+    private var accountSwitchCompletion: ((SwitchGeminiAccountResult) -> Unit)? = null
+    private var accountSwitchAutomation: GeminiAccountSwitchAutomation? = null
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
     private val settingsStore by lazy { AutomationSettingsStore(applicationContext) }
@@ -71,26 +75,39 @@ class GeminiAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         activeService = this
-        serviceInfo = serviceInfo?.apply {
-            eventTypes = 0
-            notificationTimeout = 0L
-            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        setWindowEventTracking(enabled = false)
+    }
+
+    private fun setWindowEventTracking(enabled: Boolean) {
+        runCatching {
+            serviceInfo = serviceInfo?.apply {
+                eventTypes = if (enabled) {
+                    AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                        AccessibilityEvent.TYPE_WINDOWS_CHANGED or
+                        AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                } else {
+                    0
+                }
+                notificationTimeout = if (enabled) 50L else 0L
+                flags = flags or
+                    AccessibilityServiceInfo.DEFAULT or
+                    AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            }
         }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     override fun onInterrupt() {
-        finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 중단되었습니다."))
-        finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 중단되었습니다."))
-        ProcessAutomationHolder.onAccessibilityLost()
-        serviceScope.coroutineContext.cancelChildren()
-        handler.removeCallbacksAndMessages(null)
+        // onInterrupt는 화면/다이얼로그 전환 시 시스템이 음성 피드백 중단을 요청할 때도 호출되므로,
+        // 진행 중인 접근성 자동화 핸들러(accountSwitch 등)를 강제 종료하지 않습니다.
     }
 
     override fun onDestroy() {
         finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 종료되었습니다."))
+        finishAccountSwitch(SwitchGeminiAccountResult.Failure("접근성 서비스가 종료되었습니다."))
         if (activeService == this) {
             activeService = null
         }
@@ -121,6 +138,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     ): MemoryCleanupResult {
         if (
             memoryCleanupToken != null ||
+            accountSwitchToken != null ||
             closeAppCompletion != null ||
             ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
         ) {
@@ -130,12 +148,16 @@ class GeminiAccessibilityService : AccessibilityService() {
         return suspendCancellableCoroutine { continuation ->
             val token = Any()
             memoryCleanupToken = token
+            setWindowEventTracking(enabled = true)
             memoryCleanupCompletion = completion@{ result ->
                 if (memoryCleanupToken !== token) return@completion
                 memoryCleanupToken = null
                 memoryCleanupCompletion = null
                 memoryCleanupAutomation?.cancel()
                 memoryCleanupAutomation = null
+                if (accountSwitchToken == null) {
+                    setWindowEventTracking(enabled = false)
+                }
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }
@@ -162,6 +184,73 @@ class GeminiAccessibilityService : AccessibilityService() {
             }
             continuation.invokeOnCancellation {
                 handler.post { cancelMemoryCleanup(token) }
+            }
+        }
+    }
+
+    internal suspend fun switchGeminiAccount(
+        targetEmail: String,
+        targetAlias: String,
+        returnToHostApp: Boolean,
+        launchGemini: () -> Boolean,
+        launchHostApp: () -> Boolean
+    ): SwitchGeminiAccountResult {
+        if (
+            accountSwitchToken != null ||
+            memoryCleanupToken != null ||
+            closeAppCompletion != null ||
+            ProcessAutomationHolder.current()?.runState?.value is AutomationRunState.Running
+        ) {
+            return SwitchGeminiAccountResult.InProgress
+        }
+
+        return suspendCancellableCoroutine { continuation ->
+            val token = Any()
+            accountSwitchToken = token
+            setWindowEventTracking(enabled = true)
+            accountSwitchCompletion = completion@{ result ->
+                if (accountSwitchToken !== token) return@completion
+                accountSwitchToken = null
+                accountSwitchCompletion = null
+                accountSwitchAutomation?.cancel()
+                accountSwitchAutomation = null
+                if (memoryCleanupToken == null) {
+                    setWindowEventTracking(enabled = false)
+                }
+                if (continuation.isActive) {
+                    continuation.resume(result)
+                }
+            }
+
+            handler.post {
+                if (accountSwitchToken !== token) return@post
+                accountSwitchAutomation = GeminiAccountSwitchAutomation(
+                    targetEmail = targetEmail,
+                    targetAlias = targetAlias,
+                    returnToHostApp = returnToHostApp,
+                    handler = handler,
+                    rootProvider = { rootInActiveWindow },
+                    allRootsProvider = {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            runCatching { clearCache() }
+                        }
+                        val activeRoot = runCatching { rootInActiveWindow }.getOrNull()
+                        val winRoots = runCatching { windows.mapNotNull { it.root } }.getOrNull().orEmpty()
+                        (listOfNotNull(activeRoot) + winRoots).distinct()
+                    },
+                    currentPackageProvider = {
+                        rootInActiveWindow?.packageName?.toString()
+                    },
+                    performBack = { performGlobalAction(GLOBAL_ACTION_BACK) },
+                    tapCoordinates = { x, y, onCompleted -> tapCoordinates(x, y, onCompleted) },
+                    launchGemini = launchGemini,
+                    launchHostApp = launchHostApp,
+                    onFinished = { result -> finishAccountSwitch(token, result) }
+                )
+                accountSwitchAutomation?.start()
+            }
+            continuation.invokeOnCancellation {
+                handler.post { cancelAccountSwitch(token) }
             }
         }
     }
@@ -394,6 +483,30 @@ class GeminiAccessibilityService : AccessibilityService() {
         memoryCleanupCompletion = null
         memoryCleanupAutomation?.cancel()
         memoryCleanupAutomation = null
+        if (accountSwitchToken == null) {
+            setWindowEventTracking(enabled = false)
+        }
+    }
+
+    private fun finishAccountSwitch(result: SwitchGeminiAccountResult) {
+        val token = accountSwitchToken ?: return
+        finishAccountSwitch(token, result)
+    }
+
+    private fun finishAccountSwitch(token: Any, result: SwitchGeminiAccountResult) {
+        if (accountSwitchToken !== token) return
+        accountSwitchCompletion?.invoke(result)
+    }
+
+    private fun cancelAccountSwitch(token: Any) {
+        if (accountSwitchToken !== token) return
+        accountSwitchToken = null
+        accountSwitchCompletion = null
+        accountSwitchAutomation?.cancel()
+        accountSwitchAutomation = null
+        if (memoryCleanupToken == null) {
+            setWindowEventTracking(enabled = false)
+        }
     }
 
 

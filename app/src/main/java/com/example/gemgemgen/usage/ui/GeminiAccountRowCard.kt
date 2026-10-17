@@ -1,4 +1,4 @@
-// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(소진 Dim UI, 소진 뱃지, 5시간 만료/미시작 안내, 별칭, 게이지, 탭 간 계정 이동 메뉴)를 제공합니다.
+// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(계정 전환 버튼, 실시간 초기화 만료 보정, 소진 Dim UI, 소진 뱃지, 별칭, 게이지, 탭 간 계정 이동 메뉴)를 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -80,7 +80,7 @@ import java.util.Locale
  * 2. 5시간 단기 한도 프로그레스 바 + 리셋 시각 및 남은 시간 ("14:00 (4시간 후)")
  * 3. 주간 누적 한도 프로그레스 바 + 리셋 일시 및 남은 시간 ("10/20/14:00 (4일 후)")
  * 4. 70%/90% 위험 뱃지 (주의/경고)
- * 5. 개별 계정 [새로고침] 아이콘, [계정 삭제] 메뉴 (더보기 메뉴 및 2단계 확인)
+ * 5. 개별 계정 [전환] 버튼, [새로고침] 아이콘, [계정 삭제] 메뉴 (더보기 메뉴 및 2단계 확인)
  */
 @Composable
 fun GeminiAccountRowCard(
@@ -91,18 +91,20 @@ fun GeminiAccountRowCard(
     onOpenLogin: () -> Unit,
     onEditAccount: () -> Unit,
     onDeleteAccount: () -> Unit,
+    onSwitchAccount: (() -> Unit)? = null,
     onMoveAccountGroup: ((GeminiAccountGroup) -> Unit)? = null,
+    nowMillis: Long = System.currentTimeMillis(),
     modifier: Modifier = Modifier
 ) {
     val displayedSuccess = entry.displayedSuccess
     val isLoading = entry.usageState is GeminiUsageState.Loading || entry.isRefreshing
-    val overallWarning = entry.overallWarningLevel
+    val overallWarning = entry.overallWarningLevel(nowMillis)
     val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
-    val exhaustionReason = entry.quotaExhaustionReason()
+    val exhaustionReason = entry.quotaExhaustionReason(nowMillis)
     val isExhausted = exhaustionReason != null
 
     val cardBorderColor = when {
-        isExhausted -> AppTheme.colors.cardBorder.copy(alpha = 0.45f)
+        isExhausted -> AppTheme.colors.cardBorder.copy(alpha = 0.25f)
         overallWarning == GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.65f)
         overallWarning == GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.65f)
         isRepresentative -> brandHighlightColor.copy(alpha = 0.7f)
@@ -118,17 +120,18 @@ fun GeminiAccountRowCard(
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onSelectRepresentative),
         shape = RoundedCornerShape(16.dp),
+        backgroundColor = if (isExhausted) AppTheme.colors.card.copy(alpha = 0.65f) else AppTheme.colors.card,
         borderColor = cardBorderColor,
-        elevation = if (isExhausted) 1.dp else if (isRepresentative) 5.dp else 3.dp
+        elevation = if (isExhausted) 0.dp else if (isRepresentative) 5.dp else 3.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .alpha(if (isExhausted) 0.52f else 1f)
+                .alpha(if (isExhausted) 0.38f else 1f)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // 1. 상단 1줄 컴팩트 헤더: 별칭, 대표 뱃지, 위험/소진 뱃지, 갱신 시각 + 우측 새로고침/메뉴 아이콘
+            // 1. 상단 1줄 컴팩트 헤더: 별칭, 대표 뱃지, 위험/소진 뱃지, 갱신 시각 + 우측 [전환], 새로고침/메뉴 아이콘
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -188,11 +191,46 @@ fun GeminiAccountRowCard(
                     }
                 }
 
-                // 우측 액션: 개별 계정 [새로고침] 아이콘 및 [계정 삭제] 메뉴
+                // 우측 액션: 개별 계정 [전환] 버튼, [새로고침] 아이콘 및 [계정 삭제] 메뉴
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    if (onSwitchAccount != null) {
+                        Surface(
+                            shape = RoundedCornerShape(9.dp),
+                            color = brandHighlightColor.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, brandHighlightColor.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(9.dp))
+                                .clickable(onClick = onSwitchAccount)
+                                .semantics {
+                                    contentDescription = "${entry.profile.displayAlias} 계정 전환"
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SwapHoriz,
+                                    contentDescription = null,
+                                    tint = brandHighlightColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "전환",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = brandHighlightColor,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+
                     Surface(
                         shape = CircleShape,
                         color = AppTheme.colors.insetBed,
@@ -256,6 +294,22 @@ fun GeminiAccountRowCard(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
                         ) {
+                            if (onSwitchAccount != null) {
+                                DropdownMenuItem(
+                                    text = { Text("Gemini 계정 전환 (대표 지정)") },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.SwapHoriz,
+                                            contentDescription = null,
+                                            tint = brandHighlightColor
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onSwitchAccount()
+                                    }
+                                )
+                            }
                             if (!isRepresentative) {
                                 DropdownMenuItem(
                                     text = { Text("대표 계정으로 지정") },
@@ -335,17 +389,17 @@ fun GeminiAccountRowCard(
             // 2. 게이지 및 상태 본문
             when (val currentState = entry.usageState) {
                 is GeminiUsageState.Success -> {
-                    AccountUsageGaugesSection(entry = entry, success = currentState)
+                    AccountUsageGaugesSection(entry = entry, success = currentState, nowMillis = nowMillis)
                 }
                 is GeminiUsageState.AuthRequired -> {
                     if (displayedSuccess != null) {
-                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess)
+                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess, nowMillis = nowMillis)
                     }
                     AccountAuthRequiredBanner(onOpenLogin = onOpenLogin)
                 }
                 is GeminiUsageState.Error -> {
                     if (displayedSuccess != null) {
-                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess)
+                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess, nowMillis = nowMillis)
                     }
                     AccountErrorBanner(
                         message = currentState.message,
@@ -355,7 +409,7 @@ fun GeminiAccountRowCard(
                 }
                 GeminiUsageState.Loading -> {
                     if (displayedSuccess != null) {
-                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess)
+                        AccountUsageGaugesSection(entry = entry, success = displayedSuccess, nowMillis = nowMillis)
                     } else {
                         AccountLoadingRow()
                     }
@@ -445,26 +499,33 @@ fun GeminiQuotaExhaustionBadge(
 @Composable
 private fun AccountUsageGaugesSection(
     entry: GeminiAccountUsageEntry,
-    success: GeminiUsageState.Success
+    success: GeminiUsageState.Success,
+    nowMillis: Long
 ) {
-    val fiveHourPercent = entry.effectiveFiveHourPercent()
-    val weeklyPercent = entry.effectiveWeeklyPercent()
+    val fiveHourPercent = entry.effectiveFiveHourPercent(nowMillis)
+    val weeklyPercent = entry.effectiveWeeklyPercent(nowMillis)
 
     val fiveHourResetText = when {
-        entry.isFiveHourWindowExpired() -> "초기화됨 (0%)"
-        entry.isFiveHourTimerUnstarted() -> "대기 중 (미시작)"
+        entry.isFiveHourWindowExpired(nowMillis) -> "초기화됨 (0%)"
+        entry.isFiveHourTimerUnstarted(nowMillis) -> "대기 중 (미시작)"
         else -> GeminiUsageParser.formatCompactResetWithRemaining(
             rawText = success.fiveHourResetText,
+            nowMillis = nowMillis,
             updatedAt = success.updatedAt,
             isFiveHourWindow = true
         )
     }
 
-    val weeklyResetText = GeminiUsageParser.formatCompactResetWithRemaining(
-        rawText = success.weeklyResetText,
-        updatedAt = success.updatedAt,
-        isFiveHourWindow = false
-    )
+    val weeklyResetText = if (entry.isWeeklyWindowExpired(nowMillis)) {
+        "초기화됨 (0%)"
+    } else {
+        GeminiUsageParser.formatCompactResetWithRemaining(
+            rawText = success.weeklyResetText,
+            nowMillis = nowMillis,
+            updatedAt = success.updatedAt,
+            isFiveHourWindow = false
+        )
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),

@@ -1,4 +1,4 @@
-// 역할: 원격 기기 간 주고받는 메시지 형식과 패킷 프로토콜을 정의합니다.
+// 역할: 원격 기기 간 주고받는 메시지 형식(페어링, 실행, 메모리 정리, Gemini 계정 전환 포함)과 패킷 프로토콜을 정의합니다.
 package com.example.gemgemgen.remote.android
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -53,6 +53,16 @@ internal sealed interface RemoteProtocolMessage {
         val token: String
     ) : RemoteProtocolMessage
     data class CleanMemoryResult(
+        val success: Boolean,
+        val message: String = ""
+    ) : RemoteProtocolMessage
+    data class SwitchAccountRequest(
+        val senderId: String,
+        val token: String,
+        val email: String,
+        val alias: String
+    ) : RemoteProtocolMessage
+    data class SwitchAccountResult(
         val success: Boolean,
         val message: String = ""
     ) : RemoteProtocolMessage
@@ -134,6 +144,18 @@ internal object RemoteAutomationProtocol {
                 put("success", message.success)
                 put("message", message.message)
             }
+            is RemoteProtocolMessage.SwitchAccountRequest -> buildJsonObject {
+                put("type", "switchAccount")
+                put("senderId", message.senderId)
+                put("token", message.token)
+                put("email", message.email)
+                put("alias", message.alias)
+            }
+            is RemoteProtocolMessage.SwitchAccountResult -> buildJsonObject {
+                put("type", "switchAccountResult")
+                put("success", message.success)
+                put("message", message.message)
+            }
         }.toString()
     }
 
@@ -199,6 +221,16 @@ internal object RemoteAutomationProtocol {
                 token = value.string("token")
             )
             "cleanMemoryResult" -> RemoteProtocolMessage.CleanMemoryResult(
+                success = value.boolean("success"),
+                message = value.string("message")
+            )
+            "switchAccount" -> RemoteProtocolMessage.SwitchAccountRequest(
+                senderId = value.string("senderId"),
+                token = value.string("token"),
+                email = value.string("email"),
+                alias = value.string("alias")
+            )
+            "switchAccountResult" -> RemoteProtocolMessage.SwitchAccountResult(
                 success = value.boolean("success"),
                 message = value.string("message")
             )

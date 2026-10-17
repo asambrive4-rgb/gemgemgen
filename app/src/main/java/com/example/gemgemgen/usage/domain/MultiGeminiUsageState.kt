@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정의 개별 사용량 항목과 전체 목록 상태, 메인/서브 그룹별 분류·정렬, 소진 판별·사유, 대표 계정 요약 규칙을 정의합니다.
+// 역할: 다중 제미나이 계정의 개별 사용량 항목과 전체 목록 상태, 5시간·주간 리셋 만료 자동 보정, 메인/서브 그룹별 분류·정렬, 소진 판별·사유, 대표 계정 요약 규칙을 정의합니다.
 package com.example.gemgemgen.usage.domain
 
 /**
@@ -30,37 +30,67 @@ data class GeminiAccountUsageEntry(
     val displayedSuccess: GeminiUsageState.Success?
         get() = (usageState as? GeminiUsageState.Success) ?: cachedSuccess
 
-    /** 메인 요약 버튼에 표시할 대표 사용률(%) (5시간 단기 한도 기준) */
+    /** 메인 요약 버튼에 표시할 대표 사용률(%) (5시간 단기 한도 만료 보정 기준) */
     val summaryPercent: Int?
-        get() = displayedSuccess?.fiveHourPercent?.coerceIn(0, 100)
+        get() = summaryPercent()
 
-    /** 5시간 단기 한도 경고 단계 */
+    fun summaryPercent(nowMillis: Long = System.currentTimeMillis()): Int? {
+        if (displayedSuccess == null) return null
+        return effectiveFiveHourPercent(nowMillis)
+    }
+
+    /** 5시간 단기 한도 경고 단계 (만료 보정 반영) */
     val fiveHourWarningLevel: GeminiUsageWarningLevel
-        get() = displayedSuccess?.fiveHourWarningLevel ?: GeminiUsageWarningLevel.NORMAL
+        get() = fiveHourWarningLevel()
 
-    /** 주간 누적 한도 경고 단계 */
+    fun fiveHourWarningLevel(nowMillis: Long = System.currentTimeMillis()): GeminiUsageWarningLevel {
+        if (displayedSuccess == null) return GeminiUsageWarningLevel.NORMAL
+        return GeminiUsageWarningLevel.fromPercent(effectiveFiveHourPercent(nowMillis))
+    }
+
+    /** 주간 누적 한도 경고 단계 (만료 보정 반영) */
     val weeklyWarningLevel: GeminiUsageWarningLevel
-        get() = displayedSuccess?.weeklyWarningLevel ?: GeminiUsageWarningLevel.NORMAL
+        get() = weeklyWarningLevel()
+
+    fun weeklyWarningLevel(nowMillis: Long = System.currentTimeMillis()): GeminiUsageWarningLevel {
+        if (displayedSuccess == null) return GeminiUsageWarningLevel.NORMAL
+        return GeminiUsageWarningLevel.fromPercent(effectiveWeeklyPercent(nowMillis))
+    }
 
     /**
-     * 계정의 종합 경고 단계.
+     * 계정의 종합 경고 단계 (만료 보정 반영).
      * 5시간 단기 한도와 주간 누적 한도 중 더 높은 위험도를 반환합니다.
      */
     val overallWarningLevel: GeminiUsageWarningLevel
-        get() = displayedSuccess?.overallWarningLevel ?: GeminiUsageWarningLevel.NORMAL
+        get() = overallWarningLevel()
 
-    /** 요약 버튼의 대표 퍼센트 기준 경고 단계 (70% 주의, 90% 경고) */
+    fun overallWarningLevel(nowMillis: Long = System.currentTimeMillis()): GeminiUsageWarningLevel {
+        if (displayedSuccess == null) return GeminiUsageWarningLevel.NORMAL
+        return GeminiUsageWarningLevel.fromPercent(
+            maxOf(effectiveFiveHourPercent(nowMillis), effectiveWeeklyPercent(nowMillis))
+        )
+    }
+
+    /** 요약 버튼의 대표 퍼센트 기준 경고 단계 (70% 주의, 90% 경고 - 만료 보정 반영) */
     val summaryWarningLevel: GeminiUsageWarningLevel
-        get() {
-            val success = displayedSuccess ?: return GeminiUsageWarningLevel.NORMAL
-            return GeminiUsageWarningLevel.fromPercent(
-                maxOf(success.fiveHourPercent, success.weeklyPercent)
-            )
-        }
+        get() = summaryWarningLevel()
 
-    /** 5시간 단기 한도 리셋 시각이 경과하여 만료되었는지 여부 */
+    fun summaryWarningLevel(nowMillis: Long = System.currentTimeMillis()): GeminiUsageWarningLevel {
+        return overallWarningLevel(nowMillis)
+    }
+
+    /**
+     * 5시간 단기 한도 리셋 시각이 경과하여 만료되었는지 여부.
+     * - 마지막 갱신(`updatedAt`) 후 5시간 이상 경과했거나(기본 문구 포함),
+     * - 명시된 초기화 시각이 이미 지났다면(`remaining <= 0L`) 만료된 것으로 판별합니다.
+     */
     fun isFiveHourWindowExpired(nowMillis: Long = System.currentTimeMillis()): Boolean {
         val success = displayedSuccess ?: return false
+        if (success.updatedAt > 0L && nowMillis >= success.updatedAt &&
+            nowMillis - success.updatedAt >= GeminiUsageParser.FIVE_HOUR_WINDOW_MILLIS
+        ) {
+            return true
+        }
         val remaining = GeminiUsageParser.computeRemainingResetMillis(
             rawText = success.fiveHourResetText,
             nowMillis = nowMillis,
@@ -70,9 +100,18 @@ data class GeminiAccountUsageEntry(
         return remaining != null && remaining <= 0L
     }
 
-    /** 주간 누적 한도 리셋 시각이 경과하여 만료되었는지 여부 */
+    /**
+     * 주간 누적 한도 리셋 시각이 경과하여 만료되었는지 여부.
+     * - 마지막 갱신(`updatedAt`) 후 7일 이상 경과했거나,
+     * - 명시된 주간 초기화 일시가 이미 지났다면(`remaining <= 0L`) 만료된 것으로 판별합니다.
+     */
     fun isWeeklyWindowExpired(nowMillis: Long = System.currentTimeMillis()): Boolean {
         val success = displayedSuccess ?: return false
+        if (success.updatedAt > 0L && nowMillis >= success.updatedAt &&
+            nowMillis - success.updatedAt >= GeminiUsageParser.WEEKLY_WINDOW_MILLIS
+        ) {
+            return true
+        }
         val remaining = GeminiUsageParser.computeRemainingResetMillis(
             rawText = success.weeklyResetText,
             nowMillis = nowMillis,
@@ -101,6 +140,7 @@ data class GeminiAccountUsageEntry(
      */
     fun isFiveHourTimerUnstarted(nowMillis: Long = System.currentTimeMillis()): Boolean {
         val success = displayedSuccess ?: return false
+        if (isFiveHourWindowExpired(nowMillis)) return true
         val remaining = GeminiUsageParser.computeRemainingResetMillis(
             rawText = success.fiveHourResetText,
             nowMillis = nowMillis,
@@ -132,9 +172,10 @@ data class GeminiAccountUsageEntry(
         return displayedSuccess != null && !isQuotaExhausted(nowMillis)
     }
 
-    /** 5시간 단기 한도 리셋까지 남은 시간(밀리초, 0 이하인 경우 null) */
+    /** 5시간 단기 한도 리셋까지 남은 시간(밀리초, 0 이하이거나 만료된 경우 null) */
     fun remainingMillisUntilFiveHourReset(nowMillis: Long = System.currentTimeMillis()): Long? {
         val success = displayedSuccess ?: return null
+        if (isFiveHourWindowExpired(nowMillis)) return null
         return GeminiUsageParser.computeRemainingResetMillis(
             rawText = success.fiveHourResetText,
             nowMillis = nowMillis,
@@ -237,7 +278,10 @@ data class MultiGeminiUsageState(
      * - 90% 이상: 경고 (WARNING - 빨간색)
      */
     val summaryWarningLevel: GeminiUsageWarningLevel
-        get() = representativeAccount?.summaryWarningLevel ?: GeminiUsageWarningLevel.NORMAL
+        get() = summaryWarningLevel()
+
+    fun summaryWarningLevel(nowMillis: Long = System.currentTimeMillis()): GeminiUsageWarningLevel =
+        representativeAccount?.summaryWarningLevel(nowMillis) ?: GeminiUsageWarningLevel.NORMAL
 
     /**
      * 메인 화면 요약 바 좌측에 표시할 대표 계정 라벨.
@@ -254,39 +298,49 @@ data class MultiGeminiUsageState(
      * 예: `27%`, `로그인 필요`, `조회중`
      */
     val summaryBadgeText: String?
-        get() {
-            val account = representativeAccount ?: return null
-            val success = account.displayedSuccess
-            return when {
-                success != null -> "${success.fiveHourPercent.coerceIn(0, 100)}%"
-                account.usageState is GeminiUsageState.AuthRequired -> "로그인 필요"
-                account.usageState is GeminiUsageState.Loading || account.isRefreshing -> "조회중"
-                else -> "--%"
-            }
+        get() = summaryBadgeText()
+
+    fun summaryBadgeText(nowMillis: Long = System.currentTimeMillis()): String? {
+        val account = representativeAccount ?: return null
+        val success = account.displayedSuccess
+        return when {
+            success != null -> "${account.effectiveFiveHourPercent(nowMillis)}%"
+            account.usageState is GeminiUsageState.AuthRequired -> "로그인 필요"
+            account.usageState is GeminiUsageState.Loading || account.isRefreshing -> "조회중"
+            else -> "--%"
         }
+    }
 
     /**
      * 메인 화면 요약 바에 퍼센트 배지 옆에 함께 표시할 단기 한도 초기화 시각.
-     * 예: `오후 2:00`
+     * 만료되었거나 타이머 미시작인 경우에는 과거 시각을 숨깁니다.
      */
     val summaryResetTimeText: String?
-        get() {
-            val success = representativeAccount?.displayedSuccess ?: return null
-            return GeminiUsageParser.formatShortResetTime(success.fiveHourResetText)
-                .takeIf { it.isNotBlank() }
+        get() = summaryResetTimeText()
+
+    fun summaryResetTimeText(nowMillis: Long = System.currentTimeMillis()): String? {
+        val account = representativeAccount ?: return null
+        val success = account.displayedSuccess ?: return null
+        if (account.isFiveHourWindowExpired(nowMillis) || account.isFiveHourTimerUnstarted(nowMillis)) {
+            return null
         }
+        return GeminiUsageParser.formatShortResetTime(success.fiveHourResetText)
+            .takeIf { it.isNotBlank() }
+    }
 
     /**
      * 메인 화면 요약 바의 접근성/요약 문자열 (`Gemini` 접두사 제외).
-     * 예: `본계정 42%`
+     * 예: `본계정 42% ▾`
      */
     val summaryButtonText: String
-        get() {
-            val account = representativeAccount ?: return "계정 추가 ▾"
-            val alias = account.profile.displayAlias
-            val badge = summaryBadgeText ?: return "$alias ▾"
-            return "$alias $badge ▾"
-        }
+        get() = summaryButtonText()
+
+    fun summaryButtonText(nowMillis: Long = System.currentTimeMillis()): String {
+        val account = representativeAccount ?: return "계정 추가 ▾"
+        val alias = account.profile.displayAlias
+        val badge = summaryBadgeText(nowMillis) ?: return "$alias ▾"
+        return "$alias $badge ▾"
+    }
 
     /**
      * 특정 그룹(메인 또는 서브)에 속한 즉시 사용 가능/확인 중 계정 목록을 최적 사용 순서로 정렬합니다.

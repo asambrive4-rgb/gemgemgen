@@ -96,4 +96,42 @@ object AutomationUiText {
             null -> "Gemini 재시작을 지금 실행할 수 없습니다."
         }
     }
+
+    fun geminiAccountSwitchStartingText(
+        aliasOrEmail: String,
+        mode: AutomationMode = AutomationMode.NORMAL
+    ): String {
+        val label = aliasOrEmail.trim().ifBlank { "선택한 계정" }
+        return if (mode == AutomationMode.SENDER) {
+            "송신·수신 기기 Gemini 계정을 '$label'(으)로 전환 중..."
+        } else {
+            "Gemini 계정을 '$label'(으)로 전환 중..."
+        }
+    }
+
+    fun geminiAccountSwitchCanceledText(
+        mode: AutomationMode = AutomationMode.NORMAL
+    ): String {
+        return if (mode == AutomationMode.SENDER) {
+            "송신·수신 기기 Gemini 계정 전환을 취소했습니다."
+        } else {
+            "Gemini 계정 전환을 취소했습니다."
+        }
+    }
+
+    fun geminiAccountSwitchUnavailableMessage(state: AutomationUiState): String {
+        return when {
+            state.isRunning || state.isVariationRunning ->
+                "자동화 실행 중에는 Gemini 계정을 전환할 수 없습니다."
+            state.isMaintenanceBusy ->
+                "유지보수 작업이 이미 진행 중입니다."
+            !state.environmentStatus.isGeminiInstalled ->
+                "Gemini 앱이 설치되어 있지 않습니다."
+            !state.environmentStatus.isAccessibilityServiceEnabled ->
+                "접근성 서비스를 먼저 켜주세요."
+            state.automationMode == AutomationMode.SENDER && !state.remoteAutomationStatus.canSend ->
+                "연결된 수신 기기를 찾지 못했습니다."
+            else -> "Gemini 계정 전환을 지금 실행할 수 없습니다."
+        }
+    }
 }

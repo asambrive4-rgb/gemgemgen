@@ -1,4 +1,4 @@
-// 역할: 자동화 실행, 변주, 앱 제어 및 메모리 정리 등 전반적인 실행 인가 정책을 총괄하는 도메인 정책입니다.
+// 역할: 자동화 실행, 변주, 앱 제어, 메모리 정리 및 Gemini 계정 전환 등 전반적인 실행 인가 정책을 총괄하는 도메인 정책입니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
@@ -170,6 +170,28 @@ object AutomationExecutionPolicy {
         AutomationMode.SENDER -> remoteAutomationStatus.canSend && !isMaintenanceBusy
         AutomationMode.RECEIVER -> false
         AutomationMode.NORMAL -> environmentStatus.isAccessibilityServiceEnabled && !isMaintenanceBusy
+    }
+
+    /**
+     * Gemini 구글 계정 자동 전환 실행 가능 여부를 판정합니다.
+     */
+    fun canSwitchGeminiAccount(
+        mode: AutomationMode,
+        environmentStatus: EnvironmentStatus,
+        remoteAutomationStatus: RemoteAutomationStatus,
+        isRunning: Boolean,
+        isVariationRunning: Boolean = false,
+        isMaintenanceBusy: Boolean = false
+    ): Boolean {
+        if (isRunning || isVariationRunning || isMaintenanceBusy) return false
+        return when (mode) {
+            AutomationMode.SENDER ->
+                (environmentStatus.isGeminiInstalled && environmentStatus.isAccessibilityServiceEnabled) ||
+                    remoteAutomationStatus.canSend
+            AutomationMode.NORMAL,
+            AutomationMode.RECEIVER ->
+                environmentStatus.isGeminiInstalled && environmentStatus.isAccessibilityServiceEnabled
+        }
     }
 }
 

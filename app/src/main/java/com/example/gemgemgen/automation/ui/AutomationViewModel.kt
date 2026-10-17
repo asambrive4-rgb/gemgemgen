@@ -37,8 +37,6 @@ import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
-import com.example.gemgemgen.usage.domain.GeminiUsageState
-import com.example.gemgemgen.usage.usecase.GeminiUsageRepository
 import com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
 import kotlinx.coroutines.CancellationException
@@ -82,7 +80,6 @@ class AutomationViewModel(
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
     private val automationSettingsStore: com.example.gemgemgen.automation.android.AutomationSettingsStore? = null,
     private val multiGeminiUsageRepository: MultiGeminiUsageRepository? = null,
-    private val geminiUsageRepository: GeminiUsageRepository? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel(), AutomationScreenActions {
     private val scope = coroutineScope ?: viewModelScope
@@ -180,33 +177,8 @@ class AutomationViewModel(
         multiGeminiUsageRepository?.let { multiRepo ->
             scope.launch {
                 multiRepo.state.collect { multiState ->
-                    val rep = multiState.representativeAccount
                     _uiState.update {
-                        it.copy(
-                            multiGeminiUsageState = multiState,
-                            geminiUsageState = rep?.usageState ?: GeminiUsageState.Loading,
-                            geminiUsageCachedSuccess = rep?.cachedSuccess,
-                            isRefreshingGeminiUsage = multiState.isAnyRefreshing
-                        )
-                    }
-                }
-            }
-        }
-        if (multiGeminiUsageRepository == null) {
-            geminiUsageRepository?.let { usageRepo ->
-                scope.launch {
-                    usageRepo.state.collect { usageState ->
-                        _uiState.update { it.copy(geminiUsageState = usageState) }
-                    }
-                }
-                scope.launch {
-                    usageRepo.cachedSuccess.collect { cached ->
-                        _uiState.update { it.copy(geminiUsageCachedSuccess = cached) }
-                    }
-                }
-                scope.launch {
-                    usageRepo.isRefreshing.collect { refreshing ->
-                        _uiState.update { it.copy(isRefreshingGeminiUsage = refreshing) }
+                        it.copy(multiGeminiUsageState = multiState)
                     }
                 }
             }
@@ -234,8 +206,9 @@ class AutomationViewModel(
 
     override fun openMultiGeminiUsageDialog() {
         _uiState.update { it.copy(showMultiGeminiUsageDialog = true) }
-        if (_uiState.value.multiGeminiUsageState.accounts.isNotEmpty()) {
-            multiGeminiUsageRepository?.triggerRefreshAll()
+        val multiState = _uiState.value.multiGeminiUsageState
+        if (multiState.accounts.isNotEmpty() && multiState.representativeAccount?.displayedSuccess == null) {
+            multiGeminiUsageRepository?.triggerRefreshRepresentativeAccount()
         }
     }
 
@@ -278,43 +251,52 @@ class AutomationViewModel(
         multiGeminiUsageRepository?.triggerSelectRepresentativeAccount(accountId)
     }
 
+    override fun switchGeminiAccount(accountId: String) {
+        val currentState = _uiState.value
+        val targetEntry = currentState.multiGeminiUsageState.accounts
+            .firstOrNull { it.profile.id == accountId }
+        if (targetEntry == null) {
+            _uiState.update {
+                it.copy(
+                    maintenanceState = MaintenanceState(
+                        isBusy = false,
+                        message = "전환할 계정을 찾지 못했습니다."
+                    )
+                )
+            }
+            return
+        }
+
+        val profile = targetEntry.profile
+        selectRepresentativeGeminiAccount(accountId)
+        _uiState.update { it.copy(showMultiGeminiUsageDialog = false) }
+
+        val mode = _uiState.value.automationMode
+        executeMaintenance(
+            canExecute = AutomationUiState::canSwitchGeminiAccount,
+            unavailableMessage = AutomationUiText::geminiAccountSwitchUnavailableMessage,
+            startingText = AutomationUiText.geminiAccountSwitchStartingText(profile.displayAlias, mode),
+            canceledText = AutomationUiText.geminiAccountSwitchCanceledText(mode),
+            action = {
+                appMaintenance.switchGeminiAccount(
+                    email = profile.email,
+                    alias = profile.displayAlias,
+                    mode = mode
+                )
+            }
+        )
+    }
+
     override fun refreshGeminiAccountUsage(accountId: String) {
         multiGeminiUsageRepository?.triggerRefreshAccount(accountId)
     }
 
-    override fun refreshAllGeminiUsage() {
-        if (multiGeminiUsageRepository != null) {
-            multiGeminiUsageRepository.triggerRefreshAll()
-        } else {
-            geminiUsageRepository?.triggerRefresh()
-        }
+    override fun refreshAllGeminiUsage(prioritizedGroup: GeminiAccountGroup?) {
+        multiGeminiUsageRepository?.triggerRefreshAll(prioritizedGroup = prioritizedGroup)
     }
 
-    override fun refreshGeminiUsage() {
-        refreshAllGeminiUsage()
-    }
-
-    override fun openGeminiUsageLogin() {
-        _uiState.update {
-            it.copy(
-                showMultiGeminiUsageDialog = true,
-                showGeminiUsageLoginSheet = true
-            )
-        }
-    }
-
-    override fun closeGeminiUsageLogin() {
-        _uiState.update {
-            it.copy(
-                showMultiGeminiUsageDialog = false,
-                showGeminiUsageLoginSheet = false
-            )
-        }
-    }
-
-    override fun onGeminiUsageLoginCompleted() {
-        _uiState.update { it.copy(showGeminiUsageLoginSheet = false) }
-        refreshAllGeminiUsage()
+    private fun refreshGeminiUsage() {
+        multiGeminiUsageRepository?.triggerRefreshRepresentativeAccount()
     }
 
     override fun onToggleCopyPromptOnStart(enabled: Boolean) {
@@ -1125,10 +1107,18 @@ class AutomationViewModel(
             }
 
             if (!wasPreStartCleanup && (completedTargetApp == AutomationTargetApp.GEMINI || completedTargetApp == null)) {
+                // 메모리 정리가 예약된 경우, 정리 완료 후 10초 뒤에 갱신해 앱 포커스 변동과 겹치지 않게 함
+                val cleanupFirst = shouldExecuteScheduledCleanup
+                shouldExecuteScheduledCleanup = false
                 postAutomationUsageRefreshJob?.cancel()
                 postAutomationUsageRefreshJob = scope.launch {
+                    if (cleanupFirst) {
+                        delay(300L)
+                        executeCleanDeviceMemory()
+                        _uiState.first { !it.maintenanceState.isBusy }
+                    }
                     delay(10_000L)
-                    refreshAllGeminiUsage()
+                    refreshGeminiUsage()
                 }
             }
         }

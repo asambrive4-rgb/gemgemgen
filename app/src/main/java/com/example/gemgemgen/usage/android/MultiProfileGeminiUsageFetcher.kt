@@ -1,4 +1,4 @@
-// 역할: 계정 ID별 독립 WebView 프로필 및 격리 쿠키 저장소를 사용하여 5개 이상의 Google 계정 세션을 섞이지 않게 유지하고 사용량 DOM을 동시에 병렬 스크래핑합니다.
+// 역할: 단일 공유 WebView와 계정별 격리 쿠키 저장소(CookieVault)를 사용해 RAM 점유를 최소화하고, 불필요한 리소스를 차단해 제미나이 사용량 DOM을 빠르게 스크래핑합니다.
 package com.example.gemgemgen.usage.android
 
 import android.annotation.SuppressLint
@@ -13,21 +13,23 @@ import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.Keep
-import androidx.webkit.ProfileStore
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiUsageParser
 import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.usecase.GeminiUsageFetchResult
 import com.example.gemgemgen.usage.usecase.MultiProfileGeminiUsageRemoteDataSource
+import java.io.ByteArrayInputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -330,11 +332,12 @@ class GeminiAccountCookieVault(
 }
 
 /**
- * 다중 Google 계정(5개 이상)의 독립 WebView 세션 격리 및 사용량 페이지 스크래핑 엔진.
+ * 다중 Google 계정(5개 이상)의 독립 쿠키 세션 격리 및 사용량 페이지 스크래핑 엔진.
  *
- * 1. AndroidX WebKit 멀티 프로필 API(`WebViewCompat.setProfile` / `ProfileStore`)를 통해 계정별 전용 프로필과 전용 `CookieManager`를 바인딩합니다.
- * 2. 동시에 모든 기기에서 완벽한 세션 격리 및 마이그레이션을 보장하기 위해 [GeminiAccountCookieVault]를 통해
- *    계정별 Google/Gemini 쿠키를 중복 없이 정제하여 백업 및 복원합니다.
+ * - 계정별로 WebView를 여러 개 생성하지 않고 **단 1개의 공유 WebView**만 사용하여 네이티브 RAM 점유를 최소화합니다.
+ * - 새로고침 시마다 [GeminiAccountCookieVault]를 통해 해당 계정의 쿠키 스냅샷으로 안전하게 스위칭하고,
+ *   모든 새로고침이 끝나면 공유 WebView를 즉시 `destroy()`하여 유휴 시 RAM 점유를 0으로 만듭니다.
+ * - `shouldInterceptRequest`를 통해 폰트·이미지·미디어·광고/분석 요청을 차단하여 로딩 속도를 극대화합니다.
  */
 class MultiProfileGeminiUsageFetcher(
     context: Context,
@@ -343,11 +346,10 @@ class MultiProfileGeminiUsageFetcher(
 
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val fallbackGlobalSessionMutex = Mutex()
-    private val profileMutexLock = Mutex()
-    private val profileSessionMutexes = LinkedHashMap<String, Mutex>()
-    private val webViewsByProfile = LinkedHashMap<String, WebView>()
+    private val sessionMutex = Mutex()
+    private var sharedWebView: WebView? = null
     private val sanitizedProfilesInSession = HashSet<String>()
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cookieVault = GeminiAccountCookieVault(
         appContext.getSharedPreferences(GeminiAccountCookieVault.PREFS_NAME, Context.MODE_PRIVATE)
     )
@@ -359,23 +361,17 @@ class MultiProfileGeminiUsageFetcher(
         registerInstance(this)
     }
 
-    private suspend fun resolveProfileSessionMutex(profileName: String): Mutex {
-        if (!isMultiProfileSupported() || profileName.isBlank()) {
-            return fallbackGlobalSessionMutex
-        }
-        return profileMutexLock.withLock {
-            profileSessionMutexes.getOrPut(profileName) { Mutex() }
-        }
-    }
-
     override suspend fun fetchUsage(profile: GeminiAccountProfile): GeminiUsageFetchResult {
-        val mutex = resolveProfileSessionMutex(profile.webViewProfileName)
-        return mutex.withLock {
+        return sessionMutex.withLock {
+            // SharedPreferences 읽기 + JSON 파싱을 IO에서 먼저 끝내 메모리 캐시에 올려 둡니다.
+            withContext(Dispatchers.IO) {
+                cookieVault.loadCookiesForProfile(profile.webViewProfileName)
+            }
             withContext(Dispatchers.Main) {
-                val webView = getOrCreateProfileWebView(profile)
+                val webView = getOrCreateSharedWebView()
                 switchCookieSessionToProfileOnMain(profile.webViewProfileName, webView)
 
-                val result = performWebViewScrapeOnMain(webView, profile.webViewProfileName)
+                val result = performWebViewScrapeOnMain(webView)
                 if (result.usageState is GeminiUsageState.Success) {
                     snapshotActiveCookiesOnMain(profile.webViewProfileName)
                 }
@@ -385,39 +381,47 @@ class MultiProfileGeminiUsageFetcher(
     }
 
     override suspend fun clearAccountSession(profile: GeminiAccountProfile) {
-        val mutex = resolveProfileSessionMutex(profile.webViewProfileName)
-        mutex.withLock {
+        sessionMutex.withLock {
             withContext(Dispatchers.Main) {
                 val profileName = profile.webViewProfileName
                 cookieVault.clearProfile(profileName)
                 sanitizedProfilesInSession.remove(profileName)
 
-                val profileCookieManager = resolveCookieManager(profileName)
-                if (isMultiProfileSupported() || activeCookieProfileName == profileName) {
-                    clearCookieManagerNow(profileCookieManager)
-                    if (activeCookieProfileName == profileName) {
-                        activeCookieProfileName = null
-                    }
-                }
-
-                webViewsByProfile.remove(profileName)?.let { webView ->
-                    runCatching {
-                        webView.stopLoading()
-                        webView.removeJavascriptInterface(BRIDGE_NAME)
-                        webView.clearHistory()
-                        webView.clearCache(true)
-                        webView.loadUrl(BLANK_URL)
-                        webView.destroy()
-                    }
+                if (activeCookieProfileName == profileName) {
+                    clearCookieManagerNow(CookieManager.getInstance())
+                    activeCookieProfileName = null
                 }
             }
+        }
+    }
+
+    override suspend fun releaseIdleResources() {
+        sessionMutex.withLock {
+            withContext(Dispatchers.Main) {
+                destroySharedWebViewOnMain()
+            }
+        }
+    }
+
+    private fun destroySharedWebViewOnMain() {
+        val webView = sharedWebView ?: return
+        sharedWebView = null
+        runCatching {
+            webView.stopLoading()
+            webView.webViewClient = WebViewClient()
+            webView.removeJavascriptInterface(BRIDGE_NAME)
+            webView.clearHistory()
+            webView.clearCache(false)
+            webView.loadUrl(BLANK_URL)
+            webView.onPause()
+            webView.destroy()
         }
     }
 
     /**
      * 인앱 [계정 추가] 또는 [재로그인] 시 해당 계정 전용 독립 세션으로 로그인 WebView를 초기화합니다.
      *
-     * 중요: `WebViewCompat.setProfile` 및 쿠키 세션 전환이 `loadUrl()` 호출보다 반드시 먼저 실행되도록
+     * 중요: 쿠키 세션 전환이 `loadUrl()` 호출보다 반드시 먼저 실행되도록
      * 메인 스레드에서 호출된 경우 지연(post) 없이 즉시 동기 실행합니다.
      */
     fun prepareInteractiveLoginWebView(
@@ -427,10 +431,14 @@ class MultiProfileGeminiUsageFetcher(
     ) {
         val prepareAction = {
             val profileName = profile.webViewProfileName
-            tryBindWebViewProfile(webView, profileName)
-            val cookieManager = resolveCookieManager(profileName)
+            val cookieManager = CookieManager.getInstance()
             cookieManager.setAcceptCookie(true)
             cookieManager.setAcceptThirdPartyCookies(webView, true)
+
+            val previousProfile = activeCookieProfileName
+            if (!previousProfile.isNullOrBlank() && previousProfile != profileName) {
+                snapshotActiveCookiesOnMain(previousProfile)
+            }
 
             if (clearExistingProfileCookies) {
                 cookieVault.clearProfile(profileName)
@@ -460,7 +468,7 @@ class MultiProfileGeminiUsageFetcher(
         val recoverAction = {
             val profileName = profile.webViewProfileName
             cookieVault.clearProfile(profileName)
-            val cookieManager = resolveCookieManager(profileName)
+            val cookieManager = CookieManager.getInstance()
             clearCookieManagerNow(cookieManager)
             sanitizedProfilesInSession.add(profileName)
             activeCookieProfileName = profileName
@@ -496,17 +504,18 @@ class MultiProfileGeminiUsageFetcher(
     }
 
     private suspend fun performWebViewScrapeOnMain(
-        webView: WebView,
-        profileName: String
+        webView: WebView
     ): GeminiUsageFetchResult =
         suspendCancellableCoroutine { continuation ->
             val completed = AtomicBoolean(false)
             var timeoutRunnable: Runnable? = null
-            val profileCookieManager = resolveCookieManager(profileName)
+            var pollTickRunnable: Runnable? = null
+            val cookieManager = CookieManager.getInstance()
 
             fun finishWith(result: GeminiUsageFetchResult) {
                 if (!completed.compareAndSet(false, true)) return
                 timeoutRunnable?.let(mainHandler::removeCallbacks)
+                pollTickRunnable?.let(mainHandler::removeCallbacks)
                 mainHandler.post {
                     resetWebViewToBlank(webView)
                     if (continuation.isActive) {
@@ -537,6 +546,7 @@ class MultiProfileGeminiUsageFetcher(
 
             continuation.invokeOnCancellation {
                 timeoutRunnable?.let(mainHandler::removeCallbacks)
+                pollTickRunnable?.let(mainHandler::removeCallbacks)
                 mainHandler.post {
                     resetWebViewToBlank(webView)
                 }
@@ -547,6 +557,17 @@ class MultiProfileGeminiUsageFetcher(
             webView.addJavascriptInterface(bridge, BRIDGE_NAME)
 
             webView.webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    val req = request ?: return null
+                    if (!req.isForMainFrame && shouldBlockSubresourceRequest(req.url?.toString())) {
+                        return createEmptyResourceResponse()
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     request: WebResourceRequest?
@@ -576,8 +597,19 @@ class MultiProfileGeminiUsageFetcher(
                         return
                     }
 
-                    profileCookieManager.flush()
+                    cookieManager.flush()
                     view?.evaluateJavascript(buildPollingScript(), null)
+                    if (pollTickRunnable == null) {
+                        val tick = object : Runnable {
+                            override fun run() {
+                                if (completed.get()) return
+                                view?.evaluateJavascript(NATIVE_POLL_TICK_SCRIPT, null)
+                                mainHandler.postDelayed(this, POLL_INTERVAL_MS)
+                            }
+                        }
+                        pollTickRunnable = tick
+                        mainHandler.postDelayed(tick, POLL_INTERVAL_MS)
+                    }
                 }
 
                 override fun onReceivedError(
@@ -608,14 +640,18 @@ class MultiProfileGeminiUsageFetcher(
                 }
             }
 
+            // 앱이 백그라운드일 때 스로틀링/일시정지된 WebView 타이머를 깨웁니다.
+            runCatching {
+                webView.onResume()
+                webView.resumeTimers()
+            }
             mainHandler.postDelayed(timeoutRunnable, NATIVE_SAFETY_TIMEOUT_MS)
             webView.loadUrl(GeminiUsageParser.USAGE_URL)
         }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun getOrCreateProfileWebView(profile: GeminiAccountProfile): WebView {
-        val profileName = profile.webViewProfileName
-        webViewsByProfile[profileName]?.let { return it }
+    private fun getOrCreateSharedWebView(): WebView {
+        sharedWebView?.let { return it }
 
         return WebView(appContext).apply {
             layoutParams = ViewGroup.LayoutParams(1, 1)
@@ -623,10 +659,7 @@ class MultiProfileGeminiUsageFetcher(
             alpha = 0f
             layout(0, 0, 1, 1)
 
-            // 중요: WebViewCompat.setProfile은 WebView 생성 직후 settings나 CookieManager 접근 전에 호출되어야 함
-            tryBindWebViewProfile(this, profileName)
-
-            val cookieManager = resolveCookieManager(profileName)
+            val cookieManager = CookieManager.getInstance()
             cookieManager.setAcceptCookie(true)
             cookieManager.setAcceptThirdPartyCookies(this, true)
 
@@ -636,24 +669,24 @@ class MultiProfileGeminiUsageFetcher(
                 databaseEnabled = true
                 loadsImagesAutomatically = false
                 blockNetworkImage = true
-                cacheMode = WebSettings.LOAD_NO_CACHE
+                mediaPlaybackRequiresUserGesture = true
+                cacheMode = WebSettings.LOAD_DEFAULT
                 userAgentString = sanitizeWebViewUserAgent(userAgentString)
             }
         }.also { created ->
-            webViewsByProfile[profileName] = created
+            sharedWebView = created
         }
     }
 
     private fun switchCookieSessionToProfileOnMain(profileName: String, webView: WebView) {
         if (profileName.isBlank()) return
         runCatching {
-            val multiProfileActive = isMultiProfileSupported()
-            val cookieManager = resolveCookieManager(profileName)
+            val cookieManager = CookieManager.getInstance()
             cookieManager.setAcceptCookie(true)
             cookieManager.setAcceptThirdPartyCookies(webView, true)
 
             val previousProfile = activeCookieProfileName
-            if (!multiProfileActive && !previousProfile.isNullOrBlank() && previousProfile != profileName) {
+            if (!previousProfile.isNullOrBlank() && previousProfile != profileName) {
                 snapshotActiveCookiesOnMain(previousProfile)
             }
 
@@ -669,24 +702,22 @@ class MultiProfileGeminiUsageFetcher(
                 "https://gemini.google.com" to GeminiAccountCookieVault.splitCookieHeader(geminiCookieHeader),
                 "https://accounts.google.com" to GeminiAccountCookieVault.splitCookieHeader(accountsCookieHeader)
             )
-            val hasNativeAuthSession = GeminiAccountCookieVault.hasAuthenticatedSessionCookies(currentSnapshot)
 
-            val shouldRestoreFromVault = if (multiProfileActive) {
-                // 멀티 프로필 지원 기기: 각 프로필이 독립된 CookieManager를 가지므로
-                // 중복 오염이 감지되었거나, 네이티브 프로필이 아직 비어 있을 때만 Vault에서 정제 복원
-                hasDuplicatesInCookieManager ||
-                    (!hasNativeAuthSession && savedCookies.isNotEmpty()) ||
-                    (profileName !in sanitizedProfilesInSession && savedCookies.isNotEmpty())
-            } else {
-                // 단일 프로필 기기 폴백: 프로필 전환 시마다 해당 계정의 쿠키로 교체
+            // 단일 공유 WebView에서 프로필 전환 시마다 해당 계정의 쿠키로 교체하여 계정이 섞이지 않게 보장
+            val shouldRestoreFromVault =
                 previousProfile != profileName ||
                     hasDuplicatesInCookieManager ||
                     profileName !in sanitizedProfilesInSession
-            }
 
             if (shouldRestoreFromVault) {
                 clearCookieManagerNow(cookieManager)
-                val sourceCookies = if (savedCookies.isNotEmpty()) savedCookies else currentSnapshot
+                val sourceCookies = if (savedCookies.isNotEmpty()) {
+                    savedCookies
+                } else if (previousProfile == null || previousProfile == profileName) {
+                    currentSnapshot
+                } else {
+                    emptyMap()
+                }
                 val commands = GeminiAccountCookieVault.buildSetCookieCommands(sourceCookies)
                 for ((targetUrl, setCookieHeader) in commands) {
                     cookieManager.setCookie(targetUrl, setCookieHeader)
@@ -705,23 +736,30 @@ class MultiProfileGeminiUsageFetcher(
     private fun snapshotActiveCookiesOnMain(profileName: String) {
         if (profileName.isBlank()) return
         runCatching {
-            val cookieManager = resolveCookieManager(profileName)
-            cookieManager.flush()
-            val captured = LinkedHashMap<String, List<String>>()
-            for (origin in GeminiAccountCookieVault.TRACKED_GOOGLE_ORIGINS) {
-                val rawCookie = cookieManager.getCookie(origin)
-                val tokens = GeminiAccountCookieVault.splitCookieHeader(rawCookie)
-                if (tokens.isNotEmpty()) {
-                    captured[origin] = tokens
-                }
+            val cookieManager = CookieManager.getInstance()
+            // 메인에서는 원시 쿠키 문자열만 읽고, 파싱·직렬화·디스크 저장·flush는 IO로 넘깁니다.
+            val rawByOrigin = GeminiAccountCookieVault.TRACKED_GOOGLE_ORIGINS.associateWith { origin ->
+                cookieManager.getCookie(origin)
             }
-            if (captured.isNotEmpty()) {
-                val existing = cookieVault.loadCookiesForProfile(profileName)
-                val existingHasAuth = GeminiAccountCookieVault.hasAuthenticatedSessionCookies(existing)
-                val capturedHasAuth = GeminiAccountCookieVault.hasAuthenticatedSessionCookies(captured)
-                // 이미 인증된 세션 쿠키가 저장되어 있는 계정은 비로그인/리다이렉트 상태의 임시 쿠키(NID만 있는 상태)로 덮어쓰지 않음
-                if (capturedHasAuth || !existingHasAuth) {
-                    cookieVault.saveCookiesForProfile(profileName, captured)
+            ioScope.launch {
+                runCatching {
+                    cookieManager.flush()
+                    val captured = LinkedHashMap<String, List<String>>()
+                    for ((origin, rawCookie) in rawByOrigin) {
+                        val tokens = GeminiAccountCookieVault.splitCookieHeader(rawCookie)
+                        if (tokens.isNotEmpty()) {
+                            captured[origin] = tokens
+                        }
+                    }
+                    if (captured.isNotEmpty()) {
+                        val existing = cookieVault.loadCookiesForProfile(profileName)
+                        val existingHasAuth = GeminiAccountCookieVault.hasAuthenticatedSessionCookies(existing)
+                        val capturedHasAuth = GeminiAccountCookieVault.hasAuthenticatedSessionCookies(captured)
+                        // 이미 인증된 세션 쿠키가 저장되어 있는 계정은 비로그인/리다이렉트 상태의 임시 쿠키(NID만 있는 상태)로 덮어쓰지 않음
+                        if (capturedHasAuth || !existingHasAuth) {
+                            cookieVault.saveCookiesForProfile(profileName, captured)
+                        }
+                    }
                 }
             }
         }
@@ -741,6 +779,8 @@ class MultiProfileGeminiUsageFetcher(
             webView.removeJavascriptInterface(BRIDGE_NAME)
             webView.loadUrl(BLANK_URL)
             webView.clearHistory()
+            // 스크래핑이 끝난 뒤 백그라운드 렌더러가 CPU를 점유하지 않도록 일시정지
+            webView.onPause()
         }
     }
 
@@ -804,10 +844,45 @@ class MultiProfileGeminiUsageFetcher(
     companion object {
         const val BRIDGE_NAME = "UsageBridge"
         const val BLANK_URL = "about:blank"
-        const val POLL_INTERVAL_MS = 300L
-        const val MAX_POLL_DURATION_MS = 6_000L
+        const val POLL_INTERVAL_MS = 250L
+        const val MAX_POLL_DURATION_MS = 15_000L
         private const val MAX_POLL_ATTEMPTS = (MAX_POLL_DURATION_MS / POLL_INTERVAL_MS).toInt()
-        private const val NATIVE_SAFETY_TIMEOUT_MS = MAX_POLL_DURATION_MS + 1_500L
+        private const val NATIVE_SAFETY_TIMEOUT_MS = 18_000L
+        private const val NATIVE_POLL_TICK_SCRIPT = "window.__gemPollTick && window.__gemPollTick()"
+
+        private val BLOCKED_SUBRESOURCE_EXTENSIONS = listOf(
+            ".woff2", ".woff", ".ttf", ".otf", ".eot",
+            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+            ".mp4", ".webm", ".mp3", ".wav"
+        )
+
+        private val BLOCKED_SUBRESOURCE_HOSTS = listOf(
+            "fonts.gstatic.com",
+            "fonts.googleapis.com",
+            "www.google-analytics.com",
+            "ssl.google-analytics.com",
+            "www.googletagmanager.com",
+            "play.google.com/log"
+        )
+
+        /**
+         * 사용량 숫자(DOM 텍스트) 렌더링과 무관한 폰트, 이미지, 미디어, 분석 로그 요청인지 판별합니다.
+         */
+        fun shouldBlockSubresourceRequest(url: String?): Boolean {
+            if (url.isNullOrBlank()) return false
+            val lower = url.lowercase()
+            if (BLOCKED_SUBRESOURCE_HOSTS.any { lower.contains(it) }) return true
+            val pathBeforeQuery = lower.substringBefore('?').substringBefore('#')
+            return BLOCKED_SUBRESOURCE_EXTENSIONS.any { pathBeforeQuery.endsWith(it) }
+        }
+
+        private fun createEmptyResourceResponse(): WebResourceResponse {
+            return WebResourceResponse(
+                "text/plain",
+                "UTF-8",
+                ByteArrayInputStream(ByteArray(0))
+            )
+        }
 
         @Volatile
         private var activeInstance: MultiProfileGeminiUsageFetcher? = null
@@ -817,45 +892,6 @@ class MultiProfileGeminiUsageFetcher(
         }
 
         fun currentInstance(): MultiProfileGeminiUsageFetcher? = activeInstance
-
-        /**
-         * 현재 기기의 Android System WebView가 멀티 프로필(`WebViewFeature.MULTI_PROFILE`)을 지원하는지 확인합니다.
-         */
-        fun isMultiProfileSupported(): Boolean {
-            return runCatching {
-                WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
-            }.getOrDefault(false)
-        }
-
-        /**
-         * 계정 프로필명(`profileName`)에 대응하는 독립 [CookieManager]를 반환합니다.
-         * 멀티 프로필 지원 기기에서는 `ProfileStore`의 프로필 전용 `CookieManager`를 반환합니다.
-         */
-        fun resolveCookieManager(profileName: String): CookieManager {
-            if (profileName.isNotBlank()) {
-                runCatching {
-                    if (isMultiProfileSupported()) {
-                        return ProfileStore.getInstance()
-                            .getOrCreateProfile(profileName)
-                            .cookieManager
-                    }
-                }
-            }
-            return CookieManager.getInstance()
-        }
-
-        /**
-         * AndroidX Webkit(`WebViewCompat.setProfile`)이 지원되는 경우
-         * 해당 `WebView`에 계정 전용 프로필 이름을 바인딩합니다.
-         */
-        fun tryBindWebViewProfile(webView: WebView, profileName: String): Boolean {
-            if (profileName.isBlank()) return false
-            return runCatching {
-                if (!isMultiProfileSupported()) return false
-                WebViewCompat.setProfile(webView, profileName)
-                true
-            }.getOrDefault(false)
-        }
 
         fun sanitizeWebViewUserAgent(rawUserAgent: String?): String {
             if (rawUserAgent.isNullOrBlank()) {
@@ -876,6 +912,8 @@ class MultiProfileGeminiUsageFetcher(
                     clearInterval(window.__gemUsagePollingTimer);
                 }
                 var attempts = 0;
+                var done = false;
+                var lastRunAt = 0;
                 var maxAttempts = $MAX_POLL_ATTEMPTS;
 
                 function detectAccountEmail(bodyText) {
@@ -923,12 +961,20 @@ class MultiProfileGeminiUsageFetcher(
                     return defaultLabel;
                 }
 
+                function stopPolling() {
+                    done = true;
+                    clearInterval(window.__gemUsagePollingTimer);
+                    window.__gemUsagePollingTimer = null;
+                    window.__gemPollTick = null;
+                }
+
                 function pollDom() {
+                    if (done) return;
+                    lastRunAt = Date.now();
                     attempts++;
                     var href = (window.location && window.location.href ? window.location.href : '').toLowerCase();
                     if (href.indexOf('accounts.google.com') !== -1 || href.indexOf('/servicelogin') !== -1 || href.indexOf('/v3/signin') !== -1) {
-                        clearInterval(window.__gemUsagePollingTimer);
-                        window.__gemUsagePollingTimer = null;
+                        stopPolling();
                         if (window.$BRIDGE_NAME && window.$BRIDGE_NAME.onAuthRequired) {
                             window.$BRIDGE_NAME.onAuthRequired();
                         }
@@ -948,8 +994,7 @@ class MultiProfileGeminiUsageFetcher(
                     }
 
                     if (matches.length >= 2) {
-                        clearInterval(window.__gemUsagePollingTimer);
-                        window.__gemUsagePollingTimer = null;
+                        stopPolling();
 
                         var first = matches[0];
                         var second = matches[1];
@@ -975,8 +1020,7 @@ class MultiProfileGeminiUsageFetcher(
                     }
 
                     if (attempts >= maxAttempts) {
-                        clearInterval(window.__gemUsagePollingTimer);
-                        window.__gemUsagePollingTimer = null;
+                        stopPolling();
                         if (href.indexOf('accounts.google.com') !== -1) {
                             if (window.$BRIDGE_NAME && window.$BRIDGE_NAME.onAuthRequired) {
                                 window.$BRIDGE_NAME.onAuthRequired();
@@ -987,8 +1031,16 @@ class MultiProfileGeminiUsageFetcher(
                     }
                 }
 
+                // 백그라운드에서 setInterval이 스로틀링되어도 네이티브가 호출할 수 있는 보조 틱 (중복 호출은 간격 기준으로 무시)
+                window.__gemPollTick = function() {
+                    if (done) return;
+                    if (Date.now() - lastRunAt >= $POLL_INTERVAL_MS - 50) {
+                        pollDom();
+                    }
+                };
+
                 pollDom();
-                if (attempts < maxAttempts) {
+                if (!done && attempts < maxAttempts) {
                     window.__gemUsagePollingTimer = setInterval(pollDom, $POLL_INTERVAL_MS);
                 }
             })();
