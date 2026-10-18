@@ -20,6 +20,8 @@ class GeminiAccountSwitchAutomationTest {
         assertTrue(labels.availableAccountRowIds.contains("com.google.android.googlequicksearchbox:id/og_bento_available_account_root"))
         assertTrue(labels.accountPrimaryInfoIds.contains("com.google.android.googlequicksearchbox:id/og_primary_account_information"))
         assertTrue(labels.accountSecondaryInfoIds.contains("com.google.android.googlequicksearchbox:id/og_secondary_account_information"))
+        assertTrue(labels.openSidebarCandidates.contains("사이드바 열기"))
+        assertTrue(labels.closeSidebarCandidates.contains("사이드바 닫기"))
     }
 
     @Test

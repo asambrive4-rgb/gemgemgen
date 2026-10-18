@@ -1,4 +1,4 @@
-// 역할: Gemini 앱을 실행하고 상단 Google 프로필 메뉴(OneGoogle Bento)를 열어 대상 구글 계정으로 자동 전환합니다.
+// 역할: Gemini 앱에서 사이드바 또는 상단 메뉴를 통해 Google 프로필(OneGoogle Bento)을 열어 대상 구글 계정으로 자동 전환합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler
@@ -33,9 +33,16 @@ internal data class GeminiAccountSwitchNodeLabels(
         "새 채팅",
         "New chat"
     ),
+    val openSidebarCandidates: List<String> = listOf(
+        "사이드바 열기",
+        "Open navigation drawer",
+        "탐색 메뉴 열기",
+        "기본 탐색 열기"
+    ),
     val closeSidebarCandidates: List<String> = listOf(
         "사이드바 닫기",
-        "Close navigation drawer"
+        "Close navigation drawer",
+        "탐색 메뉴 닫기"
     ),
     val bentoMenuContainerIds: List<String> = listOf(
         "com.google.android.googlequicksearchbox:id/og_bento_menu_content_container",
@@ -191,6 +198,7 @@ internal class GeminiAccountSwitchAutomation(
     private var active = false
     private var phase = Phase.LAUNCH_GEMINI
     private var phaseStartedAtMillis = 0L
+    private var lastSidebarTapAtMillis = 0L
     private var lastProfileTapAtMillis = 0L
     private var lastExpandTapAtMillis = 0L
     private var expandAttemptCount = 0
@@ -256,6 +264,96 @@ internal class GeminiAccountSwitchAutomation(
                     return
                 }
 
+                // 1순위: 사이드바가 이미 열려 있는 상태라면 사이드바 하단 프로필 카드 클릭
+                val sidebarProfileNode = findSidebarProfileNode(nodes)
+                if (sidebarProfileNode != null) {
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastProfileTapAtMillis >= PROFILE_TAP_COOLDOWN_MS) {
+                        lastProfileTapAtMillis = now
+                        val clicked = AccessibilityNodeTraversal.clickNodeOrParent(
+                            sidebarProfileNode,
+                            maxDepth = MAX_ANCESTOR_SEARCH_DEPTH
+                        )
+                        if (!clicked) {
+                            val tapPoint = findSidebarProfileTapPoint(sidebarProfileNode)
+                            if (tapPoint != null) {
+                                tapCoordinates(tapPoint.first, tapPoint.second) {
+                                    if (active && phase == Phase.OPEN_PROFILE_MENU) {
+                                        handler.postDelayed({ checkPhase() }, POST_TAP_SETTLE_MS)
+                                    }
+                                }
+                                return
+                            }
+                        } else {
+                            handler.postDelayed(
+                                {
+                                    if (active && phase == Phase.OPEN_PROFILE_MENU) {
+                                        checkPhase()
+                                    }
+                                },
+                                POST_TAP_SETTLE_MS
+                            )
+                            return
+                        }
+                    }
+                    retryOrFail("사이드바 하단 Google 프로필 메뉴를 열지 못했습니다.") { checkPhase() }
+                    return
+                }
+
+                // 2순위: 사이드바가 닫혀 있는 상태라면 좌측 상단 '사이드바 열기' 클릭
+                val openSidebarNode = findOpenSidebarNode(nodes)
+                if (openSidebarNode != null) {
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastSidebarTapAtMillis >= SIDEBAR_TAP_COOLDOWN_MS) {
+                        lastSidebarTapAtMillis = now
+                        val clicked = AccessibilityNodeTraversal.clickNodeOrParent(
+                            openSidebarNode,
+                            maxDepth = MAX_ANCESTOR_SEARCH_DEPTH
+                        )
+                        if (!clicked) {
+                            val bounds = openSidebarNode.nodeBounds()
+                            if (bounds != null) {
+                                tapCoordinates(bounds.centerX.toFloat(), bounds.centerY.toFloat()) {
+                                    if (active && phase == Phase.OPEN_PROFILE_MENU) {
+                                        handler.postDelayed({ checkPhase() }, POST_SIDEBAR_OPEN_SETTLE_MS)
+                                    }
+                                }
+                                return
+                            }
+                        } else {
+                            handler.postDelayed(
+                                {
+                                    if (active && phase == Phase.OPEN_PROFILE_MENU) {
+                                        checkPhase()
+                                    }
+                                },
+                                POST_SIDEBAR_OPEN_SETTLE_MS
+                            )
+                            return
+                        }
+                    }
+                    retryOrFail("사이드바 열기 반응을 대기하고 있습니다.") { checkPhase() }
+                    return
+                }
+
+                // 3순위 (Fallback): 툴바 좌측 상단 햄버거 영역 좌표 탭
+                val toolbarSidebarTapPoint = findToolbarSidebarTapPoint(nodes)
+                if (toolbarSidebarTapPoint != null) {
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastSidebarTapAtMillis >= SIDEBAR_TAP_COOLDOWN_MS) {
+                        lastSidebarTapAtMillis = now
+                        tapCoordinates(toolbarSidebarTapPoint.first, toolbarSidebarTapPoint.second) {
+                            if (active && phase == Phase.OPEN_PROFILE_MENU) {
+                                handler.postDelayed({ checkPhase() }, POST_SIDEBAR_OPEN_SETTLE_MS)
+                            }
+                        }
+                        return
+                    }
+                    retryOrFail("사이드바 열기 좌표 터치 후 대기 중입니다.") { checkPhase() }
+                    return
+                }
+
+                // 4순위 (Fallback): 새 채팅 홈 화면 등에서 우측 상단 프로필 버튼이 직접 노출된 경우
                 val explicitProfileNode = findExplicitProfileButtonNode(nodes)
                 if (explicitProfileNode != null) {
                     val now = SystemClock.uptimeMillis()
@@ -286,17 +384,7 @@ internal class GeminiAccountSwitchAutomation(
                     return
                 }
 
-                val closeSidebarNode = findCloseSidebarNode(nodes)
-                if (closeSidebarNode != null) {
-                    AccessibilityNodeTraversal.clickNodeOrParent(
-                        closeSidebarNode,
-                        maxDepth = MAX_ANCESTOR_SEARCH_DEPTH
-                    )
-                    retryOrFail("사이드바를 닫지 못했습니다.") { checkPhase() }
-                    return
-                }
-
-                retryOrFail("Gemini 상단 프로필 버튼을 찾지 못했습니다.") { checkPhase() }
+                retryOrFail("Gemini 프로필 메뉴 또는 사이드바를 찾지 못했습니다.") { checkPhase() }
             }
 
             Phase.CHECK_OR_EXPAND_ACCOUNTS -> {
@@ -644,6 +732,112 @@ internal class GeminiAccountSwitchAutomation(
         return tapX to tapY
     }
 
+    private fun findSidebarProfileNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        val radioButtonNode = nodes.firstOrNull { node ->
+            node.className?.contains("RadioButton", ignoreCase = true) == true
+        }
+        if (radioButtonNode != null) {
+            val parent = radioButtonNode.parent
+            if (parent != null && (parent.isClickable || parent.isCheckable)) {
+                return parent
+            }
+            return radioButtonNode
+        }
+
+        val isSidebarOpen = nodes.any { node ->
+            val desc = node.contentDescription?.toString()?.trim().orEmpty()
+            labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }
+        }
+        if (!isSidebarOpen) return null
+
+        val profileIndicators = listOf(
+            "pro",
+            "google 계정",
+            "google account",
+            "signed in",
+            targetEmail.lowercase(),
+            targetAlias.lowercase()
+        ).filter { it.isNotBlank() }
+
+        val clickableCandidates = nodes.filter { node ->
+            val isClickableOrCheckable = node.isClickable || node.isCheckable
+            val b = node.nodeBounds()
+            isClickableOrCheckable && b != null && (b.bottom - b.top) in 50..300
+        }
+
+        for (node in clickableCandidates) {
+            val subNodes = AccessibilityNodeTraversal.lazyTraverse(node).toList()
+            val hasIndicator = subNodes.any { child ->
+                val text = child.text?.toString()?.lowercase().orEmpty()
+                val desc = child.contentDescription?.toString()?.lowercase().orEmpty()
+                profileIndicators.any { ind -> text.contains(ind) || desc.contains(ind) }
+            }
+            if (hasIndicator) {
+                return node
+            }
+        }
+
+        val bottomNode = clickableCandidates.maxByOrNull { it.nodeBounds()?.bottom ?: 0 }
+        if (bottomNode != null) {
+            val b = bottomNode.nodeBounds()
+            if (b != null && (b.right - b.left) > 250) {
+                return bottomNode
+            }
+        }
+
+        return null
+    }
+
+    private fun findSidebarProfileTapPoint(profileNode: AccessibilityNodeInfo): Pair<Float, Float>? {
+        val bounds = profileNode.nodeBounds() ?: return null
+        val tapX = bounds.left + ((bounds.right - bounds.left) * 0.35f)
+        val tapY = bounds.centerY.toFloat()
+        return Pair(tapX, tapY)
+    }
+
+    private fun findOpenSidebarNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        for (node in nodes) {
+            val desc = node.contentDescription?.toString()?.trim().orEmpty()
+            if (desc.isNotBlank() && labels.openSidebarCandidates.any { desc.equals(it, ignoreCase = true) }) {
+                return node
+            }
+        }
+        for (node in nodes) {
+            val text = node.text?.toString()?.trim().orEmpty()
+            if (text.isNotBlank() && labels.openSidebarCandidates.any { text.equals(it, ignoreCase = true) }) {
+                return node
+            }
+        }
+        val toolbarNode = nodes.firstOrNull { node ->
+            node.viewIdResourceName != null && labels.toolbarViewIds.contains(node.viewIdResourceName)
+        }
+        if (toolbarNode != null) {
+            val toolbarBounds = toolbarNode.nodeBounds()
+            if (toolbarBounds != null) {
+                val leftNodes = AccessibilityNodeTraversal.lazyTraverse(toolbarNode)
+                    .filter { node ->
+                        val b = node.nodeBounds()
+                        b != null && b.left < toolbarBounds.left + 250 && (node.isClickable || node.isFocusable)
+                    }
+                    .toList()
+                leftNodes.firstOrNull()?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun findToolbarSidebarTapPoint(nodes: List<AccessibilityNodeInfo>): Pair<Float, Float>? {
+        val toolbarNode = nodes.firstOrNull { node ->
+            node.viewIdResourceName != null && labels.toolbarViewIds.contains(node.viewIdResourceName)
+        } ?: return null
+        val toolbarBounds = toolbarNode.nodeBounds() ?: return null
+
+        val toolbarHeight = (toolbarBounds.bottom - toolbarBounds.top).toFloat()
+        val tapX = toolbarBounds.left + (toolbarHeight / 2f)
+        val tapY = (toolbarBounds.top + toolbarBounds.bottom) / 2f
+        return tapX to tapY
+    }
+
     private fun findCloseSidebarNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
         return nodes.firstOrNull { node ->
             val desc = node.contentDescription?.toString()?.trim().orEmpty()
@@ -781,9 +975,11 @@ internal class GeminiAccountSwitchAutomation(
         const val MAX_RETURN_BACKS = 2
         const val MIN_PROFILE_BUTTON_WIDTH_PX = 40
         const val MIN_VISIBLE_ROW_HEIGHT_PX = 24
-        const val PROFILE_TAP_COOLDOWN_MS = 1600L
+        const val SIDEBAR_TAP_COOLDOWN_MS = 600L
+        const val POST_SIDEBAR_OPEN_SETTLE_MS = 450L
+        const val PROFILE_TAP_COOLDOWN_MS = 600L
         const val EXPAND_TAP_COOLDOWN_MS = 650L
-        const val POST_TAP_SETTLE_MS = 650L
+        const val POST_TAP_SETTLE_MS = 500L
         const val POST_EXPAND_SETTLE_MS = 480L
         const val POST_SCROLL_SETTLE_MS = 400L
         const val POST_CLOSE_SETTLE_MS = 280L
