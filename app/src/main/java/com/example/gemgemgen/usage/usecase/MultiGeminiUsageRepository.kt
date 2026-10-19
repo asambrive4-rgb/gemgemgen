@@ -1,10 +1,11 @@
-// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 계정 그룹 이동, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
+// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 계정 그룹 이동, 수동 소진/복구 및 대표 자동 위임, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
 package com.example.gemgemgen.usage.usecase
 
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
+import com.example.gemgemgen.usage.domain.GeminiUsageParser
 import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 import kotlinx.coroutines.CancellationException
@@ -285,6 +286,61 @@ class MultiGeminiUsageRepository(
     fun triggerMoveAccountGroup(accountId: String, targetGroup: GeminiAccountGroup) {
         scope.launch {
             moveAccountGroup(accountId, targetGroup)
+        }
+    }
+
+    /**
+     * 계정의 수동 사용불가(내림) 상태를 변경하고 DataStore에 영속화합니다.
+     * 방안 X: 만약 대표 계정을 사용불가로 내리는 경우, 상단에 남은 사용 가능 1위 계정에게 대표 계정을 자동 위임합니다.
+     */
+    suspend fun setAccountManuallyExhausted(
+        accountId: String,
+        isExhausted: Boolean
+    ): GeminiAccountProfile? {
+        return mutationMutex.withLock {
+            val currentAccounts = _state.value.accounts
+            val index = currentAccounts.indexOfFirst { it.profile.id == accountId }
+            if (index < 0) return@withLock null
+
+            val target = currentAccounts[index]
+            val now = nowProvider()
+            if (target.profile.isManuallyExhausted(now) == isExhausted) return@withLock target.profile
+
+            // 다음 5시간 주기 도래 시각(롤오버 반영). 단서가 없는 신규 계정은 내린 시점 + 5시간
+            val nextResetAt = now + (target.nextFiveHourResetRemainingMillis(now)
+                ?: GeminiUsageParser.FIVE_HOUR_WINDOW_MILLIS)
+            val updatedProfile = target.profile.copy(
+                manualExhaustedUntilMillis = if (isExhausted) nextResetAt else 0L
+            )
+            val updatedAccounts = currentAccounts.toMutableList().apply {
+                set(index, target.copy(profile = updatedProfile))
+            }
+
+            // 방안 X: 대표 계정을 사용불가로 내린 경우, 남은 사용 가능 1위 계정에게 대표 자리를 자동 위임
+            var nextSelectedId = _state.value.selectedAccountId
+            if (isExhausted && nextSelectedId == accountId) {
+                val tempState = _state.value.copy(accounts = updatedAccounts)
+                nextSelectedId = tempState.availableAccountsSorted().firstOrNull()?.profile?.id
+                    ?: nextSelectedId
+            }
+
+            _state.update {
+                it.copy(
+                    accounts = updatedAccounts,
+                    selectedAccountId = nextSelectedId
+                )
+            }
+            persistProfilesInternal(updatedAccounts.map { it.profile }, nextSelectedId)
+            updatedProfile
+        }
+    }
+
+    /**
+     * 비동기 코루틴 스코프에서 계정 수동 사용불가(내림)/복구를 트리거합니다.
+     */
+    fun triggerSetAccountManuallyExhausted(accountId: String, isExhausted: Boolean) {
+        scope.launch {
+            setAccountManuallyExhausted(accountId, isExhausted)
         }
     }
 

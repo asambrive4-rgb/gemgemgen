@@ -6,7 +6,8 @@ package com.example.gemgemgen.usage.domain
  */
 enum class GeminiQuotaExhaustionReason(val badgeLabel: String) {
     FIVE_HOUR_EXHAUSTED("5시간 소진"),
-    WEEKLY_EXHAUSTED("주간 소진")
+    WEEKLY_EXHAUSTED("주간 소진"),
+    MANUAL_EXHAUSTED("수동 제외")
 }
 
 /**
@@ -71,12 +72,12 @@ data class GeminiAccountUsageEntry(
         )
     }
 
-    /** 요약 버튼의 대표 퍼센트 기준 경고 단계 (70% 주의, 90% 경고 - 만료 보정 반영) */
+    /** 요약 버튼의 대표 퍼센트 기준 경고 단계 (5시간 한도 만료 보정 기준, 70% 주의, 90% 경고) */
     val summaryWarningLevel: GeminiUsageWarningLevel
         get() = summaryWarningLevel()
 
     fun summaryWarningLevel(nowMillis: Long = System.currentTimeMillis()): GeminiUsageWarningLevel {
-        return overallWarningLevel(nowMillis)
+        return fiveHourWarningLevel(nowMillis)
     }
 
     /**
@@ -150,14 +151,18 @@ data class GeminiAccountUsageEntry(
         return remaining == null || remaining <= 0L
     }
 
-    /** 할당량 소진 사유 (주간 소진 우선, 5시간 소진 차순) */
+    /** 할당량 소진 사유 (주간 소진 우선, 5시간 소진 차순, 수동 내림) */
     fun quotaExhaustionReason(nowMillis: Long = System.currentTimeMillis()): GeminiQuotaExhaustionReason? {
-        if (displayedSuccess == null) return null
+        val isManual = profile.isManuallyExhausted(nowMillis)
+        if (displayedSuccess == null) {
+            return if (isManual) GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED else null
+        }
         val fiveHourPct = effectiveFiveHourPercent(nowMillis)
         val weeklyPct = effectiveWeeklyPercent(nowMillis)
         return when {
             weeklyPct >= 100 -> GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED
             fiveHourPct >= 100 -> GeminiQuotaExhaustionReason.FIVE_HOUR_EXHAUSTED
+            isManual -> GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED
             else -> null
         }
     }
@@ -165,11 +170,6 @@ data class GeminiAccountUsageEntry(
     /** 할당량이 소진되어 현재 사용할 수 없는 상태인지 여부 */
     fun isQuotaExhausted(nowMillis: Long = System.currentTimeMillis()): Boolean {
         return quotaExhaustionReason(nowMillis) != null
-    }
-
-    /** 즉시 사용 가능한 상태인지 여부 */
-    fun isAvailableForImmediateUse(nowMillis: Long = System.currentTimeMillis()): Boolean {
-        return displayedSuccess != null && !isQuotaExhausted(nowMillis)
     }
 
     /** 5시간 단기 한도 리셋까지 남은 시간(밀리초, 0 이하이거나 만료된 경우 null) */
@@ -185,15 +185,31 @@ data class GeminiAccountUsageEntry(
     }
 
     /**
+     * 다음 5시간 단기 한도 리셋까지 남은 시간(밀리초, 롤오버 반영).
+     * - 구체적인 리셋 시각 단서가 없는 미시작 계정("5시간 주기")은 null을 반환합니다.
+     * - 이미 리셋 시각이 지난 계정은 다음 롤오버 주기(5시간 후)까지 남은 시간을 반환합니다.
+     */
+    fun nextFiveHourResetRemainingMillis(nowMillis: Long = System.currentTimeMillis()): Long? {
+        val success = displayedSuccess ?: return null
+        return GeminiUsageParser.computeNextResetRemainingMillis(
+            rawText = success.fiveHourResetText,
+            nowMillis = nowMillis,
+            updatedAt = success.updatedAt,
+            isFiveHourWindow = true
+        )
+    }
+
+    /**
      * 소진된 계정이 실제로 다시 사용 가능해지기까지 남은 시간(밀리초).
-     * - FIVE_HOUR_EXHAUSTED: 5시간 리셋까지 남은 시간
+     * - FIVE_HOUR_EXHAUSTED / MANUAL_EXHAUSTED: 5시간 리셋까지 남은 시간
      * - WEEKLY_EXHAUSTED: 주간 리셋과 5시간 리셋 중 더 늦게 풀리는 시간
      */
     fun remainingMillisUntilUsable(nowMillis: Long = System.currentTimeMillis()): Long? {
         val success = displayedSuccess ?: return null
         val reason = quotaExhaustionReason(nowMillis) ?: return null
         return when (reason) {
-            GeminiQuotaExhaustionReason.FIVE_HOUR_EXHAUSTED -> {
+            GeminiQuotaExhaustionReason.FIVE_HOUR_EXHAUSTED,
+            GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED -> {
                 remainingMillisUntilFiveHourReset(nowMillis)
             }
             GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED -> {
@@ -366,20 +382,16 @@ data class MultiGeminiUsageState(
         val unconfirmedAccounts = baseAccounts.filter { it.displayedSuccess == null }
 
         val sortedUsable = usableAccounts.sortedWith { a, b ->
-            val aUnstarted = a.isFiveHourTimerUnstarted(nowMillis)
-            val bUnstarted = b.isFiveHourTimerUnstarted(nowMillis)
+            val remA = a.nextFiveHourResetRemainingMillis(nowMillis)
+            val remB = b.nextFiveHourResetRemainingMillis(nowMillis)
+
+            val aHasTimer = remA != null
+            val bHasTimer = remB != null
 
             when {
-                aUnstarted && !bUnstarted -> -1
-                !aUnstarted && bUnstarted -> 1
-                aUnstarted && bUnstarted -> {
-                    val weeklyCmp = a.effectiveWeeklyPercent(nowMillis).compareTo(b.effectiveWeeklyPercent(nowMillis))
-                    if (weeklyCmp != 0) weeklyCmp else a.profile.sortOrder.compareTo(b.profile.sortOrder)
-                }
-                else -> {
-                    val remA = a.remainingMillisUntilFiveHourReset(nowMillis) ?: Long.MAX_VALUE
-                    val remB = b.remainingMillisUntilFiveHourReset(nowMillis) ?: Long.MAX_VALUE
-                    val remCmp = remA.compareTo(remB)
+                // 1) 둘 다 타이머가 있는 경우: 다음 초기화까지 남은 시간이 짧은 순 (진정한 5시간 초기화 임박 순!)
+                aHasTimer && bHasTimer -> {
+                    val remCmp = remA!!.compareTo(remB!!)
                     if (remCmp != 0) return@sortedWith remCmp
 
                     val fiveCmp = a.effectiveFiveHourPercent(nowMillis).compareTo(b.effectiveFiveHourPercent(nowMillis))
@@ -389,6 +401,14 @@ data class MultiGeminiUsageState(
                     if (weeklyCmp != 0) return@sortedWith weeklyCmp
 
                     a.profile.sortOrder.compareTo(b.profile.sortOrder)
+                }
+                // 2) 타이머가 진행 중/롤오버된 계정이 타이머가 없는 미시작 계정보다 앞 (곧 리셋될 쿼터 먼저 소진)
+                aHasTimer && !bHasTimer -> -1
+                !aHasTimer && bHasTimer -> 1
+                // 3) 둘 다 타이머가 없는 미시작 계정 ("5시간 주기"): 주간 누적 사용량 오름차순
+                else -> {
+                    val weeklyCmp = a.effectiveWeeklyPercent(nowMillis).compareTo(b.effectiveWeeklyPercent(nowMillis))
+                    if (weeklyCmp != 0) weeklyCmp else a.profile.sortOrder.compareTo(b.profile.sortOrder)
                 }
             }
         }

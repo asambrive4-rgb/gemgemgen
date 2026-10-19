@@ -1,9 +1,12 @@
-// 역할: 와일드카드 관리 화면에서 발생하는 사용자 입력 인터랙션을 뷰모델 액션과 직접 연결하는 인터페이스입니다.
+// 역할: 와일드카드 관리 화면에서 발생하는 사용자 입력 인터랙션 및 분류(Classify) 액션 그룹을 제공하는 인터페이스입니다.
 package com.example.gemgemgen.wildcard.ui
 
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 
-interface WildcardScreenActions : WildcardClassifyActions {
+interface WildcardScreenActions {
+    val classify: WildcardClassifyActions
+        get() = object : WildcardClassifyActions {}
+
     fun onRefresh() {}
     fun onSelectFolder() {}
     fun selectFile(file: WildcardTextFile) {}

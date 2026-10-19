@@ -158,7 +158,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
 
     fun selectMainTab(tab: MainTab) {
         if (tab != MainTab.AUTOMATION) {
-            automationViewModel.cancelParagraphSelection()
+            automationViewModel.promptEditor.cancelParagraphSelection()
         }
         if (selectedTab != tab) {
             trimInactiveTabs(exceptTab = tab)
@@ -316,10 +316,6 @@ private fun createAutomationActions(
     runAutomation: () -> Unit,
     selectAutomationMode: (AutomationMode) -> Unit
 ): AutomationScreenActions = object : AutomationScreenActions by automationViewModel {
-    override fun onPromptTemplateChange(value: String) {
-        automationViewModel.onPromptTemplateFromEditor(value)
-    }
-
     override fun onRunAutomation() {
         runAutomation()
     }

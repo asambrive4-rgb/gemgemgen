@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,6 +45,7 @@ internal fun AutomationBottomBar(
     isRunning: Boolean,
     automationState: AutomationRunState,
     isRemoteSendMode: Boolean = false,
+    hasPreStartMemoryCleanup: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     NeuCard(
@@ -65,7 +67,8 @@ internal fun AutomationBottomBar(
                 isRunning = isRunning,
                 onRunMvp = onRunMvp,
                 onCancelAutomation = onCancelAutomation,
-                isRemoteSendMode = isRemoteSendMode
+                isRemoteSendMode = isRemoteSendMode,
+                hasPreStartMemoryCleanup = hasPreStartMemoryCleanup
             )
 
             Spacer(modifier = Modifier.width(6.dp))
@@ -176,6 +179,7 @@ internal fun AutomationRunButton(
     onRunMvp: () -> Unit,
     onCancelAutomation: () -> Unit,
     isRemoteSendMode: Boolean = false,
+    hasPreStartMemoryCleanup: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -214,8 +218,17 @@ internal fun AutomationRunButton(
                 Text(
                     text = "시작",
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
                 )
+                if (hasPreStartMemoryCleanup) {
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        imageVector = Icons.Default.CleaningServices,
+                        contentDescription = "시작 전 메모리 정리 예정",
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
             }
         } else {
             Button(

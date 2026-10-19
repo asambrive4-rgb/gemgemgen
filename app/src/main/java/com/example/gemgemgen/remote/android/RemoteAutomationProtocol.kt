@@ -36,6 +36,12 @@ internal sealed interface RemoteProtocolMessage {
         val token: String,
         val requestId: String
     ) : RemoteProtocolMessage
+    data class UpdateRepeatCountRequest(
+        val senderId: String,
+        val token: String,
+        val requestId: String,
+        val repeatCount: Int
+    ) : RemoteProtocolMessage
     data class DisconnectRequest(
         val senderId: String,
         val token: String
@@ -118,6 +124,13 @@ internal object RemoteAutomationProtocol {
                 put("senderId", message.senderId)
                 put("token", message.token)
                 put("requestId", message.requestId)
+            }
+            is RemoteProtocolMessage.UpdateRepeatCountRequest -> buildJsonObject {
+                put("type", "updateRepeatCount")
+                put("senderId", message.senderId)
+                put("token", message.token)
+                put("requestId", message.requestId)
+                put("repeatCount", message.repeatCount)
             }
             is RemoteProtocolMessage.DisconnectRequest -> buildJsonObject {
                 put("type", "disconnect")
@@ -203,6 +216,12 @@ internal object RemoteAutomationProtocol {
                 senderId = value.string("senderId"),
                 token = value.string("token"),
                 requestId = value.string("requestId")
+            )
+            "updateRepeatCount" -> RemoteProtocolMessage.UpdateRepeatCountRequest(
+                senderId = value.string("senderId"),
+                token = value.string("token"),
+                requestId = value.string("requestId"),
+                repeatCount = value.intOrNull("repeatCount") ?: return null
             )
             "disconnect" -> RemoteProtocolMessage.DisconnectRequest(
                 senderId = value.string("senderId"),

@@ -56,7 +56,8 @@ internal fun KeyboardPromptAccessoryBar(
                     actions.onClearFocus()
                     actions.cancelAutomation()
                 },
-                isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
+                isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER,
+                hasPreStartMemoryCleanup = uiState.shouldAutoCleanMemoryBeforeStart
             )
 
             if (!uiState.isRunning) {
@@ -81,7 +82,7 @@ internal fun KeyboardPromptAccessoryBar(
             ActionIsland {
                 ParagraphSelectionModeButton(
                     selected = uiState.editor.isParagraphSelectionMode,
-                    onClick = actions::toggleParagraphSelectionMode
+                    onClick = actions.promptEditor::toggleParagraphSelectionMode
                 )
             }
 
@@ -91,8 +92,8 @@ internal fun KeyboardPromptAccessoryBar(
                 onInsertTopInstruction = actions::insertTopInstruction,
                 onInsertBottomInstruction = actions::insertBottomInstruction,
                 onOpenInstructionConfigDialog = actions::openInstructionConfigDialog,
-                onImportFromClipboard = actions::importPromptFromClipboard,
-                onCopyPromptToClipboard = actions::copyPromptToClipboard,
+                onImportFromClipboard = actions.promptEditor::importPromptFromClipboard,
+                onCopyPromptToClipboard = actions.promptEditor::copyPromptToClipboard,
                 showInsertButtons = false,
                 showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                 isVariationButtonEnabled = uiState.canInteractWithVariation,

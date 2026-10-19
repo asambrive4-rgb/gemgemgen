@@ -27,11 +27,9 @@ import com.example.gemgemgen.analysis.usecase.ApplyCandidateResult
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationRequest
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationResult
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationUseCase
-import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.ManageCandidateHandoffUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.RestorePromptResult
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
@@ -49,8 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AnalysisViewModel(
-    private val resolveTarget: ResolveAnalysisTargetUseCase,
-    private val generateTxtUseCase: GenerateAnalysisTxtUseCase,
+    private val executeGeneration: ExecuteAnalysisGenerationUseCase,
     private val keyManager: ManageGeminiApiKeysUseCase,
     private val grokAuth: ManageGrokAuthUseCase,
     private val clipboardGateway: ClipboardGateway,
@@ -58,11 +55,6 @@ class AnalysisViewModel(
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val promptWorkspace: PromptWorkspace? = null,
     coroutineScope: CoroutineScope? = null,
-    private val executeGeneration: ExecuteAnalysisGenerationUseCase = ExecuteAnalysisGenerationUseCase(
-        resolveTarget = resolveTarget,
-        generateTxtUseCase = generateTxtUseCase,
-        dispatchers = dispatchers
-    ),
     private val candidateHandoff: ManageCandidateHandoffUseCase = ManageCandidateHandoffUseCase(
         clipboardGateway = clipboardGateway,
         promptWorkspace = promptWorkspace,

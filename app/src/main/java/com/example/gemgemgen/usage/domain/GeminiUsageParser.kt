@@ -193,9 +193,104 @@ object GeminiUsageParser {
     }
 
     /**
+     * 다음 리셋 시점의 절대 밀리초(타겟 시각)를 계산합니다.
+     * - 리셋 시각이 이미 지난 경우 주기(5시간 / 7일)를 가산하여 현재([nowMillis])보다 미래인 다음 타겟 밀리초를 반환합니다.
+     * - 구체적인 시간 단서가 없는 기본 문구("5시간 주기 자동 초기화" 등)는 null을 반환합니다.
+     */
+    fun computeNextResetTargetMillis(
+        rawText: String,
+        nowMillis: Long = System.currentTimeMillis(),
+        updatedAt: Long = 0L,
+        isFiveHourWindow: Boolean = false
+    ): Long? {
+        val initialCleaned = cleanResetText(rawText)
+        if (initialCleaned.isBlank() ||
+            initialCleaned.contains("주기") ||
+            initialCleaned == DEFAULT_FIVE_HOUR_RESET_TEXT ||
+            initialCleaned == DEFAULT_WEEKLY_RESET_TEXT
+        ) {
+            return null
+        }
+
+        val cleaned = initialCleaned
+            .replace(RESET_PREFIX_NOISE_REGEX, "")
+            .replace(RESET_SUFFIX_NOISE_REGEX, "")
+            .trim()
+        if (cleaned.isBlank()) return null
+
+        val period = if (isFiveHourWindow) FIVE_HOUR_WINDOW_MILLIS else WEEKLY_WINDOW_MILLIS
+
+        if (RELATIVE_TIME_REGEX.containsMatchIn(cleaned)) {
+            val daysMatch = RELATIVE_DAYS_REGEX.find(cleaned)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            val hoursMatch = RELATIVE_HOURS_REGEX.find(cleaned)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            val minutesMatch = RELATIVE_MINUTES_REGEX.find(cleaned)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            val durationMillis = daysMatch * 24 * 3600_000L + hoursMatch * 3600_000L + minutesMatch * 60_000L
+            if (durationMillis > 0L) {
+                val anchor = if (updatedAt > 0L && updatedAt <= nowMillis) updatedAt else nowMillis
+                var targetMillis = anchor + durationMillis
+                while (targetMillis <= nowMillis) {
+                    targetMillis += period
+                }
+                return targetMillis
+            }
+            return null
+        }
+
+        val parsedTime = parseTargetTime(cleaned)
+        if (parsedTime != null) {
+            val anchorMillis = if (updatedAt > 0L && updatedAt <= nowMillis) updatedAt else nowMillis
+            val targetCal = Calendar.getInstance().apply {
+                timeInMillis = anchorMillis
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                set(Calendar.HOUR_OF_DAY, parsedTime.hour24)
+                set(Calendar.MINUTE, parsedTime.minute)
+                if (parsedTime.month != null && parsedTime.day != null) {
+                    set(Calendar.MONTH, parsedTime.month - 1)
+                    set(Calendar.DAY_OF_MONTH, parsedTime.day)
+                    if (timeInMillis < anchorMillis - 30L * 24L * 3600_000L) {
+                        add(Calendar.YEAR, 1)
+                    }
+                } else {
+                    if (timeInMillis <= anchorMillis) {
+                        add(Calendar.DAY_OF_YEAR, 1)
+                    }
+                    if (isFiveHourWindow && timeInMillis - anchorMillis > 6 * 3600_000L) {
+                        add(Calendar.DAY_OF_YEAR, -1)
+                    }
+                }
+            }
+
+            var targetMillis = targetCal.timeInMillis
+            while (targetMillis <= nowMillis) {
+                targetMillis += period
+            }
+            return targetMillis
+        }
+
+        return null
+    }
+
+    /**
+     * 다음 리셋 시각까지 남은 시간(밀리초)을 계산합니다.
+     * - 이미 리셋 시각이 지난 경우 주기(5시간 / 7일)를 가산하여 현재([nowMillis])보다 미래인 다음 리셋까지의 잔여 밀리초(> 0L)를 반환합니다.
+     * - 구체적인 시간 단서가 없는 기본 문구("5시간 주기 자동 초기화" 등)는 null을 반환합니다.
+     */
+    fun computeNextResetRemainingMillis(
+        rawText: String,
+        nowMillis: Long = System.currentTimeMillis(),
+        updatedAt: Long = 0L,
+        isFiveHourWindow: Boolean = false
+    ): Long? {
+        val targetMillis = computeNextResetTargetMillis(rawText, nowMillis, updatedAt, isFiveHourWindow) ?: return null
+        return (targetMillis - nowMillis).coerceAtLeast(0L)
+    }
+
+    /**
      * 다이얼로그 및 카드 표시용으로 `"에 초기화"` 반복 문구를 제거하고, 24시간제/축약 일시와 함께 현재 시각 기준 남은 시간을 병기합니다.
      * 예: `"오후 2:00에 초기화"` -> `"14:00 (4시간 10분 후)"`, `"10월 20일 오후 2:00에 초기화"` -> `"10/20/14:00 (4일 4시간 후)"`
-     * 리셋 시각이 이미 지났다면 `"초기화됨 (0%)"`를 반환합니다.
+     * 리셋 시각이 이미 지났다면 다음 주기(5시간 / 7일)의 초기화 일시 및 남은 시간을 계산하여 반환합니다.
+     * 구체적인 시간 단서가 없는 기본 문구("5시간 주기 자동 초기화" 등)는 "5시간 주기" 등의 주기 문구를 반환합니다.
      */
     fun formatCompactResetWithRemaining(
         rawText: String,
@@ -203,55 +298,65 @@ object GeminiUsageParser {
         updatedAt: Long = 0L,
         isFiveHourWindow: Boolean = false
     ): String {
-        val elapsedSinceUpdate = if (updatedAt > 0L && nowMillis >= updatedAt) nowMillis - updatedAt else 0L
-        if (isFiveHourWindow && elapsedSinceUpdate >= FIVE_HOUR_WINDOW_MILLIS) {
-            return "초기화됨 (0%)"
-        }
-        if (!isFiveHourWindow && elapsedSinceUpdate >= WEEKLY_WINDOW_MILLIS) {
-            return "초기화됨 (0%)"
-        }
+        val initialCleaned = cleanResetText(rawText)
+        if (initialCleaned.isBlank()) return ""
 
-        val remainingMillis = computeRemainingResetMillis(
-            rawText = rawText,
-            nowMillis = nowMillis,
-            updatedAt = updatedAt,
-            isFiveHourWindow = isFiveHourWindow
-        )
-        if (remainingMillis != null && remainingMillis <= 0L) {
-            return "초기화됨 (0%)"
-        }
-
-        val cleaned = cleanResetText(rawText)
+        val cleaned = initialCleaned
             .replace(RESET_PREFIX_NOISE_REGEX, "")
             .replace(RESET_SUFFIX_NOISE_REGEX, "")
             .trim()
         if (cleaned.isBlank()) return ""
 
+        if (cleaned.contains("주기") ||
+            initialCleaned == DEFAULT_FIVE_HOUR_RESET_TEXT ||
+            initialCleaned == DEFAULT_WEEKLY_RESET_TEXT
+        ) {
+            return cleaned.ifBlank { initialCleaned }
+        }
+
         if (RELATIVE_TIME_REGEX.containsMatchIn(cleaned)) {
-            if (updatedAt > 0L && updatedAt <= nowMillis && remainingMillis != null && remainingMillis > 0L) {
-                return formatRemainingDuration(remainingMillis)
+            val daysMatch = RELATIVE_DAYS_REGEX.find(cleaned)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+            val targetMillis = computeNextResetTargetMillis(rawText, nowMillis, updatedAt, isFiveHourWindow)
+            if (targetMillis != null && updatedAt > 0L && updatedAt <= nowMillis) {
+                val targetCal = Calendar.getInstance().apply { timeInMillis = targetMillis }
+                val hourStr = targetCal.get(Calendar.HOUR_OF_DAY).toString().padStart(2, '0')
+                val minuteStr = targetCal.get(Calendar.MINUTE).toString().padStart(2, '0')
+                val timeStr = if (daysMatch > 0L) {
+                    val month = targetCal.get(Calendar.MONTH) + 1
+                    val day = targetCal.get(Calendar.DAY_OF_MONTH)
+                    "$month/$day/$hourStr:$minuteStr"
+                } else {
+                    "$hourStr:$minuteStr"
+                }
+                val remainingMillis = targetMillis - nowMillis
+                val durationStr = formatRemainingDuration(remainingMillis)
+                return "$timeStr ($durationStr)"
             }
             return cleaned
         }
 
         val parsedTime = parseTargetTime(cleaned)
         if (parsedTime != null) {
-            val shortTime = parsedTime.formatFormattedTime()
-            val durationText = if (remainingMillis != null && remainingMillis > 0L) {
-                formatRemainingDuration(remainingMillis)
-            } else if (updatedAt <= 0L) {
-                computeRemainingDurationText(parsedTime, nowMillis)
-            } else {
-                null
-            }
-            return if (!durationText.isNullOrBlank()) {
-                "$shortTime ($durationText)"
-            } else {
-                shortTime
+            val targetMillis = computeNextResetTargetMillis(rawText, nowMillis, updatedAt, isFiveHourWindow)
+            if (targetMillis != null) {
+                val nextCal = Calendar.getInstance().apply { timeInMillis = targetMillis }
+                val hourStr = nextCal.get(Calendar.HOUR_OF_DAY).toString().padStart(2, '0')
+                val minuteStr = nextCal.get(Calendar.MINUTE).toString().padStart(2, '0')
+                val hasMonthDay = parsedTime.month != null && parsedTime.day != null
+                val timePart = if (hasMonthDay) {
+                    val month = nextCal.get(Calendar.MONTH) + 1
+                    val day = nextCal.get(Calendar.DAY_OF_MONTH)
+                    "$month/$day/$hourStr:$minuteStr"
+                } else {
+                    "$hourStr:$minuteStr"
+                }
+                val remainingMillis = targetMillis - nowMillis
+                val durationText = formatRemainingDuration(remainingMillis)
+                return "$timePart ($durationText)"
             }
         }
 
-        return cleaned.ifBlank { cleanResetText(rawText) }
+        return cleaned.ifBlank { initialCleaned }
     }
 
     private fun formatRemainingDuration(diffMillis: Long): String {

@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 추천 후보 바 국소 격리 관찰, 제어 바 및 상태 화면을 구성합니다.
+// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 상용구 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 제어 바 및 상태 화면을 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -96,7 +96,8 @@ internal fun AutomationScreen(
                             canRun = uiState.canRun,
                             isRunning = uiState.isRunning,
                             automationState = automationBarUiState.automationState,
-                            isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER
+                            isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER,
+                            hasPreStartMemoryCleanup = uiState.shouldAutoCleanMemoryBeforeStart
                         )
                     }
 
@@ -132,8 +133,8 @@ internal fun AutomationScreen(
                             verticalArrangement = Arrangement.spacedBy(AutomationScreenSectionSpacing)
                         ) {
                             IsolatedPromptSuggestionBar(
-                                activeSuggestionsFlow = actions.activeSuggestions,
-                                onSuggestionClick = actions::applySuggestion
+                                activeSuggestionsFlow = actions.promptEditor.activeSuggestions,
+                                onSuggestionClick = actions.promptEditor::applySuggestion
                             )
 
                             KeyboardPromptAccessoryBar(
@@ -191,6 +192,7 @@ internal fun AutomationScreen(
                     onAddSnippet = actions::addPromptSnippet,
                     onUpdateSnippet = actions::updatePromptSnippet,
                     onDeleteSnippet = actions::deletePromptSnippet,
+                    onBatchReplaceSnippets = actions::batchReplacePromptSnippets,
                     onDismiss = actions::dismissPromptSnippetDialog
                 )
             }
@@ -210,6 +212,7 @@ internal fun AutomationScreen(
                     onRefreshAll = actions::refreshAllGeminiUsage,
                     onSwitchAccount = actions::switchGeminiAccount,
                     onMoveAccountGroup = actions::moveGeminiAccountGroup,
+                    onToggleManualExhaustion = actions::toggleGeminiAccountManualExhaustion,
                     onDismiss = actions::closeMultiGeminiUsageDialog
                 )
             }

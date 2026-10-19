@@ -87,20 +87,6 @@ class ThemePaletteStore(
         }
     }
 
-    suspend fun setPaletteAsync(palette: AppThemePalette) {
-        _currentPalette.value = palette
-        dataStore.edit { preferences ->
-            preferences[KEY_THEME_PALETTE] = palette.id
-        }
-    }
-
-    suspend fun setThemeModeAsync(mode: AppThemeMode) {
-        _currentMode.value = mode
-        dataStore.edit { preferences ->
-            preferences[KEY_THEME_MODE] = mode.id
-        }
-    }
-
     companion object {
         const val DATASTORE_NAME = "theme_preferences"
         val KEY_THEME_PALETTE = stringPreferencesKey("selected_theme_palette")

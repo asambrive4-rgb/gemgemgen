@@ -513,6 +513,7 @@ class AppMaintenanceUseCaseTest {
         override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
         override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
         override suspend fun send(request: RemoteAutomationRequest) = Unit
+        override fun updateRepeatCount(requestId: String, repeatCount: Int) = Unit
         override fun forceStop(requestId: String?) = Unit
 
         override suspend fun cleanMemory(): RemoteActionResult {

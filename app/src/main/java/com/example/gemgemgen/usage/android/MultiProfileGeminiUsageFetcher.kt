@@ -1,4 +1,4 @@
-// 역할: 단일 공유 WebView와 계정별 격리 쿠키 저장소(CookieVault)를 사용해 RAM 점유를 최소화하고, 불필요한 리소스를 차단해 제미나이 사용량 DOM을 빠르게 스크래핑합니다.
+// 역할: 단일 공유 WebView와 계정별 격리 쿠키 저장소(CookieVault)로 제미나이 사용량 DOM을 빠르게 스크래핑하고, 인앱 로그인 WebView의 쿠키 세션(준비·복구·저장·정리·폐기)도 담당합니다.
 package com.example.gemgemgen.usage.android
 
 import android.annotation.SuppressLint
@@ -342,7 +342,7 @@ class GeminiAccountCookieVault(
 class MultiProfileGeminiUsageFetcher(
     context: Context,
     private val nowProvider: () -> Long = System::currentTimeMillis
-) : MultiProfileGeminiUsageRemoteDataSource {
+) : MultiProfileGeminiUsageRemoteDataSource, GeminiAccountLoginSessionHandler {
 
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -424,10 +424,11 @@ class MultiProfileGeminiUsageFetcher(
      * 중요: 쿠키 세션 전환이 `loadUrl()` 호출보다 반드시 먼저 실행되도록
      * 메인 스레드에서 호출된 경우 지연(post) 없이 즉시 동기 실행합니다.
      */
-    fun prepareInteractiveLoginWebView(
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun prepareLoginWebView(
         webView: WebView,
         profile: GeminiAccountProfile,
-        clearExistingProfileCookies: Boolean = false
+        clearExistingCookies: Boolean
     ) {
         val prepareAction = {
             val profileName = profile.webViewProfileName
@@ -435,12 +436,20 @@ class MultiProfileGeminiUsageFetcher(
             cookieManager.setAcceptCookie(true)
             cookieManager.setAcceptThirdPartyCookies(webView, true)
 
+            webView.settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                cacheMode = WebSettings.LOAD_DEFAULT
+                userAgentString = sanitizeWebViewUserAgent(userAgentString)
+            }
+
             val previousProfile = activeCookieProfileName
             if (!previousProfile.isNullOrBlank() && previousProfile != profileName) {
                 snapshotActiveCookiesOnMain(previousProfile)
             }
 
-            if (clearExistingProfileCookies) {
+            if (clearExistingCookies) {
                 cookieVault.clearProfile(profileName)
                 clearCookieManagerNow(cookieManager)
                 sanitizedProfilesInSession.add(profileName)
@@ -461,7 +470,7 @@ class MultiProfileGeminiUsageFetcher(
      * 인앱 로그인 WebView에서 Google `CookieMismatch`(쿠키 설정 문제) 페이지 감지 시
      * 오염된 쿠키를 즉시 비우고 깨끗한 로그인 세션으로 복구합니다.
      */
-    fun recoverFromCookieMismatchOnMain(
+    override fun recoverFromCookieMismatch(
         profile: GeminiAccountProfile,
         webView: WebView
     ) {
@@ -491,7 +500,7 @@ class MultiProfileGeminiUsageFetcher(
     /**
      * 인앱 로그인 WebView에서 로그인 진행 중 또는 완료 시점의 쿠키를 해당 계정의 독립 프로필 저장소에 즉시 반영합니다.
      */
-    fun commitInteractiveLoginSession(profile: GeminiAccountProfile) {
+    override fun commitLoginSession(profile: GeminiAccountProfile) {
         val commitAction = {
             activeCookieProfileName = profile.webViewProfileName
             snapshotActiveCookiesOnMain(profile.webViewProfileName)
@@ -500,6 +509,56 @@ class MultiProfileGeminiUsageFetcher(
             commitAction()
         } else {
             mainHandler.post(commitAction)
+        }
+    }
+
+    /**
+     * 로그인 WebView를 정리합니다. 공유 CookieManager를 쓰는 새로고침과 경합하지 않도록
+     * (필요 시 쿠키를 먼저 저장한 뒤) WebView를 완전히 파괴합니다.
+     */
+    override fun releaseLoginWebView(
+        webView: WebView,
+        profile: GeminiAccountProfile,
+        commitCookies: Boolean
+    ) {
+        val releaseAction = {
+            if (commitCookies) {
+                commitLoginSession(profile)
+            }
+            runCatching {
+                CookieManager.getInstance().flush()
+                webView.stopLoading()
+                webView.loadUrl(BLANK_URL)
+                webView.clearHistory()
+                (webView.parent as? ViewGroup)?.removeView(webView)
+                webView.destroy()
+            }
+            Unit
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            releaseAction()
+        } else {
+            mainHandler.post(releaseAction)
+        }
+    }
+
+    /**
+     * 저장하지 않고 취소한 신규 계정의 쿠키(금고 + 현재 CookieManager)를 폐기합니다.
+     */
+    override fun discardLoginSession(profile: GeminiAccountProfile) {
+        val discardAction = {
+            val profileName = profile.webViewProfileName
+            cookieVault.clearProfile(profileName)
+            sanitizedProfilesInSession.remove(profileName)
+            if (activeCookieProfileName == profileName) {
+                clearCookieManagerNow(CookieManager.getInstance())
+                activeCookieProfileName = null
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            discardAction()
+        } else {
+            mainHandler.post(discardAction)
         }
     }
 
@@ -891,7 +950,8 @@ class MultiProfileGeminiUsageFetcher(
             activeInstance = instance
         }
 
-        fun currentInstance(): MultiProfileGeminiUsageFetcher? = activeInstance
+        fun loginSessionHandler(): GeminiAccountLoginSessionHandler =
+            checkNotNull(activeInstance) { "MultiProfileGeminiUsageFetcher가 아직 생성되지 않았습니다." }
 
         fun sanitizeWebViewUserAgent(rawUserAgent: String?): String {
             if (rawUserAgent.isNullOrBlank()) {

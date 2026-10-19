@@ -51,10 +51,6 @@ class ExecuteAutomationLoopUseCase(
     private val _runState = MutableStateFlow<AutomationRunState>(AutomationRunState.Idle)
     val runState: StateFlow<AutomationRunState> = _runState.asStateFlow()
 
-    fun isSessionRunning(): Boolean {
-        return currentRun?.finished == false && _runState.value is AutomationRunState.Running
-    }
-
     suspend fun run(
         request: AutomationRunRequest,
         onStateChange: ((AutomationRunState) -> Unit)? = null

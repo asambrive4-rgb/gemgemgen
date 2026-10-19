@@ -21,6 +21,7 @@ import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
+import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
@@ -1506,17 +1507,23 @@ class AnalysisFeatureTest {
             grokAuth = grokAuth,
             dispatchers = dispatchers
         )
+        val resolveTarget = ResolveAnalysisTargetUseCase(
+            aiGateway = aiGateway,
+            credentialResolver = credentialResolver,
+            dispatchers = dispatchers
+        )
+        val generateTxtUseCase = GenerateAnalysisTxtUseCase(
+            aiGateway = aiGateway,
+            credentialResolver = credentialResolver,
+            dispatchers = dispatchers
+        )
+        val executeGeneration = ExecuteAnalysisGenerationUseCase(
+            resolveTarget = resolveTarget,
+            generateTxtUseCase = generateTxtUseCase,
+            dispatchers = dispatchers
+        )
         return AnalysisViewModel(
-            resolveTarget = ResolveAnalysisTargetUseCase(
-                aiGateway = aiGateway,
-                credentialResolver = credentialResolver,
-                dispatchers = dispatchers
-            ),
-            generateTxtUseCase = GenerateAnalysisTxtUseCase(
-                aiGateway = aiGateway,
-                credentialResolver = credentialResolver,
-                dispatchers = dispatchers
-            ),
+            executeGeneration = executeGeneration,
             keyManager = ManageGeminiApiKeysUseCase(
                 repository = keyRepository,
                 dispatchers = dispatchers

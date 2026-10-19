@@ -12,6 +12,7 @@ import com.example.gemgemgen.analysis.android.AndroidGrokBillingGateway
 import com.example.gemgemgen.analysis.android.AndroidGrokOAuthGateway
 import com.example.gemgemgen.analysis.android.RoutingAnalysisAiGateway
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
+import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
@@ -176,15 +177,20 @@ class AndroidAppContainer(context: Context) {
     }
 
     val analysisViewModelFactory: ViewModelProvider.Factory = factory<AnalysisViewModel> {
+        val resolveTarget = ResolveAnalysisTargetUseCase(
+            aiGateway = analysisAiGateway,
+            credentialResolver = analysisCredentialResolver
+        )
+        val generateTxtUseCase = GenerateAnalysisTxtUseCase(
+            aiGateway = analysisAiGateway,
+            credentialResolver = analysisCredentialResolver
+        )
+        val executeGeneration = ExecuteAnalysisGenerationUseCase(
+            resolveTarget = resolveTarget,
+            generateTxtUseCase = generateTxtUseCase
+        )
         AnalysisViewModel(
-            resolveTarget = ResolveAnalysisTargetUseCase(
-                aiGateway = analysisAiGateway,
-                credentialResolver = analysisCredentialResolver
-            ),
-            generateTxtUseCase = GenerateAnalysisTxtUseCase(
-                aiGateway = analysisAiGateway,
-                credentialResolver = analysisCredentialResolver
-            ),
+            executeGeneration = executeGeneration,
             keyManager = ManageGeminiApiKeysUseCase(geminiApiKeyRepository),
             grokAuth = grokAuthManager,
             clipboardGateway = clipboardGateway,

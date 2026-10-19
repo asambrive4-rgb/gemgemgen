@@ -1,4 +1,4 @@
-// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션 격리를 검증합니다.
+// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 수동 소진/복구 및 대표 자동 위임, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션 격리를 검증합니다.
 package com.example.gemgemgen
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -7,6 +7,8 @@ import com.example.gemgemgen.usage.android.DataStoreMultiGeminiUsageDataSource
 import com.example.gemgemgen.usage.android.GeminiAccountCookieVault
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
+import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
+import com.example.gemgemgen.usage.domain.GeminiQuotaExhaustionReason
 import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.domain.GeminiUsageWarningLevel
 import com.example.gemgemgen.usage.usecase.GeminiUsageFetchResult
@@ -531,6 +533,85 @@ class MultiGeminiUsageRepositoryTest {
         assertEquals(listOf("main_1", "sub_1", "sub_2"), fetchedIds)
         assertEquals(12, (results["main_2"] as? GeminiUsageState.Success)?.fiveHourPercent)
         assertTrue("새로고침 완료 후 유휴 WebView 리소스 해제가 호출되어야 함", releaseCalls.get() >= 1)
+    }
+
+    @Test
+    fun setAccountManuallyExhausted_movesAccountToExhaustedAndDelegatesRepresentative() = runBlocking {
+        val fakeRemote = object : MultiProfileGeminiUsageRemoteDataSource {
+            override suspend fun fetchUsage(profile: GeminiAccountProfile): GeminiUsageFetchResult {
+                return GeminiUsageFetchResult(
+                    usageState = GeminiUsageState.Success(
+                        fiveHourPercent = 10,
+                        fiveHourResetText = "3시간 후",
+                        weeklyPercent = 20,
+                        weeklyResetText = "4일 후",
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource()
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        repository.addAccount(alias = "계정 1", accountId = "acc_1", autoRefresh = true)
+        repository.addAccount(alias = "계정 2", accountId = "acc_2", autoRefresh = true)
+
+        assertEquals("acc_1", repository.state.value.selectedAccountId)
+
+        // acc_1을 수동 사용불가(내림) 처리
+        val updated = repository.setAccountManuallyExhausted("acc_1", true)
+        assertNotNull(updated)
+        assertTrue(updated!!.isManuallyExhausted(System.currentTimeMillis()))
+
+        val state = repository.state.value
+        // 방안 X: 대표 계정이었던 acc_1이 소진 목록으로 내려가면서, 사용 가능한 1위 계정인 acc_2로 대표 계정 자동 위임
+        assertEquals("acc_2", state.selectedAccountId)
+
+        val acc1Entry = state.accounts.first { it.profile.id == "acc_1" }
+        assertTrue(acc1Entry.isQuotaExhausted())
+        assertEquals(GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED, acc1Entry.quotaExhaustionReason())
+
+        // acc_1을 다시 사용 가능으로 복구
+        val recovered = repository.setAccountManuallyExhausted("acc_1", false)
+        assertNotNull(recovered)
+        assertFalse(recovered!!.isManuallyExhausted(System.currentTimeMillis()))
+        assertFalse(repository.state.value.accounts.first { it.profile.id == "acc_1" }.isQuotaExhausted())
+    }
+
+    @Test
+    fun manualExhaustion_automaticallyRecoversWhenResetTimeExpires() = runBlocking {
+        val now = 1_000_000L
+        val entry = GeminiAccountUsageEntry(
+            profile = GeminiAccountProfile(
+                id = "acc_test",
+                alias = "테스트",
+                sortOrder = 0,
+                manualExhaustedUntilMillis = now + 60 * 60 * 1000L
+            ),
+            usageState = GeminiUsageState.Success(
+                fiveHourPercent = 95,
+                fiveHourResetText = "1시간 후",
+                weeklyPercent = 30,
+                weeklyResetText = "3일 후",
+                updatedAt = now
+            )
+        )
+
+        // 1시간 뒤 초기화 전 (30분 경과) -> 여전히 수동 소진 상태
+        val duringWindow = now + 30 * 60 * 1000L
+        assertTrue(entry.isQuotaExhausted(duringWindow))
+        assertEquals(GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED, entry.quotaExhaustionReason(duringWindow))
+
+        // 방안 A: 1시간 10분 경과하여 5시간 리셋 시간이 지남 -> 자동 복구되어 정상(null) 반환
+        val afterReset = now + 70 * 60 * 1000L
+        assertFalse(entry.isQuotaExhausted(afterReset))
+        assertNull(entry.quotaExhaustionReason(afterReset))
     }
 
     private class InMemoryMultiUsageLocalDataSource(

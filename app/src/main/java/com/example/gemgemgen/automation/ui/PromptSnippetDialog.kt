@@ -1,4 +1,4 @@
-// 역할: 2-in-1 조약돌 세그먼트 탭(보관함 ↔ 등록/수정)으로 상용구를 TextFieldState 기반으로 조회, 추가, 수정, 삭제하고 클립보드와 연동하는 다이얼로그를 제공합니다.
+// 역할: 3-in-1 조약돌 세그먼트 탭(보관함 ↔ 등록/수정 ↔ 찾아 바꾸기)으로 상용구를 조회, 추가, 수정, 삭제하고 본문 일괄 치환을 제공하는 다이얼로그입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -77,11 +77,12 @@ import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlinx.coroutines.delay
 
 /**
- * 상용구 다이얼로그 탭 종류 (보관함 vs 등록/수정 폼)
+ * 상용구 다이얼로그 탭 종류 (보관함 vs 등록/수정 폼 vs 찾아 바꾸기)
  */
 private enum class SnippetTab {
-    VAULT, // 보관함 (목록 및 빠른 복사/삭제/상세)
-    FORM   // 새 상용구 등록 또는 기존 상용구 수정 폼
+    VAULT,        // 보관함 (목록 및 빠른 복사/삭제/상세)
+    FORM,         // 새 상용구 등록 또는 기존 상용구 수정 폼
+    FIND_REPLACE  // 단어 검색 및 본문 일괄 변경
 }
 
 /**
@@ -95,6 +96,7 @@ fun PromptSnippetDialog(
     onAddSnippet: (shortcut: String, content: String) -> Unit,
     onUpdateSnippet: (id: String, shortcut: String, content: String) -> Unit = { _, _, _ -> },
     onDeleteSnippet: (id: String) -> Unit,
+    onBatchReplaceSnippets: (searchText: String, replacementText: String) -> Unit = { _, _ -> },
     onDismiss: () -> Unit
 ) {
     val clipboardGateway = rememberClipboardGateway()
@@ -133,6 +135,13 @@ fun PromptSnippetDialog(
         contentInput = ""
         errorMessage = ""
         currentTab = SnippetTab.VAULT
+    }
+
+    // 찾아 바꾸기 탭 전환 핸들러
+    val openFindReplace: () -> Unit = {
+        editingSnippet = null
+        errorMessage = ""
+        currentTab = SnippetTab.FIND_REPLACE
     }
 
     NeuModalDialogFrame(
@@ -192,21 +201,22 @@ fun PromptSnippetDialog(
             }
         }
 
-        // 2. 조약돌 세그먼트 탭바 (보관함 vs 등록/수정)
+        // 2. 조약돌 세그먼트 탭바 (보관함 vs 등록/수정 vs 찾아 바꾸기)
         NeuSegmentedTabBar(
-            items = listOf(SnippetTab.VAULT, SnippetTab.FORM),
+            items = listOf(SnippetTab.VAULT, SnippetTab.FORM, SnippetTab.FIND_REPLACE),
             selectedItem = currentTab,
             onItemSelected = { tab ->
-                if (tab == SnippetTab.VAULT) {
-                    backToVault()
-                } else if (currentTab != SnippetTab.FORM) {
-                    startNew()
+                when (tab) {
+                    SnippetTab.VAULT -> backToVault()
+                    SnippetTab.FORM -> if (currentTab != SnippetTab.FORM) startNew()
+                    SnippetTab.FIND_REPLACE -> openFindReplace()
                 }
             },
             itemLabel = { tab ->
                 when (tab) {
                     SnippetTab.VAULT -> "보관함 (${snippets.size})"
-                    SnippetTab.FORM -> if (editingSnippet != null) "✏️ 상용구 수정" else "+ 새 상용구"
+                    SnippetTab.FORM -> if (editingSnippet != null) "✏️ 수정" else "+ 새 상용구"
+                    SnippetTab.FIND_REPLACE -> "🔍 찾아 바꾸기"
                 }
             },
             height = 36.dp,
@@ -278,6 +288,13 @@ fun PromptSnippetDialog(
                                 }
                             }
                         }
+                    )
+                }
+                SnippetTab.FIND_REPLACE -> {
+                    PromptSnippetFindReplaceView(
+                        snippets = snippets,
+                        onBatchReplace = onBatchReplaceSnippets,
+                        onCancel = backToVault
                     )
                 }
             }
@@ -354,22 +371,24 @@ private fun SnippetDialogTabBar(
     isEditing: Boolean,
     onSelectVault: () -> Unit,
     onSelectForm: () -> Unit,
+    onSelectFindReplace: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     NeuSegmentedTabBar(
-        items = listOf(SnippetTab.VAULT, SnippetTab.FORM),
+        items = listOf(SnippetTab.VAULT, SnippetTab.FORM, SnippetTab.FIND_REPLACE),
         selectedItem = currentTab,
         onItemSelected = { tab ->
-            if (tab == SnippetTab.VAULT) {
-                onSelectVault()
-            } else {
-                onSelectForm()
+            when (tab) {
+                SnippetTab.VAULT -> onSelectVault()
+                SnippetTab.FORM -> onSelectForm()
+                SnippetTab.FIND_REPLACE -> onSelectFindReplace()
             }
         },
         itemLabel = { tab ->
             when (tab) {
                 SnippetTab.VAULT -> "보관함 ($snippetCount)"
-                SnippetTab.FORM -> if (isEditing) "✏️ 상용구 수정" else "+ 새 상용구"
+                SnippetTab.FORM -> if (isEditing) "✏️ 수정" else "+ 새 상용구"
+                SnippetTab.FIND_REPLACE -> "🔍 찾아 바꾸기"
             }
         },
         height = 36.dp,

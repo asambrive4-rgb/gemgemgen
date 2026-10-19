@@ -54,18 +54,9 @@ class WildcardViewModel(
             endFileOperation = ::endFileOperation
         )
 
-    override fun requestClassify() = classifyCoordinator.requestClassify()
-    override fun onClassifyCriteriaChange(value: String) = classifyCoordinator.onClassifyCriteriaChange(value)
-    override fun onClassifyProviderSelected(provider: com.example.gemgemgen.analysis.domain.AnalysisProvider) = classifyCoordinator.onClassifyProviderSelected(provider)
-    override fun onClassifyModelSelected(modelId: String) = classifyCoordinator.onClassifyModelSelected(modelId)
-    override fun dismissClassifyCriteriaDialog() = classifyCoordinator.dismissClassifyCriteriaDialog()
-    override fun runClassify() = classifyCoordinator.runClassify()
-    override fun dismissClassifyPreview() = classifyCoordinator.dismissClassifyPreview()
-    override fun onClassifyFileNameChange(index: Int, value: String) = classifyCoordinator.onClassifyFileNameChange(index, value)
-    override fun onToggleClassifyFileNameEdit(index: Int) = classifyCoordinator.onToggleClassifyFileNameEdit(index)
-    override fun saveClassifyResult(overwrite: Boolean) = classifyCoordinator.saveClassifyResult(overwrite)
-    override fun confirmClassifyOverwrite() = classifyCoordinator.confirmClassifyOverwrite()
-    override fun dismissClassifyOverwrite() = classifyCoordinator.dismissClassifyOverwrite()
+    override val classify: WildcardClassifyActions
+        get() = classifyCoordinator
+
 
     init {
         refreshFiles(openFirstFile = true)

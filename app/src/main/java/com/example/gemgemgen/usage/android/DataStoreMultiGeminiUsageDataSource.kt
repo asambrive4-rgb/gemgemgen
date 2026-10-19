@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore와 JSON 직렬화를 사용해 다중 제미나이 계정 프로필 목록, 대표 계정 선택 상태 및 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
+// 역할: Jetpack DataStore와 JSON 직렬화를 사용해 다중 제미나이 계정 프로필 목록(수동 소진 플래그 포함), 대표 계정 선택 상태 및 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
 package com.example.gemgemgen.usage.android
 
 import android.content.Context
@@ -169,6 +169,7 @@ class DataStoreMultiGeminiUsageDataSource(
         private const val FIELD_WEBVIEW_PROFILE_NAME = "webview_profile_name"
         private const val FIELD_CREATED_AT = "created_at"
         private const val FIELD_GROUP = "group"
+        private const val FIELD_MANUAL_EXHAUSTED_UNTIL = "manual_exhausted_until"
 
         private const val FIELD_FIVE_HOUR_PERCENT = "five_hour_percent"
         private const val FIELD_FIVE_HOUR_RESET_TEXT = "five_hour_reset_text"
@@ -188,6 +189,7 @@ class DataStoreMultiGeminiUsageDataSource(
                             put(FIELD_WEBVIEW_PROFILE_NAME, profile.webViewProfileName)
                             put(FIELD_CREATED_AT, profile.createdAt)
                             put(FIELD_GROUP, profile.group.name)
+                            put(FIELD_MANUAL_EXHAUSTED_UNTIL, profile.manualExhaustedUntilMillis)
                         }
                     )
                 }
@@ -216,6 +218,7 @@ class DataStoreMultiGeminiUsageDataSource(
                     val groupStr = obj[FIELD_GROUP]?.jsonPrimitive?.content?.trim().orEmpty()
                     val group: GeminiAccountGroup = runCatching { GeminiAccountGroup.valueOf(groupStr) }
                         .getOrDefault(GeminiAccountGroup.MAIN)
+                    val manualExhaustedUntilMillis = obj[FIELD_MANUAL_EXHAUSTED_UNTIL]?.jsonPrimitive?.longOrNull ?: 0L
 
                     GeminiAccountProfile(
                         id = id,
@@ -224,7 +227,8 @@ class DataStoreMultiGeminiUsageDataSource(
                         sortOrder = sortOrder,
                         webViewProfileName = webViewProfileName,
                         createdAt = createdAt,
-                        group = group
+                        group = group,
+                        manualExhaustedUntilMillis = manualExhaustedUntilMillis
                     )
                 }.sortedBy { it.sortOrder }
                     .mapIndexed { idx, profile -> profile.copy(sortOrder = idx) }

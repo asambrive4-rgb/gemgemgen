@@ -154,7 +154,7 @@ internal fun WildcardScreen(
                         )
                         if (selectedFile != null && !uiState.isLineSelectionMode) {
                             TextButton(
-                                onClick = actions::requestClassify,
+                                onClick = actions.classify::requestClassify,
                                 enabled = uiState.canRequestClassify
                             ) {
                                 Text(

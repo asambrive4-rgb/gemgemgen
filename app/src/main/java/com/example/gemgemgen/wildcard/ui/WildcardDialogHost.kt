@@ -128,9 +128,9 @@ internal fun WildcardDialogHost(
             is WildcardDialogType.DeleteConfirm -> actions.dismissDeleteConfirm()
             WildcardDialogType.UnsavedChanges -> actions.cancelPendingAction()
             WildcardDialogType.ClassifyLoading -> Unit // 로딩 중 dismiss 방지
-            is WildcardDialogType.ClassifyCriteria -> actions.dismissClassifyCriteriaDialog()
-            is WildcardDialogType.ClassifyPreview -> actions.dismissClassifyPreview()
-            is WildcardDialogType.ClassifyOverwrite -> actions.dismissClassifyOverwrite()
+            is WildcardDialogType.ClassifyCriteria -> actions.classify.dismissClassifyCriteriaDialog()
+            is WildcardDialogType.ClassifyPreview -> actions.classify.dismissClassifyPreview()
+            is WildcardDialogType.ClassifyOverwrite -> actions.classify.dismissClassifyOverwrite()
         }
     }
 
@@ -182,9 +182,9 @@ internal fun WildcardDialogHost(
             )
             WildcardDialogType.UnsavedChanges -> UnsavedChangesContent(actions)
             WildcardDialogType.ClassifyLoading -> ClassifyLoadingContent()
-            is WildcardDialogType.ClassifyCriteria -> ClassifyCriteriaContent(targetDialog, actions)
-            is WildcardDialogType.ClassifyPreview -> ClassifyPreviewContent(targetDialog, actions)
-            is WildcardDialogType.ClassifyOverwrite -> ClassifyOverwriteContent(targetDialog, actions)
+            is WildcardDialogType.ClassifyCriteria -> ClassifyCriteriaContent(targetDialog, actions.classify)
+            is WildcardDialogType.ClassifyPreview -> ClassifyPreviewContent(targetDialog, actions.classify)
+            is WildcardDialogType.ClassifyOverwrite -> ClassifyOverwriteContent(targetDialog, actions.classify)
         }
     }
 }
@@ -314,7 +314,7 @@ private fun ClassifyLoadingContent() {
 @Composable
 private fun ClassifyCriteriaContent(
     dialog: WildcardDialogType.ClassifyCriteria,
-    actions: WildcardScreenActions
+    actions: WildcardClassifyActions
 ) {
     val criteriaState = rememberSyncedTextFieldState(
         value = dialog.criteria,
@@ -382,7 +382,7 @@ private fun ClassifyCriteriaContent(
 @Composable
 private fun ClassifyPreviewContent(
     dialog: WildcardDialogType.ClassifyPreview,
-    actions: WildcardScreenActions
+    actions: WildcardClassifyActions
 ) {
     val criteriaState = rememberSyncedTextFieldState(
         value = dialog.criteria,
@@ -547,7 +547,7 @@ private fun ClassifyPreviewContent(
 @Composable
 private fun ClassifyOverwriteContent(
     dialog: WildcardDialogType.ClassifyOverwrite,
-    actions: WildcardScreenActions
+    actions: WildcardClassifyActions
 ) {
     NeuConfigDialogContent(
         title = "파일 덮어쓰기",

@@ -170,6 +170,7 @@ class RemoteAutomationReceiverService : Service() {
                 is RemoteProtocolMessage.DisconnectRequest -> handleDisconnect(message, writer)
                 is RemoteProtocolMessage.RunRequest -> handleRun(message, writer, socket)
                 is RemoteProtocolMessage.CancelRequest -> handleCancel(message)
+                is RemoteProtocolMessage.UpdateRepeatCountRequest -> handleUpdateRepeatCount(message)
                 is RemoteProtocolMessage.CleanMemoryRequest -> handleCleanMemory(message, writer)
                 is RemoteProtocolMessage.SwitchAccountRequest -> handleSwitchAccount(message, writer)
                 else -> Unit
@@ -330,6 +331,14 @@ class RemoteAutomationReceiverService : Service() {
             withContext(Dispatchers.Main.immediate) {
                 executeRemoteAutomation.cancel()
             }
+        }
+    }
+
+    private suspend fun handleUpdateRepeatCount(message: RemoteProtocolMessage.UpdateRepeatCountRequest) {
+        if (!isAuthenticated(message.senderId, message.token)) return
+        if (activeSession?.requestId != message.requestId) return
+        withContext(Dispatchers.Main.immediate) {
+            executeRemoteAutomation.updateRepeatCount(message.repeatCount)
         }
     }
 

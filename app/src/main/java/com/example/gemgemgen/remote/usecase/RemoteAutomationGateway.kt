@@ -15,6 +15,7 @@ interface RemoteAutomationGateway {
     suspend fun disconnect(): RemoteActionResult
     suspend fun send(request: RemoteAutomationRequest)
     fun forceStop(requestId: String?)
+    fun updateRepeatCount(requestId: String, repeatCount: Int)
     suspend fun cleanMemory(): RemoteActionResult
     suspend fun switchGeminiAccount(email: String, alias: String): RemoteActionResult = RemoteActionResult.Success
 }

@@ -294,6 +294,24 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         }
     }
 
+    override fun updateRepeatCount(requestId: String, repeatCount: Int) {
+        if (!isCurrentRequest(requestId)) return
+        val target = endpoint ?: return
+        val paired = store.pairedReceiver() ?: return
+        scope.launch(Dispatchers.IO) {
+            requestOnce(
+                target = target,
+                request = RemoteProtocolMessage.UpdateRepeatCountRequest(
+                    senderId = store.installationId(),
+                    token = paired.token,
+                    requestId = requestId,
+                    repeatCount = repeatCount
+                ),
+                readResponse = false
+            )
+        }
+    }
+
     override suspend fun cleanMemory(): RemoteActionResult = withContext(Dispatchers.IO) {
         val target = endpoint
             ?: return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")

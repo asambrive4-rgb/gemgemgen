@@ -34,7 +34,7 @@ class AutomationViewModelTest {
     fun importPromptFromClipboard_updatesPromptTemplate() {
         val viewModel = viewModel(clipboardText = "clipboard prompt")
 
-        viewModel.importPromptFromClipboard()
+        viewModel.promptEditor.importPromptFromClipboard()
 
         assertEquals("clipboard prompt", viewModel.uiState.value.promptTemplate)
         assertEquals(
@@ -46,7 +46,7 @@ class AutomationViewModelTest {
     @Test
     fun insertTopInstruction_prependsWithBlankLineBeforeExistingBody() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("user body")
+        viewModel.promptEditor.onPromptTemplateChange("user body")
 
         viewModel.insertTopInstruction()
 
@@ -65,7 +65,7 @@ class AutomationViewModelTest {
     @Test
     fun insertTopInstruction_doubleTapPrependsAgain() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("body")
+        viewModel.promptEditor.onPromptTemplateChange("body")
 
         viewModel.insertTopInstruction()
         val once = viewModel.uiState.value.promptTemplate
@@ -111,7 +111,7 @@ class AutomationViewModelTest {
     @Test
     fun insertBottomInstruction_withConfiguredBottom_appendsToExistingPrompt() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("user body")
+        viewModel.promptEditor.onPromptTemplateChange("user body")
         viewModel.saveInstructionConfig(
             PromptInstructionConfig(
                 topInstruction = "Custom Top",
@@ -148,8 +148,8 @@ class AutomationViewModelTest {
         val clipboardGateway = FakeClipboardGateway()
         val viewModel = viewModel(clipboardGateway = clipboardGateway)
 
-        viewModel.onPromptTemplateChange("prompt to copy")
-        viewModel.copyPromptToClipboard()
+        viewModel.promptEditor.onPromptTemplateChange("prompt to copy")
+        viewModel.promptEditor.copyPromptToClipboard()
 
         assertEquals("prompt to copy", clipboardGateway.writtenText)
     }
@@ -159,8 +159,8 @@ class AutomationViewModelTest {
         val clipboardGateway = FakeClipboardGateway()
         val viewModel = viewModel(clipboardGateway = clipboardGateway)
 
-        viewModel.onPromptTemplateChange("   ")
-        viewModel.copyPromptToClipboard()
+        viewModel.promptEditor.onPromptTemplateChange("   ")
+        viewModel.promptEditor.copyPromptToClipboard()
 
         assertEquals("", clipboardGateway.writtenText)
     }
@@ -168,9 +168,9 @@ class AutomationViewModelTest {
     @Test
     fun replacePromptTemplateSegment_preservesOtherEditsAndReplacesSegment() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("quality, red hair and blue dress, masterpiece")
+        viewModel.promptEditor.onPromptTemplateChange("quality, red hair and blue dress, masterpiece")
 
-        val replacedStart = viewModel.replacePromptTemplateSegment(
+        val replacedStart = viewModel.promptEditor.replacePromptTemplateSegment(
             expectedSegment = "blue dress",
             replacement = "검은 원피스",
             preferredStartIndex = 13
@@ -186,9 +186,9 @@ class AutomationViewModelTest {
     @Test
     fun replacePromptTemplateSegment_doesNotChangePromptWhenSegmentIsMissing() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("사용자가 수정한 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("사용자가 수정한 프롬프트")
 
-        val replacedStart = viewModel.replacePromptTemplateSegment(
+        val replacedStart = viewModel.promptEditor.replacePromptTemplateSegment(
             expectedSegment = "blue dress",
             replacement = "검은 원피스",
             preferredStartIndex = 13
@@ -201,12 +201,12 @@ class AutomationViewModelTest {
     @Test
     fun onPromptTemplateChange_withSameText_preservesSelection() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("abcdef")
+        viewModel.promptEditor.onPromptTemplateChange("abcdef")
         viewModel.promptTemplateTextFieldState.edit {
             selection = TextRange(1, 4)
         }
 
-        viewModel.onPromptTemplateChange("abcdef")
+        viewModel.promptEditor.onPromptTemplateChange("abcdef")
 
         assertEquals(
             TextRange(1, 4),
@@ -217,12 +217,12 @@ class AutomationViewModelTest {
     @Test
     fun onPromptTemplateChange_withDifferentText_placesCursorAtEnd() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("before")
+        viewModel.promptEditor.onPromptTemplateChange("before")
         viewModel.promptTemplateTextFieldState.edit {
             selection = TextRange(1, 3)
         }
 
-        viewModel.onPromptTemplateChange("after")
+        viewModel.promptEditor.onPromptTemplateChange("after")
 
         assertEquals(
             TextRange("after".length),
@@ -237,30 +237,30 @@ class AutomationViewModelTest {
         store.record("과거 프롬프트 1")
         store.record("과거 프롬프트 2 (최신)")
         val viewModel = viewModel(promptHistoryStore = store)
-        viewModel.onPromptTemplateChange("현재 작성 중인 글")
+        viewModel.promptEditor.onPromptTemplateChange("현재 작성 중인 글")
 
         assertTrue(viewModel.uiState.value.editor.canNavigateHistoryBack)
         assertTrue(!viewModel.uiState.value.editor.canNavigateHistoryForward)
 
         // 뒤로 1단계: 최신 실행기록 복원
-        viewModel.navigatePromptHistoryBack()
+        viewModel.promptEditor.navigatePromptHistoryBack()
         assertEquals("과거 프롬프트 2 (최신)", viewModel.uiState.value.promptTemplate)
         assertEquals("과거 프롬프트 2 (최신)", viewModel.promptTemplateTextFieldState.text.toString())
         assertTrue(viewModel.uiState.value.editor.isHistoryIndicatorVisible)
         assertTrue(viewModel.uiState.value.editor.canNavigateHistoryForward)
 
         // 뒤로 2단계: 그 전 실행기록 복원
-        viewModel.navigatePromptHistoryBack()
+        viewModel.promptEditor.navigatePromptHistoryBack()
         assertEquals("과거 프롬프트 1", viewModel.uiState.value.promptTemplate)
         assertEquals("과거 프롬프트 1", viewModel.promptTemplateTextFieldState.text.toString())
         assertTrue(!viewModel.uiState.value.editor.canNavigateHistoryBack)
 
         // 앞으로 1단계: 최신 실행기록 복원
-        viewModel.navigatePromptHistoryForward()
+        viewModel.promptEditor.navigatePromptHistoryForward()
         assertEquals("과거 프롬프트 2 (최신)", viewModel.uiState.value.promptTemplate)
 
         // 앞으로 2단계: 원래 초안(Draft) 복원 & 인디케이터 숨김
-        viewModel.navigatePromptHistoryForward()
+        viewModel.promptEditor.navigatePromptHistoryForward()
         assertEquals("현재 작성 중인 글", viewModel.uiState.value.promptTemplate)
         assertEquals("현재 작성 중인 글", viewModel.promptTemplateTextFieldState.text.toString())
         assertTrue(!viewModel.uiState.value.editor.isHistoryIndicatorVisible)
@@ -273,14 +273,14 @@ class AutomationViewModelTest {
         val store = PromptHistoryStore(repo)
         store.record("과거 기록 1")
         val viewModel = viewModel(promptHistoryStore = store)
-        viewModel.onPromptTemplateChange("신규 실행 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("신규 실행 프롬프트")
 
         // 네비게이션으로 과거 기록을 보던 중 (인디케이터 노출 상태)
-        viewModel.navigatePromptHistoryBack()
+        viewModel.promptEditor.navigatePromptHistoryBack()
         assertTrue(viewModel.uiState.value.editor.isHistoryIndicatorVisible)
 
         // 다시 신규 프롬프트 작성 후 자동화 시작
-        viewModel.onPromptTemplateChange("신규 실행 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("신규 실행 프롬프트")
         val decision = viewModel.runAutomation()
         assertTrue(decision is AutomationStartDecision.Started)
 
@@ -296,12 +296,12 @@ class AutomationViewModelTest {
     fun toggleParagraphSelectionMode_enablesAndClearsMode() {
         val viewModel = viewModel()
 
-        viewModel.toggleParagraphSelectionMode()
+        viewModel.promptEditor.toggleParagraphSelectionMode()
 
         assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
         assertEquals("", viewModel.uiState.value.editor.paragraphSelectionMessage)
 
-        viewModel.toggleParagraphSelectionMode()
+        viewModel.promptEditor.toggleParagraphSelectionMode()
 
         assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
         assertEquals(null, viewModel.uiState.value.editor.selectedParagraphRange)
@@ -310,10 +310,10 @@ class AutomationViewModelTest {
     @Test
     fun selectPromptParagraphAt_selectsTouchedNonBlankLine() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("첫째\n둘째\n셋째")
-        viewModel.toggleParagraphSelectionMode()
+        viewModel.promptEditor.onPromptTemplateChange("첫째\n둘째\n셋째")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
 
-        viewModel.selectPromptParagraphAt(4)
+        viewModel.promptEditor.selectPromptParagraphAt(4)
 
         assertEquals(
             PromptParagraphRange(3, 5),
@@ -324,10 +324,10 @@ class AutomationViewModelTest {
     @Test
     fun selectPromptParagraphAt_blankLine_clearsSelection() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("첫째\n\n셋째")
-        viewModel.toggleParagraphSelectionMode()
+        viewModel.promptEditor.onPromptTemplateChange("첫째\n\n셋째")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
 
-        viewModel.selectPromptParagraphAt(3)
+        viewModel.promptEditor.selectPromptParagraphAt(3)
 
         assertEquals(null, viewModel.uiState.value.editor.selectedParagraphRange)
         assertTrue(viewModel.uiState.value.editor.paragraphSelectionMessage.contains("빈 줄"))
@@ -336,11 +336,11 @@ class AutomationViewModelTest {
     @Test
     fun importPromptFromClipboard_inSelectionMode_replacesOnlySelectedParagraph() {
         val viewModel = viewModel(clipboardText = "새 장소\n보조 설명")
-        viewModel.onPromptTemplateChange("인물\n장소\n조명")
-        viewModel.toggleParagraphSelectionMode()
-        viewModel.selectPromptParagraphAt(4)
+        viewModel.promptEditor.onPromptTemplateChange("인물\n장소\n조명")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
+        viewModel.promptEditor.selectPromptParagraphAt(4)
 
-        viewModel.importPromptFromClipboard()
+        viewModel.promptEditor.importPromptFromClipboard()
 
         assertEquals(
             "인물\n새 장소\n보조 설명\n조명",
@@ -356,11 +356,11 @@ class AutomationViewModelTest {
     @Test
     fun replaceSelectedPromptParagraph_replacesOnlySelectedParagraph() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("인물\n장소\n조명")
-        viewModel.toggleParagraphSelectionMode()
-        viewModel.selectPromptParagraphAt(4)
+        viewModel.promptEditor.onPromptTemplateChange("인물\n장소\n조명")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
+        viewModel.promptEditor.selectPromptParagraphAt(4)
 
-        viewModel.replaceSelectedPromptParagraph("새 장소\n보조 설명")
+        viewModel.promptEditor.replaceSelectedPromptParagraph("새 장소\n보조 설명")
 
         assertEquals(
             "인물\n새 장소\n보조 설명\n조명",
@@ -376,11 +376,11 @@ class AutomationViewModelTest {
     @Test
     fun replaceSelectedPromptParagraph_blankText_keepsSelectedParagraph() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("인물\n장소")
-        viewModel.toggleParagraphSelectionMode()
-        viewModel.selectPromptParagraphAt(4)
+        viewModel.promptEditor.onPromptTemplateChange("인물\n장소")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
+        viewModel.promptEditor.selectPromptParagraphAt(4)
 
-        viewModel.replaceSelectedPromptParagraph("   ")
+        viewModel.promptEditor.replaceSelectedPromptParagraph("   ")
 
         assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
         assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
@@ -393,10 +393,10 @@ class AutomationViewModelTest {
     @Test
     fun importPromptFromClipboard_withoutSelection_keepsTextAndMode() {
         val viewModel = viewModel(clipboardText = "새 장소")
-        viewModel.onPromptTemplateChange("인물\n장소")
-        viewModel.toggleParagraphSelectionMode()
+        viewModel.promptEditor.onPromptTemplateChange("인물\n장소")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
 
-        viewModel.importPromptFromClipboard()
+        viewModel.promptEditor.importPromptFromClipboard()
 
         assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
         assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
@@ -406,11 +406,11 @@ class AutomationViewModelTest {
     @Test
     fun importPromptFromClipboard_blankClipboard_keepsSelectedParagraph() {
         val viewModel = viewModel(clipboardText = "   ")
-        viewModel.onPromptTemplateChange("인물\n장소")
-        viewModel.toggleParagraphSelectionMode()
-        viewModel.selectPromptParagraphAt(4)
+        viewModel.promptEditor.onPromptTemplateChange("인물\n장소")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
+        viewModel.promptEditor.selectPromptParagraphAt(4)
 
-        viewModel.importPromptFromClipboard()
+        viewModel.promptEditor.importPromptFromClipboard()
 
         assertEquals("인물\n장소", viewModel.uiState.value.promptTemplate)
         assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
@@ -423,11 +423,11 @@ class AutomationViewModelTest {
     @Test
     fun deleteSelectedPromptParagraph_deletesTextButKeepsLineBreaks() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("인물\n장소\n조명")
-        viewModel.toggleParagraphSelectionMode()
-        viewModel.selectPromptParagraphAt(4)
+        viewModel.promptEditor.onPromptTemplateChange("인물\n장소\n조명")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
+        viewModel.promptEditor.selectPromptParagraphAt(4)
 
-        viewModel.deleteSelectedPromptParagraph()
+        viewModel.promptEditor.deleteSelectedPromptParagraph()
 
         assertEquals("인물\n\n조명", viewModel.uiState.value.promptTemplate)
         assertEquals(
@@ -440,11 +440,11 @@ class AutomationViewModelTest {
     @Test
     fun cancelParagraphSelection_clearsSelectionState() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("인물\n장소")
-        viewModel.toggleParagraphSelectionMode()
-        viewModel.selectPromptParagraphAt(4)
+        viewModel.promptEditor.onPromptTemplateChange("인물\n장소")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
+        viewModel.promptEditor.selectPromptParagraphAt(4)
 
-        viewModel.cancelParagraphSelection()
+        viewModel.promptEditor.cancelParagraphSelection()
 
         assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
         assertEquals(null, viewModel.uiState.value.editor.selectedParagraphRange)
@@ -535,7 +535,7 @@ class AutomationViewModelTest {
             lastRunSnapshotStore = LastRunSnapshotStore(snapshotStorage)
         )
 
-        viewModel.onPromptTemplateChange("prompt to resume")
+        viewModel.promptEditor.onPromptTemplateChange("prompt to resume")
         viewModel.onRepeatCountChange("7")
         viewModel.onTargetAppSelected(AutomationTargetApp.CHATGPT)
         viewModel.runAutomation()
@@ -559,7 +559,7 @@ class AutomationViewModelTest {
             )
         )
 
-        viewModel.onPromptTemplateChange("live prompt")
+        viewModel.promptEditor.onPromptTemplateChange("live prompt")
         viewModel.onRepeatCountChange("5")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
         waitUntil { viewModel.uiState.value.isRunning }
@@ -583,7 +583,7 @@ class AutomationViewModelTest {
             clipboardGateway = clipboardGateway
         )
 
-        viewModel.onPromptTemplateChange("base __hair__ prompt")
+        viewModel.promptEditor.onPromptTemplateChange("base __hair__ prompt")
         viewModel.runAutomation()
 
         assertEquals("", clipboardGateway.writtenText)
@@ -647,7 +647,7 @@ class AutomationViewModelTest {
             automationRunner = automation(service = service)
         )
 
-        viewModel.onPromptTemplateChange("base prompt")
+        viewModel.promptEditor.onPromptTemplateChange("base prompt")
 
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
@@ -667,7 +667,7 @@ class AutomationViewModelTest {
     fun runAutomation_updatesMainAndBarStateWhenFinished() {
         val viewModel = viewModel()
 
-        viewModel.onPromptTemplateChange("base prompt")
+        viewModel.promptEditor.onPromptTemplateChange("base prompt")
 
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
@@ -731,6 +731,7 @@ class AutomationViewModelTest {
             override suspend fun send(
                 request: com.example.gemgemgen.remote.domain.RemoteAutomationRequest
             ) = Unit
+            override fun updateRepeatCount(requestId: String, repeatCount: Int) = Unit
             override fun forceStop(requestId: String?) = Unit
             override suspend fun cleanMemory(): RemoteActionResult {
                 cleanCount += 1
@@ -787,7 +788,7 @@ class AutomationViewModelTest {
             automationRunner = automation(service = runner),
             cleanMemoryGateway = gateway
         )
-        viewModel.onPromptTemplateChange("base")
+        viewModel.promptEditor.onPromptTemplateChange("base")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
         // 1회 클릭: 예약 등록
@@ -813,7 +814,7 @@ class AutomationViewModelTest {
             automationRunner = automation(service = runner),
             cleanMemoryGateway = gateway
         )
-        viewModel.onPromptTemplateChange("base")
+        viewModel.promptEditor.onPromptTemplateChange("base")
         viewModel.onRepeatCountChange("1")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
@@ -839,7 +840,7 @@ class AutomationViewModelTest {
             automationRunner = automation(service = runner),
             cleanMemoryGateway = gateway
         )
-        viewModel.onPromptTemplateChange("base")
+        viewModel.promptEditor.onPromptTemplateChange("base")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
         viewModel.cleanDeviceMemory()
@@ -863,7 +864,7 @@ class AutomationViewModelTest {
             automationRunner = automation(service = runner),
             cleanMemoryGateway = gateway
         )
-        viewModel.onPromptTemplateChange("base")
+        viewModel.promptEditor.onPromptTemplateChange("base")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
 
         viewModel.cleanDeviceMemory()
@@ -956,7 +957,7 @@ class AutomationViewModelTest {
             automationRunner = automation(service = runner),
             terminateSelfCloser = closer
         )
-        viewModel.onPromptTemplateChange("base")
+        viewModel.promptEditor.onPromptTemplateChange("base")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
         assertTrue(viewModel.uiState.value.isRunning)
 
@@ -1041,22 +1042,22 @@ class AutomationViewModelTest {
     @Test
     fun toggleSearch_and_setSearchQuery_updatesUiState_and_findsMatches() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("Hello World, hello Compose!")
+        viewModel.promptEditor.onPromptTemplateChange("Hello World, hello Compose!")
 
-        viewModel.toggleSearch(true)
+        viewModel.promptEditor.toggleSearch(true)
         assertTrue(viewModel.uiState.value.editor.isSearchActive)
 
-        viewModel.setSearchQuery("hello")
+        viewModel.promptEditor.setSearchQuery("hello")
         assertEquals(2, viewModel.uiState.value.editor.searchMatches.size)
         assertEquals(0, viewModel.uiState.value.editor.activeSearchMatchIndex)
 
-        viewModel.navigateSearchNext()
+        viewModel.promptEditor.navigateSearchNext()
         assertEquals(1, viewModel.uiState.value.editor.activeSearchMatchIndex)
 
-        viewModel.navigateSearchPrevious()
+        viewModel.promptEditor.navigateSearchPrevious()
         assertEquals(0, viewModel.uiState.value.editor.activeSearchMatchIndex)
 
-        viewModel.closeSearch()
+        viewModel.promptEditor.closeSearch()
         assertTrue(!viewModel.uiState.value.editor.isSearchActive)
         assertEquals("", viewModel.uiState.value.editor.searchQuery)
         assertTrue(viewModel.uiState.value.editor.searchMatches.isEmpty())
@@ -1066,11 +1067,11 @@ class AutomationViewModelTest {
     @Test
     fun toggleSearch_whenParagraphSelectionActive_cancelsParagraphSelection() {
         val viewModel = viewModel()
-        viewModel.onPromptTemplateChange("Paragraph 1\n\nParagraph 2")
-        viewModel.toggleParagraphSelectionMode()
+        viewModel.promptEditor.onPromptTemplateChange("Paragraph 1\n\nParagraph 2")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
         assertTrue(viewModel.uiState.value.editor.isParagraphSelectionMode)
 
-        viewModel.toggleSearch(true)
+        viewModel.promptEditor.toggleSearch(true)
         assertTrue(viewModel.uiState.value.editor.isSearchActive)
         assertTrue(!viewModel.uiState.value.editor.isParagraphSelectionMode)
     }
@@ -1096,7 +1097,7 @@ class AutomationViewModelTest {
             manageRemoteAutomation = remoteUseCase
         )
         viewModel.onAutomationModeSelected(AutomationMode.SENDER)
-        viewModel.onPromptTemplateChange("테스트 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("테스트 프롬프트")
 
         viewModel.runAutomation()
 
@@ -1124,7 +1125,7 @@ class AutomationViewModelTest {
             manageRemoteAutomation = remoteUseCase
         )
         viewModel.onAutomationModeSelected(AutomationMode.SENDER)
-        viewModel.onPromptTemplateChange("테스트 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("테스트 프롬프트")
 
         viewModel.runAutomation()
 
@@ -1148,7 +1149,7 @@ class AutomationViewModelTest {
             manageRemoteAutomation = remoteUseCase
         )
         viewModel.onAutomationModeSelected(AutomationMode.SENDER)
-        viewModel.onPromptTemplateChange("테스트 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("테스트 프롬프트")
 
         viewModel.runAutomation()
         viewModel.cancelAutomation()
@@ -1263,7 +1264,7 @@ class AutomationViewModelTest {
                 }
             )
         )
-        viewModel.onPromptTemplateChange("일반 모드 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("일반 모드 프롬프트")
 
         viewModel.runAutomation()
 
@@ -1294,12 +1295,12 @@ class AutomationViewModelTest {
         )
 
         val viewModel = viewModel(runVariationPrompt = runVariationPrompt)
-        viewModel.onPromptTemplateChange("첫 번째 문단\n\n두 번째 문단\n\n세 번째 문단")
-        viewModel.toggleParagraphSelectionMode()
+        viewModel.promptEditor.onPromptTemplateChange("첫 번째 문단\n\n두 번째 문단\n\n세 번째 문단")
+        viewModel.promptEditor.toggleParagraphSelectionMode()
 
         val fullText = "첫 번째 문단\n\n두 번째 문단\n\n세 번째 문단"
         val offset = fullText.indexOf("두 번째 문단") + 1
-        viewModel.selectPromptParagraphAt(offset)
+        viewModel.promptEditor.selectPromptParagraphAt(offset)
 
         val decision = viewModel.runVariation()
 
@@ -1330,7 +1331,7 @@ class AutomationViewModelTest {
         )
 
         val viewModel = viewModel(runVariationPrompt = runVariationPrompt)
-        viewModel.onPromptTemplateChange("전체 프롬프트 원문입니다.")
+        viewModel.promptEditor.onPromptTemplateChange("전체 프롬프트 원문입니다.")
 
         val decision = viewModel.runVariation(selectedText = "프롬프트 원문")
 
@@ -1376,19 +1377,19 @@ class AutomationViewModelTest {
             promptSnippetRepository = snippetRepository
         )
 
-        viewModel.onPromptTemplateChange("초기 실행 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("초기 실행 프롬프트")
         assertEquals(AutomationStartDecision.Started, viewModel.runAutomation())
         assertTrue(viewModel.uiState.value.isRunning)
 
         // 1. 일반 모드 실행 중 프롬프트 상용구(스니펫) 칩 클릭 반영 검증
-        viewModel.onPromptTemplateChange("배경 고화")
-        viewModel.applySuggestion(snippetCandidate)
+        viewModel.promptEditor.onPromptTemplateChange("배경 고화")
+        viewModel.promptEditor.applySuggestion(snippetCandidate)
         assertEquals("배경 8k masterpiece", viewModel.uiState.value.promptTemplate)
         assertEquals("배경 8k masterpiece", viewModel.promptTemplateTextFieldState.text.toString())
 
         // 2. 일반 모드 실행 중 와일드카드 칩 클릭 반영 검증
-        viewModel.onPromptTemplateChange("배경 8k masterpiece 장")
-        viewModel.applySuggestion(WildcardTokenAutocomplete.Candidate(name = "장소", token = "__장소__"))
+        viewModel.promptEditor.onPromptTemplateChange("배경 8k masterpiece 장")
+        viewModel.promptEditor.applySuggestion(WildcardTokenAutocomplete.Candidate(name = "장소", token = "__장소__"))
         assertEquals("배경 8k masterpiece __장소__", viewModel.uiState.value.promptTemplate)
         assertEquals("배경 8k masterpiece __장소__", viewModel.promptTemplateTextFieldState.text.toString())
 
@@ -1400,16 +1401,16 @@ class AutomationViewModelTest {
         viewModel.insertBottomInstruction()
         assertEquals("TOP\n\n배경 8k masterpiece __장소__\n\nBOTTOM", viewModel.uiState.value.promptTemplate)
 
-        viewModel.copyPromptToClipboard()
+        viewModel.promptEditor.copyPromptToClipboard()
         assertEquals("TOP\n\n배경 8k masterpiece __장소__\n\nBOTTOM", clipboardGateway.writtenText)
 
-        viewModel.navigatePromptHistoryBack()
+        viewModel.promptEditor.navigatePromptHistoryBack()
         assertEquals("초기 실행 프롬프트", viewModel.uiState.value.promptTemplate)
-        viewModel.navigatePromptHistoryBack()
+        viewModel.promptEditor.navigatePromptHistoryBack()
         assertEquals("이전 기록 프롬프트", viewModel.uiState.value.promptTemplate)
-        viewModel.navigatePromptHistoryForward()
+        viewModel.promptEditor.navigatePromptHistoryForward()
         assertEquals("초기 실행 프롬프트", viewModel.uiState.value.promptTemplate)
-        viewModel.navigatePromptHistoryForward()
+        viewModel.promptEditor.navigatePromptHistoryForward()
         assertEquals("TOP\n\n배경 8k masterpiece __장소__\n\nBOTTOM", viewModel.uiState.value.promptTemplate)
     }
 
@@ -1452,21 +1453,21 @@ class AutomationViewModelTest {
             promptSnippetRepository = snippetRepository
         )
         viewModel.onAutomationModeSelected(AutomationMode.SENDER)
-        viewModel.onPromptTemplateChange("원격 프롬프트")
+        viewModel.promptEditor.onPromptTemplateChange("원격 프롬프트")
 
         assertEquals(AutomationStartDecision.RemoteStarted, viewModel.runAutomation())
         assertTrue(viewModel.uiState.value.isRunning)
         assertEquals(AutomationMode.SENDER, viewModel.uiState.value.automationMode)
 
         // 1. 송신 모드 실행 중 프롬프트 상용구(스니펫) 칩 클릭 반영 검증
-        viewModel.onPromptTemplateChange("인물 고화")
-        viewModel.applySuggestion(snippetCandidate)
+        viewModel.promptEditor.onPromptTemplateChange("인물 고화")
+        viewModel.promptEditor.applySuggestion(snippetCandidate)
         assertEquals("인물 8k masterpiece", viewModel.uiState.value.promptTemplate)
         assertEquals("인물 8k masterpiece", viewModel.promptTemplateTextFieldState.text.toString())
 
         // 2. 송신 모드 실행 중 와일드카드 칩 클릭 반영 검증
-        viewModel.onPromptTemplateChange("인물 8k masterpiece 장")
-        viewModel.applySuggestion(WildcardTokenAutocomplete.Candidate(name = "장소", token = "__장소__"))
+        viewModel.promptEditor.onPromptTemplateChange("인물 8k masterpiece 장")
+        viewModel.promptEditor.applySuggestion(WildcardTokenAutocomplete.Candidate(name = "장소", token = "__장소__"))
         assertEquals("인물 8k masterpiece __장소__", viewModel.uiState.value.promptTemplate)
         assertEquals("인물 8k masterpiece __장소__", viewModel.promptTemplateTextFieldState.text.toString())
     }
@@ -1827,6 +1828,8 @@ class AutomationViewModelTest {
             sendAction?.invoke(request, emitState)
         }
 
+        override fun updateRepeatCount(requestId: String, repeatCount: Int) = Unit
+
         override fun forceStop(requestId: String?) {
             status.value = status.value.copy(automationState = AutomationRunState.Stopped)
             lastStateCallback?.invoke(AutomationRunState.Stopped)
@@ -1895,7 +1898,7 @@ class AutomationViewModelTest {
         val viewModel = viewModel()
         val actions: AutomationScreenActions = viewModel
 
-        actions.onPromptTemplateChange("action prompt")
+        actions.promptEditor.onPromptTemplateChange("action prompt")
 
         assertEquals("action prompt", viewModel.uiState.value.promptTemplate)
     }
@@ -1967,7 +1970,7 @@ class AutomationViewModelTest {
             automationRunner = automation(service = promptService),
             cleanMemoryGateway = memoryGateway
         )
-        viewModel.onPromptTemplateChange("gemini prompt")
+        viewModel.promptEditor.onPromptTemplateChange("gemini prompt")
         viewModel.onAutoMemoryCleanupThresholdChange("25")
 
         // 1세션: 15회 생성 -> 완료 직후에는 메모리 정리를 수행하지 않음 (누적 15회)
@@ -2019,6 +2022,7 @@ class AutomationViewModelTest {
                 )
                 status.value = status.value.copy(automationState = AutomationRunState.Success)
             }
+            override fun updateRepeatCount(requestId: String, repeatCount: Int) = Unit
             override fun forceStop(requestId: String?) = Unit
             override suspend fun cleanMemory(): RemoteActionResult {
                 cleanCount += 1
@@ -2029,7 +2033,7 @@ class AutomationViewModelTest {
         val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
         val viewModel = viewModel(manageRemoteAutomation = manageRemote)
         viewModel.onAutomationModeSelected(AutomationMode.SENDER)
-        viewModel.onPromptTemplateChange("remote gemini prompt")
+        viewModel.promptEditor.onPromptTemplateChange("remote gemini prompt")
         viewModel.onRepeatCountChange("25")
 
         // 1세션(25회): 완료 직후에는 원격 메모리 정리를 수행하지 않음 (누적 25회)
@@ -2052,7 +2056,7 @@ class AutomationViewModelTest {
     fun runAutomation_nonGeminiOrDisabledToggle_doesNotAutoCleanMemory() {
         val memoryGateway = FakeMemoryCleanupGateway(MemoryCleanupResult.Success)
         val viewModel = viewModel(cleanMemoryGateway = memoryGateway)
-        viewModel.onPromptTemplateChange("prompt")
+        viewModel.promptEditor.onPromptTemplateChange("prompt")
         viewModel.onRepeatCountChange("30")
 
         // CHATGPT 대상일 때는 누적 카운트 증가 및 자동 메모리 정리 미수행

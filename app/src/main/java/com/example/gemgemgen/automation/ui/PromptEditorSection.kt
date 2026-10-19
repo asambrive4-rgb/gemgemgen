@@ -70,7 +70,7 @@ internal fun PromptEditorSection(
             isSearchActive = uiState.editor.isSearchActive,
             onTargetAppSelected = actions::onTargetAppSelected,
             onShowPromptSnippetDialog = actions::showPromptSnippetDialog,
-            onToggleSearch = actions::toggleSearch
+            onToggleSearch = actions.promptEditor::toggleSearch
         )
 
         AnimatedVisibility(
@@ -80,12 +80,12 @@ internal fun PromptEditorSection(
         ) {
             PromptSearchBar(
                 query = uiState.editor.searchQuery,
-                onQueryChange = actions::setSearchQuery,
+                onQueryChange = actions.promptEditor::setSearchQuery,
                 matchCount = uiState.editor.searchMatches.size,
                 currentMatchIndex = uiState.editor.activeSearchMatchIndex,
-                onNavigateNext = actions::navigateSearchNext,
-                onNavigatePrevious = actions::navigateSearchPrevious,
-                onClose = actions::closeSearch
+                onNavigateNext = actions.promptEditor::navigateSearchNext,
+                onNavigatePrevious = actions.promptEditor::navigateSearchPrevious,
+                onClose = actions.promptEditor::closeSearch
             )
         }
 
@@ -103,14 +103,14 @@ internal fun PromptEditorSection(
 
         if (showWildcardSuggestions) {
             IsolatedEditorSuggestionSection(
-                activeSuggestionsFlow = actions.activeSuggestions,
-                onSuggestionClick = actions::applySuggestion
+                activeSuggestionsFlow = actions.promptEditor.activeSuggestions,
+                onSuggestionClick = actions.promptEditor::applySuggestion
             )
         }
 
         AppMultilineTextField(
             state = promptTemplateState,
-            onValueChange = actions::onPromptTemplateChange,
+            onValueChange = actions.promptEditor::onPromptTemplateFromEditor,
             modifier = Modifier.fillMaxWidth(),
             minLines = 18,
             maxLines = 18,
@@ -120,16 +120,16 @@ internal fun PromptEditorSection(
             searchHighlightRanges = uiState.editor.searchMatches,
             activeSearchMatchIndex = uiState.editor.activeSearchMatchIndex,
             supportingText = uiState.editor.paragraphSelectionMessage,
-            onParagraphOffsetSelected = actions::selectPromptParagraphAt,
-            onDeleteSelectedParagraph = actions::deleteSelectedPromptParagraph,
-            onReplaceSelectedParagraph = actions::replaceSelectedPromptParagraph
+            onParagraphOffsetSelected = actions.promptEditor::selectPromptParagraphAt,
+            onDeleteSelectedParagraph = actions.promptEditor::deleteSelectedPromptParagraph,
+            onReplaceSelectedParagraph = actions.promptEditor::replaceSelectedPromptParagraph
         )
 
         if (showPromptActions) {
             PromptActionRow(
                 promptTemplateState = promptTemplateState,
                 isParagraphSelectionMode = uiState.editor.isParagraphSelectionMode,
-                onToggleParagraphSelectionMode = actions::toggleParagraphSelectionMode,
+                onToggleParagraphSelectionMode = actions.promptEditor::toggleParagraphSelectionMode,
                 canCloseGemini = uiState.canCloseGemini,
                 canCloseSelfApp = uiState.canCloseSelfApp,
                 canCleanMemory = uiState.canCleanMemory,
@@ -144,13 +144,13 @@ internal fun PromptEditorSection(
                 onCloseGeminiApp = actions::closeGeminiApp,
                 onCleanDeviceMemory = actions::cleanDeviceMemory,
                 onTerminateSelfApp = actions::terminateSelfApp,
-                onNavigateHistoryBack = actions::navigatePromptHistoryBack,
-                onNavigateHistoryForward = actions::navigatePromptHistoryForward,
+                onNavigateHistoryBack = actions.promptEditor::navigatePromptHistoryBack,
+                onNavigateHistoryForward = actions.promptEditor::navigatePromptHistoryForward,
                 onInsertTopInstruction = actions::insertTopInstruction,
                 onInsertBottomInstruction = actions::insertBottomInstruction,
                 onOpenInstructionConfigDialog = actions::openInstructionConfigDialog,
-                onImportFromClipboard = actions::importPromptFromClipboard,
-                onCopyPromptToClipboard = actions::copyPromptToClipboard,
+                onImportFromClipboard = actions.promptEditor::importPromptFromClipboard,
+                onCopyPromptToClipboard = actions.promptEditor::copyPromptToClipboard,
                 showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
                 isVariationButtonEnabled = uiState.canInteractWithVariation,
                 variationAutomationState = uiState.variationAutomationState,

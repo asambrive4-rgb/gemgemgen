@@ -196,6 +196,25 @@ class GeminiUsageParserTest {
         val stateWithWarningSelected = stateWithMainSelected.copy(selectedAccountId = "acc_3")
         assertEquals("작업용 2 94% ▾", stateWithWarningSelected.summaryButtonText(nowMillis))
         assertEquals(GeminiUsageWarningLevel.WARNING, stateWithWarningSelected.summaryWarningLevel(nowMillis))
+
+        // 주간 누적이 95%이더라도 5시간 한도가 40%이면 summaryWarningLevel은 주간 누적에 영향받지 않고 NORMAL 유지
+        val accountHighWeekly = GeminiAccountUsageEntry(
+            profile = GeminiAccountProfile(id = "acc_hw", alias = "주간높음", email = "hw@gmail.com", sortOrder = 3),
+            usageState = GeminiUsageState.Success(
+                fiveHourPercent = 40,
+                fiveHourResetText = "2시간 후",
+                weeklyPercent = 95,
+                weeklyResetText = "1일 후 초기화",
+                updatedAt = nowMillis
+            )
+        )
+        val stateWithHighWeekly = stateWithMainSelected.copy(
+            accounts = listOf(accountHighWeekly),
+            selectedAccountId = "acc_hw"
+        )
+        assertEquals(GeminiUsageWarningLevel.NORMAL, stateWithHighWeekly.summaryWarningLevel(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.NORMAL, accountHighWeekly.fiveHourWarningLevel(nowMillis))
+        assertEquals(GeminiUsageWarningLevel.WARNING, accountHighWeekly.weeklyWarningLevel(nowMillis))
     }
 
     @Test
@@ -391,14 +410,14 @@ class GeminiUsageParserTest {
     }
 
     @Test
-    fun accountsSorting_unstartedTimerPlacedAtTopAndDifferentiatedFromZeroPercentRunningTimer() {
+    fun accountsSorting_resetImminentOrder_expiredAccountPlacedByNextResetTimeAndUnstartedAtBottom() {
         val baseCal = java.util.Calendar.getInstance().apply {
             set(2026, java.util.Calendar.OCTOBER, 16, 12, 0, 0)
             set(java.util.Calendar.MILLISECOND, 0)
         }
         val nowMillis = baseCal.timeInMillis
 
-        // 계정 0: 미시작 계정 (0%, "5시간 주기 자동 초기화", 주간 10%)
+        // 계정 0: 미시작 계정 (0%, "5시간 주기 자동 초기화", 주간 10%) - 타이머 없음
         val account0 = GeminiAccountUsageEntry(
             profile = GeminiAccountProfile(id = "acc_0", alias = "미시작 계정", email = "acc0@gmail.com", sortOrder = 0),
             usageState = GeminiUsageState.Success(
@@ -410,7 +429,7 @@ class GeminiUsageParserTest {
             )
         )
 
-        // 계정 1: 과거 시각 캐시 만료로 미시작 처리된 계정 (과거 10:00 초기화 캐시)
+        // 계정 1: 과거 시각 캐시 만료로 0% 리셋된 계정 (과거 10:00 초기화 -> 롤오버 15:00, 3시간 남음)
         val account1 = GeminiAccountUsageEntry(
             profile = GeminiAccountProfile(id = "acc_1", alias = "만료 계정", email = "acc1@gmail.com", sortOrder = 1),
             usageState = GeminiUsageState.Success(
@@ -422,12 +441,12 @@ class GeminiUsageParserTest {
             )
         )
 
-        // 계정 2: 0%이지만 미래 3시간 후 초기화 시각이 명시되어 타이머가 이미 시작된 계정
+        // 계정 2: 1시간 후 초기화되는 계정 (13:00, 1시간 남음)
         val account2 = GeminiAccountUsageEntry(
-            profile = GeminiAccountProfile(id = "acc_2", alias = "타이머 진행중 0%", email = "acc2@gmail.com", sortOrder = 2),
+            profile = GeminiAccountProfile(id = "acc_2", alias = "타이머 진행중 1시간 남음", email = "acc2@gmail.com", sortOrder = 2),
             usageState = GeminiUsageState.Success(
-                fiveHourPercent = 0,
-                fiveHourResetText = "3시간 후 초기화",
+                fiveHourPercent = 40,
+                fiveHourResetText = "1시간 후 초기화",
                 weeklyPercent = 5,
                 weeklyResetText = "주간 주기 자동 초기화",
                 updatedAt = nowMillis
@@ -439,12 +458,14 @@ class GeminiUsageParserTest {
         assertFalse(account2.isFiveHourTimerUnstarted(nowMillis))
         assertEquals(0, account1.effectiveFiveHourPercent(nowMillis)) // 캐시 만료로 0%
 
-        val state = MultiGeminiUsageState(accounts = listOf(account2, account1, account0))
+        val state = MultiGeminiUsageState(accounts = listOf(account0, account1, account2))
         val sorted = state.availableAccountsSorted(nowMillis)
 
-        // 미시작 계정(acc_0, acc_1)이 진행 중 계정(acc_2)보다 앞에 오고,
-        // 미시작 계정끼리는 주간 사용률 오름차순(acc_0: 10% vs acc_1: 20%) -> acc_0이 먼저!
-        assertEquals(listOf("acc_0", "acc_1", "acc_2"), sorted.map { it.profile.id })
+        // 옵션 A 검증:
+        // 1등: acc_2 (1시간 후 초기화로 가장 임박!)
+        // 2등: acc_1 (방금 만료되어 다음 리셋까지 3시간 남아 acc_2보다 뒤에 배치!)
+        // 3등: acc_0 (타이머가 없는 순수 미시작 계정은 맨 뒤에 배치!)
+        assertEquals(listOf("acc_2", "acc_1", "acc_0"), sorted.map { it.profile.id })
     }
 
     @Test
@@ -520,14 +541,43 @@ class GeminiUsageParserTest {
         requireNotNull(remainingWithoutUpdated)
         assertTrue("updatedAt=0L이어도 5시간 윈도우에서 6시간 초과 미래 시각은 당일 만료(<= 0L)로 보정되어야 함", remainingWithoutUpdated <= 0L)
 
-        // formatCompactResetWithRemaining 검증: "초기화됨 (0%)" 반환 확인
+        // formatCompactResetWithRemaining 검증: "초기화됨" 대신 다음 5시간 주기 시각(15:00) 및 잔여 시간 확인
         assertEquals(
-            "초기화됨 (0%)",
+            "15:00 (4시간 30분 후)",
             GeminiUsageParser.formatCompactResetWithRemaining(
                 rawText = "오전 10:00에 초기화",
                 nowMillis = nowMillis,
                 updatedAt = updatedAt,
                 isFiveHourWindow = true
+            )
+        )
+
+        // 주간 주기 만료 시 +7일 다음 주기 시각으로 롤오버 확인 (10/16 10:30 기준 과거 10/12 10:00 -> 10/19 10:00)
+        assertEquals(
+            "10/19/10:00 (2일 23시간 후)",
+            GeminiUsageParser.formatCompactResetWithRemaining(
+                rawText = "10월 12일 오전 10:00에 초기화",
+                nowMillis = nowMillis,
+                updatedAt = updatedAt,
+                isFiveHourWindow = false
+            )
+        )
+
+        // 구체적 시간 정보가 없는 기본 주기 문구는 주기 텍스트 그대로 반환 확인 (선택지 B)
+        assertEquals(
+            "5시간 주기",
+            GeminiUsageParser.formatCompactResetWithRemaining(
+                rawText = "5시간 주기 자동 초기화",
+                nowMillis = nowMillis,
+                isFiveHourWindow = true
+            )
+        )
+        assertEquals(
+            "주간 주기",
+            GeminiUsageParser.formatCompactResetWithRemaining(
+                rawText = "주간 주기 자동 초기화",
+                nowMillis = nowMillis,
+                isFiveHourWindow = false
             )
         )
     }

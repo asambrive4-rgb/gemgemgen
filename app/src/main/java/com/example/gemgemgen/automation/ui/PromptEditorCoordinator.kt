@@ -52,7 +52,7 @@ class PromptEditorCoordinator(
     private val dispatchers: AppDispatchers = AppDispatchers(),
     initialPrompt: String = "",
     private val onPromptTextChanged: ((String) -> Unit)? = null
-) {
+) : PromptEditorUiActions {
     val textFieldState = TextFieldState()
     private val promptHistoryNavigator = PromptHistoryNavigator(initialDraft = initialPrompt)
     private var ignoredPromptChangeText: String? = null
@@ -64,7 +64,7 @@ class PromptEditorCoordinator(
     val editorUiState: StateFlow<PromptEditorUiState> = _editorUiState.asStateFlow()
 
     private val _activeSuggestions = MutableStateFlow<List<WildcardTokenAutocomplete.Candidate>>(emptyList())
-    val activeSuggestions: StateFlow<List<WildcardTokenAutocomplete.Candidate>> = _activeSuggestions.asStateFlow()
+    override val activeSuggestions: StateFlow<List<WildcardTokenAutocomplete.Candidate>> = _activeSuggestions.asStateFlow()
 
     init {
         if (initialPrompt.isNotEmpty()) {
@@ -94,10 +94,14 @@ class PromptEditorCoordinator(
         }
     }
 
-    fun onPromptTemplateFromEditor(value: String) =
+    override fun onPromptTemplateFromEditor(value: String) =
         onPromptTemplateChange(value, updateTextFieldState = false)
 
-    fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean = true) {
+    override fun onPromptTemplateChange(value: String) {
+        onPromptTemplateChange(value, updateTextFieldState = true)
+    }
+
+    fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean) {
         if (updateTextFieldState && !textFieldState.text.contentEquals(value)) {
             textFieldState.setTextAndPlaceCursorAtEnd(value)
         }
@@ -152,7 +156,7 @@ class PromptEditorCoordinator(
         }
     }
 
-    fun toggleSearch(active: Boolean? = null) {
+    override fun toggleSearch(active: Boolean?) {
         val nextActive = active ?: !_editorUiState.value.isSearchActive
         if (nextActive) {
             if (_editorUiState.value.isParagraphSelectionMode) {
@@ -180,7 +184,7 @@ class PromptEditorCoordinator(
         }
     }
 
-    fun closeSearch() {
+    override fun closeSearch() {
         _editorUiState.update {
             it.copy(
                 isSearchActive = false,
@@ -191,7 +195,7 @@ class PromptEditorCoordinator(
         }
     }
 
-    fun setSearchQuery(query: String) {
+    override fun setSearchQuery(query: String) {
         val text = textFieldState.text.toString()
         _editorUiState.update { it.copy(searchQuery = query) }
         // 검색어 타이핑 중에는 본문 TextFieldState 커서를 강제 이동하지 않아 포커스·스크롤 간섭을 방지한다.
@@ -203,7 +207,7 @@ class PromptEditorCoordinator(
         )
     }
 
-    fun navigateSearchNext() {
+    override fun navigateSearchNext() {
         val state = _editorUiState.value
         if (state.searchMatches.isEmpty()) return
         val nextIndex = (state.activeSearchMatchIndex + 1) % state.searchMatches.size
@@ -211,7 +215,7 @@ class PromptEditorCoordinator(
         selectSearchMatch(state.searchMatches[nextIndex])
     }
 
-    fun navigateSearchPrevious() {
+    override fun navigateSearchPrevious() {
         val state = _editorUiState.value
         if (state.searchMatches.isEmpty()) return
         val prevIndex = (state.activeSearchMatchIndex - 1 + state.searchMatches.size) % state.searchMatches.size
@@ -291,21 +295,21 @@ class PromptEditorCoordinator(
         updateNavigationAvailability()
     }
 
-    fun navigatePromptHistoryBack() {
+    override fun navigatePromptHistoryBack() {
         syncPromptTemplateFromTextField()
         val target = promptHistoryNavigator.navigateBack(promptEditorSession.text) ?: return
         applyPromptTemplateText(target)
         publishEditorSession(promptEditorSession.afterWholeReplace(target))
     }
 
-    fun navigatePromptHistoryForward() {
+    override fun navigatePromptHistoryForward() {
         syncPromptTemplateFromTextField()
         val target = promptHistoryNavigator.navigateForward() ?: return
         applyPromptTemplateText(target)
         publishEditorSession(promptEditorSession.afterWholeReplace(target))
     }
 
-    fun toggleParagraphSelectionMode() {
+    override fun toggleParagraphSelectionMode() {
         if (_editorUiState.value.isSearchActive) {
             closeSearch()
         }
@@ -313,12 +317,12 @@ class PromptEditorCoordinator(
         publishEditorSession(promptEditorSession.toggleSelectionMode())
     }
 
-    fun selectPromptParagraphAt(offset: Int) {
+    override fun selectPromptParagraphAt(offset: Int) {
         syncEditorTextFromCurrent()
         publishEditorSession(promptEditorSession.selectAt(offset))
     }
 
-    fun deleteSelectedPromptParagraph() {
+    override fun deleteSelectedPromptParagraph() {
         syncEditorTextFromCurrent()
         when (val result = promptEditorSession.prepareDeleteSelected()) {
             PromptParagraphActionResult.NoOp -> Unit
@@ -327,11 +331,11 @@ class PromptEditorCoordinator(
         }
     }
 
-    fun cancelParagraphSelection() {
+    override fun cancelParagraphSelection() {
         publishEditorSession(promptEditorSession.cancelSelection())
     }
 
-    fun importPromptFromClipboard() {
+    override fun importPromptFromClipboard() {
         syncPromptTemplateFromTextField()
         scope.launch {
             val text = withContext(dispatchers.io) {
@@ -374,7 +378,7 @@ class PromptEditorCoordinator(
         return edit.startIndex
     }
 
-    fun copyPromptToClipboard() {
+    override fun copyPromptToClipboard() {
         syncPromptTemplateFromTextField()
         val text = promptEditorSession.text
         if (text.isBlank()) return
@@ -414,9 +418,13 @@ class PromptEditorCoordinator(
         )
     }
 
+    override fun applySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {
+        applySuggestion(candidate, currentAutocompleteCandidates)
+    }
+
     fun applySuggestion(
         candidate: WildcardTokenAutocomplete.Candidate,
-        candidates: List<WildcardTokenAutocomplete.Candidate> = currentAutocompleteCandidates
+        candidates: List<WildcardTokenAutocomplete.Candidate>
     ) {
         val state = _editorUiState.value
         val selection = textFieldState.selection
@@ -439,7 +447,7 @@ class PromptEditorCoordinator(
         )
     }
 
-    fun replaceSelectedPromptParagraph(replacement: String) {
+    override fun replaceSelectedPromptParagraph(replacement: String) {
         syncEditorTextFromCurrent()
         when (val result = promptEditorSession.prepareReplaceSelected(replacement)) {
             PromptParagraphActionResult.NoOp -> Unit

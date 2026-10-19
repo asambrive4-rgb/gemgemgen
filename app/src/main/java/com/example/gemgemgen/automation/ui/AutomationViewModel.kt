@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드, 다중 계정 제미나이 사용량 모니터링 상태 및 모달 제어, 자동/예약 메모리 정리를 총괄 관리하는 뷰모델입니다.
+// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드(일괄 치환 포함), 다중 계정 제미나이 사용량 모니터링 상태 및 모달 제어, 자동/예약 메모리 정리를 총괄 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -10,6 +10,7 @@ import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.PromptSnippet
+import com.example.gemgemgen.automation.domain.PromptSnippetTextUseCase
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
@@ -90,7 +91,7 @@ class AutomationViewModel(
     private var activeRunRequestedCount: Int = 0
     private var activeRunMaxIndex: Int = 0
     private var isPreStartCleanupInProgress: Boolean = false
-    private val promptEditor = PromptEditorCoordinator(
+    override val promptEditor: PromptEditorCoordinator = PromptEditorCoordinator(
         clipboardGateway = clipboardGateway,
         scope = scope,
         dispatchers = dispatchers,
@@ -99,8 +100,6 @@ class AutomationViewModel(
     val promptTemplateTextFieldState: TextFieldState
         get() = promptEditor.textFieldState
 
-    override val activeSuggestions: StateFlow<List<WildcardTokenAutocomplete.Candidate>>
-        get() = promptEditor.activeSuggestions
 
     private val _uiState = MutableStateFlow(
         AutomationUiState(
@@ -185,12 +184,12 @@ class AutomationViewModel(
         }
         loadInitialState()
         promptWorkspace?.let { workspace ->
-            workspace.segmentReplacer = ::replacePromptTemplateSegment
+            workspace.segmentReplacer = promptEditor::replacePromptTemplateSegment
             scope.launch {
                 workspace.handoffEvents.collect { event ->
                     when (event) {
                         is PromptHandoffEvent.ReplaceEntirely -> {
-                            replacePromptTemplateEntirely(event.replacement)
+                            promptEditor.replaceWholePromptTemplate(event.replacement)
                         }
                     }
                 }
@@ -200,7 +199,6 @@ class AutomationViewModel(
 
     // AutomationScreenActions 인터페이스 위임 구현
     override fun onRunAutomation() { runAutomation() }
-    override fun onPromptTemplateChange(value: String) { promptEditor.onPromptTemplateChange(value, updateTextFieldState = true) }
     override fun onRunVariation(selectedText: String?) { runVariation(selectedText) }
     override fun onConfirmAccessibilityPrompt() { confirmAccessibilityPrompt() }
 
@@ -249,6 +247,10 @@ class AutomationViewModel(
 
     override fun selectRepresentativeGeminiAccount(accountId: String) {
         multiGeminiUsageRepository?.triggerSelectRepresentativeAccount(accountId)
+    }
+
+    override fun toggleGeminiAccountManualExhaustion(accountId: String, isExhausted: Boolean) {
+        multiGeminiUsageRepository?.triggerSetAccountManuallyExhausted(accountId, isExhausted)
     }
 
     override fun switchGeminiAccount(accountId: String) {
@@ -348,20 +350,6 @@ class AutomationViewModel(
     val currentThemeMode: com.example.gemgemgen.ui.theme.AppThemeMode
         get() = themePaletteStore?.loadMode() ?: com.example.gemgemgen.ui.theme.AppThemeMode.DEFAULT
 
-    fun onPromptTemplateChange(value: String, updateTextFieldState: Boolean = true) =
-        promptEditor.onPromptTemplateChange(value, updateTextFieldState)
-
-    fun onPromptTemplateFromEditor(value: String) =
-        promptEditor.onPromptTemplateFromEditor(value)
-
-    override fun toggleParagraphSelectionMode() = promptEditor.toggleParagraphSelectionMode()
-
-    override fun selectPromptParagraphAt(offset: Int) = promptEditor.selectPromptParagraphAt(offset)
-
-    override fun deleteSelectedPromptParagraph() = promptEditor.deleteSelectedPromptParagraph()
-
-    override fun cancelParagraphSelection() = promptEditor.cancelParagraphSelection()
-
     override fun onTargetAppSelected(targetApp: AutomationTargetApp) {
         _uiState.update {
             if (it.isRunning) it else it.copy(selectedTargetApp = targetApp)
@@ -381,13 +369,16 @@ class AutomationViewModel(
             publishRepeatCountText(normalized)
             return
         }
-        if (state.automationMode == AutomationMode.SENDER) return
         if (normalized.isEmpty()) {
             publishRepeatCountText(normalized)
             return
         }
         val requested = RepeatCountParser.parse(normalized)
-        val applied = (automation.updateRepeatCount(requested) ?: requested).toString()
+        val applied = if (state.automationMode == AutomationMode.SENDER) {
+            requested.coerceIn(1, 999).also { manageRemoteAutomation.updateRepeatCount(it) }.toString()
+        } else {
+            (automation.updateRepeatCount(requested) ?: requested).toString()
+        }
         publishRepeatCountText(applied)
         scope.launch {
             withContext(dispatchers.io) {
@@ -408,24 +399,6 @@ class AutomationViewModel(
         _automationBarUiState.update { it.copy(repeatCountText = text) }
     }
 
-    override fun importPromptFromClipboard() = promptEditor.importPromptFromClipboard()
-
-    /** 외부(분석 저장 등)에서 프롬프트 템플릿 전체를 교체한다. Undo 가능. */
-    fun replacePromptTemplateEntirely(replacement: String) =
-        promptEditor.replaceWholePromptTemplate(replacement)
-
-    /** 현재 프롬프트의 나머지 내용은 보존하고 일치하는 대상 구간만 교체한다. */
-    fun replacePromptTemplateSegment(
-        expectedSegment: String,
-        replacement: String,
-        preferredStartIndex: Int
-    ): Int? = promptEditor.replacePromptTemplateSegment(
-        expectedSegment = expectedSegment,
-        replacement = replacement,
-        preferredStartIndex = preferredStartIndex
-    )
-
-    override fun copyPromptToClipboard() = promptEditor.copyPromptToClipboard()
 
     /**
      * 프롬프트 템플릿 맨 앞에 상단 인스트럭션을 붙인다.
@@ -524,11 +497,6 @@ class AutomationViewModel(
         return VariationStartDecision.Rejected(message)
     }
 
-    /**
-     * 추천 칩 탭 (Candidate 직접 전달): 커서 기준 현재 단어를 치환.
-     */
-    override fun applySuggestion(candidate: WildcardTokenAutocomplete.Candidate) =
-        promptEditor.applySuggestion(candidate)
 
     /** 와일드카드 폴더 및 상용구 목록으로 추천 후보를 다시 읽는다. */
     fun refreshAutocompleteCandidates() {
@@ -611,8 +579,20 @@ class AutomationViewModel(
         }
     }
 
-    override fun replaceSelectedPromptParagraph(replacement: String) =
-        promptEditor.replaceSelectedPromptParagraph(replacement)
+    override fun batchReplacePromptSnippets(searchText: String, replacementText: String) {
+        scope.launch {
+            withContext(dispatchers.io) {
+                val current = promptSnippetRepository?.load().orEmpty()
+                val useCase = PromptSnippetTextUseCase()
+                val (updated, changedCount) = useCase.replaceContent(current, searchText, replacementText)
+                if (changedCount > 0) {
+                    promptSnippetRepository?.save(updated)
+                }
+            }
+            refreshAutocompleteCandidates()
+        }
+    }
+
 
     override fun closeGeminiApp() = executeMaintenance(
         canExecute = AutomationUiState::canCloseGemini,
@@ -716,12 +696,6 @@ class AutomationViewModel(
         }
     }
 
-    override fun navigatePromptHistoryBack() =
-        promptEditor.navigatePromptHistoryBack()
-
-    override fun navigatePromptHistoryForward() =
-        promptEditor.navigatePromptHistoryForward()
-
     override fun refreshStatus() {
         scope.launch {
             val report = withContext(dispatchers.io) {
@@ -780,7 +754,7 @@ class AutomationViewModel(
         promptEditor.onAutomationStarted(state.promptTemplate)
         postAutomationUsageRefreshJob?.cancel()
 
-        cancelParagraphSelection()
+        promptEditor.cancelParagraphSelection()
         val request = AutomationRunRequest(
             promptTemplate = state.promptTemplate,
             repeatCountText = state.repeatCountText,
@@ -879,11 +853,6 @@ class AutomationViewModel(
         }
     }
 
-    override fun toggleSearch(active: Boolean?) = promptEditor.toggleSearch(active)
-    override fun setSearchQuery(query: String) = promptEditor.setSearchQuery(query)
-    override fun navigateSearchNext() = promptEditor.navigateSearchNext()
-    override fun navigateSearchPrevious() = promptEditor.navigateSearchPrevious()
-    override fun closeSearch() = promptEditor.closeSearch()
 
     override fun cancelAutomation() {
         _uiState.update { it.copy(isMemoryCleanupScheduled = false) }

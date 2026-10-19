@@ -195,6 +195,8 @@ class ManageRemoteAutomationUseCaseTest {
             if (holdSend) awaitCancellation()
         }
 
+        override fun updateRepeatCount(requestId: String, repeatCount: Int) = Unit
+
         override fun forceStop(requestId: String?) {
             forceStoppedRequestId = requestId
             status.value = status.value.copy(automationState = AutomationRunState.Stopped)

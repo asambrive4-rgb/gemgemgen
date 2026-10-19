@@ -314,6 +314,8 @@ class CoordinateAutomationExecutionUseCaseTest {
             sentRequest = request
         }
 
+        override fun updateRepeatCount(requestId: String, repeatCount: Int) = Unit
+
         override fun forceStop(requestId: String?) {
             forceStopCalled = true
         }

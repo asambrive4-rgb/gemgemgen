@@ -69,5 +69,7 @@ class ExecuteRemoteAutomationUseCase(
     fun cancel() {
         automation.cancel()
     }
+
+    fun updateRepeatCount(requestedCount: Int): Int? = automation.updateRepeatCount(requestedCount)
 }
 

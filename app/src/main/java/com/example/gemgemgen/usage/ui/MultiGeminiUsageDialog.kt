@@ -1,14 +1,6 @@
-// 역할: 다중 제미나이 계정의 메인/서브 탭 분리(대표 계정 기준 자동 탭 선택), 계정 전환 액션 연결, 선택 탭 우선 스마트 새로고침, 실시간 초기화 만료 반영, 계정 추가 및 독립 세션 로그인을 제공합니다.
+// 역할: 다중 제미나이 계정의 메인/서브 탭 분리 목록, 수동 소진/복구 토글, 선택 탭 우선 새로고침, 실시간 초기화 만료 반영 및 목록↔로그인 화면을 한 모달 안에서 전환하는 계정 사용량 다이얼로그 호스트(Single Dialog Host)를 제공합니다. (로그인 WebView 자체는 GeminiAccountLoginView가 담당)
 package com.example.gemgemgen.usage.ui
 
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
-import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -18,7 +10,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,11 +26,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PersonAdd
@@ -47,11 +36,9 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -67,18 +54,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.example.gemgemgen.automation.ui.GeminiGradientLogo
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.NeuModalDialogFrame
-import com.example.gemgemgen.ui.theme.NeuPillChip
-import com.example.gemgemgen.ui.theme.appTextFieldColors
+import com.example.gemgemgen.usage.android.GeminiAccountLoginSessionHandler
 import com.example.gemgemgen.usage.android.MultiProfileGeminiUsageFetcher
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
-import com.example.gemgemgen.usage.domain.GeminiUsageParser
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 import kotlinx.coroutines.delay
 
@@ -93,15 +77,6 @@ private sealed interface MultiUsageModalStage {
     ) : MultiUsageModalStage
 }
 
-private val PRESET_ACCOUNT_ALIASES = listOf(
-    "개인 본계정",
-    "작업용 1",
-    "작업용 2",
-    "작업용 3",
-    "서브 계정 4",
-    "서브 계정 5"
-)
-
 /**
  * 다중 Google Gemini 계정(5개 이상)의 사용량을 메인/서브 탭 분리 수직 스크롤 목록으로 확인·감시하는 모달 다이얼로그.
  *
@@ -109,7 +84,7 @@ private val PRESET_ACCOUNT_ALIASES = listOf(
  * - 탭 바: [메인 (N개)] / [서브 (N개)] 세그먼트 전환
  * - 수직 스크롤 목록: 등록된 계정 카드([GeminiAccountRowCard]) 나열
  * - 빈 상태(Empty State): 전체 빈 상태 및 탭별 빈 상태 안내 화면 제공
- * - 인앱 [계정 추가] / [로그인]: 해당 계정 전용 독립 세션 웹뷰로 구글 로그인 및 쿠키 격리 저장
+ * - 인앱 [계정 추가] / [로그인]: [AccountIsolatedLoginContent]로 크로스페이드 전환하여 독립 세션 로그인 제공
  */
 @Composable
 fun MultiGeminiUsageDialog(
@@ -122,7 +97,9 @@ fun MultiGeminiUsageDialog(
     onRefreshAll: (GeminiAccountGroup?) -> Unit,
     onSwitchAccount: ((accountId: String) -> Unit)? = null,
     onMoveAccountGroup: ((accountId: String, targetGroup: GeminiAccountGroup) -> Unit)? = null,
-    onDismiss: () -> Unit
+    onToggleManualExhaustion: ((accountId: String, isExhausted: Boolean) -> Unit)? = null,
+    onDismiss: () -> Unit,
+    sessionHandler: GeminiAccountLoginSessionHandler = MultiProfileGeminiUsageFetcher.loginSessionHandler()
 ) {
     var activeStage by remember {
         mutableStateOf<MultiUsageModalStage>(MultiUsageModalStage.AccountList)
@@ -201,6 +178,7 @@ fun MultiGeminiUsageDialog(
                         onRemoveAccount = onRemoveAccount,
                         onSwitchAccount = onSwitchAccount,
                         onMoveAccountGroup = onMoveAccountGroup,
+                        onToggleManualExhaustion = onToggleManualExhaustion,
                         onDismiss = onDismiss
                     )
                 }
@@ -208,6 +186,7 @@ fun MultiGeminiUsageDialog(
                     AccountIsolatedLoginContent(
                         targetProfile = stage.targetProfile,
                         isNewAccount = stage.isNewAccount,
+                        sessionHandler = sessionHandler,
                         onSaveAndFinish = { alias, email ->
                             if (stage.isNewAccount) {
                                 onAddAccount(alias, email, stage.targetProfile.id, stage.targetProfile.group)
@@ -241,6 +220,7 @@ private fun MultiAccountListContent(
     onRemoveAccount: (String) -> Unit,
     onSwitchAccount: ((String) -> Unit)? = null,
     onMoveAccountGroup: ((String, GeminiAccountGroup) -> Unit)? = null,
+    onToggleManualExhaustion: ((accountId: String, isExhausted: Boolean) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val representativeId = multiUsageState.representativeAccount?.profile?.id
@@ -451,6 +431,9 @@ private fun MultiAccountListContent(
                             onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
                                 { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
                             },
+                            onToggleManualExhaustion = onToggleManualExhaustion?.let { fn ->
+                                { isExhausted -> fn(accountEntry.profile.id, isExhausted) }
+                            },
                             nowMillis = nowMillis
                         )
                     }
@@ -504,6 +487,9 @@ private fun MultiAccountListContent(
                             },
                             onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
                                 { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
+                            },
+                            onToggleManualExhaustion = onToggleManualExhaustion?.let { fn ->
+                                { isExhausted -> fn(accountEntry.profile.id, isExhausted) }
                             },
                             nowMillis = nowMillis
                         )
@@ -730,7 +716,7 @@ private fun MultiAccountEmptyStateView(
                     color = AppTheme.colors.textPrimary
                 )
                 Text(
-                    text = "본계정과 서브 계정(5개 이상)을 추가하면 쿠키·세션 덮어쓰기 없이\n각 계정의 5시간 단기 한도와 주간 누적 한도를 한눈에 감시할 수 있습니다.",
+                    text = "본계정과 서브 계정(5개 이상)을 추가하면 쿠키·세션 덮어쓰기 없이\n각 계정의 5시간 한도와 주간 한도를 한눈에 감시할 수 있습니다.",
                     style = MaterialTheme.typography.bodySmall,
                     fontSize = 11.sp,
                     lineHeight = 16.sp,
@@ -761,297 +747,3 @@ private fun MultiAccountEmptyStateView(
     }
 }
 
-/**
- * 계정별 독립 세션 WebView로 구글 로그인을 진행하고 별칭/이메일을 저장하는 모달 내부 화면.
- */
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-private fun AccountIsolatedLoginContent(
-    targetProfile: GeminiAccountProfile,
-    isNewAccount: Boolean,
-    onSaveAndFinish: (alias: String, email: String) -> Unit,
-    onBackToList: () -> Unit
-) {
-    var aliasInput by remember(targetProfile.id) { mutableStateOf(targetProfile.alias) }
-    var emailInput by remember(targetProfile.id) { mutableStateOf(targetProfile.email) }
-    var sawAuthRedirect by remember(targetProfile.id) { mutableStateOf(false) }
-    var recoveredCookieMismatch by remember(targetProfile.id) { mutableStateOf(false) }
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
-
-    val completeAndCommit = {
-        MultiProfileGeminiUsageFetcher.currentInstance()?.commitInteractiveLoginSession(targetProfile)
-        CookieManager.getInstance().flush()
-        val finalAlias = aliasInput.trim().ifEmpty { targetProfile.displayAlias }
-        onSaveAndFinish(finalAlias, emailInput.trim())
-    }
-
-    DisposableEffect(targetProfile.id) {
-        onDispose {
-            webViewRef?.let { webView ->
-                runCatching {
-                    if (!isNewAccount) {
-                        MultiProfileGeminiUsageFetcher.currentInstance()
-                            ?.commitInteractiveLoginSession(targetProfile)
-                    }
-                    CookieManager.getInstance().flush()
-                    webView.stopLoading()
-                    webView.loadUrl(MultiProfileGeminiUsageFetcher.BLANK_URL)
-                    webView.clearHistory()
-                    (webView.parent as? ViewGroup)?.removeView(webView)
-                    webView.destroy()
-                }
-            }
-            webViewRef = null
-        }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        // 상단 바: 뒤로가기 + 제목 + [완료 및 저장] 버튼
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = AppTheme.colors.insetBed,
-                    border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onBackToList)
-                        .semantics { contentDescription = "계정 목록으로 돌아가기" }
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                            tint = AppTheme.colors.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Column {
-                    Text(
-                        text = if (isNewAccount) "새 Google 계정 추가 (독립 세션)" else "계정 수정 및 세션 재로그인",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = AppTheme.colors.textPrimary
-                    )
-                    Text(
-                        text = "독립 쿠키 금고(${targetProfile.webViewProfileName})에 쿠키가 격리 저장됩니다",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AppTheme.colors.textSecondary,
-                        fontSize = 10.sp
-                    )
-                }
-            }
-
-            NeuButton(
-                onClick = completeAndCommit,
-                isPrimary = true,
-                shape = RoundedCornerShape(10.dp),
-                contentModifier = Modifier.padding(PaddingValues(0.dp)),
-                modifier = Modifier.height(36.dp)
-            ) {
-                Text(
-                    text = "완료 및 저장",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        // 빠른 별칭 추천 칩
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            PRESET_ACCOUNT_ALIASES.forEach { preset ->
-                NeuPillChip(
-                    text = preset,
-                    selected = aliasInput.trim() == preset,
-                    onClick = { aliasInput = preset },
-                    height = 28.dp,
-                    textStyle = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
-
-        // 계정 별칭 및 구글 이메일 입력란
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedTextField(
-                value = aliasInput,
-                onValueChange = { aliasInput = it },
-                label = { Text("계정 별칭 (예: 작업용 1)", fontSize = 11.sp) },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodySmall,
-                colors = appTextFieldColors(),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(0.45f)
-            )
-
-            OutlinedTextField(
-                value = emailInput,
-                onValueChange = { emailInput = it },
-                label = { Text("구글 이메일 (선택)", fontSize = 11.sp) },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodySmall,
-                colors = appTextFieldColors(),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.weight(0.55f)
-            )
-        }
-
-        // 해당 계정 전용 독립 세션 WebView
-        NeuInsetBed(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(360.dp),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            AndroidView(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(14.dp)),
-                factory = { context ->
-                    WebView(context).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-
-                        // 중요: settings 및 loadUrl 호출 전에 동기적으로 쿠키 금고 복원 및 정제를 완료합니다.
-                        MultiProfileGeminiUsageFetcher.currentInstance()
-                            ?.prepareInteractiveLoginWebView(
-                                webView = this,
-                                profile = targetProfile,
-                                clearExistingProfileCookies = isNewAccount
-                            )
-
-                        val cookieManager = CookieManager.getInstance()
-                        cookieManager.setAcceptCookie(true)
-                        cookieManager.setAcceptThirdPartyCookies(this, true)
-
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            databaseEnabled = true
-                            cacheMode = WebSettings.LOAD_DEFAULT
-                            userAgentString =
-                                MultiProfileGeminiUsageFetcher.sanitizeWebViewUserAgent(userAgentString)
-                        }
-
-                        webViewClient = object : WebViewClient() {
-                            override fun shouldOverrideUrlLoading(
-                                view: WebView?,
-                                request: WebResourceRequest?
-                            ): Boolean {
-                                val nextUrl = request?.url?.toString()
-                                if (GeminiUsageParser.isCookieMismatchUrl(nextUrl) && !recoveredCookieMismatch && view != null) {
-                                    recoveredCookieMismatch = true
-                                    sawAuthRedirect = true
-                                    MultiProfileGeminiUsageFetcher.currentInstance()
-                                        ?.recoverFromCookieMismatchOnMain(targetProfile, view)
-                                    return true
-                                }
-                                if (GeminiUsageParser.isAuthRedirectUrl(nextUrl)) {
-                                    sawAuthRedirect = true
-                                }
-                                return false
-                            }
-
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                super.onPageStarted(view, url, favicon)
-                                if (GeminiUsageParser.isCookieMismatchUrl(url) && !recoveredCookieMismatch && view != null) {
-                                    recoveredCookieMismatch = true
-                                    sawAuthRedirect = true
-                                    MultiProfileGeminiUsageFetcher.currentInstance()
-                                        ?.recoverFromCookieMismatchOnMain(targetProfile, view)
-                                    return
-                                }
-                                if (GeminiUsageParser.isAuthRedirectUrl(url)) {
-                                    sawAuthRedirect = true
-                                }
-                            }
-
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                super.onPageFinished(view, url)
-                                if (GeminiUsageParser.isCookieMismatchUrl(url) && !recoveredCookieMismatch && view != null) {
-                                    recoveredCookieMismatch = true
-                                    sawAuthRedirect = true
-                                    MultiProfileGeminiUsageFetcher.currentInstance()
-                                        ?.recoverFromCookieMismatchOnMain(targetProfile, view)
-                                    return
-                                }
-
-                                // 페이지 본문에 쿠키 설정 오류 안내가 표시된 경우 자동 정화 후 로그인 화면으로 복구
-                                view?.evaluateJavascript(
-                                    """
-                                    (function() {
-                                        var text = (document.body && document.body.innerText) ? document.body.innerText : '';
-                                        if (text.indexOf('쿠키 설정에 문제가 있음을 발견했습니다') !== -1 ||
-                                            text.toLowerCase().indexOf('problem with your cookie settings') !== -1) {
-                                            return '__COOKIE_MISMATCH__';
-                                        }
-                                        var m = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
-                                        return m ? m[0] : '';
-                                    })();
-                                    """.trimIndent()
-                                ) { rawJsResult ->
-                                    val unquoted = rawJsResult?.trim()?.trim('"').orEmpty()
-                                    if (unquoted == "__COOKIE_MISMATCH__" && !recoveredCookieMismatch) {
-                                        recoveredCookieMismatch = true
-                                        sawAuthRedirect = true
-                                        MultiProfileGeminiUsageFetcher.currentInstance()
-                                            ?.recoverFromCookieMismatchOnMain(targetProfile, view)
-                                        return@evaluateJavascript
-                                    }
-                                    val detected = GeminiUsageParser.extractAccountEmail(unquoted)
-                                    if (!detected.isNullOrBlank() && emailInput.isBlank()) {
-                                        emailInput = detected
-                                    }
-                                }
-
-                                MultiProfileGeminiUsageFetcher.currentInstance()
-                                    ?.commitInteractiveLoginSession(targetProfile)
-
-                                if (sawAuthRedirect &&
-                                    !url.isNullOrBlank() &&
-                                    url.startsWith("https://gemini.google.com/usage")
-                                ) {
-                                    sawAuthRedirect = false
-                                    completeAndCommit()
-                                }
-                            }
-                        }
-
-                        loadUrl(
-                            if (isNewAccount) {
-                                GeminiUsageParser.LOGIN_URL
-                            } else {
-                                GeminiUsageParser.USAGE_URL
-                            }
-                        )
-                        webViewRef = this
-                    }
-                }
-            )
-        }
-    }
-}

@@ -117,6 +117,11 @@ class ManageRemoteAutomationUseCase(
         gateway.forceStop(requestId)
     }
 
+    fun updateRepeatCount(repeatCount: Int) {
+        val requestId = activeRequestId.get() ?: return
+        gateway.updateRepeatCount(requestId, repeatCount.coerceIn(1, 999))
+    }
+
     companion object {
         const val PAIRING_CODE_LENGTH = 4
     }

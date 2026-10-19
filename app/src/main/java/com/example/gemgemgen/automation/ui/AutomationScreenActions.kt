@@ -1,22 +1,19 @@
-// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 다중 계정 제미나이 사용량 모달/CRUD/새로고침 액션 및 추천 칩 국소 관찰 상태를 캡슐화한 인터페이스입니다.
+// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 다중 계정 제미나이 액션 및 상용구 일괄 치환 액션을 제공하는 인터페이스입니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
-import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 
 interface AutomationScreenActions {
-    // 추천 칩 국소 관찰 스트림 (커서 이동 시 전체 화면 리컴포지션 차단)
-    val activeSuggestions: StateFlow<List<WildcardTokenAutocomplete.Candidate>>
-        get() = MutableStateFlow(emptyList())
+    // 프롬프트 에디터 전용 액션 그룹
+    val promptEditor: PromptEditorUiActions
+        get() = object : PromptEditorUiActions {}
 
     // 기본 실행 및 제어
     fun onTargetAppSelected(targetApp: AutomationTargetApp) {}
@@ -27,30 +24,6 @@ interface AutomationScreenActions {
     fun onAutomationModeSelected(mode: AutomationMode) {}
     fun pairRemoteDevice(pairingCode: String) {}
     fun disconnectRemoteDevice() {}
-
-    // 프롬프트 텍스트 편집 및 클립보드
-    fun onPromptTemplateChange(value: String) {}
-    fun importPromptFromClipboard() {}
-    fun copyPromptToClipboard() {}
-    fun applySuggestion(candidate: WildcardTokenAutocomplete.Candidate) {}
-
-    // 히스토리 탐색
-    fun navigatePromptHistoryBack() {}
-    fun navigatePromptHistoryForward() {}
-
-    // 문단 선택 모드
-    fun toggleParagraphSelectionMode() {}
-    fun selectPromptParagraphAt(offset: Int) {}
-    fun deleteSelectedPromptParagraph() {}
-    fun replaceSelectedPromptParagraph(replacement: String) {}
-    fun cancelParagraphSelection() {}
-
-    // 검색 기능
-    fun toggleSearch(active: Boolean? = null) {}
-    fun setSearchQuery(query: String) {}
-    fun navigateSearchNext() {}
-    fun navigateSearchPrevious() {}
-    fun closeSearch() {}
 
     // 인스트럭션 설정
     fun insertTopInstruction() {}
@@ -71,6 +44,7 @@ interface AutomationScreenActions {
     fun addPromptSnippet(shortcut: String, content: String) {}
     fun updatePromptSnippet(id: String, shortcut: String, content: String) {}
     fun deletePromptSnippet(id: String) {}
+    fun batchReplacePromptSnippets(searchText: String, replacementText: String) {}
 
     // 유지보수 및 앱 제어
     fun closeGeminiApp() {}
@@ -91,6 +65,7 @@ interface AutomationScreenActions {
     fun moveGeminiAccountGroup(accountId: String, targetGroup: GeminiAccountGroup) {}
     fun selectRepresentativeGeminiAccount(accountId: String) {}
     fun switchGeminiAccount(accountId: String) {}
+    fun toggleGeminiAccountManualExhaustion(accountId: String, isExhausted: Boolean) {}
     fun refreshGeminiAccountUsage(accountId: String) {}
     fun refreshAllGeminiUsage(prioritizedGroup: GeminiAccountGroup? = null) {}
 

@@ -1,4 +1,4 @@
-// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(계정 전환 버튼, 실시간 초기화 만료 보정, 소진 Dim UI, 소진 뱃지, 별칭, 게이지, 탭 간 계정 이동 메뉴)를 제공합니다.
+// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(계정 전환 버튼, 실시간 초기화 만료 보정, 소진 Dim UI, 소진 뱃지, 별칭, 게이지, 계정 이동 및 사용불가 내림/복구 메뉴)를 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -27,9 +27,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -38,6 +39,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -77,8 +79,8 @@ import java.util.Locale
  *
  * 구성 요소:
  * 1. 계정 라벨/별칭 (예: "작업용 1", "개인 본계정") 및 갱신 시각 (긴 이메일은 숨김 처리)
- * 2. 5시간 단기 한도 프로그레스 바 + 리셋 시각 및 남은 시간 ("14:00 (4시간 후)")
- * 3. 주간 누적 한도 프로그레스 바 + 리셋 일시 및 남은 시간 ("10/20/14:00 (4일 후)")
+ * 2. 5시간 한도 프로그레스 바 + 리셋 시각 및 남은 시간 ("14:00 (4시간 후)")
+ * 3. 주간 한도 프로그레스 바 + 리셋 일시 및 남은 시간 ("10/20/14:00 (4일 후)")
  * 4. 70%/90% 위험 뱃지 (주의/경고)
  * 5. 개별 계정 [전환] 버튼, [새로고침] 아이콘, [계정 삭제] 메뉴 (더보기 메뉴 및 2단계 확인)
  */
@@ -93,20 +95,21 @@ fun GeminiAccountRowCard(
     onDeleteAccount: () -> Unit,
     onSwitchAccount: (() -> Unit)? = null,
     onMoveAccountGroup: ((GeminiAccountGroup) -> Unit)? = null,
-    nowMillis: Long = System.currentTimeMillis(),
+    onToggleManualExhaustion: ((Boolean) -> Unit)? = null,
+    nowMillis: Long = remember { System.currentTimeMillis() },
     modifier: Modifier = Modifier
 ) {
     val displayedSuccess = entry.displayedSuccess
     val isLoading = entry.usageState is GeminiUsageState.Loading || entry.isRefreshing
-    val overallWarning = entry.overallWarningLevel(nowMillis)
+    val fiveHourWarning = entry.fiveHourWarningLevel(nowMillis)
     val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
     val exhaustionReason = entry.quotaExhaustionReason(nowMillis)
     val isExhausted = exhaustionReason != null
 
     val cardBorderColor = when {
         isExhausted -> AppTheme.colors.cardBorder.copy(alpha = 0.25f)
-        overallWarning == GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.65f)
-        overallWarning == GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.65f)
+        fiveHourWarning == GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.65f)
+        fiveHourWarning == GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.65f)
         isRepresentative -> brandHighlightColor.copy(alpha = 0.7f)
         else -> AppTheme.colors.cardBorder
     }
@@ -172,10 +175,10 @@ fun GeminiAccountRowCard(
 
                     if (exhaustionReason != null) {
                         GeminiQuotaExhaustionBadge(reason = exhaustionReason)
-                    } else if (overallWarning != GeminiUsageWarningLevel.NORMAL) {
+                    } else if (fiveHourWarning != GeminiUsageWarningLevel.NORMAL) {
                         GeminiUsageWarningBadge(
-                            warningLevel = overallWarning,
-                            color = resolveGeminiUsageWarningColor(overallWarning)
+                            warningLevel = fiveHourWarning,
+                            color = resolveGeminiUsageWarningColor(fiveHourWarning)
                         )
                     }
 
@@ -292,46 +295,25 @@ fun GeminiAccountRowCard(
 
                         DropdownMenu(
                             expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
+                            onDismissRequest = { showMenu = false },
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = AppTheme.colors.card,
+                            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
+                            shadowElevation = 8.dp
                         ) {
-                            if (onSwitchAccount != null) {
-                                DropdownMenuItem(
-                                    text = { Text("Gemini 계정 전환 (대표 지정)") },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Default.SwapHoriz,
-                                            contentDescription = null,
-                                            tint = brandHighlightColor
-                                        )
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        onSwitchAccount()
-                                    }
-                                )
-                            }
-                            if (!isRepresentative) {
-                                DropdownMenuItem(
-                                    text = { Text("대표 계정으로 지정") },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = brandHighlightColor
-                                        )
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        onSelectRepresentative()
-                                    }
-                                )
-                            }
                             DropdownMenuItem(
-                                text = { Text("별칭 수정 / 재로그인") },
+                                text = {
+                                    Text(
+                                        text = "별칭 수정 / 재로그인",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = AppTheme.colors.textPrimary
+                                    )
+                                },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Edit,
-                                        contentDescription = null
+                                        contentDescription = null,
+                                        tint = AppTheme.colors.textSecondary
                                     )
                                 },
                                 onClick = {
@@ -340,6 +322,11 @@ fun GeminiAccountRowCard(
                                 }
                             )
                             if (onMoveAccountGroup != null) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    color = AppTheme.colors.insetBorder.copy(alpha = 0.65f),
+                                    thickness = 0.8.dp
+                                )
                                 val targetGroup = if (entry.profile.group == GeminiAccountGroup.MAIN) {
                                     GeminiAccountGroup.SUB
                                 } else {
@@ -347,7 +334,13 @@ fun GeminiAccountRowCard(
                                 }
                                 val moveLabel = if (targetGroup == GeminiAccountGroup.SUB) "서브로 이동" else "메인으로 이동"
                                 DropdownMenuItem(
-                                    text = { Text(moveLabel) },
+                                    text = {
+                                        Text(
+                                            text = moveLabel,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = AppTheme.colors.textPrimary
+                                        )
+                                    },
                                     leadingIcon = {
                                         Icon(
                                             imageVector = Icons.Default.SwapHoriz,
@@ -361,10 +354,46 @@ fun GeminiAccountRowCard(
                                     }
                                 )
                             }
+                            if (onToggleManualExhaustion != null) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    color = AppTheme.colors.insetBorder.copy(alpha = 0.65f),
+                                    thickness = 0.8.dp
+                                )
+                                val isManuallyExhausted = entry.profile.isManuallyExhausted(nowMillis)
+                                val toggleText = if (isManuallyExhausted) "사용 가능으로 복구" else "사용불가로 내리기"
+                                val toggleIcon = if (isManuallyExhausted) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = toggleText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = AppTheme.colors.textPrimary
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = toggleIcon,
+                                            contentDescription = null,
+                                            tint = brandHighlightColor
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onToggleManualExhaustion(!isManuallyExhausted)
+                                    }
+                                )
+                            }
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                color = AppTheme.colors.insetBorder,
+                                thickness = 1.dp
+                            )
                             DropdownMenuItem(
                                 text = {
                                     Text(
                                         text = "계정 삭제",
+                                        style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.error,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -505,34 +534,26 @@ private fun AccountUsageGaugesSection(
     val fiveHourPercent = entry.effectiveFiveHourPercent(nowMillis)
     val weeklyPercent = entry.effectiveWeeklyPercent(nowMillis)
 
-    val fiveHourResetText = when {
-        entry.isFiveHourWindowExpired(nowMillis) -> "초기화됨 (0%)"
-        entry.isFiveHourTimerUnstarted(nowMillis) -> "대기 중 (미시작)"
-        else -> GeminiUsageParser.formatCompactResetWithRemaining(
-            rawText = success.fiveHourResetText,
-            nowMillis = nowMillis,
-            updatedAt = success.updatedAt,
-            isFiveHourWindow = true
-        )
-    }
+    val fiveHourResetText = GeminiUsageParser.formatCompactResetWithRemaining(
+        rawText = success.fiveHourResetText,
+        nowMillis = nowMillis,
+        updatedAt = success.updatedAt,
+        isFiveHourWindow = true
+    )
 
-    val weeklyResetText = if (entry.isWeeklyWindowExpired(nowMillis)) {
-        "초기화됨 (0%)"
-    } else {
-        GeminiUsageParser.formatCompactResetWithRemaining(
-            rawText = success.weeklyResetText,
-            nowMillis = nowMillis,
-            updatedAt = success.updatedAt,
-            isFiveHourWindow = false
-        )
-    }
+    val weeklyResetText = GeminiUsageParser.formatCompactResetWithRemaining(
+        rawText = success.weeklyResetText,
+        nowMillis = nowMillis,
+        updatedAt = success.updatedAt,
+        isFiveHourWindow = false
+    )
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         AccountUsageGaugeRow(
-            title = "5시간 단기",
+            title = "5시간",
             percent = fiveHourPercent,
             resetText = fiveHourResetText,
             warningLevel = GeminiUsageWarningLevel.fromPercent(fiveHourPercent),
@@ -540,7 +561,7 @@ private fun AccountUsageGaugesSection(
         )
 
         AccountUsageGaugeRow(
-            title = "주간 누적",
+            title = "주간",
             percent = weeklyPercent,
             resetText = weeklyResetText,
             warningLevel = GeminiUsageWarningLevel.fromPercent(weeklyPercent),
@@ -802,9 +823,13 @@ private fun AccountLoadingRow() {
     }
 }
 
+private val accountUpdatedAtFormatter = ThreadLocal.withInitial {
+    SimpleDateFormat("HH:mm 갱신", Locale.KOREA)
+}
+
 private fun formatAccountUpdatedAtTime(updatedAt: Long): String {
     return runCatching {
-        val formatter = SimpleDateFormat("HH:mm 갱신", Locale.KOREA)
+        val formatter = accountUpdatedAtFormatter.get() ?: SimpleDateFormat("HH:mm 갱신", Locale.KOREA)
         formatter.format(Date(updatedAt))
     }.getOrDefault("")
 }
