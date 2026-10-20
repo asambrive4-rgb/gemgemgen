@@ -83,7 +83,7 @@ internal class GeminiAccessibilityNodeFinder(
 
         val tallEnoughForSidebarList = height >= rootBounds.height / 3
         val startsNearLeftEdge = left <= rootBounds.left + rootBounds.width / 4
-        val centerIsNotOnRightPane = centerX <= rootBounds.centerX
+        val centerIsNotOnRightPane = centerX <= rootBounds.centerX + 16
 
         return tallEnoughForSidebarList && startsNearLeftEdge && centerIsNotOnRightPane
     }
@@ -107,9 +107,10 @@ internal class GeminiAccessibilityNodeFinder(
 
     internal companion object {
         const val NEW_CHAT_DESCRIPTION = "새 채팅"
-        val INPUT_KEYWORDS = listOf("프롬프트", "메시지")
+        val INPUT_KEYWORDS = listOf("프롬프트", "메시지", "Gemini에게 물어보세요")
         val SEND_KEYWORDS = listOf("보내기", "전송")
         val SEND_VIEW_IDS = listOf(
+            "com.google.android.googlequicksearchbox:id/assistant_robin_input_send_button_compose",
             "com.google.android.googlequicksearchbox:id/assistant_robin_input_send_button",
             "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_send_button"
         )
