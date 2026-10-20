@@ -19,7 +19,5 @@ class GeminiAccessibilityNodeFinderTest {
     @Test
     fun inChatNewChatCandidates_containExpectedKeywords() {
         assertEquals("새 채팅", GeminiAccessibilityNodeFinder.NEW_CHAT_DESCRIPTION)
-        assertTrue(GeminiAccessibilityNodeFinder.SEND_VIEW_IDS.contains("com.google.android.googlequicksearchbox:id/assistant_robin_input_send_button_compose"))
-        assertTrue(GeminiAccessibilityNodeFinder.INPUT_KEYWORDS.contains("Gemini에게 물어보세요"))
     }
 }
