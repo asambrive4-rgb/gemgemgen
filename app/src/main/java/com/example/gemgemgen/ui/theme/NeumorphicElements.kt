@@ -176,31 +176,42 @@ fun NeuButton(
     contentModifier: Modifier = Modifier,
     enabled: Boolean = true,
     isPrimary: Boolean = true,
+    containerColor: Color? = null,
+    contentColor: Color? = null,
+    borderColor: Color? = null,
+    elevation: Dp? = null,
     shape: Shape = RoundedCornerShape(12.dp),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
     content: @Composable RowScope.() -> Unit
 ) {
-    val backgroundColor = if (isPrimary) AppTheme.colors.primary else AppTheme.colors.card
-    val contentColor = if (isPrimary) AppTheme.colors.onPrimary else AppTheme.colors.textPrimary
-    val borderColor = if (isPrimary) AppTheme.colors.primary else AppTheme.colors.cardBorder
-    val elevation = if (isPrimary) 6.dp else 3.dp
+    val defaultBg = if (isPrimary) AppTheme.colors.primary else AppTheme.colors.card
+    val defaultContent = if (isPrimary) AppTheme.colors.onPrimary else AppTheme.colors.textPrimary
+    val defaultBorder = if (isPrimary) AppTheme.colors.primary else AppTheme.colors.cardBorder
+    val defaultElevation = if (isPrimary) 6.dp else 3.dp
+
+    val resolvedBg = containerColor ?: defaultBg
+    val resolvedContent = contentColor ?: defaultContent
+    val resolvedBorder = borderColor ?: (if (containerColor != null) containerColor else defaultBorder)
+    val resolvedElevation = elevation ?: defaultElevation
+
+    val shadowBaseColor = AppTheme.colors.shadowDark
 
     Surface(
         onClick = onClick,
         enabled = enabled,
         shape = shape,
-        color = if (enabled) backgroundColor else backgroundColor.copy(alpha = 0.5f),
-        contentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.5f),
-        modifier = modifier
-            .shadow(
-                elevation = if (enabled) elevation else 0.dp,
-                shape = shape,
-                ambientColor = if (isPrimary) AppTheme.colors.primary.copy(alpha = 0.4f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = if (isPrimary) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
-            .border(BorderStroke(1.5.dp, borderColor), shape)
+        color = if (enabled) resolvedBg else resolvedBg.copy(alpha = 0.5f),
+        contentColor = if (enabled) resolvedContent else resolvedContent.copy(alpha = 0.5f),
+        border = BorderStroke(1.5.dp, resolvedBorder),
+        modifier = modifier.shadow(
+            elevation = if (enabled) resolvedElevation else 0.dp,
+            shape = shape,
+            ambientColor = shadowBaseColor.copy(alpha = 0.4f),
+            spotColor = shadowBaseColor.copy(alpha = 0.3f)
+        )
     ) {
         Row(
-            modifier = contentModifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = contentModifier.padding(contentPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
             content = content

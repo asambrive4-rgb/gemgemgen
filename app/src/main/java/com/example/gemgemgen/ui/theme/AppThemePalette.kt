@@ -6,8 +6,6 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-val RemoteStartGreen = Color(0xFF2E7D32)
-
 /**
  * GemGemGen 앱의 3가지 소프트 3D 뉴모피즘 테마 색상 팔레트.
  * 기본값은 SAGE_MATCHA (팔레트 2: 노르딕 세이지 & 말차)입니다.

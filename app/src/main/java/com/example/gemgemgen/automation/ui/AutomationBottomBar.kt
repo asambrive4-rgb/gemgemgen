@@ -15,9 +15,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,15 +25,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
-import com.example.gemgemgen.ui.theme.RemoteStartGreen
 
 @Composable
 internal fun AutomationBottomBar(
@@ -130,6 +129,8 @@ private fun AutomationStatusSection(
             text = statusText,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             color = if (isError) {
                 MaterialTheme.colorScheme.error
             } else {
@@ -182,79 +183,73 @@ internal fun AutomationRunButton(
     hasPreStartMemoryCleanup: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier.width(74.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (!isRunning) {
-            val startBtnColor = if (isRemoteSendMode) RemoteStartGreen else AppTheme.colors.primary
-            Button(
-                onClick = onRunMvp,
-                enabled = canRun,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = startBtnColor,
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(38.dp)
-                    .shadow(
-                        elevation = if (canRun) 4.dp else 0.dp,
-                        shape = RoundedCornerShape(12.dp),
-                        ambientColor = startBtnColor.copy(alpha = 0.4f),
-                        spotColor = startBtnColor.copy(alpha = 0.3f)
-                    )
-            ) {
-                if (isRemoteSendMode) {
-                    Icon(
-                        imageVector = Icons.Default.Wifi,
-                        contentDescription = "Wi-Fi 송신",
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
-                }
-                Text(
-                    text = "시작",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
+    val buttonShape = RoundedCornerShape(13.dp)
+    val buttonModifier = modifier
+        .width(88.dp)
+        .height(42.dp)
+
+    if (!isRunning) {
+        NeuButton(
+            onClick = onRunMvp,
+            enabled = canRun,
+            isPrimary = true,
+            elevation = 3.dp,
+            shape = buttonShape,
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+            modifier = buttonModifier
+        ) {
+            if (isRemoteSendMode) {
+                Icon(
+                    imageVector = Icons.Default.Wifi,
+                    contentDescription = "Wi-Fi 송신",
+                    modifier = Modifier.size(15.dp)
                 )
-                if (hasPreStartMemoryCleanup) {
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Icon(
-                        imageVector = Icons.Default.CleaningServices,
-                        contentDescription = "시작 전 메모리 정리 예정",
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
+                Spacer(modifier = Modifier.width(3.dp))
+            } else {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = "시작",
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(2.dp))
             }
-        } else {
-            Button(
-                onClick = onCancelAutomation,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError
-                ),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(38.dp)
-                    .shadow(
-                        elevation = 4.dp,
-                        shape = RoundedCornerShape(12.dp),
-                        ambientColor = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
-                        spotColor = MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
-                    )
-            ) {
-                Text(
-                    text = "중지",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
+            Text(
+                text = "시작",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            if (hasPreStartMemoryCleanup) {
+                Spacer(modifier = Modifier.width(3.dp))
+                Icon(
+                    imageVector = Icons.Default.CleaningServices,
+                    contentDescription = "시작 전 메모리 정리 예정",
+                    modifier = Modifier.size(13.dp)
                 )
             }
+        }
+    } else {
+        NeuButton(
+            onClick = onCancelAutomation,
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError,
+            elevation = 3.dp,
+            shape = buttonShape,
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+            modifier = buttonModifier
+        ) {
+            Icon(
+                imageVector = Icons.Default.Stop,
+                contentDescription = "중지",
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = "중지",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
         }
     }
 }

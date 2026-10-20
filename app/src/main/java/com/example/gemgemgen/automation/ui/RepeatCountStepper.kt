@@ -57,11 +57,11 @@ internal fun RepeatCountStepper(
                 Text(
                     text = repeatCountText,
                     modifier = Modifier
-                        .widthIn(min = 28.dp)
+                        .widthIn(min = 32.dp)
                         .padding(horizontal = 4.dp),
                     color = AppTheme.colors.textPrimary,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
+                    fontSize = 16.sp,
                     textAlign = TextAlign.Center
                 )
 
@@ -81,7 +81,7 @@ private fun StepperButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val buttonShape = RoundedCornerShape(8.dp)
+    val buttonShape = RoundedCornerShape(9.dp)
 
     Box(
         modifier = Modifier
@@ -91,7 +91,7 @@ private fun StepperButton(
     ) {
         Box(
             modifier = Modifier
-                .size(30.dp)
+                .size(34.dp)
                 .then(
                     if (enabled) {
                         Modifier.shadow(
@@ -129,7 +129,7 @@ private fun StepperButton(
                     AppTheme.colors.textSecondary.copy(alpha = 0.4f)
                 },
                 fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
+                fontSize = 15.sp,
                 textAlign = TextAlign.Center
             )
         }
