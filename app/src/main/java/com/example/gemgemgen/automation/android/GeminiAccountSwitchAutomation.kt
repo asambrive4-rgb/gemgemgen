@@ -170,6 +170,50 @@ internal object GeminiAccountMatcher {
     ): Boolean = scoreCandidate(candidate, targetEmail, targetAlias) >= EXACT_MATCH_THRESHOLD
 }
 
+internal data class GeminiSidebarProfileCandidate(
+    val className: String = "",
+    val contentDescription: String = "",
+    val isClickableOrCheckable: Boolean = false,
+    val parent: GeminiSidebarProfileCandidate? = null
+)
+
+internal object GeminiSidebarProfileMatcher {
+    fun isSidebarOpen(
+        candidates: List<GeminiSidebarProfileCandidate>,
+        closeSidebarCandidates: List<String>
+    ): Boolean {
+        return candidates.any { candidate ->
+            val desc = candidate.contentDescription.trim()
+            closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }
+        }
+    }
+
+    /**
+     * 사이드바가 실제로 열려 있음이 확인된 경우에만 프로필/라디오 버튼 노드를 감지합니다.
+     * 사이드바가 닫혀 있는 상태라면 화면 내 라디오 버튼이 존재하더라도 null을 반환합니다.
+     */
+    fun findSidebarProfileCandidate(
+        candidates: List<GeminiSidebarProfileCandidate>,
+        closeSidebarCandidates: List<String>
+    ): GeminiSidebarProfileCandidate? {
+        val isSidebarOpen = isSidebarOpen(candidates, closeSidebarCandidates)
+        if (!isSidebarOpen) return null
+
+        val radioButtonNode = candidates.firstOrNull { candidate ->
+            candidate.className.contains("RadioButton", ignoreCase = true)
+        }
+        if (radioButtonNode != null) {
+            val parent = radioButtonNode.parent
+            if (parent != null && parent.isClickableOrCheckable) {
+                return parent
+            }
+            return radioButtonNode
+        }
+
+        return null
+    }
+}
+
 internal class GeminiAccountSwitchAutomation(
     private val targetEmail: String,
     private val targetAlias: String,
@@ -733,6 +777,12 @@ internal class GeminiAccountSwitchAutomation(
     }
 
     private fun findSidebarProfileNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        val isSidebarOpen = nodes.any { node ->
+            val desc = node.contentDescription?.toString()?.trim().orEmpty()
+            labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }
+        }
+        if (!isSidebarOpen) return null
+
         val radioButtonNode = nodes.firstOrNull { node ->
             node.className?.contains("RadioButton", ignoreCase = true) == true
         }
@@ -743,12 +793,6 @@ internal class GeminiAccountSwitchAutomation(
             }
             return radioButtonNode
         }
-
-        val isSidebarOpen = nodes.any { node ->
-            val desc = node.contentDescription?.toString()?.trim().orEmpty()
-            labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }
-        }
-        if (!isSidebarOpen) return null
 
         val profileIndicators = listOf(
             "pro",

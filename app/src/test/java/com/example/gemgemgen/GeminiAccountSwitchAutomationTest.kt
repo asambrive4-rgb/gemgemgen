@@ -1,11 +1,15 @@
-// 역할: Gemini 구글 계정 전환 접근성 노드 라벨 및 계정 식별자 매칭 규칙을 검증합니다.
+// 역할: Gemini 구글 계정 전환 접근성 노드 라벨, 사이드바 프로필 탐색 규칙 및 계정 식별자 매칭 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.GeminiAccountMatcher
 import com.example.gemgemgen.automation.android.GeminiAccountNodeCandidate
 import com.example.gemgemgen.automation.android.GeminiAccountSwitchNodeLabels
+import com.example.gemgemgen.automation.android.GeminiSidebarProfileCandidate
+import com.example.gemgemgen.automation.android.GeminiSidebarProfileMatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -143,5 +147,70 @@ class GeminiAccountSwitchAutomationTest {
                 targetAlias = "부계정"
             )
         )
+    }
+
+    @Test
+    fun findSidebarProfileCandidate_whenSidebarClosed_doesNotSelectRadioButton() {
+        val labels = GeminiAccountSwitchNodeLabels()
+        val radioButtonNode = GeminiSidebarProfileCandidate(
+            className = "android.widget.RadioButton",
+            isClickableOrCheckable = true
+        )
+        val normalNode = GeminiSidebarProfileCandidate(
+            contentDescription = "새 채팅"
+        )
+        val candidates = listOf(normalNode, radioButtonNode)
+
+        // 사이드바가 닫혀 있는 상태에서는 라디오 버튼이 존재하더라도 사이드바 프로필 노드로 잘못 감지되지 않아야 함
+        val result = GeminiSidebarProfileMatcher.findSidebarProfileCandidate(
+            candidates = candidates,
+            closeSidebarCandidates = labels.closeSidebarCandidates
+        )
+        assertNull(result)
+    }
+
+    @Test
+    fun findSidebarProfileCandidate_whenSidebarOpen_selectsRadioButton() {
+        val labels = GeminiAccountSwitchNodeLabels()
+        val closeSidebarNode = GeminiSidebarProfileCandidate(
+            contentDescription = "사이드바 닫기"
+        )
+        val radioButtonNode = GeminiSidebarProfileCandidate(
+            className = "android.widget.RadioButton",
+            isClickableOrCheckable = true
+        )
+        val candidates = listOf(closeSidebarNode, radioButtonNode)
+
+        // 사이드바가 열려 있음이 확인된 경우에만 라디오 버튼 노드를 정상 감지함
+        val result = GeminiSidebarProfileMatcher.findSidebarProfileCandidate(
+            candidates = candidates,
+            closeSidebarCandidates = labels.closeSidebarCandidates
+        )
+        assertNotNull(result)
+        assertEquals(radioButtonNode, result)
+    }
+
+    @Test
+    fun findSidebarProfileCandidate_whenSidebarOpenAndParentClickable_selectsParent() {
+        val labels = GeminiAccountSwitchNodeLabels()
+        val closeSidebarNode = GeminiSidebarProfileCandidate(
+            contentDescription = "사이드바 닫기"
+        )
+        val parentNode = GeminiSidebarProfileCandidate(
+            className = "android.widget.LinearLayout",
+            isClickableOrCheckable = true
+        )
+        val radioButtonNode = GeminiSidebarProfileCandidate(
+            className = "android.widget.RadioButton",
+            isClickableOrCheckable = false,
+            parent = parentNode
+        )
+        val candidates = listOf(closeSidebarNode, radioButtonNode)
+
+        val result = GeminiSidebarProfileMatcher.findSidebarProfileCandidate(
+            candidates = candidates,
+            closeSidebarCandidates = labels.closeSidebarCandidates
+        )
+        assertEquals(parentNode, result)
     }
 }

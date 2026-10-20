@@ -48,10 +48,23 @@ class GeminiAccessibilityService : AccessibilityService() {
     private var closeTaskTitle: String = GEMINI_TASK_TITLE
     private var closeTaskDescription: String = GEMINI_CLOSE_DESCRIPTION
     private val settingsStore by lazy { AutomationSettingsStore(applicationContext) }
+
+    private fun findTargetAppRoot(targetPackages: Set<String>): AccessibilityNodeInfo? {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            runCatching { clearCache() }
+        }
+        val activeRoot = runCatching { rootInActiveWindow }.getOrNull()
+        if (activeRoot != null && activeRoot.packageName?.toString() in targetPackages) {
+            return activeRoot
+        }
+        val winRoots = runCatching { windows.mapNotNull { it.root } }.getOrNull().orEmpty()
+        return winRoots.firstOrNull { it.packageName?.toString() in targetPackages } ?: activeRoot
+    }
+
     private val geminiAutomation by lazy {
         GeminiPromptAutomation(
             coroutineScope = serviceScope,
-            rootProvider = { rootInActiveWindow },
+            rootProvider = { findTargetAppRoot(GeminiAccessibilityNodeFinder.GEMINI_ACCESSIBILITY_PACKAGES) },
             copyToClipboard = ::copyTextToClipboard,
             isSidebarOpenModeEnabled = { settingsStore.geminiSidebarOpenMode.first() }
         )
@@ -59,14 +72,14 @@ class GeminiAccessibilityService : AccessibilityService() {
     private val chatGptAutomation by lazy {
         ChatGptPromptAutomation(
             coroutineScope = serviceScope,
-            rootProvider = { rootInActiveWindow },
+            rootProvider = { findTargetAppRoot(setOf(com.example.gemgemgen.core.AppDefaults.CHATGPT_PACKAGE_NAME)) },
             copyToClipboard = ::copyTextToClipboard
         )
     }
     private val flowAutomation by lazy {
         FlowPromptAutomation(
             coroutineScope = serviceScope,
-            rootProvider = { rootInActiveWindow },
+            rootProvider = { findTargetAppRoot(setOf(com.example.gemgemgen.core.AppDefaults.FLOW_PACKAGE_NAME)) },
             tapAtCoordinates = { x, y, onCompleted ->
                 tapCoordinates(x, y, onCompleted)
             }

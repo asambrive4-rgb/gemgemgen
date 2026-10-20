@@ -84,7 +84,7 @@ class AndroidTargetAppLauncher(
             .getLaunchIntentForPackage(packageName)
             ?: return false
 
-        context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
         return true
     }
 }

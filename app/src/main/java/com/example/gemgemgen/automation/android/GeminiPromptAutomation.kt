@@ -37,25 +37,33 @@ internal class GeminiPromptAutomation(
         notifyState: suspend (AutomationRunState) -> Unit
     ): Boolean {
         if (isSidebarOpenModeEnabled()) {
-            // 태블릿 가로 화면 등 사이드바가 항상 열려 있는 모드에서는
-            // 1회차(Initial)와 2회차 이후(Subsequent) 모두 '사이드바 열기'를 건너뛰고
-            // 열려 있는 사이드바 내 '채팅 검색' 근처의 '새 채팅'을 바로 클릭합니다.
-            return clickNewChatNearSearch(
-                notifyState = notifyState,
-                assumeSidebarOpen = true
-            )
+            val isSidebarActuallyOpen = nodeFinder.findNodeByTextOrDescription("사이드바 닫기") != null
+            if (isSidebarActuallyOpen) {
+                if (clickNewChatNearSearch(notifyState, assumeSidebarOpen = true)) {
+                    return true
+                }
+            } else {
+                // 사이드바 열림 모드로 설정되어 있으나 실제 화면(Freeform/세로 모드 등)에서는 사이드바가 닫혀 있는 경우 사이드바 열기 시도
+                if (clickSidebar(notifyState) && clickNewChatNearSearch(notifyState)) {
+                    return true
+                }
+            }
+            // 사이드바 탐색이 실패한 경우에도 상단 툴바로 안전하게 Fallback
+            return tryFallbackToolbarNewChat(notifyState)
         }
 
         return when (newChatMode) {
             NewChatMode.Initial -> {
                 // 최초 1회 실행 시에는 이전 대화 잔류 상태나 임시채팅 오진입을 방지하기 위해
-                // 상단 툴바 우회를 건너뛰고, 반드시 사이드바 드로어를 열어 정규 '새 채팅'으로 진입합니다.
-                val sidebarOpened = clickSidebar(notifyState)
-                if (!sidebarOpened) {
-                    // 사이드바 열기가 끝내 실패한 비정상 화면일 경우에만 안전망(Fallback)으로 상단 툴바 시도
-                    return tryFallbackToolbarNewChat(notifyState)
+                // 사이드바 드로어를 열어 정규 '새 채팅'으로 진입합니다.
+                val isSidebarAlreadyOpen = nodeFinder.findNodeByTextOrDescription("사이드바 닫기") != null
+                val sidebarReady = if (isSidebarAlreadyOpen) true else clickSidebar(notifyState)
+                if (sidebarReady && clickNewChatNearSearch(notifyState)) {
+                    true
+                } else {
+                    // 사이드바 열기 또는 사이드바 내 새 채팅 탐색 실패 시 상단 툴바로 안전하게 Fallback
+                    tryFallbackToolbarNewChat(notifyState)
                 }
-                clickNewChatNearSearch(notifyState)
             }
 
             NewChatMode.Subsequent -> {
@@ -106,7 +114,7 @@ internal class GeminiPromptAutomation(
             return true
         }
 
-        return retryUntilFound(
+        val opened = retryUntilFound(
             actionName = "사이드바 여는 중",
             failureMessage = "Gemini 사이드바 열기 못 찾음",
             notifyState = notifyState
@@ -119,6 +127,10 @@ internal class GeminiPromptAutomation(
                 null
             }
         } == true
+        if (opened) {
+            delay(NEW_CHAT_SETTLE_MS)
+        }
+        return opened
     }
 
     private suspend fun trySidebarNewChatNearSearch(
