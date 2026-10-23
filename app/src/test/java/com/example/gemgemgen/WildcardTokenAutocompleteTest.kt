@@ -1,4 +1,4 @@
-// 역할: 와일드카드 토큰 자동완성 제안 목록 추출을 검증합니다.
+// 역할: 와일드카드 토큰 및 상용구 자동완성 제안 목록 추출 및 우선순위 정렬을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
@@ -23,11 +23,11 @@ class WildcardTokenAutocompleteTest {
             listOf("장소.txt", "top.TXT", "readme.md", "  .txt")
         )
 
-        // 짧은 이름 우선 → 장소(2) 다음 top(3)
+        // 가나다(알파벳) 사전순: top 다음 장소
         assertEquals(
             listOf(
-                Candidate(name = "장소", token = "__장소__"),
-                Candidate(name = "top", token = "__top__")
+                Candidate(name = "top", token = "__top__"),
+                Candidate(name = "장소", token = "__장소__")
             ),
             result
         )
@@ -46,7 +46,7 @@ class WildcardTokenAutocompleteTest {
 
     @Test
     fun suggestCandidates_prefixMatchKoreanAndEnglish() {
-        // 짧은 이름 우선 → 장면·장소(2) 후 장소명(3). 동길이면 이름 순(장면 < 장소).
+        // 가나다 사전순: 장면 < 장소 < 장소명
         assertEquals(
             listOf("__장면__", "__장소__", "__장소명__"),
             WildcardTokenAutocomplete.suggestCandidates(
@@ -78,7 +78,20 @@ class WildcardTokenAutocompleteTest {
     }
 
     @Test
-    fun suggestCandidates_limitsToMaxThree() {
+    fun suggestCandidates_limitsToMaxFiveByDefault() {
+        val many = (1..10).map { i ->
+            Candidate(name = "a$i", token = "__a${i}__")
+        }
+        val result = WildcardTokenAutocomplete.suggestCandidates(
+            text = "a",
+            cursor = 1,
+            candidates = many
+        )
+        assertEquals(5, result.size)
+    }
+
+    @Test
+    fun suggestCandidates_respectsExplicitMaxCount() {
         val many = (1..10).map { i ->
             Candidate(name = "a$i", token = "__a${i}__")
         }
@@ -195,16 +208,16 @@ class WildcardTokenAutocompleteTest {
 
         val result = WildcardTokenAutocomplete.candidatesFromSnippets(snippets)
 
-        // 짧은 이름 우선: 화풍(2) -> 고화질(3)
+        // 가나다 순: 고화질 -> 화풍
         assertEquals(2, result.size)
-        assertEquals("화풍", result[0].name)
-        assertEquals("oil painting style", result[0].token)
-        assertEquals("화풍", result[0].displayText)
+        assertEquals("고화질", result[0].name)
+        assertEquals("8k masterpiece, extremely detailed", result[0].token)
+        assertEquals("고화질", result[0].displayText)
         assertEquals(Candidate.Type.SNIPPET, result[0].type)
 
-        assertEquals("고화질", result[1].name)
-        assertEquals("8k masterpiece, extremely detailed", result[1].token)
-        assertEquals("고화질", result[1].displayText)
+        assertEquals("화풍", result[1].name)
+        assertEquals("oil painting style", result[1].token)
+        assertEquals("화풍", result[1].displayText)
         assertEquals(Candidate.Type.SNIPPET, result[1].type)
     }
 
@@ -213,7 +226,8 @@ class WildcardTokenAutocompleteTest {
         val combinedCandidates = listOf(
             Candidate(name = "장소", token = "__장소__", displayText = "__장소__", type = Candidate.Type.WILDCARD),
             Candidate(name = "장면", token = "__장면__", displayText = "__장면__", type = Candidate.Type.WILDCARD),
-            Candidate(name = "장편스토리", token = "A long story about...", displayText = "장편스토리", type = Candidate.Type.SNIPPET)
+            Candidate(name = "장편스토리", token = "A long story about...", displayText = "장편스토리", type = Candidate.Type.SNIPPET),
+            Candidate(name = "장미", token = "red rose flower", displayText = "장미", type = Candidate.Type.SNIPPET)
         )
 
         val suggestions = WildcardTokenAutocomplete.suggestCandidates(
@@ -222,18 +236,20 @@ class WildcardTokenAutocompleteTest {
             candidates = combinedCandidates
         )
 
-        assertEquals(3, suggestions.size)
-        // 짧은 순: 장면, 장소 (길이 2) -> 장편스토리 (길이 5)
-        assertEquals("장면", suggestions[0].name)
-        assertEquals(Candidate.Type.WILDCARD, suggestions[0].type)
+        assertEquals(4, suggestions.size)
+        // 1순위 상용구 가나다순: 장미 -> 장편스토리
+        // 2순위 와일드카드 가나다순: 장면 -> 장소
+        assertEquals("장미", suggestions[0].name)
+        assertEquals(Candidate.Type.SNIPPET, suggestions[0].type)
 
-        assertEquals("장소", suggestions[1].name)
-        assertEquals(Candidate.Type.WILDCARD, suggestions[1].type)
+        assertEquals("장편스토리", suggestions[1].name)
+        assertEquals(Candidate.Type.SNIPPET, suggestions[1].type)
 
-        assertEquals("장편스토리", suggestions[2].name)
-        assertEquals("장편스토리", suggestions[2].displayText)
-        assertEquals("A long story about...", suggestions[2].token)
-        assertEquals(Candidate.Type.SNIPPET, suggestions[2].type)
+        assertEquals("장면", suggestions[2].name)
+        assertEquals(Candidate.Type.WILDCARD, suggestions[2].type)
+
+        assertEquals("장소", suggestions[3].name)
+        assertEquals(Candidate.Type.WILDCARD, suggestions[3].type)
     }
 
     @Test

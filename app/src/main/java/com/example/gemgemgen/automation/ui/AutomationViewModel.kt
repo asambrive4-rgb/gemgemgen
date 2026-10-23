@@ -520,8 +520,8 @@ class AutomationViewModel(
         val snippets = runCatching { promptSnippetRepository?.load().orEmpty() }.getOrDefault(emptyList())
         val snippetCandidates = WildcardTokenAutocomplete.candidatesFromSnippets(snippets)
         val combined = (wildcardCandidates + snippetCandidates).sortedWith(
-            compareBy<WildcardTokenAutocomplete.Candidate> { it.name.length }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+            WildcardTokenAutocomplete.CANDIDATE_COMPARATOR
+
         )
         return combined to snippets
     }

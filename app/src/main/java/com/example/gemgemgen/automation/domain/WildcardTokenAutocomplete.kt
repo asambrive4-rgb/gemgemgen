@@ -8,7 +8,7 @@ import com.example.gemgemgen.wildcard.domain.WildcardFileParser
  * Compose / ViewModel 에 의존하지 않는 순수 규칙.
  */
 object WildcardTokenAutocomplete {
-    const val MAX_SUGGESTIONS = 3
+    const val MAX_SUGGESTIONS = 5
 
     data class Candidate(
         /** 매칭 기준명 (확장자 제외 파일명 또는 단축어 별칭, 예: 장소, 고화질) */
@@ -31,8 +31,17 @@ object WildcardTokenAutocomplete {
         val cursorAfter: Int
     )
 
-    val CANDIDATE_COMPARATOR: Comparator<Candidate> = compareBy<Candidate> { it.name.length }
-        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+    /**
+     * 자동완성 후보 정렬 비교자.
+     * 1순위: 상용구(SNIPPET) 우선, 와일드카드(WILDCARD) 후순위
+     * 2순위: 각 타입 그룹 내에서 단축어/토큰명 가나다(대소문자 무시 사전) 순
+     */
+    val CANDIDATE_COMPARATOR: Comparator<Candidate> = compareBy<Candidate> {
+        when (it.type) {
+            Candidate.Type.SNIPPET -> 0
+            Candidate.Type.WILDCARD -> 1
+        }
+    }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
 
     /** 파일명 목록 → 와일드카드 추천 후보 (이름 오름차순, 토큰 중복 제거). */
     fun candidatesFromFileNames(fileNames: Iterable<String>): List<Candidate> {
