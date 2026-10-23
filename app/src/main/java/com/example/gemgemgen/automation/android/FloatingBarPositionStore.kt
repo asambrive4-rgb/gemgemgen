@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore와 메모리 캐시를 활용하여 플로팅 바의 화면 위치 좌표를 관리하고 비동기/동기 저장을 제공합니다.
+// 역할: Jetpack DataStore와 메모리 캐시를 사용해 플로팅 바 위치를 비동기로 불러오고 저장합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 
 internal data class FloatingBarPosition(
     val x: Int,
@@ -50,21 +49,11 @@ internal class FloatingBarPositionStore(
             }
         }
 
-    fun load(): FloatingBarPosition? {
-        memoryCache?.let { return it }
-        return runBlocking {
-            positionFlow.first()
-        }
+    suspend fun load(): FloatingBarPosition? {
+        return memoryCache ?: positionFlow.first()
     }
 
-    fun save(position: FloatingBarPosition) {
-        memoryCache = position
-        runBlocking {
-            saveAsync(position)
-        }
-    }
-
-    suspend fun saveAsync(position: FloatingBarPosition) {
+    suspend fun save(position: FloatingBarPosition) {
         memoryCache = position
         dataStore.edit { preferences ->
             preferences[KEY_X] = position.x

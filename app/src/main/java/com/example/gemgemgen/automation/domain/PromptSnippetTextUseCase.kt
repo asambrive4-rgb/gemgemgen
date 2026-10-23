@@ -20,16 +20,15 @@ class PromptSnippetTextUseCase {
      * 상용구 목록 중 본문에 [searchText]가 포함된 항목을 대소문자 구분 없이 검색합니다.
      */
     fun findMatches(snippets: List<PromptSnippet>, searchText: String): List<PromptSnippetMatch> {
-        val query = searchText.trim()
-        if (query.isEmpty()) return emptyList()
+        if (searchText.isEmpty()) return emptyList()
 
         return snippets.mapNotNull { snippet ->
-            val count = countOccurrences(snippet.content, query)
+            val count = countOccurrences(snippet.content, searchText)
             if (count > 0) {
                 PromptSnippetMatch(
                     snippet = snippet,
                     occurrenceCount = count,
-                    preview = generateSnippetPreview(snippet.content, query)
+                    preview = generateSnippetPreview(snippet.content, searchText)
                 )
             } else {
                 null
@@ -47,16 +46,15 @@ class PromptSnippetTextUseCase {
         searchText: String,
         replacementText: String
     ): Pair<List<PromptSnippet>, Int> {
-        val query = searchText.trim()
-        if (query.isEmpty() || query == replacementText) {
+        if (searchText.isEmpty() || searchText == replacementText) {
             return Pair(snippets, 0)
         }
 
         var changedCount = 0
         val updatedList = snippets.map { snippet ->
             val originalContent = snippet.content
-            if (originalContent.contains(query, ignoreCase = true)) {
-                val newContent = originalContent.replace(query, replacementText, ignoreCase = true)
+            if (originalContent.contains(searchText, ignoreCase = true)) {
+                val newContent = originalContent.replace(searchText, replacementText, ignoreCase = true)
                 if (newContent != originalContent) {
                     changedCount++
                     snippet.copy(content = newContent)

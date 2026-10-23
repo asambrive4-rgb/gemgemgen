@@ -94,4 +94,71 @@ class PromptSnippetTextUseCaseTest {
         assertEquals(0, changedCount)
         assertEquals("masterpiece", updated[0].content)
     }
+
+    @Test
+    fun `findMatches preserves whitespace in search text and matches exact spacing`() {
+        val snippets = listOf(
+            PromptSnippet(id = "1", shortcut = "태그1", content = "masterpiece, ultra quality"),
+            PromptSnippet(id = "2", shortcut = "태그2", content = "masterpiece: ultra quality"),
+            PromptSnippet(id = "3", shortcut = "태그3", content = "masterpiece,ultra quality")
+        )
+
+        // "masterpiece, " (trailing space 포함)는 쉼표 뒤 공백이 있는 1번만 일치해야 함
+        val results = useCase.findMatches(snippets, "masterpiece, ")
+
+        assertEquals(1, results.size)
+        assertEquals("1", results[0].snippet.id)
+        assertEquals(1, results[0].occurrenceCount)
+    }
+
+    @Test
+    fun `replaceContent allows whitespace modification such as adding trailing space`() {
+        val snippets = listOf(
+            PromptSnippet(id = "1", shortcut = "태그", content = "masterpiece,ultra quality")
+        )
+
+        // 의도적인 공백 추가 ("masterpiece," -> "masterpiece, ")
+        val (updated, changedCount) = useCase.replaceContent(
+            snippets = snippets,
+            searchText = "masterpiece,",
+            replacementText = "masterpiece, "
+        )
+
+        assertEquals(1, changedCount)
+        assertEquals("masterpiece, ultra quality", updated[0].content)
+    }
+
+    @Test
+    fun `replaceContent replaces exact whitespace padding without forced trimming`() {
+        val snippets = listOf(
+            PromptSnippet(id = "1", shortcut = "태그", content = "high  quality and best  quality")
+        )
+
+        // 다중 공백을 단일 공백으로 치환 ("  " -> " ")
+        val (updated, changedCount) = useCase.replaceContent(
+            snippets = snippets,
+            searchText = "  ",
+            replacementText = " "
+        )
+
+        assertEquals(1, changedCount)
+        assertEquals("high quality and best quality", updated[0].content)
+    }
+
+    @Test
+    fun `replaceContent matches and replaces text with leading and trailing spaces`() {
+        val snippets = listOf(
+            PromptSnippet(id = "1", shortcut = "태그", content = "start masterpiece finish")
+        )
+
+        // 앞뒤 공백 패딩이 포함된 검색어 (" masterpiece ")
+        val (updated, changedCount) = useCase.replaceContent(
+            snippets = snippets,
+            searchText = " masterpiece ",
+            replacementText = " - "
+        )
+
+        assertEquals(1, changedCount)
+        assertEquals("start - finish", updated[0].content)
+    }
 }

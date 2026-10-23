@@ -122,12 +122,21 @@ class AppMaintenanceUseCase(
     ): MaintenanceResult {
         val displayLabel = alias.trim().ifBlank { email.trim().ifBlank { "선택한 계정" } }
         return when (mode) {
-            AutomationMode.NORMAL,
-            AutomationMode.RECEIVER -> switchLocalGeminiAccount(
+            AutomationMode.NORMAL -> switchLocalGeminiAccount(
                 email = email,
                 alias = alias,
                 returnToHostApp = true
             )
+            AutomationMode.RECEIVER -> {
+                // 취지: 수신 모드(RECEIVER) 기기(예: S25 FE 보조 기기)에서는 계정 전환 완료 후 GemGemGen으로 복귀하지 않고
+                // Gemini 앱 화면에 그대로 잔류시킵니다. 이를 통해 사용자가 보조 기기 화면을 직접 보며
+                // 실제로 제미나이 앱에서 대상 Google 계정으로 정상 전환되었는지 육안으로 즉시 확인할 수 있습니다.
+                switchLocalGeminiAccount(
+                    email = email,
+                    alias = alias,
+                    returnToHostApp = false
+                )
+            }
             AutomationMode.SENDER -> coroutineScope {
                 val remoteDeferred = async {
                     switchRemoteGeminiAccount(email = email, alias = alias)

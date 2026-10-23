@@ -365,7 +365,32 @@ class AppMaintenanceUseCaseTest {
             (result as MaintenanceResult.Success).message
         )
         assertEquals(1, accountGateway.callCount)
+        assertEquals(true, accountGateway.lastReturnToHostApp)
         assertEquals(0, remoteGateway.switchAccountCount)
+    }
+
+    @Test
+    fun switchGeminiAccount_receiverMode_switchesLocalAccountWithoutReturningToHost() = runBlocking {
+        val accountGateway = FakeAccountSwitchGateway(
+            SwitchGeminiAccountResult.Success
+        )
+        val useCase = AppMaintenanceUseCase(
+            geminiAccountSwitchGateway = accountGateway
+        )
+
+        val result = useCase.switchGeminiAccount(
+            email = "receiver@gmail.com",
+            alias = "수신 계정",
+            mode = AutomationMode.RECEIVER
+        )
+
+        assertTrue(result is MaintenanceResult.Success)
+        assertEquals(
+            "Gemini 계정을 '수신 계정'(으)로 전환했습니다.",
+            (result as MaintenanceResult.Success).message
+        )
+        assertEquals(1, accountGateway.callCount)
+        assertEquals(false, accountGateway.lastReturnToHostApp)
     }
 
     @Test
@@ -481,12 +506,14 @@ class AppMaintenanceUseCaseTest {
         val result: SwitchGeminiAccountResult
     ) : GeminiAccountSwitchGateway {
         var callCount = 0
+        var lastReturnToHostApp: Boolean? = null
         override suspend fun switchAccount(
             email: String,
             alias: String,
             returnToHostApp: Boolean
         ): SwitchGeminiAccountResult {
             callCount++
+            lastReturnToHostApp = returnToHostApp
             return result
         }
     }

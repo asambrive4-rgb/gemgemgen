@@ -1,4 +1,4 @@
-// 역할: 화면 위에 항상 떠 있는 플로팅 자동화 제어 바의 사전 준비, 프레임 분산 표시 및 윈도우를 제어합니다.
+// 역할: 비동기로 위치를 복원·저장하고 화면 위 플로팅 자동화 제어 바의 윈도우와 표시 시점을 제어합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.PixelFormat
@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
@@ -18,6 +19,7 @@ import com.example.gemgemgen.automation.ui.FloatingOverlayBar
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -34,7 +36,7 @@ internal class FloatingAutomationBarController(
     private var overlayLifecycleOwner: FloatingBarLifecycleOwner? = null
     private var isAttached = false
     private var isAttachScheduled = false
-    private var currentPosition = positionStore.load()
+    private var currentPosition: FloatingBarPosition? = null
     private var pendingDragX = 0f
     private var pendingDragY = 0f
     private var isDragFrameScheduled = false
@@ -95,21 +97,29 @@ internal class FloatingAutomationBarController(
             )
         }
 
-        val params = createLayoutParams()
-        layoutParams = params
         isAttachScheduled = true
 
-        // 시작 버튼 클릭 렌더 프레임과 충돌하지 않도록 다음 Vsync 프레임으로 분산
-        choreographer.postFrameCallback {
-            if (!isAttachScheduled) return@postFrameCallback
-            isAttachScheduled = false
-            if (!isAttached && overlayView === view) {
-                lifecycleOwner.start()
-                try {
-                    windowManager.addView(view, params)
-                    isAttached = true
-                } catch (_: Exception) {
-                    // 오버레이 윈도우 추가 실패 방어
+        activity.lifecycleScope.launch {
+            currentPosition = currentPosition
+                ?: positionStore.load()
+                ?: positionStore.defaultPosition()
+            if (!isAttachScheduled || overlayView !== view) return@launch
+
+            val params = createLayoutParams()
+            layoutParams = params
+
+            // 시작 버튼 클릭 렌더 프레임과 충돌하지 않도록 다음 Vsync 프레임으로 분산
+            choreographer.postFrameCallback {
+                if (!isAttachScheduled) return@postFrameCallback
+                isAttachScheduled = false
+                if (!isAttached && overlayView === view) {
+                    lifecycleOwner.start()
+                    try {
+                        windowManager.addView(view, params)
+                        isAttached = true
+                    } catch (_: Exception) {
+                        // 오버레이 윈도우 추가 실패 방어
+                    }
                 }
             }
         }
@@ -185,7 +195,10 @@ internal class FloatingAutomationBarController(
             isDragFrameScheduled = false
             applyPendingDrag()
         }
-        currentPosition?.let(positionStore::save)
+        val position = currentPosition ?: return
+        activity.lifecycleScope.launch {
+            positionStore.save(position)
+        }
     }
 
     private fun clampX(value: Int): Int {

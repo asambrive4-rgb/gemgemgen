@@ -1,6 +1,7 @@
-// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 다중 계정 제미나이 액션 및 상용구 일괄 치환 액션을 제공하는 인터페이스입니다.
+// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 다중 계정 제미나이 액션 및 상용구 일괄 치환 액션을 제공하는 안정적인(Stable) UI 액션 인터페이스입니다.
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.runtime.Stable
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
@@ -10,6 +11,7 @@ import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 
+@Stable
 interface AutomationScreenActions {
     // 프롬프트 에디터 전용 액션 그룹
     val promptEditor: PromptEditorUiActions

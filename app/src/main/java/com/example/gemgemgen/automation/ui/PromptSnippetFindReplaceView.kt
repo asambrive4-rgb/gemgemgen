@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -100,13 +99,13 @@ fun PromptSnippetFindReplaceView(
     // 상용구 목록 변경 시(치환 완료 후) 일치 결과 갱신
     LaunchedEffect(snippets) {
         val query = searchedQuery
-        if (!query.isNullOrBlank()) {
+        if (!query.isNullOrEmpty()) {
             matchedResults = useCase.findMatches(snippets, query)
         }
     }
 
     val hasMatches = searchedQuery != null && matchedResults.isNotEmpty()
-    val isSameQueryAndReplacement = searchInput.trim().isNotEmpty() && searchInput.trim() == replacementInput.trim()
+    val isSameQueryAndReplacement = searchInput.isNotEmpty() && searchInput == replacementInput
     val canReplace = hasMatches && !isSameQueryAndReplacement
 
     Column(
@@ -170,17 +169,16 @@ fun PromptSnippetFindReplaceView(
                 NeuButton(
                     onClick = {
                         focusManager.clearFocus()
-                        val query = searchInput.trim()
-                        if (query.isNotEmpty()) {
-                            searchedQuery = query
-                            matchedResults = useCase.findMatches(snippets, query)
+                        if (searchInput.isNotEmpty()) {
+                            searchedQuery = searchInput
+                            matchedResults = useCase.findMatches(snippets, searchInput)
                             isConfirmingReplace = false
                             successMessage = null
                         }
                     },
                     modifier = Modifier.height(52.dp),
                     isPrimary = true,
-                    enabled = searchInput.trim().isNotEmpty()
+                    enabled = searchInput.isNotEmpty()
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -223,12 +221,9 @@ fun PromptSnippetFindReplaceView(
                         fontSize = 12.sp
                     )
 
-                    // 매칭 카드 목록 (최대 높이 제한 및 스크롤)
+                    // 매칭 카드 목록 (외부 스크롤러에서 자연스럽게 함께 스크롤)
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 200.dp)
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         matchedResults.forEach { match ->
@@ -336,7 +331,7 @@ fun PromptSnippetFindReplaceView(
 
                         TextButton(
                             onClick = {
-                                val query = searchInput.trim()
+                                val query = searchInput
                                 val repl = replacementInput
                                 onBatchReplace(query, repl)
                                 isConfirmingReplace = false
