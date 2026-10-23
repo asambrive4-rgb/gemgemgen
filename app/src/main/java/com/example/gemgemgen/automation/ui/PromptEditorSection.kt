@@ -1,4 +1,4 @@
-// 역할: 프롬프트 에디터의 메인 컨테이너 레이아웃, 헤더, 추천 칩 국소 격리 및 18줄 고정 높이 텍스트필드 조합을 제공합니다.
+// 역할: 프롬프트 에디터의 메인 컨테이너 레이아웃, 대상 앱 드롭다운 헤더, 추천 칩 국소 격리 및 18줄 고정 높이 텍스트필드 조합을 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -7,16 +7,26 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,8 +36,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -185,7 +198,7 @@ internal fun PromptEditorHeader(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = "프롬프트 템플릿",
@@ -193,19 +206,11 @@ internal fun PromptEditorHeader(
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.colors.textPrimary
             )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AutomationTargetApp.entries.forEach { targetApp ->
-                    NeuPillChip(
-                        text = targetApp.displayName,
-                        selected = selectedTargetApp == targetApp,
-                        enabled = !isRunning,
-                        onClick = { onTargetAppSelected(targetApp) }
-                    )
-                }
-            }
+            TargetAppDropdownChip(
+                selectedTargetApp = selectedTargetApp,
+                enabled = !isRunning,
+                onTargetAppSelected = onTargetAppSelected
+            )
         }
 
         Row(
@@ -237,6 +242,89 @@ internal fun PromptEditorHeader(
                     contentDescription = null,
                     tint = if (isSearchActive) AppTheme.colors.accent else AppTheme.colors.textSecondary,
                     modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TargetAppDropdownChip(
+    selectedTargetApp: AutomationTargetApp,
+    enabled: Boolean,
+    onTargetAppSelected: (AutomationTargetApp) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(10.dp)
+
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .shadow(
+                    elevation = if (enabled) 2.dp else 0.dp,
+                    shape = shape,
+                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f),
+                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.15f)
+                )
+                .clip(shape)
+                .background(AppTheme.colors.card)
+                .border(BorderStroke(1.dp, AppTheme.colors.cardBorder), shape)
+                .clickable(enabled = enabled) { expanded = true }
+                .padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp)
+                .semantics {
+                    contentDescription = "자동화 대상 앱 선택: 현재 ${selectedTargetApp.displayName}"
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = selectedTargetApp.displayName,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (enabled) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.5f)
+            )
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                tint = if (enabled) AppTheme.colors.accent else AppTheme.colors.textSecondary.copy(alpha = 0.5f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded && enabled,
+            onDismissRequest = { expanded = false },
+            shape = RoundedCornerShape(14.dp),
+            containerColor = AppTheme.colors.card,
+            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
+            shadowElevation = 8.dp
+        ) {
+            AutomationTargetApp.entries.forEach { targetApp ->
+                val isSelected = targetApp == selectedTargetApp
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = targetApp.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) AppTheme.colors.primary else AppTheme.colors.textPrimary
+                        )
+                    },
+                    trailingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = AppTheme.colors.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    } else null,
+                    onClick = {
+                        expanded = false
+                        onTargetAppSelected(targetApp)
+                    }
                 )
             }
         }
