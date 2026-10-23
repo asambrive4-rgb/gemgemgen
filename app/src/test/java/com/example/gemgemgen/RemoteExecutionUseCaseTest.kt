@@ -1,4 +1,4 @@
-// 역할: 수신된 원격 명령의 실행 처리 유스케이스를 검증합니다.
+// 역할: 수신된 원격 명령의 실행 인가 정책 및 선점 허용 결정을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.remote.usecase.CheckRemoteExecutionUseCase
@@ -28,9 +28,10 @@ class RemoteExecutionUseCaseTest {
     }
 
     @Test
-    fun decide_rejectsAdditionalRequestWhileBusy() {
+    fun decide_allowsAdditionalRequestWhileBusy_forPreemption() {
+        // 송신이 주(Master)이므로 수신 기기가 자동화 실행 중이더라도 거부하지 않고 허용되어 기존 작업을 취소 후 선점할 수 있어야 한다.
         assertEquals(
-            RemoteExecutionDecision.Rejected("S25 FE에서 다른 자동화를 실행 중입니다."),
+            RemoteExecutionDecision.Allowed,
             useCase.decide(readyConditions().copy(isAutomationBusy = true))
         )
     }

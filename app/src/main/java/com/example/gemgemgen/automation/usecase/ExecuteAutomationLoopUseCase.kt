@@ -1,4 +1,4 @@
-// 역할: 시스템 설정(IME/애니메이션) 전환, 시작 시 클립보드 백업 및 메인 스레드 안전 상태 전파로 대상 AI 앱 자동화 반복 루프를 관리합니다.
+// 역할: 시스템 설정(IME/애니메이션) 전환, 시작 시 클립보드 백업, 선점형 취소 대기 및 메인 스레드 안전 상태 전파로 대상 AI 앱 자동화 반복 루프를 관리합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -12,6 +12,7 @@ import com.example.gemgemgen.wildcard.domain.WildcardSet
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,6 +46,7 @@ class ExecuteAutomationLoopUseCase(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatchers.io)
     private var currentRun: CurrentRun? = null
+    private var cleanupJob: Job? = null
     private var isPreparingRun = false
     /** 준비 중이거나 실행 중일 때 목표 회차. 종료 시 null. */
     private var sessionRepeatCount: Int? = null
@@ -116,6 +118,21 @@ class ExecuteAutomationLoopUseCase(
 
     fun cancel(onStateChange: ((AutomationRunState) -> Unit)? = null) {
         terminateActiveRun(AutomationRunState.Stopped, onStateChange)
+    }
+
+    suspend fun cancelAndAwait(
+        targetState: AutomationRunState = AutomationRunState.Stopped,
+        onStateChange: ((AutomationRunState) -> Unit)? = null
+    ) {
+        val run = currentRun
+        if (run != null) {
+            terminateActiveRun(targetState, onStateChange)
+        }
+        cleanupJob?.join()
+        cleanupJob = null
+        if (_runState.value is AutomationRunState.Running) {
+            emitState(targetState, onStateChange)
+        }
     }
 
     fun onAccessibilityLost() {
@@ -208,6 +225,7 @@ class ExecuteAutomationLoopUseCase(
         if (request.targetApp == AutomationTargetApp.FLOW) {
             sendNextPrompt(run, onStateChange)
         } else {
+            // Gemini 자동화에서 MARKER_PROMPT 전송은 필수 기능이다. 이 분기는 현재 FLOW를 제외한 모든 대상 앱에 공통 적용된다.
             sendMarker(run, onStateChange)
         }
     }
@@ -216,6 +234,7 @@ class ExecuteAutomationLoopUseCase(
         run: CurrentRun,
         onStateChange: ((AutomationRunState) -> Unit)?
     ) {
+        if (run.finished) return
         updateRunState(run, "세션 마커 전송 중", onStateChange)
         run.promptGateway.sendPrompt(
             prompt = MARKER_PROMPT,
@@ -231,6 +250,7 @@ class ExecuteAutomationLoopUseCase(
         run: CurrentRun,
         onStateChange: ((AutomationRunState) -> Unit)?
     ) {
+        if (run.finished) return
         if (run.successCount >= run.repeatCount) {
             finishRun(run, AutomationRunState.Success, onStateChange)
             return
@@ -264,12 +284,14 @@ class ExecuteAutomationLoopUseCase(
         onStateChange: ((AutomationRunState) -> Unit)?
     ): (AutomationRunState) -> Unit {
         return { state ->
-            when (state) {
-                is AutomationRunState.Running -> updateRunState(run, state.step, onStateChange)
-                is AutomationRunState.Failure -> finishRun(run, state, onStateChange)
-                AutomationRunState.Success -> Unit
-                AutomationRunState.Stopped -> finishRun(run, state, onStateChange)
-                AutomationRunState.Idle -> emitState(state, onStateChange)
+            if (!run.finished) {
+                when (state) {
+                    is AutomationRunState.Running -> updateRunState(run, state.step, onStateChange)
+                    is AutomationRunState.Failure -> finishRun(run, state, onStateChange)
+                    AutomationRunState.Success -> Unit
+                    AutomationRunState.Stopped -> finishRun(run, state, onStateChange)
+                    AutomationRunState.Idle -> emitState(state, onStateChange)
+                }
             }
         }
     }
@@ -299,7 +321,8 @@ class ExecuteAutomationLoopUseCase(
         run.finished = true
         emitState(AutomationRunState.Running("원래 입력기로 복구 중"), onStateChange)
 
-        scope.launch {
+        cleanupJob = scope.launch {
+            try {
             run.animationSession?.let { session ->
                 manageAnimationScaleUseCase?.restore(session)
             }
@@ -317,6 +340,10 @@ class ExecuteAutomationLoopUseCase(
             clearSessionRepeatCount()
             withContext(dispatchers.main) {
                 emitState(finalState, onStateChange)
+            }
+        } finally {
+            currentRun = null
+            clearSessionRepeatCount()
             }
         }
     }

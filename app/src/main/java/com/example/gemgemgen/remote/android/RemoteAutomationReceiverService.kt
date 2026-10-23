@@ -1,4 +1,4 @@
-// 역할: 백그라운드 포그라운드 서비스로 상주하며 원격 기기의 자동화·메모리 정리·Gemini 계정 전환 요청을 수신합니다.
+// 역할: 포그라운드 서비스로 상주하며 원격 송신 기기의 최상위 명령(자동화 선점 실행, 취소, 메모리 정리, 계정 전환)을 수신·조율합니다.
 package com.example.gemgemgen.remote.android
 
 import android.app.KeyguardManager
@@ -263,7 +263,7 @@ class RemoteAutomationReceiverService : Service() {
             val previousSession = activeSession
             previousSession?.executionJob?.cancelAndJoin()
             withContext(Dispatchers.Main.immediate) {
-                executeRemoteAutomation.cancel()
+                executeRemoteAutomation.cancelAndAwait()
             }
 
             RemoteAutomationStateHub.update {
@@ -325,11 +325,17 @@ class RemoteAutomationReceiverService : Service() {
     private suspend fun handleCancel(message: RemoteProtocolMessage.CancelRequest) {
         if (!isAuthenticated(message.senderId, message.token)) return
         sessionMutex.withLock {
-            val session = activeSession?.takeIf { it.requestId == message.requestId } ?: return
+            val session = activeSession
             activeSession = null
-            session.executionJob.cancelAndJoin()
+            session?.executionJob?.cancelAndJoin()
             withContext(Dispatchers.Main.immediate) {
-                executeRemoteAutomation.cancel()
+                executeRemoteAutomation.cancelAndAwait()
+            }
+            RemoteAutomationStateHub.update {
+                it.copy(
+                    automationState = AutomationRunState.Stopped,
+                    message = "송신 기기 요청으로 자동화를 중지했습니다."
+                )
             }
         }
     }
@@ -358,17 +364,13 @@ class RemoteAutomationReceiverService : Service() {
             return
         }
 
-        val runState = AndroidAutomationRuntimeProvider.get(this).runState.value
-        if (runState is AutomationRunState.Running || activeSession != null) {
-            writer.println(
-                RemoteAutomationProtocol.encode(
-                    RemoteProtocolMessage.CleanMemoryResult(
-                        success = false,
-                        message = "수신 기기에서 자동화 실행 중에는 메모리를 정리할 수 없습니다."
-                    )
-                )
-            )
-            return
+        sessionMutex.withLock {
+            val session = activeSession
+            activeSession = null
+            session?.executionJob?.cancelAndJoin()
+            withContext(Dispatchers.Main.immediate) {
+                executeRemoteAutomation.cancelAndAwait()
+            }
         }
 
         val memoryGateway = AndroidMemoryCleanupGateway(this)
@@ -436,17 +438,13 @@ class RemoteAutomationReceiverService : Service() {
             return
         }
 
-        val runState = AndroidAutomationRuntimeProvider.get(this).runState.value
-        if (runState is AutomationRunState.Running || activeSession != null) {
-            writer.println(
-                RemoteAutomationProtocol.encode(
-                    RemoteProtocolMessage.SwitchAccountResult(
-                        success = false,
-                        message = "수신 기기에서 자동화 실행 중에는 계정을 전환할 수 없습니다."
-                    )
-                )
-            )
-            return
+        sessionMutex.withLock {
+            val session = activeSession
+            activeSession = null
+            session?.executionJob?.cancelAndJoin()
+            withContext(Dispatchers.Main.immediate) {
+                executeRemoteAutomation.cancelAndAwait()
+            }
         }
 
         val displayLabel = message.alias.trim().ifBlank { message.email.trim().ifBlank { "선택한 계정" } }
@@ -458,7 +456,10 @@ class RemoteAutomationReceiverService : Service() {
         val result = switcher.switchAccount(
             email = message.email,
             alias = message.alias,
-            returnToHostApp = true
+            // 취지: 수신 기기(S25 FE 등)에서는 원격 계정 전환 요청을 처리한 후 GemGemGen으로 복귀하지 않고
+            // Gemini 앱 화면에 그대로 잔류시킵니다. 이를 통해 사용자가 보조 기기 화면을 직접 보며
+            // 실제로 제미나이 앱에서 대상 Google 계정으로 정상 전환되었는지 육안으로 즉시 확인할 수 있습니다.
+            returnToHostApp = false
         )
         when (result) {
             SwitchGeminiAccountResult.Success -> {
