@@ -1,4 +1,4 @@
-// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(계정 전환 버튼, 실시간 초기화 만료 보정, 소진 Dim UI, 소진 뱃지, 별칭, 게이지, 계정 이동 및 사용불가 내림/복구 메뉴)를 제공합니다.
+﻿// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(계정 전환 버튼, 사용불가 내림/복구 외부 원터치 토글, 실시간 초기화 만료 보정, 소진 Dim UI, 소진 뱃지, 별칭, 게이지, 당분간 사용 금지 메뉴)를 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -96,6 +98,7 @@ fun GeminiAccountRowCard(
     onSwitchAccount: (() -> Unit)? = null,
     onMoveAccountGroup: ((GeminiAccountGroup) -> Unit)? = null,
     onToggleManualExhaustion: ((Boolean) -> Unit)? = null,
+    onToggleAccountSuspension: ((Boolean) -> Unit)? = null,
     nowMillis: Long = remember { System.currentTimeMillis() },
     modifier: Modifier = Modifier
 ) {
@@ -234,6 +237,46 @@ fun GeminiAccountRowCard(
                         }
                     }
 
+                    if (onToggleManualExhaustion != null) {
+                        val isSuspended = entry.profile.isSuspended
+                        val isManuallyExhausted = entry.profile.isManuallyExhausted(nowMillis)
+                        val buttonEnabled = !isSuspended
+                        val arrowIcon = if (isManuallyExhausted) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown
+                        val buttonDesc = when {
+                            isSuspended -> "${entry.profile.displayAlias} 당분간 사용 금지 상태"
+                            isManuallyExhausted -> "${entry.profile.displayAlias} 사용 가능으로 복구"
+                            else -> "${entry.profile.displayAlias} 사용불가로 내리기"
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = AppTheme.colors.insetBed,
+                            border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .alpha(if (buttonEnabled) 1f else 0.38f)
+                                .clickable(enabled = buttonEnabled) {
+                                    onToggleManualExhaustion(!isManuallyExhausted)
+                                }
+                                .semantics {
+                                    contentDescription = buttonDesc
+                                }
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = arrowIcon,
+                                    contentDescription = null,
+                                    tint = if (isManuallyExhausted) brandHighlightColor else AppTheme.colors.textPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
                     Surface(
                         shape = CircleShape,
                         color = AppTheme.colors.insetBed,
@@ -354,33 +397,34 @@ fun GeminiAccountRowCard(
                                     }
                                 )
                             }
-                            if (onToggleManualExhaustion != null) {
+                            if (onToggleAccountSuspension != null) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 12.dp),
                                     color = AppTheme.colors.insetBorder.copy(alpha = 0.65f),
                                     thickness = 0.8.dp
                                 )
-                                val isManuallyExhausted = entry.profile.isManuallyExhausted(nowMillis)
-                                val toggleText = if (isManuallyExhausted) "사용 가능으로 복구" else "사용불가로 내리기"
-                                val toggleIcon = if (isManuallyExhausted) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown
+                                val isSuspended = entry.profile.isSuspended
+                                val suspendText = if (isSuspended) "사용 금지 해제" else "당분간 사용 금지"
+                                val suspendIcon = if (isSuspended) Icons.Default.CheckCircle else Icons.Default.Block
+                                val suspendColor = if (isSuspended) brandHighlightColor else MultiUsageWarningRed
                                 DropdownMenuItem(
                                     text = {
                                         Text(
-                                            text = toggleText,
+                                            text = suspendText,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = AppTheme.colors.textPrimary
+                                            color = if (isSuspended) AppTheme.colors.textPrimary else MultiUsageWarningRed
                                         )
                                     },
                                     leadingIcon = {
                                         Icon(
-                                            imageVector = toggleIcon,
+                                            imageVector = suspendIcon,
                                             contentDescription = null,
-                                            tint = brandHighlightColor
+                                            tint = suspendColor
                                         )
                                     },
                                     onClick = {
                                         showMenu = false
-                                        onToggleManualExhaustion(!isManuallyExhausted)
+                                        onToggleAccountSuspension(!isSuspended)
                                     }
                                 )
                             }

@@ -1,4 +1,4 @@
-// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량 저장소 포함), 유스케이스, 게이트웨이(Gemini 계정 자동 전환 포함) 인스턴스를 주입하는 의존성 컨테이너입니다.
+// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량, 프롬프트 실험 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.Context
@@ -107,6 +107,7 @@ class AndroidAppContainer(context: Context) {
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
     val promptWorkspace = PromptWorkspace()
     val promptSnippetRepository by lazy { PromptSnippetStore(appContext) }
+    val promptExperimentRepository by lazy { com.example.gemgemgen.automation.android.PromptExperimentStore(appContext) }
     val automationSettingsStore by lazy { com.example.gemgemgen.automation.android.AutomationSettingsStore(appContext) }
     val multiGeminiUsageRepository by lazy {
         MultiGeminiUsageRepository(
@@ -150,6 +151,7 @@ class AndroidAppContainer(context: Context) {
             themePaletteStore = themePaletteStore,
             promptWorkspace = promptWorkspace,
             promptSnippetRepository = promptSnippetRepository,
+            promptExperimentRepository = promptExperimentRepository,
             runVariationPrompt = RunVariationPromptUseCase(
                 gatewayProvider = ActivePromptAutomationGatewayProvider,
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)

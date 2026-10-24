@@ -1,4 +1,4 @@
-// 역할: 자동화 실행, 변주, 앱 제어, 메모리 정리 및 Gemini 계정 전환 등 전반적인 실행 인가 정책을 총괄하는 도메인 정책입니다.
+// 역할: 자동화 실행(프롬프트 실험 모드 조건 검증 포함), 변주, 앱 제어, 메모리 정리 및 Gemini 계정 전환 등 전반적인 실행 인가 정책을 총괄하는 도메인 정책입니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
@@ -38,21 +38,34 @@ object AutomationExecutionPolicy {
         isRunning: Boolean,
         remoteAutomationStatus: RemoteAutomationStatus,
         isVariationRunning: Boolean = false,
-        isMaintenanceBusy: Boolean = false
-    ): Boolean = when (mode) {
-        AutomationMode.NORMAL ->
-            environmentStatus.isReadyFor(targetApp) &&
+        isMaintenanceBusy: Boolean = false,
+        isExperimentMode: Boolean = false,
+        selectedExperimentItem: PromptExperimentItem? = null
+    ): Boolean {
+        if (PromptExperimentPolicy.validateExperimentReady(
+                isExperimentMode = isExperimentMode,
+                promptTemplate = promptTemplate,
+                selectedItem = selectedExperimentItem
+            ) != null
+        ) {
+            return false
+        }
+
+        return when (mode) {
+            AutomationMode.NORMAL ->
+                environmentStatus.isReadyFor(targetApp) &&
+                    hasPromptTemplate(promptTemplate) &&
+                    !isRunning &&
+                    !isVariationRunning &&
+                    !isMaintenanceBusy
+            AutomationMode.SENDER ->
                 hasPromptTemplate(promptTemplate) &&
-                !isRunning &&
-                !isVariationRunning &&
-                !isMaintenanceBusy
-        AutomationMode.SENDER ->
-            hasPromptTemplate(promptTemplate) &&
-                remoteAutomationStatus.canSend &&
-                !isRunning &&
-                !isVariationRunning &&
-                !isMaintenanceBusy
-        AutomationMode.RECEIVER -> false
+                    remoteAutomationStatus.canSend &&
+                    !isRunning &&
+                    !isVariationRunning &&
+                    !isMaintenanceBusy
+            AutomationMode.RECEIVER -> false
+        }
     }
 
     /**

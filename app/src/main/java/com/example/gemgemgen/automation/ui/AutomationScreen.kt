@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 상용구 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 제어 바 및 상태 화면을 구성합니다.
+﻿// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 실험(연금술) 관리 모달 연동, 상용구 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -14,24 +14,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.ui.AutomationModePairDialog
-import com.example.gemgemgen.remote.ui.AutomationModePanel
+import com.example.gemgemgen.remote.ui.AutomationReceiverBottomBar
 import com.example.gemgemgen.remote.ui.resolveConnectionText
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.rememberIsImeVisible
-import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.usage.ui.GeminiUsageSummaryButton
 import com.example.gemgemgen.usage.ui.MultiGeminiUsageDialog
 
@@ -75,6 +72,7 @@ internal fun AutomationScreen(
                         uiState = uiState,
                         promptTemplateState = promptTemplateState,
                         actions = actions,
+                        onRequestPair = { showPairDialog = true },
                         showPromptActions = !isKeyboardVisible,
                         showWildcardSuggestions = !isKeyboardVisible
                     )
@@ -86,40 +84,38 @@ internal fun AutomationScreen(
                             onRefreshClick = { actions.refreshAllGeminiUsage(null) }
                         )
                     }
-
-                    if (!isKeyboardVisible && uiState.automationMode != AutomationMode.RECEIVER) {
-                        AutomationBottomBar(
-                            repeatCountText = uiState.repeatCountText,
-                            onRepeatCountChange = actions::onRepeatCountChange,
-                            onRunMvp = actions::onRunAutomation,
-                            onCancelAutomation = actions::cancelAutomation,
-                            canRun = uiState.canRun,
-                            isRunning = uiState.isRunning,
-                            automationState = automationBarUiState.automationState,
-                            isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER,
-                            hasPreStartMemoryCleanup = uiState.shouldAutoCleanMemoryBeforeStart
-                        )
-                    }
-
-                    if (!isKeyboardVisible) {
-                        AutomationModePanel(
-                            selectedMode = uiState.automationMode,
-                            status = uiState.remoteAutomationStatus,
-                            enabled = !uiState.isRunning,
-                            onModeSelected = actions::onAutomationModeSelected,
-                            onRequestPair = { showPairDialog = true }
-                        )
-
-                        AutomationFooterStatus(
-                            maintenanceMessage = uiState.maintenanceMessage,
-                            variationAutomationState = uiState.variationAutomationState,
-                            automationMode = uiState.automationMode,
-                            remoteStatus = uiState.remoteAutomationStatus
-                        )
-                    }
                 }
 
-                if (isKeyboardVisible) {
+                if (!isKeyboardVisible) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = AutomationScreenContentPadding,
+                                end = AutomationScreenContentPadding,
+                                bottom = AutomationScreenContentPadding,
+                                top = 2.dp
+                            )
+                    ) {
+                        if (uiState.automationMode != AutomationMode.RECEIVER) {
+                            AutomationBottomBar(
+                                repeatCountText = uiState.repeatCountText,
+                                onRepeatCountChange = actions::onRepeatCountChange,
+                                onRunMvp = actions::onRunAutomation,
+                                onCancelAutomation = actions::cancelAutomation,
+                                canRun = uiState.canRun,
+                                isRunning = uiState.isRunning,
+                                automationState = automationBarUiState.automationState,
+                                isRemoteSendMode = uiState.automationMode == AutomationMode.SENDER,
+                                hasPreStartMemoryCleanup = uiState.shouldAutoCleanMemoryBeforeStart
+                            )
+                        } else {
+                            AutomationReceiverBottomBar(
+                                status = uiState.remoteAutomationStatus
+                            )
+                        }
+                    }
+                } else {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
@@ -177,6 +173,29 @@ internal fun AutomationScreen(
                 )
             }
 
+            if (uiState.showExperimentDialog) {
+                PromptExperimentDialog(
+                    presets = uiState.experimentPresets,
+                    activePresetId = uiState.activeExperimentPresetId,
+                    selectedItemId = uiState.selectedExperimentItemId,
+                    onSelectPreset = actions::selectExperimentPreset,
+                    onSelectItem = actions::selectExperimentItem,
+                    onAddPreset = actions::addExperimentPreset,
+                    onUpdatePreset = actions::updateExperimentPreset,
+                    onDeletePreset = actions::deleteExperimentPreset,
+                    onMovePreset = actions::moveExperimentPreset,
+                    onReorderPresets = actions::reorderExperimentPresets,
+                    onResetPresetItems = actions::resetExperimentPresetItems,
+                    onAddItem = actions::addExperimentItem,
+                    onAddItemsBatch = actions::addExperimentItemsBatch,
+                    onUpdateItem = actions::updateExperimentItem,
+                    onDeleteItem = actions::deleteExperimentItem,
+                    onMoveItem = actions::moveExperimentItem,
+                    onReorderItems = actions::reorderExperimentItems,
+                    onDismiss = actions::dismissExperimentDialog
+                )
+            }
+
             if (uiState.showPromptSnippetDialog) {
                 val selectedText = promptTemplateState.selectedTextOrNull()
                     ?: uiState.editor.selectedParagraphRange?.let { range ->
@@ -213,6 +232,7 @@ internal fun AutomationScreen(
                     onSwitchAccount = actions::switchGeminiAccount,
                     onMoveAccountGroup = actions::moveGeminiAccountGroup,
                     onToggleManualExhaustion = actions::toggleGeminiAccountManualExhaustion,
+                    onToggleAccountSuspension = actions::toggleGeminiAccountSuspension,
                     onDismiss = actions::closeMultiGeminiUsageDialog
                 )
             }
@@ -251,33 +271,4 @@ internal fun resolveFooterStatus(
     }
 
     return null
-}
-
-@Composable
-internal fun AutomationFooterStatus(
-    maintenanceMessage: String,
-    variationAutomationState: AutomationRunState,
-    automationMode: AutomationMode,
-    remoteStatus: RemoteAutomationStatus,
-    modifier: Modifier = Modifier
-) {
-    val statusInfo = resolveFooterStatus(
-        maintenanceMessage = maintenanceMessage,
-        variationAutomationState = variationAutomationState,
-        automationMode = automationMode,
-        remoteStatus = remoteStatus
-    ) ?: return
-
-    Text(
-        text = statusInfo.text,
-        style = MaterialTheme.typography.bodySmall,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        color = if (statusInfo.isError) {
-            MaterialTheme.colorScheme.error
-        } else {
-            AppTheme.colors.textSecondary
-        },
-        modifier = modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-    )
 }

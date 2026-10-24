@@ -1,4 +1,4 @@
-// 역할: 프롬프트 에디터의 메인 컨테이너 레이아웃, 대상 앱 드롭다운 헤더, 추천 칩 국소 격리 및 18줄 고정 높이 텍스트필드 조합을 제공합니다.
+// 역할: 프롬프트 에디터의 메인 컨테이너 레이아웃, 대상 앱 드롭다운 및 자동화 모드(일반/송신/수신) 헤더, 원격 상태 서브 바, 실험(연금술) 바, 추천 칩 국소 격리 및 18줄 고정 높이 텍스트필드 조합을 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -52,6 +53,8 @@ import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.remote.ui.AutomationModeSubBar
+import com.example.gemgemgen.remote.ui.CompactAutomationModeToggle
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.TextHighlightRange
 import com.example.gemgemgen.ui.theme.AppTheme
@@ -67,10 +70,22 @@ internal fun PromptEditorSection(
     uiState: AutomationUiState,
     promptTemplateState: TextFieldState,
     actions: AutomationScreenActions,
+    onRequestPair: () -> Unit = {},
     showPromptActions: Boolean = true,
     showWildcardSuggestions: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val subBarStatusInfo = resolveFooterStatus(
+        maintenanceMessage = uiState.maintenanceMessage,
+        variationAutomationState = uiState.variationAutomationState,
+        automationMode = if (uiState.automationMode == AutomationMode.RECEIVER) {
+            AutomationMode.NORMAL
+        } else {
+            uiState.automationMode
+        },
+        remoteStatus = uiState.remoteAutomationStatus
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -79,12 +94,46 @@ internal fun PromptEditorSection(
     ) {
         PromptEditorHeader(
             selectedTargetApp = uiState.selectedTargetApp,
+            selectedAutomationMode = uiState.automationMode,
             isRunning = uiState.isRunning,
             isSearchActive = uiState.editor.isSearchActive,
+            isExperimentMode = uiState.isExperimentMode,
             onTargetAppSelected = actions::onTargetAppSelected,
+            onAutomationModeSelected = actions::onAutomationModeSelected,
+            onToggleExperimentMode = actions::toggleExperimentMode,
             onShowPromptSnippetDialog = actions::showPromptSnippetDialog,
             onToggleSearch = actions.promptEditor::toggleSearch
         )
+
+        AutomationModeSubBar(
+            selectedMode = if (uiState.automationMode == AutomationMode.RECEIVER) {
+                AutomationMode.NORMAL
+            } else {
+                uiState.automationMode
+            },
+            status = uiState.remoteAutomationStatus,
+            statusText = subBarStatusInfo?.text,
+            isStatusError = subBarStatusInfo?.isError == true,
+            onRequestPair = onRequestPair
+        )
+
+        AnimatedVisibility(
+            visible = uiState.isExperimentMode,
+            enter = fadeIn(tween(150)) + expandVertically(tween(150)),
+            exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
+        ) {
+            PromptExperimentBar(
+                presets = uiState.experimentPresets,
+                activePreset = uiState.activeExperimentPreset,
+                selectedItemId = uiState.selectedExperimentItemId,
+                hasExperimentTagInPrompt = uiState.hasExperimentTagInPrompt,
+                experimentBlockReason = uiState.experimentBlockReason,
+                onSelectPreset = actions::selectExperimentPreset,
+                onSelectItem = actions::selectExperimentItem,
+                onInsertTag = actions::insertExperimentTag,
+                onOpenManageDialog = actions::showExperimentDialog
+            )
+        }
 
         AnimatedVisibility(
             visible = uiState.editor.isSearchActive,
@@ -184,9 +233,13 @@ internal fun PromptEditorSection(
 @Composable
 internal fun PromptEditorHeader(
     selectedTargetApp: AutomationTargetApp,
+    selectedAutomationMode: AutomationMode,
     isRunning: Boolean,
     isSearchActive: Boolean,
+    isExperimentMode: Boolean,
     onTargetAppSelected: (AutomationTargetApp) -> Unit,
+    onAutomationModeSelected: (AutomationMode) -> Unit,
+    onToggleExperimentMode: () -> Unit,
     onShowPromptSnippetDialog: () -> Unit,
     onToggleSearch: () -> Unit,
     modifier: Modifier = Modifier
@@ -198,18 +251,17 @@ internal fun PromptEditorHeader(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = "프롬프트 템플릿",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.textPrimary
-            )
             TargetAppDropdownChip(
                 selectedTargetApp = selectedTargetApp,
                 enabled = !isRunning,
                 onTargetAppSelected = onTargetAppSelected
+            )
+            CompactAutomationModeToggle(
+                selectedMode = selectedAutomationMode,
+                enabled = !isRunning,
+                onModeSelected = onAutomationModeSelected
             )
         }
 
@@ -217,6 +269,20 @@ internal fun PromptEditorHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            IconButton(
+                onClick = onToggleExperimentMode,
+                modifier = Modifier
+                    .size(36.dp)
+                    .semantics { contentDescription = "실험(연금술) 모드 토글" }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Science,
+                    contentDescription = null,
+                    tint = if (isExperimentMode) AppTheme.colors.accent else AppTheme.colors.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
             IconButton(
                 onClick = onShowPromptSnippetDialog,
                 modifier = Modifier

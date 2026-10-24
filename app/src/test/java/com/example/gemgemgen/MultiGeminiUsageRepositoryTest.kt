@@ -1,4 +1,4 @@
-// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 수동 소진/복구 및 대표 자동 위임, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션 격리를 검증합니다.
+﻿// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 수동 소진/복구 및 당분간 사용 금지, 대표 자동 위임, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션 격리를 검증합니다.
 package com.example.gemgemgen
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -612,6 +612,61 @@ class MultiGeminiUsageRepositoryTest {
         val afterReset = now + 70 * 60 * 1000L
         assertFalse(entry.isQuotaExhausted(afterReset))
         assertNull(entry.quotaExhaustionReason(afterReset))
+    }
+
+    @Test
+    fun setAccountSuspended_movesAccountToSuspendedAndDoesNotAutoRecoverUntilManuallyReleased() = runBlocking {
+        val fakeRemote = object : MultiProfileGeminiUsageRemoteDataSource {
+            override suspend fun fetchUsage(profile: GeminiAccountProfile): GeminiUsageFetchResult {
+                return GeminiUsageFetchResult(
+                    usageState = GeminiUsageState.Success(
+                        fiveHourPercent = 10,
+                        fiveHourResetText = "1시간 후",
+                        weeklyPercent = 20,
+                        weeklyResetText = "4일 후",
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource()
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        repository.addAccount(alias = "계정 1", accountId = "acc_1", autoRefresh = true)
+        repository.addAccount(alias = "계정 2", accountId = "acc_2", autoRefresh = true)
+
+        assertEquals("acc_1", repository.state.value.selectedAccountId)
+
+        // acc_1을 '당분간 사용 금지' 처리
+        val updated = repository.setAccountSuspended("acc_1", true)
+        assertNotNull(updated)
+        assertTrue(updated!!.isSuspended)
+
+        val state = repository.state.value
+        // 대표 계정이었던 acc_1이 금지되면서 acc_2로 대표 자동 위임
+        assertEquals("acc_2", state.selectedAccountId)
+
+        val acc1Entry = state.accounts.first { it.profile.id == "acc_1" }
+        assertTrue(acc1Entry.isQuotaExhausted())
+        assertEquals(GeminiQuotaExhaustionReason.SUSPENDED, acc1Entry.quotaExhaustionReason())
+        assertEquals(Long.MAX_VALUE, acc1Entry.remainingMillisUntilUsable())
+
+        // 1시간 뒤, 10일 뒤가 되어도 여전히 금지 상태 유지 (자동 복구 없음!)
+        val tenDaysLater = System.currentTimeMillis() + 10L * 24 * 3600 * 1000L
+        assertTrue(acc1Entry.isQuotaExhausted(tenDaysLater))
+        assertEquals(GeminiQuotaExhaustionReason.SUSPENDED, acc1Entry.quotaExhaustionReason(tenDaysLater))
+
+        // 사용자가 명시적으로 금지를 해제했을 때만 정상 복구됨
+        val recovered = repository.setAccountSuspended("acc_1", false)
+        assertNotNull(recovered)
+        assertFalse(recovered!!.isSuspended)
+        assertFalse(repository.state.value.accounts.first { it.profile.id == "acc_1" }.isQuotaExhausted())
     }
 
     private class InMemoryMultiUsageLocalDataSource(

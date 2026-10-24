@@ -1,10 +1,13 @@
-// 역할: 자동화 메인 화면의 프롬프트 편집, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
+// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
+import com.example.gemgemgen.automation.domain.PromptExperimentItem
+import com.example.gemgemgen.automation.domain.PromptExperimentPolicy
+import com.example.gemgemgen.automation.domain.PromptExperimentPreset
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
@@ -33,6 +36,16 @@ data class AutomationUiState(
     val isDisconnectingRemote: Boolean = false,
     val remoteDisconnectMessage: String = "",
     val maintenanceState: MaintenanceState = MaintenanceState(),
+    /** 프롬프트 실험(연금술) 모드 활성화 여부 */
+    val isExperimentMode: Boolean = false,
+    /** 등록된 프롬프트 실험 프리셋(세트) 목록 */
+    val experimentPresets: List<PromptExperimentPreset> = listOf(PromptExperimentPolicy.defaultPreset()),
+    /** 현재 선택된 실험 프리셋(세트) ID */
+    val activeExperimentPresetId: String = PromptExperimentPolicy.DEFAULT_PRESET_ID,
+    /** 현재 실험 모드에서 선택된 실험 항목(번호) ID (단일 선택, 미선택 시 null) */
+    val selectedExperimentItemId: String? = null,
+    /** 실험(연금술) 프리셋 및 항목 관리 다이얼로그 표시 여부 */
+    val showExperimentDialog: Boolean = false,
     /** 등록된 프롬프트 상용구(스니펫) 목록 */
     val promptSnippets: List<com.example.gemgemgen.automation.domain.PromptSnippet> = emptyList(),
     /** 상용구(텍스트 대치) 관리 다이얼로그 표시 여부 */
@@ -63,6 +76,24 @@ data class AutomationUiState(
     /** 태블릿 가로 화면 등 Gemini 사이드바가 열려 있는 상태에서 자동화를 진행할지 여부 (기본값 OFF) */
     val geminiSidebarOpenMode: Boolean = AppDefaults.DEFAULT_GEMINI_SIDEBAR_OPEN_MODE
 ) {
+    val activeExperimentPreset: PromptExperimentPreset
+        get() = experimentPresets.firstOrNull { it.id == activeExperimentPresetId }
+            ?: experimentPresets.firstOrNull()
+            ?: PromptExperimentPolicy.defaultPreset()
+
+    val selectedExperimentItem: PromptExperimentItem?
+        get() = activeExperimentPreset.items.firstOrNull { it.id == selectedExperimentItemId }
+
+    val hasExperimentTagInPrompt: Boolean
+        get() = PromptExperimentPolicy.hasExperimentTag(promptTemplate)
+
+    val experimentBlockReason: String?
+        get() = PromptExperimentPolicy.validateExperimentReady(
+            isExperimentMode = isExperimentMode,
+            promptTemplate = promptTemplate,
+            selectedItem = selectedExperimentItem
+        )
+
     val hasPromptTemplate: Boolean
         get() = promptTemplate.isNotBlank()
 
@@ -78,7 +109,9 @@ data class AutomationUiState(
             isRunning = isRunning,
             remoteAutomationStatus = remoteAutomationStatus,
             isVariationRunning = isVariationRunning,
-            isMaintenanceBusy = isMaintenanceBusy
+            isMaintenanceBusy = isMaintenanceBusy,
+            isExperimentMode = isExperimentMode,
+            selectedExperimentItem = selectedExperimentItem
         )
 
     val isVariationRunning: Boolean

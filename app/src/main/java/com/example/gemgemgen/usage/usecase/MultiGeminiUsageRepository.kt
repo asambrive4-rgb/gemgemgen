@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 계정 그룹 이동, 수동 소진/복구 및 대표 자동 위임, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
+﻿// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 계정 그룹 이동, 수동 소진/복구 및 당분간 사용 금지, 대표 자동 위임, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
 package com.example.gemgemgen.usage.usecase
 
 import com.example.gemgemgen.core.AppDispatchers
@@ -341,6 +341,55 @@ class MultiGeminiUsageRepository(
     fun triggerSetAccountManuallyExhausted(accountId: String, isExhausted: Boolean) {
         scope.launch {
             setAccountManuallyExhausted(accountId, isExhausted)
+        }
+    }
+
+    /**
+     * 특정 계정을 '당분간 사용 금지' 상태로 전환하거나 금지를 해제합니다.
+     * 사용 금지 상태인 계정은 수동으로 해제하기 전까지 자동으로 복구되지 않습니다.
+     * 만약 현재 대표 계정을 사용 금지한 경우 남은 사용 가능 1위 계정에게 대표 자리를 자동 위임합니다.
+     */
+    suspend fun setAccountSuspended(
+        accountId: String,
+        isSuspended: Boolean
+    ): GeminiAccountProfile? {
+        return mutationMutex.withLock {
+            val currentAccounts = _state.value.accounts
+            val index = currentAccounts.indexOfFirst { it.profile.id == accountId }
+            if (index < 0) return@withLock null
+
+            val target = currentAccounts[index]
+            if (target.profile.isSuspended == isSuspended) return@withLock target.profile
+
+            val updatedProfile = target.profile.copy(isSuspended = isSuspended)
+            val updatedAccounts = currentAccounts.toMutableList().apply {
+                set(index, target.copy(profile = updatedProfile))
+            }
+
+            var nextSelectedId = _state.value.selectedAccountId
+            if (isSuspended && nextSelectedId == accountId) {
+                val tempState = _state.value.copy(accounts = updatedAccounts)
+                nextSelectedId = tempState.availableAccountsSorted().firstOrNull()?.profile?.id
+                    ?: nextSelectedId
+            }
+
+            _state.update {
+                it.copy(
+                    accounts = updatedAccounts,
+                    selectedAccountId = nextSelectedId
+                )
+            }
+            persistProfilesInternal(updatedAccounts.map { it.profile }, nextSelectedId)
+            updatedProfile
+        }
+    }
+
+    /**
+     * 비동기 코루틴 스코프에서 계정 당분간 사용 금지/해제를 트리거합니다.
+     */
+    fun triggerSetAccountSuspended(accountId: String, isSuspended: Boolean) {
+        scope.launch {
+            setAccountSuspended(accountId, isSuspended)
         }
     }
 

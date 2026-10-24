@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정의 개별 사용량 항목과 전체 목록 상태, 5시간·주간 리셋 만료 자동 보정, 메인/서브 그룹별 분류·정렬, 소진 판별·사유, 대표 계정 요약 규칙을 정의합니다.
+// 역할: 다중 제미나이 계정의 개별 사용량 항목과 전체 목록 상태, 5시간·주간 리셋 만료 자동 보정, 메인/서브 그룹별 분류·정렬, 소진 판별·사유(당분간 사용 금지 포함), 대표 계정 요약 규칙을 정의합니다.
 package com.example.gemgemgen.usage.domain
 
 /**
@@ -7,7 +7,8 @@ package com.example.gemgemgen.usage.domain
 enum class GeminiQuotaExhaustionReason(val badgeLabel: String) {
     FIVE_HOUR_EXHAUSTED("5시간 소진"),
     WEEKLY_EXHAUSTED("주간 소진"),
-    MANUAL_EXHAUSTED("수동 제외")
+    MANUAL_EXHAUSTED("수동 제외"),
+    SUSPENDED("사용 금지")
 }
 
 /**
@@ -153,6 +154,7 @@ data class GeminiAccountUsageEntry(
 
     /** 할당량 소진 사유 (주간 소진 우선, 5시간 소진 차순, 수동 내림) */
     fun quotaExhaustionReason(nowMillis: Long = System.currentTimeMillis()): GeminiQuotaExhaustionReason? {
+        if (profile.isSuspended) return GeminiQuotaExhaustionReason.SUSPENDED
         val isManual = profile.isManuallyExhausted(nowMillis)
         if (displayedSuccess == null) {
             return if (isManual) GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED else null
@@ -208,6 +210,7 @@ data class GeminiAccountUsageEntry(
         val success = displayedSuccess ?: return null
         val reason = quotaExhaustionReason(nowMillis) ?: return null
         return when (reason) {
+            GeminiQuotaExhaustionReason.SUSPENDED -> Long.MAX_VALUE
             GeminiQuotaExhaustionReason.FIVE_HOUR_EXHAUSTED,
             GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED -> {
                 remainingMillisUntilFiveHourReset(nowMillis)
@@ -443,9 +446,9 @@ data class MultiGeminiUsageState(
             val reasonA = a.quotaExhaustionReason(nowMillis)
             val reasonB = b.quotaExhaustionReason(nowMillis)
             val usableA = a.remainingMillisUntilUsable(nowMillis)
-                ?: if (reasonA == GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED) Long.MAX_VALUE else (5L * 3600_000L)
+                ?: if (reasonA == GeminiQuotaExhaustionReason.SUSPENDED || reasonA == GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED) Long.MAX_VALUE else (5L * 3600_000L)
             val usableB = b.remainingMillisUntilUsable(nowMillis)
-                ?: if (reasonB == GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED) Long.MAX_VALUE else (5L * 3600_000L)
+                ?: if (reasonB == GeminiQuotaExhaustionReason.SUSPENDED || reasonB == GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED) Long.MAX_VALUE else (5L * 3600_000L)
 
             val usableCmp = usableA.compareTo(usableB)
             if (usableCmp != 0) return@sortedWith usableCmp

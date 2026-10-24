@@ -1,4 +1,4 @@
-// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 다중 계정 제미나이 액션 및 상용구 일괄 치환 액션을 제공하는 안정적인(Stable) UI 액션 인터페이스입니다.
+// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 실험(연금술) 액션, 다중 계정 제미나이 액션 및 상용구 일괄 치환 액션을 제공하는 안정적인(Stable) UI 액션 인터페이스입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.runtime.Stable
@@ -40,6 +40,26 @@ interface AutomationScreenActions {
     fun closeVariationPromptConfigDialog() {}
     fun saveVariationPromptConfig(config: VariationPromptConfig) {}
 
+    // 프롬프트 실험 (연금술)
+    fun toggleExperimentMode() {}
+    fun showExperimentDialog() {}
+    fun dismissExperimentDialog() {}
+    fun selectExperimentPreset(presetId: String) {}
+    fun selectExperimentItem(itemId: String?) {}
+    fun insertExperimentTag() {}
+    fun addExperimentPreset(name: String) {}
+    fun updateExperimentPreset(presetId: String, name: String) {}
+    fun deleteExperimentPreset(presetId: String) {}
+    fun moveExperimentPreset(presetId: String, delta: Int) {}
+    fun reorderExperimentPresets(fromIndex: Int, toIndex: Int) {}
+    fun resetExperimentPresetItems(presetId: String) {}
+    fun addExperimentItem(presetId: String, content: String) {}
+    fun addExperimentItemsBatch(presetId: String, contents: List<String>) {}
+    fun updateExperimentItem(presetId: String, itemId: String, content: String) {}
+    fun deleteExperimentItem(presetId: String, itemId: String) {}
+    fun moveExperimentItem(presetId: String, itemId: String, delta: Int) {}
+    fun reorderExperimentItems(presetId: String, fromIndex: Int, toIndex: Int) {}
+
     // 상용구 (Prompt Snippet)
     fun showPromptSnippetDialog() {}
     fun dismissPromptSnippetDialog() {}
@@ -68,6 +88,7 @@ interface AutomationScreenActions {
     fun selectRepresentativeGeminiAccount(accountId: String) {}
     fun switchGeminiAccount(accountId: String) {}
     fun toggleGeminiAccountManualExhaustion(accountId: String, isExhausted: Boolean) {}
+    fun toggleGeminiAccountSuspension(accountId: String, isSuspended: Boolean) {}
     fun refreshGeminiAccountUsage(accountId: String) {}
     fun refreshAllGeminiUsage(prioritizedGroup: GeminiAccountGroup? = null) {}
 

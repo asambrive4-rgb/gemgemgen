@@ -1,4 +1,4 @@
-// 역할: 다중 계정(5개 이상) 제미나이 사용량 모니터링을 위한 개별 Google 계정 프로필 메타데이터(메인/서브 그룹, 수동 사용불가 내림 포함)와 독립 세션 식별자 모델을 정의합니다.
+// 역할: 다중 계정(5개 이상) 제미나이 사용량 모니터링을 위한 개별 Google 계정 프로필 메타데이터(메인/서브 그룹, 수동 사용불가 내림, 당분간 사용 금지 포함)와 독립 세션 식별자 모델을 정의합니다.
 package com.example.gemgemgen.usage.domain
 
 import java.util.UUID
@@ -31,7 +31,8 @@ data class GeminiAccountProfile(
     val webViewProfileName: String = buildWebViewProfileName(id),
     val createdAt: Long = 0L,
     val group: GeminiAccountGroup = GeminiAccountGroup.MAIN,
-    val manualExhaustedUntilMillis: Long = 0L
+    val manualExhaustedUntilMillis: Long = 0L,
+    val isSuspended: Boolean = false
 ) {
     /** 수동 사용불가 상태 여부. 자동 복구 시각이 지나면 사용자의 조작 없이 false가 됩니다. */
     fun isManuallyExhausted(nowMillis: Long): Boolean = nowMillis < manualExhaustedUntilMillis

@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정의 메인/서브 탭 분리 목록, 수동 소진/복구 토글, 선택 탭 우선 새로고침, 실시간 초기화 만료 반영 및 목록↔로그인 화면을 한 모달 안에서 전환하는 계정 사용량 다이얼로그 호스트(Single Dialog Host)를 제공합니다. (로그인 WebView 자체는 GeminiAccountLoginView가 담당)
+﻿// 역할: 다중 제미나이 계정의 메인/서브 탭 분리 목록, 수동 소진/복구 및 당분간 사용 금지 토글, 선택 탭 우선 새로고침, 실시간 초기화 만료 반영 및 목록↔로그인 화면을 한 모달 안에서 전환하는 계정 사용량 다이얼로그 호스트(Single Dialog Host)를 제공합니다. (로그인 WebView 자체는 GeminiAccountLoginView가 담당)
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -98,6 +98,7 @@ fun MultiGeminiUsageDialog(
     onSwitchAccount: ((accountId: String) -> Unit)? = null,
     onMoveAccountGroup: ((accountId: String, targetGroup: GeminiAccountGroup) -> Unit)? = null,
     onToggleManualExhaustion: ((accountId: String, isExhausted: Boolean) -> Unit)? = null,
+    onToggleAccountSuspension: ((accountId: String, isSuspended: Boolean) -> Unit)? = null,
     onDismiss: () -> Unit,
     sessionHandler: GeminiAccountLoginSessionHandler = MultiProfileGeminiUsageFetcher.loginSessionHandler()
 ) {
@@ -179,6 +180,7 @@ fun MultiGeminiUsageDialog(
                         onSwitchAccount = onSwitchAccount,
                         onMoveAccountGroup = onMoveAccountGroup,
                         onToggleManualExhaustion = onToggleManualExhaustion,
+                        onToggleAccountSuspension = onToggleAccountSuspension,
                         onDismiss = onDismiss
                     )
                 }
@@ -221,6 +223,7 @@ private fun MultiAccountListContent(
     onSwitchAccount: ((String) -> Unit)? = null,
     onMoveAccountGroup: ((String, GeminiAccountGroup) -> Unit)? = null,
     onToggleManualExhaustion: ((accountId: String, isExhausted: Boolean) -> Unit)? = null,
+    onToggleAccountSuspension: ((accountId: String, isSuspended: Boolean) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val representativeId = multiUsageState.representativeAccount?.profile?.id
@@ -434,6 +437,9 @@ private fun MultiAccountListContent(
                             onToggleManualExhaustion = onToggleManualExhaustion?.let { fn ->
                                 { isExhausted -> fn(accountEntry.profile.id, isExhausted) }
                             },
+                            onToggleAccountSuspension = onToggleAccountSuspension?.let { fn ->
+                                { isSuspended -> fn(accountEntry.profile.id, isSuspended) }
+                            },
                             nowMillis = nowMillis
                         )
                     }
@@ -490,6 +496,9 @@ private fun MultiAccountListContent(
                             },
                             onToggleManualExhaustion = onToggleManualExhaustion?.let { fn ->
                                 { isExhausted -> fn(accountEntry.profile.id, isExhausted) }
+                            },
+                            onToggleAccountSuspension = onToggleAccountSuspension?.let { fn ->
+                                { isSuspended -> fn(accountEntry.profile.id, isSuspended) }
                             },
                             nowMillis = nowMillis
                         )

@@ -396,6 +396,24 @@ class PromptEditorCoordinator(
     fun insertBottomInstruction(bottomInstruction: String) =
         insertInstruction(bottomInstruction, isTop = false)
 
+    fun insertTextAtCursor(token: String) {
+        if (token.isBlank()) return
+        syncPromptTemplateFromTextField()
+        val currentText = textFieldState.text.toString()
+        val selection = textFieldState.selection
+        val start = selection.min.coerceIn(0, currentText.length)
+        val end = selection.max.coerceIn(start, currentText.length)
+        val newText = currentText.substring(0, start) + token + currentText.substring(end)
+        val cursorAfter = (start + token.length).coerceIn(0, newText.length)
+        commitProgrammaticEdit(
+            session = promptEditorSession.afterWholeReplace(newText),
+            selection = TextRange(cursorAfter),
+            replaceStart = start,
+            replaceEnd = end,
+            replacementText = token
+        )
+    }
+
     private fun insertInstruction(instruction: String, isTop: Boolean) {
         if (instruction.isBlank()) return
         syncPromptTemplateFromTextField()

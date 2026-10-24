@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 상용구/와일드카드(일괄 치환 포함), 다중 계정 제미나이 사용량 모니터링 상태 및 모달 제어, 자동/예약 메모리 정리를 총괄 관리하는 뷰모델입니다.
+// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 실험(연금술) 세트/항목 관리 및 위치 태그 합성, 상용구/와일드카드(일괄 치환 포함), 다중 계정 제미나이 사용량 모니터링 상태 및 모달 제어, 자동/예약 메모리 정리를 총괄 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.InstructionTab
+import com.example.gemgemgen.automation.domain.PromptExperimentItem
+import com.example.gemgemgen.automation.domain.PromptExperimentPolicy
+import com.example.gemgemgen.automation.domain.PromptExperimentPreset
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.PromptSnippet
@@ -23,6 +26,7 @@ import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshot
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.MaintenanceResult
+import com.example.gemgemgen.automation.usecase.PromptExperimentRepository
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
 import com.example.gemgemgen.automation.usecase.PromptSnippetRepository
 import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
@@ -60,7 +64,9 @@ private data class AutomationInitialState(
     val geminiSidebarOpenMode: Boolean = AppDefaults.DEFAULT_GEMINI_SIDEBAR_OPEN_MODE,
     val autoMemoryCleanupEnabled: Boolean = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED,
     val autoMemoryCleanupThreshold: Int = AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD,
-    val cumulativeGeminiGenerationCount: Int = 0
+    val cumulativeGeminiGenerationCount: Int = 0,
+    val experimentPresets: List<PromptExperimentPreset> = listOf(PromptExperimentPolicy.defaultPreset()),
+    val activeExperimentPresetId: String = PromptExperimentPolicy.DEFAULT_PRESET_ID
 )
 
 class AutomationViewModel(
@@ -78,6 +84,7 @@ class AutomationViewModel(
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val executeAutomation: CoordinateAutomationExecutionUseCase,
     private val promptSnippetRepository: PromptSnippetRepository? = null,
+    private val promptExperimentRepository: PromptExperimentRepository? = null,
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
     private val automationSettingsStore: com.example.gemgemgen.automation.android.AutomationSettingsStore? = null,
     private val multiGeminiUsageRepository: MultiGeminiUsageRepository? = null,
@@ -251,6 +258,10 @@ class AutomationViewModel(
 
     override fun toggleGeminiAccountManualExhaustion(accountId: String, isExhausted: Boolean) {
         multiGeminiUsageRepository?.triggerSetAccountManuallyExhausted(accountId, isExhausted)
+    }
+
+    override fun toggleGeminiAccountSuspension(accountId: String, isSuspended: Boolean) {
+        multiGeminiUsageRepository?.triggerSetAccountSuspended(accountId, isSuspended)
     }
 
     override fun switchGeminiAccount(accountId: String) {
@@ -593,6 +604,256 @@ class AutomationViewModel(
         }
     }
 
+    // =========================================================================
+    // 프롬프트 실험 (연금술) 액션 구현
+    // =========================================================================
+
+    override fun toggleExperimentMode() {
+        _uiState.update { state ->
+            val nextMode = !state.isExperimentMode
+            state.copy(isExperimentMode = nextMode)
+        }
+    }
+
+    override fun showExperimentDialog() {
+        _uiState.update { it.copy(showExperimentDialog = true) }
+    }
+
+    override fun dismissExperimentDialog() {
+        _uiState.update { it.copy(showExperimentDialog = false) }
+    }
+
+    override fun selectExperimentPreset(presetId: String) {
+        val presets = _uiState.value.experimentPresets
+        val target = presets.firstOrNull { it.id == presetId } ?: return
+        _uiState.update { state ->
+            val keepItem = target.items.any { it.id == state.selectedExperimentItemId }
+            state.copy(
+                activeExperimentPresetId = target.id,
+                selectedExperimentItemId = if (keepItem) state.selectedExperimentItemId else null
+            )
+        }
+        scope.launch {
+            withContext(dispatchers.io) {
+                promptExperimentRepository?.saveActivePresetId(target.id)
+            }
+        }
+    }
+
+    override fun selectExperimentItem(itemId: String?) {
+        _uiState.update { state ->
+            val nextId = if (state.selectedExperimentItemId == itemId) null else itemId
+            state.copy(selectedExperimentItemId = nextId)
+        }
+    }
+
+    override fun insertExperimentTag() {
+        promptEditor.insertTextAtCursor(PromptExperimentPolicy.EXPERIMENT_TAG)
+    }
+
+    override fun addExperimentPreset(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        val newPreset = PromptExperimentPreset(name = trimmed)
+        val updated = _uiState.value.experimentPresets + newPreset
+        _uiState.update {
+            it.copy(
+                experimentPresets = updated,
+                activeExperimentPresetId = newPreset.id,
+                selectedExperimentItemId = null
+            )
+        }
+        persistExperimentPresets(updated, activePresetId = newPreset.id)
+    }
+
+    override fun updateExperimentPreset(presetId: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        val updated = _uiState.value.experimentPresets.map { preset ->
+            if (preset.id == presetId) preset.copy(name = trimmed) else preset
+        }
+        _uiState.update { it.copy(experimentPresets = updated) }
+        persistExperimentPresets(updated)
+    }
+
+    override fun deleteExperimentPreset(presetId: String) {
+        val current = _uiState.value.experimentPresets
+        val remaining = current.filterNot { it.id == presetId }
+            .ifEmpty { listOf(PromptExperimentPolicy.defaultPreset()) }
+        val nextActiveId = if (_uiState.value.activeExperimentPresetId == presetId) {
+            remaining.first().id
+        } else {
+            _uiState.value.activeExperimentPresetId
+        }
+        val nextActivePreset = remaining.firstOrNull { it.id == nextActiveId } ?: remaining.first()
+        val keepSelected = nextActivePreset.items.any { it.id == _uiState.value.selectedExperimentItemId }
+        _uiState.update {
+            it.copy(
+                experimentPresets = remaining,
+                activeExperimentPresetId = nextActivePreset.id,
+                selectedExperimentItemId = if (keepSelected) it.selectedExperimentItemId else null
+            )
+        }
+        persistExperimentPresets(remaining, activePresetId = nextActivePreset.id)
+    }
+
+    override fun moveExperimentPreset(presetId: String, delta: Int) {
+        val current = _uiState.value.experimentPresets
+        val fromIndex = current.indexOfFirst { it.id == presetId }
+        val updated = PromptExperimentPolicy.moveElement(current, fromIndex, delta)
+        if (updated == current) return
+        _uiState.update { it.copy(experimentPresets = updated) }
+        persistExperimentPresets(updated)
+    }
+
+    override fun reorderExperimentPresets(fromIndex: Int, toIndex: Int) {
+        val current = _uiState.value.experimentPresets
+        val updated = PromptExperimentPolicy.moveElementTo(current, fromIndex, toIndex)
+        if (updated == current) return
+        _uiState.update { it.copy(experimentPresets = updated) }
+        persistExperimentPresets(updated)
+    }
+
+    override fun resetExperimentPresetItems(presetId: String) {
+        val updated = _uiState.value.experimentPresets.map { preset ->
+            if (preset.id == presetId) {
+                if (preset.id == PromptExperimentPolicy.DEFAULT_PRESET_ID) {
+                    PromptExperimentPolicy.defaultPreset()
+                } else {
+                    preset.copy(items = emptyList())
+                }
+            } else preset
+        }
+        _uiState.update { state ->
+            val clearSelected = state.activeExperimentPresetId == presetId
+            state.copy(
+                experimentPresets = updated,
+                selectedExperimentItemId = if (clearSelected) null else state.selectedExperimentItemId
+            )
+        }
+        persistExperimentPresets(updated)
+    }
+
+    override fun addExperimentItem(presetId: String, content: String) {
+        val trimmed = content.trim()
+        if (trimmed.isEmpty()) return
+        val newItem = PromptExperimentItem(content = trimmed)
+        val updated = _uiState.value.experimentPresets.map { preset ->
+            if (preset.id == presetId) {
+                preset.copy(items = preset.items + newItem)
+            } else {
+                preset
+            }
+        }
+        _uiState.update { state ->
+            val nextSelected = state.selectedExperimentItemId ?: newItem.id.takeIf { state.activeExperimentPresetId == presetId }
+            state.copy(
+                experimentPresets = updated,
+                selectedExperimentItemId = nextSelected
+            )
+        }
+        persistExperimentPresets(updated)
+    }
+
+    override fun addExperimentItemsBatch(presetId: String, contents: List<String>) {
+        val validContents = contents.map { it.trim() }.filter { it.isNotEmpty() }
+        if (validContents.isEmpty()) return
+        val newItems = validContents.map { PromptExperimentItem(content = it) }
+        val updated = _uiState.value.experimentPresets.map { preset ->
+            if (preset.id == presetId) {
+                preset.copy(items = preset.items + newItems)
+            } else {
+                preset
+            }
+        }
+        _uiState.update { state ->
+            val nextSelected = state.selectedExperimentItemId ?: newItems.first().id.takeIf { state.activeExperimentPresetId == presetId }
+            state.copy(
+                experimentPresets = updated,
+                selectedExperimentItemId = nextSelected
+            )
+        }
+        persistExperimentPresets(updated)
+    }
+
+    override fun updateExperimentItem(presetId: String, itemId: String, content: String) {
+        val trimmed = content.trim()
+        if (trimmed.isEmpty()) return
+        val updated = _uiState.value.experimentPresets.map { preset ->
+            if (preset.id == presetId) {
+                preset.copy(
+                    items = preset.items.map { item ->
+                        if (item.id == itemId) item.copy(content = trimmed) else item
+                    }
+                )
+            } else {
+                preset
+            }
+        }
+        _uiState.update { it.copy(experimentPresets = updated) }
+        persistExperimentPresets(updated)
+    }
+
+    override fun deleteExperimentItem(presetId: String, itemId: String) {
+        val updated = _uiState.value.experimentPresets.map { preset ->
+            if (preset.id == presetId) {
+                preset.copy(items = preset.items.filterNot { it.id == itemId })
+            } else {
+                preset
+            }
+        }
+        _uiState.update { state ->
+            state.copy(
+                experimentPresets = updated,
+                selectedExperimentItemId = if (state.selectedExperimentItemId == itemId) null else state.selectedExperimentItemId
+            )
+        }
+        persistExperimentPresets(updated)
+    }
+
+    override fun moveExperimentItem(presetId: String, itemId: String, delta: Int) {
+        val updated = _uiState.value.experimentPresets.map { preset ->
+            if (preset.id == presetId) {
+                val fromIndex = preset.items.indexOfFirst { it.id == itemId }
+                val reordered = PromptExperimentPolicy.moveElement(preset.items, fromIndex, delta)
+                preset.copy(items = reordered)
+            } else {
+                preset
+            }
+        }
+        if (updated == _uiState.value.experimentPresets) return
+        _uiState.update { it.copy(experimentPresets = updated) }
+        persistExperimentPresets(updated)
+    }
+
+    override fun reorderExperimentItems(presetId: String, fromIndex: Int, toIndex: Int) {
+        val updated = _uiState.value.experimentPresets.map { preset ->
+            if (preset.id == presetId) {
+                val reordered = PromptExperimentPolicy.moveElementTo(preset.items, fromIndex, toIndex)
+                preset.copy(items = reordered)
+            } else {
+                preset
+            }
+        }
+        if (updated == _uiState.value.experimentPresets) return
+        _uiState.update { it.copy(experimentPresets = updated) }
+        persistExperimentPresets(updated)
+    }
+
+    private fun persistExperimentPresets(
+        presets: List<PromptExperimentPreset>,
+        activePresetId: String? = null
+    ) {
+        scope.launch {
+            withContext(dispatchers.io) {
+                promptExperimentRepository?.savePresets(presets)
+                if (activePresetId != null) {
+                    promptExperimentRepository?.saveActivePresetId(activePresetId)
+                }
+            }
+        }
+    }
+
 
     override fun closeGeminiApp() = executeMaintenance(
         canExecute = AutomationUiState::canCloseGemini,
@@ -745,18 +1006,26 @@ class AutomationViewModel(
             remoteAutomationStatus = state.remoteAutomationStatus,
             isVariationRunning = state.isVariationRunning,
             isMaintenanceBusy = state.isMaintenanceBusy,
-            isStartInProgress = isStartInProgress
+            isStartInProgress = isStartInProgress,
+            isExperimentMode = state.isExperimentMode,
+            selectedExperimentItem = state.selectedExperimentItem
         )
         if (decision !is AutomationStartDecision.Started && decision !is AutomationStartDecision.RemoteStarted) {
             return decision
         }
+
+        val effectivePromptTemplate = PromptExperimentPolicy.resolvePromptTemplate(
+            isExperimentMode = state.isExperimentMode,
+            promptTemplate = state.promptTemplate,
+            selectedItem = state.selectedExperimentItem
+        )
 
         promptEditor.onAutomationStarted(state.promptTemplate)
         postAutomationUsageRefreshJob?.cancel()
 
         promptEditor.cancelParagraphSelection()
         val request = AutomationRunRequest(
-            promptTemplate = state.promptTemplate,
+            promptTemplate = effectivePromptTemplate,
             repeatCountText = state.repeatCountText,
             targetApp = state.selectedTargetApp,
             flowImageCount = state.flowImageCount
@@ -934,6 +1203,16 @@ class AutomationViewModel(
                     ?: AppDefaults.DEFAULT_AUTO_MEMORY_CLEANUP_THRESHOLD
                 val cumulativeGeminiCount = automationSettingsStore?.geminiGenerationCountSinceCleanup?.first()
                     ?: 0
+                val loadedPresets = runCatching {
+                    promptExperimentRepository?.loadPresets().orEmpty()
+                }.getOrDefault(emptyList()).ifEmpty {
+                    listOf(PromptExperimentPolicy.defaultPreset())
+                }
+                val savedActivePresetId = runCatching {
+                    promptExperimentRepository?.loadActivePresetId()
+                }.getOrNull()
+                val resolvedActivePresetId = loadedPresets.firstOrNull { it.id == savedActivePresetId }?.id
+                    ?: loadedPresets.first().id
                 Triple(
                     AutomationInitialState(
                         lastRunSnapshotStore.load(),
@@ -943,7 +1222,9 @@ class AutomationViewModel(
                         geminiSidebarOpenMode,
                         autoMemoryCleanupEnabled,
                         autoMemoryCleanupThreshold,
-                        cumulativeGeminiCount
+                        cumulativeGeminiCount,
+                        loadedPresets,
+                        resolvedActivePresetId
                     ),
                     checkEnvironmentStatus.check(),
                     loadSortedCandidatesAndSnippets()
@@ -968,6 +1249,8 @@ class AutomationViewModel(
                     environmentStatus = report.status,
                     environmentSetupInfo = report.setupInfo,
                     promptSnippets = snippets,
+                    experimentPresets = initialState.experimentPresets,
+                    activeExperimentPresetId = initialState.activeExperimentPresetId,
                     promptInstructionConfig = initialState.instructionConfig,
                     variationPromptConfig = initialState.variationConfig,
                     geminiSidebarOpenMode = initialState.geminiSidebarOpenMode,

@@ -1,9 +1,10 @@
-// 역할: 자동화 실행 전 오버레이 권한·도메인 불변식을 사전 판별하고 로컬/원격 자동화 실행 경로를 조율합니다.
+// 역할: 자동화 실행 전 오버레이 권한·도메인 불변식(프롬프트 실험 조건 포함)을 사전 판별하고 로컬/원격 자동화 실행 경로를 조율합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.domain.PromptExperimentItem
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.remote.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteActionResult
@@ -34,7 +35,9 @@ class CheckAutomationStartUseCase(
         isRunning: Boolean = false,
         isVariationRunning: Boolean = false,
         isMaintenanceBusy: Boolean = false,
-        isStartInProgress: Boolean = false
+        isStartInProgress: Boolean = false,
+        isExperimentMode: Boolean = false,
+        selectedExperimentItem: PromptExperimentItem? = null
     ): AutomationStartDecision {
         if (!overlayPermissionGateway.isGranted()) {
             return AutomationStartDecision.PermissionRequired
@@ -47,7 +50,9 @@ class CheckAutomationStartUseCase(
             isRunning = isRunning,
             remoteAutomationStatus = RemoteAutomationStatus(),
             isVariationRunning = isVariationRunning,
-            isMaintenanceBusy = isMaintenanceBusy
+            isMaintenanceBusy = isMaintenanceBusy,
+            isExperimentMode = isExperimentMode,
+            selectedExperimentItem = selectedExperimentItem
         )
         return if (canRun && !isStartInProgress) {
             AutomationStartDecision.Started
@@ -76,7 +81,9 @@ class CoordinateAutomationExecutionUseCase(
         remoteAutomationStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
         isVariationRunning: Boolean = false,
         isMaintenanceBusy: Boolean = false,
-        isStartInProgress: Boolean = false
+        isStartInProgress: Boolean = false,
+        isExperimentMode: Boolean = false,
+        selectedExperimentItem: PromptExperimentItem? = null
     ): AutomationStartDecision = when (mode) {
         AutomationMode.RECEIVER -> AutomationStartDecision.Rejected
         AutomationMode.SENDER -> {
@@ -88,7 +95,9 @@ class CoordinateAutomationExecutionUseCase(
                 isRunning = isRunning,
                 remoteAutomationStatus = remoteAutomationStatus,
                 isVariationRunning = isVariationRunning,
-                isMaintenanceBusy = isMaintenanceBusy
+                isMaintenanceBusy = isMaintenanceBusy,
+                isExperimentMode = isExperimentMode,
+                selectedExperimentItem = selectedExperimentItem
             )
             if (canRunSender && !isStartInProgress) {
                 AutomationStartDecision.RemoteStarted
@@ -103,7 +112,9 @@ class CoordinateAutomationExecutionUseCase(
             isRunning = isRunning,
             isVariationRunning = isVariationRunning,
             isMaintenanceBusy = isMaintenanceBusy,
-            isStartInProgress = isStartInProgress
+            isStartInProgress = isStartInProgress,
+            isExperimentMode = isExperimentMode,
+            selectedExperimentItem = selectedExperimentItem
         )
     }
 
