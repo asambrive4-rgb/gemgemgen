@@ -1,27 +1,24 @@
-// 역할: 분석 화면의 API 키 관리, 인증, 알림 다이얼로그를 단일 호스트와 TextFieldState 기반 화면 액션 인터페이스로 표시합니다.
+// 역할: 분석 화면의 API 키 관리, 인증, 알림 다이얼로그를 뉴모피즘 디자인과 단일 호스트로 통합 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +35,10 @@ import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
+import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuButton
+import com.example.gemgemgen.ui.theme.NeuConfigDialogContent
+import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 
 sealed interface AnalysisDialogType {
@@ -110,6 +111,7 @@ internal fun AnalysisDialogHost(
                 message = "원문, 카테고리, 마스킹, 생성 결과와 변주 조건이 모두 지워집니다. " +
                     "자동화 프롬프트와 계정 설정은 유지됩니다.",
                 confirmLabel = "비우기",
+                useFilledConfirmButton = true,
                 onConfirm = actions::confirmResetSession,
                 onDismiss = actions::dismissResetSession
             )
@@ -118,6 +120,7 @@ internal fun AnalysisDialogHost(
                 message = "${targetDialog.fileName} 파일을 덮어쓸까요? 다른 이름을 입력하려면 취소하고 파일명을 바꿔주세요.",
                 confirmLabel = "덮어쓰기",
                 dismissLabel = "다른 파일명 입력",
+                useFilledConfirmButton = true,
                 onConfirm = actions::onConfirmOverwrite,
                 onDismiss = actions::dismissOverwrite
             )
@@ -158,7 +161,7 @@ private fun KeyManagementContent(
             text = "Gemini API 키 관리",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = AppTheme.colors.textPrimary
         )
         Column(
             modifier = Modifier
@@ -193,60 +196,128 @@ private fun KeyManagementContent(
                 label = { Text("API 키") },
                 outputTransformation = PasswordMaskOutputTransformation
             )
-            Button(
-                onClick = actions::addApiKey,
-                enabled = canAddKey,
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Text("추가")
+
+            if (uiState.error.isNotBlank()) {
+                Text(
+                    text = uiState.error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (uiState.message.isNotBlank()) {
+                Text(
+                    text = uiState.message,
+                    color = AppTheme.colors.primary,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
-            HorizontalDivider()
+            NeuButton(
+                onClick = actions::addApiKey,
+                enabled = canAddKey,
+                isPrimary = true,
+                modifier = Modifier.align(Alignment.End),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "추가",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            HorizontalDivider(color = AppTheme.colors.cardBorder)
 
             if (uiState.apiKeys.isEmpty()) {
                 Text(
                     text = "저장된 키가 없습니다.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = AppTheme.colors.textSecondary
                 )
             } else {
                 uiState.apiKeys.forEach { key ->
+                    val backgroundColor = if (key.isActive) {
+                        AppTheme.colors.primary.copy(alpha = 0.12f)
+                    } else {
+                        AppTheme.colors.insetBed
+                    }
+                    val borderColor = if (key.isActive) {
+                        AppTheme.colors.primary
+                    } else {
+                        AppTheme.colors.cardBorder
+                    }
+
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.small,
-                        color = if (key.isActive) {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-                        },
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        shape = RoundedCornerShape(12.dp),
+                        color = backgroundColor,
+                        border = BorderStroke(1.dp, borderColor)
                     ) {
                         Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "${key.label} ${key.preview}",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${key.label} ${key.preview}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.colors.textPrimary
+                                )
+                                if (key.isActive) {
+                                    Text(
+                                        text = "사용 중",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AppTheme.colors.primary
+                                    )
+                                }
+                            }
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OutlinedButton(
-                                    onClick = { actions.activateApiKey(key.id) },
-                                    enabled = !key.isActive
-                                ) {
-                                    Text(if (key.isActive) "활성" else "활성화")
+                                if (!key.isActive) {
+                                    NeuButton(
+                                        onClick = { actions.activateApiKey(key.id) },
+                                        isPrimary = false,
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = "활성화",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                 }
-                                OutlinedButton(
-                                    onClick = { actions.startEditingApiKey(key) }
+                                NeuButton(
+                                    onClick = { actions.startEditingApiKey(key) },
+                                    isPrimary = false,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Text("이름 수정")
+                                    Text(
+                                        text = "이름 수정",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
-                                TextButton(onClick = { actions.deleteApiKey(key.id) }) {
-                                    Text("삭제")
+                                TextButton(
+                                    onClick = { actions.deleteApiKey(key.id) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "삭제",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                         }
@@ -258,8 +329,16 @@ private fun KeyManagementContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions::dismissKeyDialog) {
-                Text("닫기")
+            NeuButton(
+                onClick = actions::dismissKeyDialog,
+                isPrimary = false,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "닫기",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }
@@ -276,18 +355,17 @@ private fun EditKeyLabelContent(
         resetKey = dialog.originalLabel
     )
     val canSave = editingLabelState.text.isNotBlank()
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+
+    NeuConfigDialogContent(
+        title = "API 키 이름 수정",
+        subtitle = "API 키를 식별할 새 이름을 입력하세요.",
+        confirmLabel = "저장",
+        dismissLabel = "취소",
+        confirmEnabled = canSave,
+        useNeuButtons = true,
+        onConfirm = actions::updateApiKeyLabel,
+        onDismiss = actions::cancelEditingApiKey
     ) {
-        Text(
-            text = "API 키 이름 수정",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
         OutlinedTextField(
             state = editingLabelState,
             modifier = Modifier.fillMaxWidth(),
@@ -303,21 +381,6 @@ private fun EditKeyLabelContent(
             label = { Text("새 키 이름") },
             placeholder = { Text(dialog.originalLabel) }
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = actions::cancelEditingApiKey) {
-                Text("취소")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = actions::updateApiKeyLabel,
-                enabled = canSave
-            ) {
-                Text("저장")
-            }
-        }
     }
 }
 
@@ -336,35 +399,89 @@ private fun GrokLoginContent(
             text = "Grok 로그인",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = AppTheme.colors.textPrimary
         )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             if (dialog.userCode.isBlank()) {
-                Text("로그인 코드를 준비하는 중...")
-            } else {
-                Text("Firefox에서 아래 코드를 승인하세요.")
                 Text(
-                    text = dialog.userCode,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
+                    text = "로그인 코드를 준비하는 중...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.colors.textSecondary
                 )
+            } else {
+                Text(
+                    text = "Firefox 또는 브라우저에서 아래 코드를 승인하세요.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.colors.textSecondary
+                )
+                NeuInsetBed(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    backgroundColor = AppTheme.colors.insetBed,
+                    borderColor = AppTheme.colors.insetBorder
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = dialog.userCode,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            color = AppTheme.colors.textPrimary
+                        )
+                        NeuButton(
+                            onClick = actions::copyGrokUserCode,
+                            isPrimary = true,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "코드 복사",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 if (dialog.verificationUri.isNotBlank()) {
-                    TextButton(onClick = { actions.onOpenGrokLoginUrl(dialog.verificationUri) }) {
-                        Text(dialog.verificationUri)
+                    NeuButton(
+                        onClick = { actions.onOpenGrokLoginUrl(dialog.verificationUri) },
+                        isPrimary = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        contentModifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "브라우저에서 승인 페이지 열기",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
             if (dialog.isPolling) {
                 Row(
+                    modifier = Modifier.padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = AppTheme.colors.primary
+                    )
                     Text(
                         text = "승인 대기 중...",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = AppTheme.colors.textSecondary
                     )
                 }
             }
@@ -373,8 +490,16 @@ private fun GrokLoginContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = actions::cancelGrokLogin) {
-                Text("취소")
+            NeuButton(
+                onClick = actions::cancelGrokLogin,
+                isPrimary = false,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "취소",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

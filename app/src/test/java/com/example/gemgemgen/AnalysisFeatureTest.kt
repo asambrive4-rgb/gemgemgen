@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름과 단일화된 화면 액션 인터페이스(AnalysisScreenActions)를 검증합니다.
+// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름과 단일화된 화면 액션 인터페이스(AnalysisScreenActions) 및 모델 요약 라벨을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -1487,6 +1487,43 @@ class AnalysisFeatureTest {
         assertTrue(viewModel.uiState.value.showKeyDialog)
         actions.dismissKeyDialog()
         assertFalse(viewModel.uiState.value.showKeyDialog)
+    }
+
+    @Test
+    fun copyGrokUserCode_copiesActiveChallengeCodeToClipboardAndSetsMessage() {
+        val clipboard = RecordingClipboard()
+        val viewModel = analysisViewModel(
+            aiGateway = FakeAnalysisAiGateway(),
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "gemini-secret"),
+            clipboardGateway = clipboard
+        )
+
+        viewModel.startGrokLogin()
+        assertEquals("USER-CODE", viewModel.uiState.value.grokLoginUserCode)
+
+        viewModel.copyGrokUserCode()
+
+        assertEquals("USER-CODE", clipboard.writtenText)
+        assertEquals("Grok 로그인 코드를 복사했습니다.", viewModel.uiState.value.message)
+        viewModel.cancelGrokLogin()
+    }
+
+    @Test
+    fun formatModelSummaryLabel_returnsCompactProviderAndModelSummary() {
+        assertEquals(
+            "Gemini · 3.5 Lite",
+            com.example.gemgemgen.analysis.ui.formatModelSummaryLabel(
+                AnalysisProvider.GEMINI,
+                com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
+            )
+        )
+        assertEquals(
+            "Grok · 4.5",
+            com.example.gemgemgen.analysis.ui.formatModelSummaryLabel(
+                AnalysisProvider.GROK,
+                com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
+            )
+        )
     }
 
     private fun analysisViewModel(

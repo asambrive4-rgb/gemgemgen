@@ -1,4 +1,4 @@
-﻿// 역할: Gemini 및 Grok 프로바이더와 지원 모델 목록을 칩 형태로 선택하는 공통 UI 컴포넌트입니다.
+// 역할: Gemini 및 Grok 프로바이더와 지원 모델 목록을 칩 형태로 선택하고 요약 라벨을 제공하는 공통 UI 컴포넌트입니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -73,4 +73,24 @@ fun ModelSelectorChips(
             )
         }
     }
+}
+
+/**
+ * 프로바이더와 모델 ID를 기반으로 화면 상단 1줄 요약 버튼 등에 표시할 짧은 라벨(예: "Gemini · 3.5 Lite", "Grok · 4.5")을 반환합니다.
+ */
+fun formatModelSummaryLabel(provider: AnalysisProvider, modelId: String): String {
+    val providerName = when (provider) {
+        AnalysisProvider.GEMINI -> "Gemini"
+        AnalysisProvider.GROK -> "Grok"
+    }
+    val modelLabel = when (provider) {
+        AnalysisProvider.GEMINI -> {
+            GEMINI_MODELS.firstOrNull { it.modelId == modelId }?.label ?: modelId
+        }
+        AnalysisProvider.GROK -> {
+            val label = GROK_MODELS.firstOrNull { it.modelId == modelId }?.label ?: modelId
+            if (label.startsWith("Grok ")) label.removePrefix("Grok ").trim() else label
+        }
+    }
+    return "$providerName · $modelLabel"
 }

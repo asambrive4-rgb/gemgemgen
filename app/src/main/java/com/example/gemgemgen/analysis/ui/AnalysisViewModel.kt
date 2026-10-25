@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스를 직접 구현하여 UseCase 및 도메인 정책을 조율합니다.
+// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스(Grok 승인 코드 복사 포함)를 직접 구현하여 UseCase 및 도메인 정책을 조율합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -868,6 +868,26 @@ class AnalysisViewModel(
             it.resetGrokLoginDialog().copy(
                 message = "Grok 로그인을 취소했습니다."
             )
+        }
+    }
+
+    override fun copyGrokUserCode() {
+        val code = _uiState.value.grokLoginUserCode
+        if (code.isBlank()) return
+        scope.launch {
+            try {
+                withContext(dispatchers.io) {
+                    clipboardGateway.writeText(code)
+                }
+                _uiState.update {
+                    it.copy(
+                        message = "Grok 로그인 코드를 복사했습니다.",
+                        error = ""
+                    )
+                }
+            } catch (error: RuntimeException) {
+                showError(error.message ?: "Grok 로그인 코드 복사에 실패했습니다.")
+            }
         }
     }
 

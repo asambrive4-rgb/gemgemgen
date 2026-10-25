@@ -1,4 +1,4 @@
-// 역할: 실험(연금술) 세트(프리셋) 및 번호별 실험 프롬프트 항목을 추가·수정·삭제하고, 좌측 3단 가로줄 롱프레스 드래그로 순서를 재배치하며, 붙여넣기 및 세트별 안전 초기화를 단일 모달 호스트(Single Dialog Host)로 제공하는 다이얼로그입니다.
+// 역할: 실험(연금술) 세트(프리셋) 및 번호별 실험 프롬프트 항목을 추가·수정·삭제하고, 좌측 3단 가로줄 롱프레스 드래그로 순서를 재배치하며, 복사·붙여넣기 및 세트별 안전 초기화를 단일 모달 호스트(Single Dialog Host)로 제공하는 다이얼로그입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -50,8 +51,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +80,8 @@ import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.NeuModalDialogFrame
 import com.example.gemgemgen.ui.theme.appTextFieldColors
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private sealed interface ExperimentDialogSubView {
     data object MainList : ExperimentDialogSubView
@@ -328,13 +334,13 @@ private fun ExperimentMainListContent(
     onEditItemClick: (PromptExperimentItem, Int) -> Unit,
     onDeleteItemClick: (String) -> Unit
 ) {
-    var localItems by remember(activePreset.items) { mutableStateOf(activePreset.items) }
-    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var localItems by remember(activePreset.id) { mutableStateOf(activePreset.items) }
+    var draggingItemId by remember { mutableStateOf<String?>(null) }
     var initialDragIndex by remember { mutableStateOf<Int?>(null) }
     var dragAccumulatedY by remember { mutableStateOf(0f) }
 
     LaunchedEffect(activePreset.items) {
-        if (draggingIndex == null) {
+        if (draggingItemId == null) {
             localItems = activePreset.items
         }
     }
@@ -342,44 +348,50 @@ private fun ExperimentMainListContent(
     val density = LocalDensity.current
     val rowHeightPx = with(density) { 56.dp.toPx() }
 
-    fun handleDragStart(index: Int) {
-        draggingIndex = index
+    fun handleDragStart(itemId: String) {
+        val index = localItems.indexOfFirst { it.id == itemId }
+        if (index == -1) return
+        draggingItemId = itemId
         initialDragIndex = index
         dragAccumulatedY = 0f
     }
 
     fun handleDrag(deltaY: Float) {
-        val curIndex = draggingIndex ?: return
+        val currentId = draggingItemId ?: return
+        var curIndex = localItems.indexOfFirst { it.id == currentId }
+        if (curIndex == -1) return
         dragAccumulatedY += deltaY
 
         val threshold = rowHeightPx * 0.5f
-        if (dragAccumulatedY > threshold && curIndex < localItems.lastIndex) {
+        while (dragAccumulatedY > threshold && curIndex < localItems.lastIndex) {
             val target = curIndex + 1
             localItems = PromptExperimentPolicy.moveElementTo(localItems, curIndex, target)
-            draggingIndex = target
+            curIndex = target
             dragAccumulatedY -= rowHeightPx
-        } else if (dragAccumulatedY < -threshold && curIndex > 0) {
+        }
+        while (dragAccumulatedY < -threshold && curIndex > 0) {
             val target = curIndex - 1
             localItems = PromptExperimentPolicy.moveElementTo(localItems, curIndex, target)
-            draggingIndex = target
+            curIndex = target
             dragAccumulatedY += rowHeightPx
         }
     }
 
     fun handleDragEnd() {
+        val currentId = draggingItemId
         val from = initialDragIndex
-        val to = draggingIndex
-        if (from != null && to != null && from != to) {
+        val to = if (currentId != null) localItems.indexOfFirst { it.id == currentId } else -1
+        if (from != null && to != -1 && from != to) {
             onReorderItems(from, to)
         }
-        draggingIndex = null
+        draggingItemId = null
         initialDragIndex = null
         dragAccumulatedY = 0f
     }
 
     fun handleDragCancel() {
         localItems = activePreset.items
-        draggingIndex = null
+        draggingItemId = null
         initialDragIndex = null
         dragAccumulatedY = 0f
     }
@@ -555,27 +567,32 @@ private fun ExperimentMainListContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 260.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(
+                        state = rememberScrollState(),
+                        enabled = draggingItemId == null
+                    ),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 localItems.forEachIndexed { index, item ->
-                    val number = index + 1
-                    val isSelected = item.id == selectedItemId
-                    val isDragging = index == draggingIndex
-                    ExperimentItemRowCard(
-                        number = number,
-                        item = item,
-                        selected = isSelected,
-                        isDragging = isDragging,
-                        dragOffset = if (isDragging) dragAccumulatedY else 0f,
-                        onSelectClick = { onSelectItem(item.id) },
-                        onDragStart = { handleDragStart(index) },
-                        onDrag = { deltaY -> handleDrag(deltaY) },
-                        onDragEnd = { handleDragEnd() },
-                        onDragCancel = { handleDragCancel() },
-                        onEditClick = { onEditItemClick(item, number) },
-                        onDeleteClick = { onDeleteItemClick(item.id) }
-                    )
+                    key(item.id) {
+                        val number = index + 1
+                        val isSelected = item.id == selectedItemId
+                        val isDragging = item.id == draggingItemId
+                        ExperimentItemRowCard(
+                            number = number,
+                            item = item,
+                            selected = isSelected,
+                            isDragging = isDragging,
+                            dragOffset = if (isDragging) dragAccumulatedY else 0f,
+                            onSelectClick = { onSelectItem(item.id) },
+                            onDragStart = { handleDragStart(item.id) },
+                            onDrag = { deltaY -> handleDrag(deltaY) },
+                            onDragEnd = { handleDragEnd() },
+                            onDragCancel = { handleDragCancel() },
+                            onEditClick = { onEditItemClick(item, number) },
+                            onDeleteClick = { onDeleteItemClick(item.id) }
+                        )
+                    }
                 }
             }
         }
@@ -689,16 +706,19 @@ private fun DialogTopActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    isDanger: Boolean = false
+    isDanger: Boolean = false,
+    isSuccess: Boolean = false
 ) {
     val contentColor = when {
         !enabled -> AppTheme.colors.textSecondary.copy(alpha = 0.4f)
         isDanger -> MaterialTheme.colorScheme.error
+        isSuccess -> AppTheme.colors.primary
         else -> AppTheme.colors.textPrimary
     }
     val iconColor = when {
         !enabled -> AppTheme.colors.textSecondary.copy(alpha = 0.4f)
         isDanger -> MaterialTheme.colorScheme.error
+        isSuccess -> AppTheme.colors.primary
         else -> AppTheme.colors.primary
     }
 
@@ -762,6 +782,11 @@ private fun ExperimentItemRowCard(
         else -> 2.dp
     }
 
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+    val currentOnDragCancel by rememberUpdatedState(onDragCancel)
+
     NeuCard(
         shape = RoundedCornerShape(12.dp),
         backgroundColor = bgColor,
@@ -799,13 +824,13 @@ private fun ExperimentItemRowCard(
                         .clip(RoundedCornerShape(8.dp))
                         .pointerInput(item.id) {
                             detectDragGesturesAfterLongPress(
-                                onDragStart = { onDragStart() },
+                                onDragStart = { currentOnDragStart() },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
-                                    onDrag(dragAmount.y)
+                                    currentOnDrag(dragAmount.y)
                                 },
-                                onDragEnd = { onDragEnd() },
-                                onDragCancel = { onDragCancel() }
+                                onDragEnd = { currentOnDragEnd() },
+                                onDragCancel = { currentOnDragCancel() }
                             )
                         },
                     contentAlignment = Alignment.Center
@@ -889,6 +914,8 @@ private fun ExperimentEditItemContent(
     onSave: (String) -> Unit
 ) {
     var text by remember(item.id) { mutableStateOf(item.content) }
+    var isCopied by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -903,19 +930,45 @@ private fun ExperimentEditItemContent(
                 text = "✏️ ${number}번 실험 프롬프트 수정",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.textPrimary
+                color = AppTheme.colors.textPrimary,
+                modifier = Modifier.weight(1f, fill = false),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            DialogTopActionButton(
-                text = "붙여넣기",
-                icon = Icons.Default.ContentPaste,
-                onClick = {
-                    val clip = clipboardGateway.readText()
-                    if (clip.isNotBlank()) {
-                        text = clip.trim()
-                    }
-                },
-                modifier = Modifier.width(110.dp)
-            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DialogTopActionButton(
+                    text = if (isCopied) "복사됨" else "복사",
+                    icon = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                    enabled = text.isNotBlank(),
+                    isSuccess = isCopied,
+                    onClick = {
+                        if (text.isNotBlank()) {
+                            clipboardGateway.writeText(text)
+                            isCopied = true
+                            coroutineScope.launch {
+                                delay(1500)
+                                isCopied = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.width(82.dp)
+                )
+                DialogTopActionButton(
+                    text = "붙여넣기",
+                    icon = Icons.Default.ContentPaste,
+                    onClick = {
+                        val clip = clipboardGateway.readText()
+                        if (clip.isNotBlank()) {
+                            text = clip.trim()
+                        }
+                    },
+                    modifier = Modifier.width(88.dp)
+                )
+            }
         }
 
         OutlinedTextField(
@@ -1135,13 +1188,13 @@ private fun ExperimentManagePresetsContent(
     var editingPreset by remember { mutableStateOf(initialEditingPreset) }
     var editingName by remember { mutableStateOf(initialEditingPreset?.name.orEmpty()) }
 
-    var localPresets by remember(presets) { mutableStateOf(presets) }
-    var draggingPresetIndex by remember { mutableStateOf<Int?>(null) }
+    var localPresets by remember { mutableStateOf(presets) }
+    var draggingPresetId by remember { mutableStateOf<String?>(null) }
     var initialPresetDragIndex by remember { mutableStateOf<Int?>(null) }
     var presetDragAccumulatedY by remember { mutableStateOf(0f) }
 
     LaunchedEffect(presets) {
-        if (draggingPresetIndex == null) {
+        if (draggingPresetId == null) {
             localPresets = presets
         }
     }
@@ -1149,44 +1202,50 @@ private fun ExperimentManagePresetsContent(
     val density = LocalDensity.current
     val presetRowHeightPx = with(density) { 56.dp.toPx() }
 
-    fun handlePresetDragStart(index: Int) {
-        draggingPresetIndex = index
+    fun handlePresetDragStart(presetId: String) {
+        val index = localPresets.indexOfFirst { it.id == presetId }
+        if (index == -1) return
+        draggingPresetId = presetId
         initialPresetDragIndex = index
         presetDragAccumulatedY = 0f
     }
 
     fun handlePresetDrag(deltaY: Float) {
-        val curIndex = draggingPresetIndex ?: return
+        val currentId = draggingPresetId ?: return
+        var curIndex = localPresets.indexOfFirst { it.id == currentId }
+        if (curIndex == -1) return
         presetDragAccumulatedY += deltaY
 
         val threshold = presetRowHeightPx * 0.5f
-        if (presetDragAccumulatedY > threshold && curIndex < localPresets.lastIndex) {
+        while (presetDragAccumulatedY > threshold && curIndex < localPresets.lastIndex) {
             val target = curIndex + 1
             localPresets = PromptExperimentPolicy.moveElementTo(localPresets, curIndex, target)
-            draggingPresetIndex = target
+            curIndex = target
             presetDragAccumulatedY -= presetRowHeightPx
-        } else if (presetDragAccumulatedY < -threshold && curIndex > 0) {
+        }
+        while (presetDragAccumulatedY < -threshold && curIndex > 0) {
             val target = curIndex - 1
             localPresets = PromptExperimentPolicy.moveElementTo(localPresets, curIndex, target)
-            draggingPresetIndex = target
+            curIndex = target
             presetDragAccumulatedY += presetRowHeightPx
         }
     }
 
     fun handlePresetDragEnd() {
+        val currentId = draggingPresetId
         val from = initialPresetDragIndex
-        val to = draggingPresetIndex
-        if (from != null && to != null && from != to) {
+        val to = if (currentId != null) localPresets.indexOfFirst { it.id == currentId } else -1
+        if (from != null && to != -1 && from != to) {
             onReorderPresets(from, to)
         }
-        draggingPresetIndex = null
+        draggingPresetId = null
         initialPresetDragIndex = null
         presetDragAccumulatedY = 0f
     }
 
     fun handlePresetDragCancel() {
         localPresets = presets
-        draggingPresetIndex = null
+        draggingPresetId = null
         initialPresetDragIndex = null
         presetDragAccumulatedY = 0f
     }
@@ -1273,120 +1332,129 @@ private fun ExperimentManagePresetsContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 260.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(
+                    state = rememberScrollState(),
+                    enabled = draggingPresetId == null
+                ),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             localPresets.forEachIndexed { index, preset ->
-                val isSelected = preset.id == activePreset.id
-                val isDragging = index == draggingPresetIndex
-                val number = index + 1
+                key(preset.id) {
+                    val isSelected = preset.id == activePreset.id
+                    val isDragging = preset.id == draggingPresetId
+                    val number = index + 1
+                    val currentOnPresetDragStart by rememberUpdatedState { handlePresetDragStart(preset.id) }
+                    val currentOnPresetDrag by rememberUpdatedState { deltaY: Float -> handlePresetDrag(deltaY) }
+                    val currentOnPresetDragEnd by rememberUpdatedState { handlePresetDragEnd() }
+                    val currentOnPresetDragCancel by rememberUpdatedState { handlePresetDragCancel() }
 
-                NeuCard(
-                    shape = RoundedCornerShape(12.dp),
-                    backgroundColor = when {
-                        isDragging -> AppTheme.colors.accent.copy(alpha = 0.14f)
-                        isSelected -> AppTheme.colors.primary.copy(alpha = 0.1f)
-                        else -> AppTheme.colors.card
-                    },
-                    borderColor = when {
-                        isDragging -> AppTheme.colors.accent
-                        isSelected -> AppTheme.colors.primary
-                        else -> AppTheme.colors.cardBorder
-                    },
-                    elevation = if (isDragging) 8.dp else 2.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(if (isDragging) 1f else 0f)
-                        .graphicsLayer {
-                            translationY = if (isDragging) presetDragAccumulatedY else 0f
-                            if (isDragging) {
-                                scaleX = 1.02f
-                                scaleY = 1.02f
-                            }
-                        }
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onSelectPreset(preset.id) }
-                ) {
-                    Row(
+                    NeuCard(
+                        shape = RoundedCornerShape(12.dp),
+                        backgroundColor = when {
+                            isDragging -> AppTheme.colors.accent.copy(alpha = 0.14f)
+                            isSelected -> AppTheme.colors.primary.copy(alpha = 0.1f)
+                            else -> AppTheme.colors.card
+                        },
+                        borderColor = when {
+                            isDragging -> AppTheme.colors.accent
+                            isSelected -> AppTheme.colors.primary
+                            else -> AppTheme.colors.cardBorder
+                        },
+                        elevation = if (isDragging) 8.dp else 2.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 6.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer {
+                                translationY = if (isDragging) presetDragAccumulatedY else 0f
+                                if (isDragging) {
+                                    scaleX = 1.02f
+                                    scaleY = 1.02f
+                                }
+                            }
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onSelectPreset(preset.id) }
                     ) {
                         Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 6.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 좌측: 3단 가로줄 드래그 핸들 (롱프레스)
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .pointerInput(preset.id) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = { handlePresetDragStart(index) },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                handlePresetDrag(dragAmount.y)
-                                            },
-                                            onDragEnd = { handlePresetDragEnd() },
-                                            onDragCancel = { handlePresetDragCancel() }
-                                        )
-                                    },
-                                contentAlignment = Alignment.Center
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Menu,
-                                    contentDescription = "${preset.name} 순서 변경 (길게 눌러 드래그)",
-                                    tint = if (isDragging) AppTheme.colors.accent else AppTheme.colors.textSecondary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                // 좌측: 3단 가로줄 드래그 핸들 (롱프레스)
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .pointerInput(preset.id) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = { currentOnPresetDragStart() },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    currentOnPresetDrag(dragAmount.y)
+                                                },
+                                                onDragEnd = { currentOnPresetDragEnd() },
+                                                onDragCancel = { currentOnPresetDragCancel() }
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Menu,
+                                        contentDescription = "${preset.name} 순서 변경 (길게 눌러 드래그)",
+                                        tint = if (isDragging) AppTheme.colors.accent else AppTheme.colors.textSecondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Text(
+                                        text = "$number. ${preset.name}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) AppTheme.colors.primary else AppTheme.colors.textPrimary
+                                    )
+                                    Text(
+                                        text = "실험 항목 ${preset.items.size}개",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontSize = 11.sp,
+                                        color = AppTheme.colors.textSecondary
+                                    )
+                                }
                             }
 
-                            Column {
-                                Text(
-                                    text = "$number. ${preset.name}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) AppTheme.colors.primary else AppTheme.colors.textPrimary
-                                )
-                                Text(
-                                    text = "실험 항목 ${preset.items.size}개",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    color = AppTheme.colors.textSecondary
-                                )
-                            }
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = {
-                                    editingPreset = preset
-                                    editingName = preset.name
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "세트 이름 수정",
-                                    tint = AppTheme.colors.textSecondary,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
-                            if (localPresets.size > 1) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(
-                                    onClick = { onDeletePreset(preset.id) },
+                                    onClick = {
+                                        editingPreset = preset
+                                        editingName = preset.name
+                                    },
                                     modifier = Modifier.size(36.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.DeleteOutline,
-                                        contentDescription = "세트 삭제",
-                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
-                                        modifier = Modifier.size(18.dp)
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "세트 이름 수정",
+                                        tint = AppTheme.colors.textSecondary,
+                                        modifier = Modifier.size(17.dp)
                                     )
+                                }
+                                if (localPresets.size > 1) {
+                                    IconButton(
+                                        onClick = { onDeletePreset(preset.id) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "세트 삭제",
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
