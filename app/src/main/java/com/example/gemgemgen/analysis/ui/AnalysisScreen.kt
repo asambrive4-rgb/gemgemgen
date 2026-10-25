@@ -1,9 +1,11 @@
-// 역할: 토스 스타일(Clean & Borderless) 단계별 카드 레이아웃으로 AI 프롬프트 분석·변주 설정(1줄 통합 헤더, 풀폭 원문·인라인 마스킹·2줄 그리드 카테고리, 방향·힌트, 결과 카드/TXT 일체형 저장 및 1줄 플로팅 액션 독)을 표시합니다.
+// 역할: 토스 스타일(Clean & Borderless) 단계별 카드 레이아웃으로 AI 프롬프트 분석·변주 설정(1줄 통합 헤더, 풀폭 원문·인라인 마스킹·2줄 그리드 카테고리, 방향·힌트, 결과 카드/TXT 다이나믹 복사·일체형 저장 및 1줄 플로팅 액션 독)을 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,7 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
-import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
+import com.example.gemgemgen.analysis.domain.AnalysisDirectionCatalog
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
@@ -147,9 +149,11 @@ internal fun AnalysisScreen(
 
             // STEP 2 카드: 변주 방향 칩 + 1줄 인셋 추가 요청사항
             Step2DirectionsAndHintCard(
-                directions = AnalysisDummyDirections.values,
+                directions = uiState.allDirections,
                 selectedIds = uiState.selectedDirectionIds,
                 onToggleDirection = { actions.toggleDirection(it) },
+                onAddDirection = { actions.showAddDirectionDialog() },
+                onDeleteDirection = { actions.deleteUserDirection(it) },
                 customHint = uiState.customHint,
                 onCustomHintChange = { actions.onCustomHintChange(it) }
             )
@@ -162,6 +166,7 @@ internal fun AnalysisScreen(
                 onCopyCandidate = { actions.copyCandidate(it) },
                 onRestoreOriginalPrompt = { actions.restoreOriginalPrompt() },
                 onCopyResults = { actions.copyGeneratedResults() },
+                onCopyDynamicPrompt = { actions.copyDynamicPrompt() },
                 onSaveResults = { actions.onSaveResults() }
             )
 
@@ -585,7 +590,6 @@ private fun InlineMaskingTargetBanner(
     onClearTargetSegment: () -> Unit
 ) {
     if (targetSegment != null) {
-        val confidencePercent = ((targetSegment.confidence * 100).roundToInt()).coerceIn(0, 100)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -601,30 +605,12 @@ private fun InlineMaskingTargetBanner(
                     .padding(end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "🎯 마스킹 타겟 구간",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = AppTheme.colors.primary
-                    )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(AppTheme.colors.card)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "신뢰도 ${confidencePercent}%",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.colors.primary
-                        )
-                    }
-                }
+                Text(
+                    text = "🎯 마스킹 타겟 구간",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = AppTheme.colors.primary
+                )
                 Text(
                     text = "\"${targetSegment.text}\"",
                     style = MaterialTheme.typography.bodySmall,
@@ -679,6 +665,8 @@ private fun Step2DirectionsAndHintCard(
     directions: List<AnalysisDirection>,
     selectedIds: Set<String>,
     onToggleDirection: (String) -> Unit,
+    onAddDirection: () -> Unit,
+    onDeleteDirection: (String) -> Unit,
     customHint: String,
     onCustomHintChange: (String) -> Unit
 ) {
@@ -721,9 +709,19 @@ private fun Step2DirectionsAndHintCard(
                     TossDirectionChip(
                         text = direction.title,
                         selected = isSelected,
-                        onClick = { onToggleDirection(direction.id) }
+                        onClick = { onToggleDirection(direction.id) },
+                        onLongClick = if (AnalysisDirectionCatalog.isUserDirection(direction.id)) {
+                            { onDeleteDirection(direction.id) }
+                        } else {
+                            null
+                        }
                     )
                 }
+                TossDirectionChip(
+                    text = "+ 추가",
+                    selected = false,
+                    onClick = onAddDirection
+                )
             }
 
             // 무테두리 인셋 힌트 입력창 (불필요한 제목·글자수 카운터 제거로 시각적 피로도 해소)
@@ -748,11 +746,13 @@ private fun Step2DirectionsAndHintCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TossDirectionChip(
     text: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
 ) {
     val bgColor = if (selected) {
         AppTheme.colors.primary.copy(alpha = 0.14f)
@@ -768,7 +768,7 @@ private fun TossDirectionChip(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -793,6 +793,7 @@ private fun Step3ResultSectionCard(
     onCopyCandidate: (Int) -> Unit,
     onRestoreOriginalPrompt: () -> Unit,
     onCopyResults: () -> Unit,
+    onCopyDynamicPrompt: () -> Unit,
     onSaveResults: () -> Unit
 ) {
     if (uiState.generatedCandidates.isEmpty()) return
@@ -806,7 +807,8 @@ private fun Step3ResultSectionCard(
                 enabled = !uiState.isBusy,
                 onApplyCandidate = onApplyCandidate,
                 onCopyCandidate = onCopyCandidate,
-                onRestoreOriginalPrompt = onRestoreOriginalPrompt
+                onRestoreOriginalPrompt = onRestoreOriginalPrompt,
+                onCopyDynamicPrompt = onCopyDynamicPrompt
             )
         }
         AnalysisResultPresentation.TXT -> {
@@ -816,6 +818,7 @@ private fun Step3ResultSectionCard(
                 canCopyOrSave = uiState.canCopyOrSave,
                 onResultFileNameChange = onResultFileNameChange,
                 onCopyResults = onCopyResults,
+                onCopyDynamicPrompt = onCopyDynamicPrompt,
                 onSaveResults = onSaveResults
             )
         }
@@ -831,7 +834,8 @@ private fun Step3CardsResultCard(
     enabled: Boolean,
     onApplyCandidate: (Int) -> Unit,
     onCopyCandidate: (Int) -> Unit,
-    onRestoreOriginalPrompt: () -> Unit
+    onRestoreOriginalPrompt: () -> Unit,
+    onCopyDynamicPrompt: () -> Unit
 ) {
     NeuCard(
         modifier = Modifier.fillMaxWidth(),
@@ -849,11 +853,21 @@ private fun Step3CardsResultCard(
                 title = "추천 후보 ${candidates.size}",
                 badgeColor = AppTheme.colors.accent,
                 trailingContent = {
-                    if (canRestoreOriginal) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (canRestoreOriginal) {
+                            TossMiniBadgeButton(
+                                text = "원본 되돌리기",
+                                isHighlighted = false,
+                                onClick = { if (enabled) onRestoreOriginalPrompt() }
+                            )
+                        }
                         TossMiniBadgeButton(
-                            text = "원본 되돌리기",
-                            isHighlighted = false,
-                            onClick = { if (enabled) onRestoreOriginalPrompt() }
+                            text = "다이나믹 복사",
+                            isHighlighted = true,
+                            onClick = { if (enabled) onCopyDynamicPrompt() }
                         )
                     }
                 }
@@ -953,6 +967,7 @@ private fun Step3TxtResultCard(
     canCopyOrSave: Boolean,
     onResultFileNameChange: (String) -> Unit,
     onCopyResults: () -> Unit,
+    onCopyDynamicPrompt: () -> Unit,
     onSaveResults: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -978,11 +993,21 @@ private fun Step3TxtResultCard(
                 title = "TXT 생성 결과 ${candidates.size}줄",
                 badgeColor = AppTheme.colors.accent,
                 trailingContent = {
-                    TossMiniBadgeButton(
-                        text = "전체 복사",
-                        isHighlighted = true,
-                        onClick = { if (canCopyOrSave) onCopyResults() }
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TossMiniBadgeButton(
+                            text = "다이나믹 복사",
+                            isHighlighted = false,
+                            onClick = { if (canCopyOrSave) onCopyDynamicPrompt() }
+                        )
+                        TossMiniBadgeButton(
+                            text = "전체 복사",
+                            isHighlighted = true,
+                            onClick = { if (canCopyOrSave) onCopyResults() }
+                        )
+                    }
                 }
             )
 

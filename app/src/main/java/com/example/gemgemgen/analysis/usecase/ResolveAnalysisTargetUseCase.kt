@@ -1,4 +1,4 @@
-// 역할: 선택된 카테고리에 맞춰 AI 마스킹 분석을 수행하고 타겟 구간 확정 및 분석 캐시를 관리합니다.
+// 역할: 선택된 카테고리에 맞춰 인증 조회와 프롬프트 조립을 병렬 준비해 AI 마스킹 분석을 수행하고 타겟 구간 확정(기존 구간 폴백 포함) 및 분석 캐시를 관리합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
@@ -13,9 +13,14 @@ import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.core.AppDispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 class AnalysisException(message: String) : RuntimeException(message)
+
+/** 분석 모델이 모호하다고 판단해 사용자에게 되묻는 질문을 돌려준 경우. */
+class AnalysisClarificationNeededException(val question: String) : RuntimeException(question)
 
 data class EnsureTargetResult(
     val target: AnalysisTargetSegment,
@@ -58,6 +63,7 @@ class ResolveAnalysisTargetUseCase(
         )
         requireNoClarification(resolved.report)
         val detectedTarget = AnalysisTargetSegmentPolicy.fromAutoReport(resolved.report, category)
+            ?: existingTarget?.takeIf { AnalysisTargetSegmentPolicy.isStillValid(source, it) }?.copy(category = category)
             ?: throw AnalysisException(
                 "자동으로 변주 대상을 찾지 못했습니다. 원문에서 직접 구간을 선택해주세요."
             )
@@ -131,15 +137,17 @@ class ResolveAnalysisTargetUseCase(
         if (sourcePrompt.isBlank()) {
             throw AnalysisException("원본 프롬프트를 입력해주세요.")
         }
-        val credential = credentialResolver.resolveForRole(role)
         val normalizedCustomHint = customHint?.trim().orEmpty()
-
-        val payload = AnalysisPromptBuilder.buildAnalysisPrompt(
-            sourcePrompt = sourcePrompt,
-            category = category,
-            selectedHints = selectedHints,
-            customHint = normalizedCustomHint.ifBlank { null }
-        )
+        val (credential, payload) = coroutineScope {
+            val credentialDeferred = async { credentialResolver.resolveForRole(role) }
+            val builtPayload = AnalysisPromptBuilder.buildAnalysisPrompt(
+                sourcePrompt = sourcePrompt,
+                category = category,
+                selectedHints = selectedHints,
+                customHint = normalizedCustomHint.ifBlank { null }
+            )
+            credentialDeferred.await() to builtPayload
+        }
         val responseText = aiGateway.analyze(
             apiKey = credential.accessTokenOrApiKey,
             modelId = credential.modelId,
@@ -162,7 +170,7 @@ class ResolveAnalysisTargetUseCase(
 
     private fun requireNoClarification(report: AnalysisReport) {
         if (report.clarificationQuestion.isNotBlank()) {
-            throw AnalysisException("추가 요구사항에 답을 적어 주세요: ${report.clarificationQuestion}")
+            throw AnalysisClarificationNeededException(report.clarificationQuestion)
         }
     }
 }

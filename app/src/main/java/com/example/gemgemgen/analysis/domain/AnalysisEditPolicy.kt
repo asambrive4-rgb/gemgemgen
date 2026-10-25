@@ -1,4 +1,4 @@
-// 역할: 분석 결과 텍스트의 세그먼트 벾위와 수정 편집 규칙을 관리합니다.
+// 역할: 분석 결과 텍스트의 세그먼트 범위와 완화된 수정 편집 규칙을 관리합니다.
 package com.example.gemgemgen.analysis.domain
 
 data class AnalysisSourceRange(
@@ -19,20 +19,18 @@ object AnalysisEditPolicy {
     }
 
     fun envelope(source: String, target: AnalysisTargetSegment, report: AnalysisReport): AnalysisTargetSegment {
+        val baseRange = AnalysisSourceRange(target.startIndex, target.endIndex, target.text)
+        validateRange(source, baseRange)
+        if (target.category != AnalysisCategory.FREE_EDIT) {
+            return target
+        }
         val ranges = target.editableRanges.ifEmpty {
-            listOf(AnalysisSourceRange(target.startIndex, target.endIndex, target.text))
-        } +
-            report.cascadingTrace.conflictingSegments
+            listOf(baseRange)
+        } + report.cascadingTrace.conflictingSegments
         ranges.forEach { validateRange(source, it) }
         report.preservedSegments.forEach { validateRange(source, it) }
         val start = ranges.minOf { it.startIndex }
         val end = ranges.maxOf { it.endIndex }
-        if (target.category != AnalysisCategory.FREE_EDIT) {
-            require(start == target.startIndex && end == target.endIndex) {
-                "선택 구간 밖에도 함께 수정할 문장이 있습니다. '분석 수정' 카테고리로 생성해 주세요."
-            }
-            return target
-        }
         val merged = mutableListOf<AnalysisSourceRange>()
         ranges.sortedBy { it.startIndex }.forEach { range ->
             val previous = merged.lastOrNull()

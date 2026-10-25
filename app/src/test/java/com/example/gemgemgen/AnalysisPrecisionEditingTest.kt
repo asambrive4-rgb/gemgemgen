@@ -1,4 +1,4 @@
-// 역할: 정밀 분석 결과의 세그먼트 편집, 치환 및 프롬프트 조립 동작을 검증합니다.
+// 역할: 정밀 분석 결과의 세그먼트 편집·치환, 완화된 충돌/파싱 정책 및 프롬프트·스키마 조립 동작을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisCascadingTrace
@@ -118,10 +118,21 @@ class AnalysisPrecisionEditingTest {
         }
     }
 
-    @Test fun otherCategories_doNotSilentlyIgnoreOutsideConflicts() {
-        assertThrows(IllegalArgumentException::class.java) {
-            AnalysisEditPolicy.envelope(source, target.copy(category = AnalysisCategory.COMPOSITION), report)
-        }
+    @Test fun otherCategories_ignoreOutsideConflictsWithoutThrowing() {
+        val compTarget = target.copy(category = AnalysisCategory.COMPOSITION)
+        val result = AnalysisEditPolicy.envelope(source, compTarget, report)
+        assertEquals(compTarget, result)
+    }
+
+    @Test fun reportParser_ignoresUnresolvableAuxiliaryRangesWithoutCrashing() {
+        val parsed = AnalysisResponseParser.parseReport("""{
+            "targetSegment":{"exactText":"상반신 촬영."},
+            "cascadingTrace":{"conflictingSegments":[{"exactText":"원문에 없는 충돌 문구"}]},
+            "preservedSegments":[{"exactText":"원문에 없는 보호 문구"}]
+        }""", source)
+        assertEquals("상반신 촬영.", parsed.targetSegment?.exactText)
+        assertTrue(parsed.cascadingTrace.conflictingSegments.isEmpty())
+        assertTrue(parsed.preservedSegments.isEmpty())
     }
 
     @Test fun parser_preservesEditWhitespaceAndRejectsMissingReplacement() {
@@ -220,13 +231,27 @@ class AnalysisPrecisionEditingTest {
                 report, 2, emptyList())
             listOf(analysis.systemInstruction, generation.systemInstruction).forEach { text ->
                 assertTrue(text.contains(AnalysisPromptBuilder.sharedVisualRules))
+                assertTrue(text.contains(AnalysisPromptBuilder.lengthPolicy))
                 val rule = AnalysisCategoryRules.ruleFor(category)
                 assertTrue(text.contains(rule.required))
                 assertTrue(text.contains(rule.avoid))
             }
+            assertTrue(generation.systemInstruction.contains("Current visual context:"))
             assertTrue(generation.systemInstruction.contains("Target visual context:"))
-            val targetProps = analysis.responseSchema["properties"]!!.jsonObject["targetSegment"]!!.jsonObject["properties"]!!.jsonObject
+            val schemaProps = analysis.responseSchema["properties"]!!.jsonObject
+            val targetProps = schemaProps["targetSegment"]!!.jsonObject["properties"]!!.jsonObject
             assertEquals(false, targetProps.containsKey("reason"))
+            val visualProps = schemaProps["visualContext"]!!.jsonObject["properties"]!!.jsonObject
+            assertEquals(false, visualProps.containsKey("visibleElements"))
+            assertEquals(false, visualProps.containsKey("hiddenOrUnclearElements"))
+            val targetVisualProps = schemaProps["targetVisualContext"]!!.jsonObject["properties"]!!.jsonObject
+            assertEquals(false, targetVisualProps.containsKey("visibleElements"))
+            assertEquals(false, targetVisualProps.containsKey("hiddenOrUnclearElements"))
+            val cascadingProps = schemaProps["cascadingTrace"]!!.jsonObject["properties"]!!.jsonObject
+            assertEquals(
+                setOf("newlyVisible", "disappearing", "undefinedAreas", "requiredAdjustments", "conflictingSegments"),
+                cascadingProps.keys
+            )
             val fields = generation.responseSchema["items"]!!.jsonObject["properties"]!!.jsonObject
             assertEquals(category == AnalysisCategory.FREE_EDIT, fields.containsKey("edits"))
             assertEquals(category != AnalysisCategory.FREE_EDIT, fields.containsKey("text"))

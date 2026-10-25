@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -118,7 +117,6 @@ fun PromptSnippetFindReplaceView(
         Surface(
             shape = RoundedCornerShape(10.dp),
             color = AppTheme.colors.primary.copy(alpha = 0.08f),
-            border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.2f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -276,7 +274,6 @@ fun PromptSnippetFindReplaceView(
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = AppTheme.colors.primary.copy(alpha = 0.12f),
-                border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.3f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
@@ -300,10 +297,6 @@ fun PromptSnippetFindReplaceView(
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = if (isDeleteMode) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f) else AppTheme.colors.primary.copy(alpha = 0.12f),
-                border = BorderStroke(
-                    1.dp,
-                    if (isDeleteMode) MaterialTheme.colorScheme.error.copy(alpha = 0.4f) else AppTheme.colors.primary.copy(alpha = 0.35f)
-                ),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -432,8 +425,7 @@ private fun FindMatchItemCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = AppTheme.colors.primary.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.3f))
+                    color = AppTheme.colors.primary.copy(alpha = 0.12f)
                 ) {
                     Text(
                         text = "📋 ${match.snippet.shortcut}",

@@ -1,4 +1,4 @@
-// 역할: AI 분석 세션의 실행 전제조건·차단 사유 판정, 결과 복사/저장 권한, 세션 초기화 가능 여부를 판정합니다.
+// 역할: AI 분석 세션의 실행 전제조건·차단 사유 판정, 결과 및 다이나믹 프롬프트 복사/저장 권한, 세션 초기화 가능 여부를 판정합니다.
 package com.example.gemgemgen.analysis.domain
 
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
@@ -44,6 +44,13 @@ object AnalysisSessionPolicy {
         return resultPresentation == AnalysisResultPresentation.TXT &&
             candidateCount > 0 &&
             status != AnalysisStatus.GENERATING
+    }
+
+    fun canCopyDynamicPrompt(
+        candidateCount: Int,
+        status: AnalysisStatus
+    ): Boolean {
+        return candidateCount > 0 && status != AnalysisStatus.GENERATING
     }
 
     fun canResetSession(

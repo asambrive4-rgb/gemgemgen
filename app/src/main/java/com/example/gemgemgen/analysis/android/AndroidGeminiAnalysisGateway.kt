@@ -175,7 +175,9 @@ class AndroidGeminiAnalysisGateway(
 
         val candidates = root["candidates"]?.jsonArray.orEmpty()
         val firstCandidate = candidates.firstOrNull() as? JsonObject
-            ?: throw AnalysisException("Gemini 응답에 결과 후보(Candidate)가 없습니다. 서버에서 답변을 생성하지 못했습니다.")
+        if (firstCandidate == null) {
+            throw AnalysisException("Gemini 응답에 결과 후보(Candidate)가 없습니다. 서버에서 답변을 생성하지 못했습니다.")
+        }
 
         val finishReason = (firstCandidate["finishReason"] as? JsonPrimitive)?.contentOrNull
         val contentObj = firstCandidate["content"] as? JsonObject
@@ -253,6 +255,6 @@ class AndroidGeminiAnalysisGateway(
         const val CONNECT_TIMEOUT_MILLIS = 15_000
         const val READ_TIMEOUT_MILLIS = 120_000
         const val DEFAULT_MAX_RETRIES = 2
-        const val DEFAULT_INITIAL_RETRY_DELAY_MILLIS = 1_500L
+        const val DEFAULT_INITIAL_RETRY_DELAY_MILLIS = 800L
     }
 }

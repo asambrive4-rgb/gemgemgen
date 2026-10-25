@@ -1,4 +1,4 @@
-﻿// 역할: 다중 제미나이 계정의 메인/서브 탭 분리 목록, 수동 소진/복구 및 당분간 사용 금지 토글, 선택 탭 우선 새로고침, 실시간 초기화 만료 반영 및 목록↔로그인 화면을 한 모달 안에서 전환하는 계정 사용량 다이얼로그 호스트(Single Dialog Host)를 제공합니다. (로그인 WebView 자체는 GeminiAccountLoginView가 담당)
+// 역할: 다중 제미나이 계정의 메인/서브 탭 분리 목록(토스 침전 바닥형 3단계 표면 위계), 수동 소진/복구 및 당분간 사용 금지 토글, 선택 탭 우선 새로고침, 실시간 초기화 만료 반영 및 목록↔로그인 화면을 한 모달 안에서 전환하는 계정 사용량 다이얼로그 호스트(Single Dialog Host)를 제공합니다. (로그인 WebView 자체는 GeminiAccountLoginView가 담당)
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -283,7 +282,6 @@ private fun MultiAccountListContent(
             Surface(
                 shape = CircleShape,
                 color = AppTheme.colors.insetBed,
-                border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
@@ -391,13 +389,18 @@ private fun MultiAccountListContent(
                 multiUsageState.exhaustedAccountsSorted(group = selectedTab, nowMillis = nowMillis)
             }
 
-            LazyColumn(
+            NeuInsetBed(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 180.dp, max = 460.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(vertical = 2.dp)
+                shape = RoundedCornerShape(16.dp),
+                backgroundColor = AppTheme.colors.insetBed
             ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                ) {
                 if (usableOrPendingAccounts.isNotEmpty()) {
                     item(key = "header_usable_${selectedTab.name}") {
                         AccountSectionHeader(
@@ -508,6 +511,7 @@ private fun MultiAccountListContent(
         }
     }
 }
+}
 
 /**
  * 다이얼로그 내부 '메인' / '서브' 세그먼트 탭 바.
@@ -559,7 +563,6 @@ private fun AccountTabSegmentItem(
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = if (isSelected) AppTheme.colors.card else androidx.compose.ui.graphics.Color.Transparent,
-        border = if (isSelected) BorderStroke(1.dp, AppTheme.colors.cardBorder) else null,
         shadowElevation = if (isSelected) 2.dp else 0.dp,
         modifier = modifier
             .fillMaxHeight()

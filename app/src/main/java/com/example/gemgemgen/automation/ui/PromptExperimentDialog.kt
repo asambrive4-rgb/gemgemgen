@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -615,7 +614,6 @@ private fun DialogPresetDropdownButton(
             onClick = { expanded = true },
             shape = shape,
             color = AppTheme.colors.card,
-            border = BorderStroke(1.5.dp, AppTheme.colors.primary.copy(alpha = 0.55f)),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(42.dp)

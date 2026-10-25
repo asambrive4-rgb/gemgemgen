@@ -4,6 +4,7 @@ package com.example.gemgemgen.ui.android
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.example.gemgemgen.analysis.android.AndroidAnalysisCustomDirectionRepository
 import com.example.gemgemgen.analysis.android.AndroidEncryptedGeminiApiKeyRepository
 import com.example.gemgemgen.analysis.android.AndroidEncryptedGrokAuthRepository
 import com.example.gemgemgen.analysis.android.AndroidGeminiAnalysisGateway
@@ -200,7 +201,8 @@ class AndroidAppContainer(context: Context) {
                 repository = wildcardFileRepository,
                 clipboardGateway = clipboardGateway
             ),
-            promptWorkspace = promptWorkspace
+            promptWorkspace = promptWorkspace,
+            customDirectionRepository = AndroidAnalysisCustomDirectionRepository(appContext)
         )
     }
 

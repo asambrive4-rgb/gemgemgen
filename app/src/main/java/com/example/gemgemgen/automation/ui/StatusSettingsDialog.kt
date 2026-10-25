@@ -1,7 +1,6 @@
 // 역할: 자동화 편의 설정(클립보드·사이드바·메모리 정리), 원격 연결, 화면 테마 및 시스템 환경 점검 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -138,8 +137,7 @@ private fun StatusSettingsDialogContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
             ) {
                 Row(
                     modifier = Modifier
@@ -176,8 +174,7 @@ private fun StatusSettingsDialogContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
             ) {
                 Row(
                     modifier = Modifier
@@ -214,8 +211,7 @@ private fun StatusSettingsDialogContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
             ) {
                 Column(
                     modifier = Modifier
@@ -309,8 +305,7 @@ private fun StatusSettingsDialogContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
             ) {
                 Column(
                     modifier = Modifier
@@ -391,14 +386,9 @@ private fun StatusSettingsDialogContent(
                             .clickable { actions.onSelectThemeMode(mode) },
                         shape = RoundedCornerShape(12.dp),
                         color = if (isModeSelected) {
-                            AppTheme.colors.card
+                            AppTheme.colors.accent.copy(alpha = 0.14f)
                         } else {
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                        },
-                        border = if (isModeSelected) {
-                            BorderStroke(2.dp, AppTheme.colors.accent)
-                        } else {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         }
                     ) {
                         Box(
@@ -415,7 +405,7 @@ private fun StatusSettingsDialogContent(
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = if (isModeSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isModeSelected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary
+                                color = if (isModeSelected) AppTheme.colors.accent else AppTheme.colors.textSecondary
                             )
                         }
                     }
@@ -444,14 +434,9 @@ private fun StatusSettingsDialogContent(
                             .clickable { actions.onSelectThemePalette(palette) },
                         shape = RoundedCornerShape(14.dp),
                         color = if (isSelected) {
-                            AppTheme.colors.card
+                            palette.previewColor.copy(alpha = 0.14f)
                         } else {
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        },
-                        border = if (isSelected) {
-                            BorderStroke(2.dp, palette.previewColor)
-                        } else {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         }
                     ) {
                         Row(
@@ -471,7 +456,8 @@ private fun StatusSettingsDialogContent(
                                 Text(
                                     text = palette.title,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) palette.previewColor else MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = palette.description,

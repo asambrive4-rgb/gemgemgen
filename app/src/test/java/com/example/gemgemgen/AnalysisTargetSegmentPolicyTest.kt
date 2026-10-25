@@ -48,8 +48,7 @@ class AnalysisTargetSegmentPolicyTest {
             targetSegment = AnalysisDetectedSegment(
                 exactText = "blue dress",
                 startIndex = 13,
-                endIndex = 23,
-                confidence = 0.9
+                endIndex = 23
             )
         )
         val segment = AnalysisTargetSegmentPolicy.fromAutoReport(
@@ -58,7 +57,6 @@ class AnalysisTargetSegmentPolicyTest {
         )
         checkNotNull(segment)
         assertEquals("blue dress", segment.text)
-        assertEquals(0.9, segment.confidence, 0.0)
     }
 
     @Test
@@ -67,8 +65,7 @@ class AnalysisTargetSegmentPolicyTest {
             targetSegment = AnalysisDetectedSegment(
                 exactText = "",
                 startIndex = 0,
-                endIndex = 0,
-                confidence = 0.1
+                endIndex = 0
             )
         )
         assertNull(

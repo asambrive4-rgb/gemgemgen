@@ -1,4 +1,4 @@
-// 역할: AI 분석 세션 정책(사전조건 평가, 생성 권한, 복사/저장 권한, 세션 초기화 가능 여부)의 도메인 규칙을 검증합니다.
+// 역할: AI 분석 세션 정책(사전조건 평가, 생성 권한, 결과/다이나믹 프롬프트 복사·저장 권한, 세션 초기화 가능 여부)의 도메인 규칙을 검증합니다.
 package com.example.gemgemgen.analysis.domain
 
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
@@ -113,6 +113,33 @@ class AnalysisSessionPolicyTest {
         assertFalse(
             AnalysisSessionPolicy.canCopyOrSave(
                 resultPresentation = AnalysisResultPresentation.TXT,
+                candidateCount = 3,
+                status = AnalysisStatus.GENERATING
+            )
+        )
+    }
+
+    @Test
+    fun canCopyDynamicPrompt_allowsWhenCandidatesExistAndNotBusy() {
+        // 후보 존재 + SUCCESS -> 허용
+        assertTrue(
+            AnalysisSessionPolicy.canCopyDynamicPrompt(
+                candidateCount = 3,
+                status = AnalysisStatus.SUCCESS
+            )
+        )
+
+        // 후보 없음 -> 차단
+        assertFalse(
+            AnalysisSessionPolicy.canCopyDynamicPrompt(
+                candidateCount = 0,
+                status = AnalysisStatus.SUCCESS
+            )
+        )
+
+        // Busy 상태 -> 차단
+        assertFalse(
+            AnalysisSessionPolicy.canCopyDynamicPrompt(
                 candidateCount = 3,
                 status = AnalysisStatus.GENERATING
             )

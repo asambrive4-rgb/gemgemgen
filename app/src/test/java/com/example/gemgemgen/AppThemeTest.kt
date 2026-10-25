@@ -1,4 +1,4 @@
-// 역할: 4종 토스 스타일 테마 팔레트(토스 시그니처 기본값 포함)와 라이트/다크 모드 색상 변환 로직을 검증합니다.
+// 역할: 4종 토스 스타일 테마 팔레트(토스 시그니처 기본값 포함)와 라이트/다크 모드(Level 1 마일드 토스 3단계 표면 대비) 색상 변환 로직을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.ui.graphics.Color
@@ -35,9 +35,9 @@ class AppThemeTest {
 
     @Test
     fun darkMode_maintainsThreeLayerContrastAndBrandPrimary() {
-        val darkCanvas = Color(0xFF0A0A0C)
-        val darkCard = Color(0xFF171B22)
-        val darkInset = Color(0xFF222731)
+        val darkCanvas = Color(0xFF0D1117)
+        val darkCard = Color(0xFF1C222D)
+        val darkInset = Color(0xFF131720)
         val brightText = Color(0xFFEDEDF0)
 
         AppThemePalette.entries.forEach { palette ->

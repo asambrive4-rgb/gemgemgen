@@ -1,7 +1,9 @@
-// 역할: 분석 화면의 현재 입력값, 진행 상태, 분석 결과를 표현하며 세션 규칙 판단을 도메인 정책에 위임합니다.
+// 역할: 분석 화면의 현재 입력값, 추천 방향 칩(기본+사용자), 진행 상태, 분석 결과를 표현하며 세션 규칙 판단을 도메인 정책에 위임합니다.
 package com.example.gemgemgen.analysis.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisDirection
+import com.example.gemgemgen.analysis.domain.AnalysisDirectionCatalog
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
@@ -27,6 +29,11 @@ data class AnalysisUiState(
     val txtCount: Int = AnalysisTxtCountPolicy.DEFAULT_COUNT,
     val selectedDirectionIds: Set<String> = emptySet(),
     val customHint: String = "",
+    /** 사용자가 직접 만든 추천 방향 칩. 앱을 껐다 켜도 유지된다. */
+    val userDirections: List<AnalysisDirection> = emptyList(),
+    val showAddDirectionDialog: Boolean = false,
+    /** 분석 모델이 되물은 질문. null이 아니면 답변 다이얼로그를 띄운다. */
+    val clarificationQuestion: String? = null,
     val generatedCandidates: List<String> = emptyList(),
     /** 마지막 생성 결과의 표시 방식. 후보가 비면 [AnalysisResultPresentation.NONE]. */
     val resultPresentation: AnalysisResultPresentation = AnalysisResultPresentation.NONE,
@@ -58,6 +65,10 @@ data class AnalysisUiState(
     /** 자동 마스킹 모델을 통한 분석이 필요한지 여부 (캐시 미스 등) */
     val needsMaskingAnalysis: Boolean = true
 ) {
+    /** 화면에 보이는 칩 전체(기본 + 사용자). 가나다순. */
+    val allDirections: List<AnalysisDirection>
+        get() = AnalysisDirectionCatalog.merged(userDirections)
+
     val hasMaskingCredential: Boolean
         get() = hasCredentialFor(maskingProvider)
 
@@ -96,6 +107,12 @@ data class AnalysisUiState(
     val canCopyOrSave: Boolean
         get() = AnalysisSessionPolicy.canCopyOrSave(
             resultPresentation = resultPresentation,
+            candidateCount = generatedCandidates.size,
+            status = status
+        )
+
+    val canCopyDynamicPrompt: Boolean
+        get() = AnalysisSessionPolicy.canCopyDynamicPrompt(
             candidateCount = generatedCandidates.size,
             status = status
         )

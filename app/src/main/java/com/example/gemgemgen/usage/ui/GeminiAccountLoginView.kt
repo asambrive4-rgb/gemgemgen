@@ -6,7 +6,6 @@ import android.view.ViewGroup
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -136,7 +135,6 @@ fun AccountIsolatedLoginContent(
                 Surface(
                     shape = CircleShape,
                     color = AppTheme.colors.insetBed,
-                    border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)

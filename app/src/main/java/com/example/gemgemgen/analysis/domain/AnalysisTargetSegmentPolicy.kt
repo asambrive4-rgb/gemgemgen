@@ -27,8 +27,7 @@ object AnalysisTargetSegmentPolicy {
             text = detected.exactText,
             startIndex = detected.startIndex,
             endIndex = detected.endIndex,
-            category = category,
-            confidence = detected.confidence
+            category = category
         )
     }
 

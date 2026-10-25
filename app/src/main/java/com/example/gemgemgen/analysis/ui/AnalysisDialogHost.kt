@@ -1,7 +1,6 @@
 // 역할: 분석 화면의 API 키 관리, 인증, 알림 다이얼로그를 뉴모피즘 디자인과 단일 호스트로 통합 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,8 +12,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.maxLength
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -32,6 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.example.gemgemgen.analysis.domain.AnalysisDirectionCatalog
 import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
@@ -46,6 +49,8 @@ sealed interface AnalysisDialogType {
     data object KeyManagement : AnalysisDialogType
     data class EditKeyLabel(val originalLabel: String, val currentLabel: String) : AnalysisDialogType
     data object ResetSession : AnalysisDialogType
+    data object AddDirection : AnalysisDialogType
+    data class Clarification(val question: String) : AnalysisDialogType
     data class Overwrite(val fileName: String) : AnalysisDialogType
     data class GrokLogin(
         val userCode: String,
@@ -65,6 +70,10 @@ fun deriveActiveAnalysisDialog(uiState: AnalysisUiState): AnalysisDialogType {
             AnalysisDialogType.KeyManagement
         uiState.showResetConfirmation ->
             AnalysisDialogType.ResetSession
+        uiState.clarificationQuestion != null ->
+            AnalysisDialogType.Clarification(uiState.clarificationQuestion)
+        uiState.showAddDirectionDialog ->
+            AnalysisDialogType.AddDirection
         uiState.pendingOverwriteFileName != null ->
             AnalysisDialogType.Overwrite(uiState.pendingOverwriteFileName)
         uiState.showGrokLoginDialog ->
@@ -92,6 +101,8 @@ internal fun AnalysisDialogHost(
             AnalysisDialogType.KeyManagement -> actions.dismissKeyDialog()
             is AnalysisDialogType.EditKeyLabel -> actions.cancelEditingApiKey()
             AnalysisDialogType.ResetSession -> actions.dismissResetSession()
+            AnalysisDialogType.AddDirection -> actions.dismissAddDirectionDialog()
+            is AnalysisDialogType.Clarification -> actions.dismissClarification()
             is AnalysisDialogType.Overwrite -> actions.dismissOverwrite()
             is AnalysisDialogType.GrokLogin -> actions.cancelGrokLogin()
         }
@@ -115,6 +126,8 @@ internal fun AnalysisDialogHost(
                 onConfirm = actions::confirmResetSession,
                 onDismiss = actions::dismissResetSession
             )
+            AnalysisDialogType.AddDirection -> AddDirectionContent(actions)
+            is AnalysisDialogType.Clarification -> ClarificationContent(targetDialog, actions)
             is AnalysisDialogType.Overwrite -> AppConfirmDialogContent(
                 title = "같은 파일명이 있습니다",
                 message = "${targetDialog.fileName} 파일을 덮어쓸까요? 다른 이름을 입력하려면 취소하고 파일명을 바꿔주세요.",
@@ -242,17 +255,11 @@ private fun KeyManagementContent(
                     } else {
                         AppTheme.colors.insetBed
                     }
-                    val borderColor = if (key.isActive) {
-                        AppTheme.colors.primary
-                    } else {
-                        AppTheme.colors.cardBorder
-                    }
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        color = backgroundColor,
-                        border = BorderStroke(1.dp, borderColor)
+                        color = backgroundColor
                     ) {
                         Column(
                             modifier = Modifier.padding(12.dp),
@@ -340,6 +347,75 @@ private fun KeyManagementContent(
                     fontWeight = FontWeight.SemiBold
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ClarificationContent(
+    dialog: AnalysisDialogType.Clarification,
+    actions: AnalysisScreenActions
+) {
+    val answerState = rememberTextFieldState()
+    val canSubmit = answerState.text.isNotBlank()
+
+    NeuConfigDialogContent(
+        title = "AI가 확인을 요청했어요",
+        subtitle = dialog.question,
+        confirmLabel = "답변하고 계속",
+        dismissLabel = "취소",
+        confirmEnabled = canSubmit,
+        useNeuButtons = true,
+        onConfirm = { actions.submitClarification(answerState.text.toString()) },
+        onDismiss = actions::dismissClarification
+    ) {
+        OutlinedTextField(
+            state = answerState,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = appTextFieldColors(),
+            lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2, maxHeightInLines = 5),
+            label = { Text("답변") }
+        )
+    }
+}
+
+@Composable
+private fun AddDirectionContent(actions: AnalysisScreenActions) {
+    val titleState = rememberTextFieldState()
+    val instructionState = rememberTextFieldState()
+    val canSave = titleState.text.isNotBlank() && instructionState.text.isNotBlank()
+
+    NeuConfigDialogContent(
+        title = "추천 방향 칩 추가",
+        subtitle = "칩 이름과, 변주 시 AI에게 전달할 지시문을 입력하세요.",
+        confirmLabel = "추가",
+        dismissLabel = "취소",
+        confirmEnabled = canSave,
+        useNeuButtons = true,
+        onConfirm = { actions.addUserDirection(titleState.text.toString(), instructionState.text.toString()) },
+        onDismiss = actions::dismissAddDirectionDialog
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(
+                state = titleState,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
+                inputTransformation = InputTransformation.maxLength(AnalysisDirectionCatalog.MAX_TITLE_LENGTH),
+                lineLimits = TextFieldLineLimits.SingleLine,
+                label = { Text("칩 이름") }
+            )
+            OutlinedTextField(
+                state = instructionState,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = appTextFieldColors(),
+                inputTransformation = InputTransformation.maxLength(AnalysisDirectionCatalog.MAX_INSTRUCTION_LENGTH),
+                lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2, maxHeightInLines = 4),
+                label = { Text("지시문") },
+                placeholder = { Text("예: 소재를 실크로, 톤은 더 밝게") }
+            )
         }
     }
 }

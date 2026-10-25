@@ -1,4 +1,4 @@
-// 역할: 프롬프트 원문, 카테고리, 방향 힌트 추출 및 변경에 따른 마스킹 분석 필요 여부와 캐시 유효성을 판정합니다.
+// 역할: 프롬프트 원문, 카테고리, 정규화된 방향 힌트 변경에 따른 마스킹 분석 필요 여부와 캐시 유효성을 판정합니다.
 package com.example.gemgemgen.analysis.domain
 
 data class AnalysisReportCache(
@@ -47,11 +47,12 @@ object AnalysisMaskingPolicy {
         customHint: String
     ): Boolean {
         if (cache == null) return true
+        val normalizedCustomHint = customHint.trim()
         return cache.sourcePrompt != source ||
             cache.category != category ||
             cache.targetSegment != targetSegment ||
             cache.selectedHints != selectedHints ||
-            cache.customHint != customHint
+            cache.customHint != normalizedCustomHint
     }
 
     fun shouldAnalyzeMaskingFromHints(

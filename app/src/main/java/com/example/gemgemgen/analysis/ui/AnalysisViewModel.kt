@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스(Grok 승인 코드 복사 포함)를 직접 구현하여 UseCase 및 도메인 정책을 조율합니다.
+// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스(다이나믹 프롬프트 복사, Grok 승인 코드 복사, 사용자 추천 칩 추가·삭제 포함)를 직접 구현하여 UseCase 및 도메인 정책을 조율합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirectionInput
-import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
+import com.example.gemgemgen.analysis.domain.AnalysisDirectionCatalog
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisModelRole
@@ -21,7 +21,9 @@ import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
+import com.example.gemgemgen.analysis.usecase.AnalysisCustomDirectionRepository
 import com.example.gemgemgen.analysis.usecase.AnalysisGenerationStep
+import com.example.gemgemgen.analysis.usecase.InMemoryAnalysisCustomDirectionRepository
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.ApplyCandidateResult
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationRequest
@@ -36,6 +38,7 @@ import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.core.PromptWorkspace
+import com.example.gemgemgen.wildcard.domain.WildcardDynamicPromptComposer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -54,6 +57,7 @@ class AnalysisViewModel(
     private val saveWildcardFile: SaveAnalysisWildcardFileUseCase,
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val promptWorkspace: PromptWorkspace? = null,
+    private val customDirectionRepository: AnalysisCustomDirectionRepository = InMemoryAnalysisCustomDirectionRepository(),
     coroutineScope: CoroutineScope? = null,
     private val candidateHandoff: ManageCandidateHandoffUseCase = ManageCandidateHandoffUseCase(
         clipboardGateway = clipboardGateway,
@@ -71,6 +75,9 @@ class AnalysisViewModel(
     private var grokLoginJob: Job? = null
     private var analysisCache: AnalysisReportCache? = null
     private var lastObservedSourcePrompt: String = ""
+    private var clarificationNotes: List<String> = emptyList()
+    private var pendingGeneration: PendingGeneration? = null
+    private var consecutiveClarifications = 0
 
     private val _uiState = MutableStateFlow(AnalysisUiState())
     val uiState: StateFlow<AnalysisUiState> = _uiState.asStateFlow()
@@ -78,6 +85,7 @@ class AnalysisViewModel(
 
     init {
         loadInitialState()
+        _uiState.update { it.copy(userDirections = customDirectionRepository.load()) }
     }
 
     override fun onCleared() {
@@ -95,12 +103,13 @@ class AnalysisViewModel(
      */
     fun trimForInactiveTab() {
         _uiState.update { state ->
-            if (state.pendingOverwriteFileName == null && !state.showResetConfirmation) {
+            if (state.pendingOverwriteFileName == null && !state.showResetConfirmation && state.clarificationQuestion == null) {
                 return@update state
             }
             state.copy(
                 pendingOverwriteFileName = null,
-                showResetConfirmation = false
+                showResetConfirmation = false,
+                clarificationQuestion = null
             )
         }
     }
@@ -134,14 +143,17 @@ class AnalysisViewModel(
             sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(value)
         }
         val state = _uiState.value
-        if (!forceStateSync && lastObservedSourcePrompt == value && state.sourcePrompt == value) return
+        val sourceChanged = lastObservedSourcePrompt != value || state.sourcePrompt != value
+        if (!forceStateSync && !sourceChanged) return
         lastObservedSourcePrompt = value
 
-        // 분석 캐시는 항상 무효화. 실제 원문은 TextField + currentSourcePrompt() 가 기준.
-        analysisCache = null
+        if (sourceChanged || analysisCache?.sourcePrompt != value) {
+            analysisCache = null
+            resetClarification()
+        }
 
         if (forceStateSync) {
-            val hasNoPendingState = state.sourcePrompt == value &&
+            val hasNoPendingState = !sourceChanged &&
                 state.targetSegment == null &&
                 state.generatedCandidates.isEmpty() &&
                 state.error.isEmpty() &&
@@ -152,8 +164,12 @@ class AnalysisViewModel(
         val nextSegment = state.targetSegment?.takeIf {
             AnalysisTargetSegmentPolicy.isStillValid(value, it)
         }
-        val clearCandidates = state.generatedCandidates.isNotEmpty()
-        val nextNeedsMasking = true
+        val clearCandidates = sourceChanged && state.generatedCandidates.isNotEmpty()
+        val nextNeedsMasking = computeNeedsMaskingAnalysis(
+            source = value,
+            targetSegment = nextSegment,
+            cache = analysisCache
+        )
 
         if (!forceStateSync) {
             // 핫패스: canGenerate 경계·구간 무효·결과 정리가 없으면 화면 state 방출 생략
@@ -179,7 +195,9 @@ class AnalysisViewModel(
     }
 
     override fun onCategorySelected(category: AnalysisCategory) {
+        if (_uiState.value.selectedCategory == category) return
         analysisCache = null
+        resetClarification()
         val source = currentSourcePrompt()
         val nextNeedsMasking = true
         _uiState.update {
@@ -198,6 +216,7 @@ class AnalysisViewModel(
 
     override fun clearTargetSegment() {
         analysisCache = null
+        resetClarification()
         val source = currentSourcePrompt()
         val nextNeedsMasking = computeNeedsMaskingAnalysis(
             source = source,
@@ -218,6 +237,7 @@ class AnalysisViewModel(
 
     override fun onCustomHintChange(value: String) {
         if (value.length > 100) return
+        if (value != _uiState.value.customHint) resetClarification()
         val source = currentSourcePrompt()
         _uiState.update { state ->
             state.copy(
@@ -233,6 +253,7 @@ class AnalysisViewModel(
     }
 
     override fun toggleDirection(id: String) {
+        resetClarification()
         val source = currentSourcePrompt()
         _uiState.update { state ->
             val nextIds = if (id in state.selectedDirectionIds) {
@@ -250,6 +271,79 @@ class AnalysisViewModel(
                 )
             )
         }
+    }
+
+    override fun showAddDirectionDialog() {
+        _uiState.update { it.copy(showAddDirectionDialog = true) }
+    }
+
+    override fun dismissAddDirectionDialog() {
+        _uiState.update { it.copy(showAddDirectionDialog = false) }
+    }
+
+    override fun addUserDirection(title: String, instruction: String) {
+        val state = _uiState.value
+        val direction = AnalysisDirectionCatalog.createUserDirection(
+            title = title,
+            instruction = instruction,
+            existing = state.userDirections,
+            newId = java.util.UUID.randomUUID().toString()
+        )
+        if (direction == null) {
+            showError("칩 이름과 지시문을 확인하세요. (중복 이름·최대 ${AnalysisDirectionCatalog.MAX_USER_DIRECTIONS}개)")
+            return
+        }
+        val next = state.userDirections + direction
+        customDirectionRepository.save(next)
+        _uiState.update { it.copy(userDirections = next, showAddDirectionDialog = false, error = "") }
+    }
+
+    override fun deleteUserDirection(id: String) {
+        if (!AnalysisDirectionCatalog.isUserDirection(id)) return
+        resetClarification()
+        val source = currentSourcePrompt()
+        val next = _uiState.value.userDirections.filterNot { it.id == id }
+        customDirectionRepository.save(next)
+        _uiState.update { state ->
+            val nextState = state.copy(
+                userDirections = next,
+                selectedDirectionIds = state.selectedDirectionIds - id
+            )
+            nextState.copy(
+                sourcePrompt = source,
+                needsMaskingAnalysis = computeNeedsMaskingAnalysis(source = source, state = nextState)
+            )
+        }
+    }
+
+    override fun dismissClarification() {
+        consecutiveClarifications = 0
+        pendingGeneration = null
+        _uiState.update { it.copy(clarificationQuestion = null) }
+    }
+
+    /** 되묻기 답변을 사용자 지시에 합쳐 같은 생성 요청을 다시 실행한다. */
+    override fun submitClarification(answer: String) {
+        val question = _uiState.value.clarificationQuestion ?: return
+        val pending = pendingGeneration ?: return
+        val trimmed = answer.trim()
+        if (trimmed.isEmpty()) return
+        clarificationNotes = clarificationNotes + "[확인 질문] $question → [사용자 답변] $trimmed"
+        analysisCache = null
+        _uiState.update { it.copy(clarificationQuestion = null) }
+        startGeneration(
+            count = pending.count,
+            presentation = pending.presentation,
+            generatingMessage = pending.generatingMessage,
+            failureFallback = pending.failureFallback,
+            updateResultFileName = pending.updateResultFileName
+        )
+    }
+
+    private fun resetClarification() {
+        clarificationNotes = emptyList()
+        pendingGeneration = null
+        consecutiveClarifications = 0
     }
 
     override fun onTxtCountChange(value: Int) {
@@ -291,6 +385,7 @@ class AnalysisViewModel(
         failureFallback: String,
         updateResultFileName: Boolean
     ) {
+        pendingGeneration = PendingGeneration(count, presentation, generatingMessage, failureFallback, updateResultFileName)
         val snapshot = _uiState.value
         val source = currentSourcePrompt()
         val request = createGenerationRequest(
@@ -361,7 +456,9 @@ class AnalysisViewModel(
             cache = analysisCache,
             count = count,
             selectedHints = directionInput.selectedHints,
-            customHint = directionInput.customHint,
+            customHint = (listOf(directionInput.customHint) + clarificationNotes)
+                .filter { it.isNotBlank() }
+                .joinToString(separator = "\n"),
             maskingProvider = snapshot.maskingProvider,
             hasMaskingCredential = snapshot.hasMaskingCredential,
             generationProvider = snapshot.generationProvider,
@@ -378,14 +475,45 @@ class AnalysisViewModel(
         updateResultFileName: Boolean
     ) {
         when (result) {
+            is ExecuteAnalysisGenerationResult.NeedsClarification -> {
+                analysisCache = null
+                consecutiveClarifications += 1
+                if (consecutiveClarifications > MAX_CONSECUTIVE_CLARIFICATIONS) {
+                    showError("AI가 같은 확인을 반복합니다. 추가 요청사항에 직접 적어 주세요: ${result.question}")
+                    resetClarification()
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            sourcePrompt = source,
+                            status = AnalysisStatus.IDLE,
+                            message = "",
+                            error = "",
+                            clarificationQuestion = result.question
+                        )
+                    }
+                }
+            }
             is ExecuteAnalysisGenerationResult.Blocked -> {
+                consecutiveClarifications = 0
                 showError(AnalysisUiText.startBlockedMessage(result.reason))
             }
             is ExecuteAnalysisGenerationResult.Failure -> {
-                analysisCache = null
+                consecutiveClarifications = 0
+                analysisCache = result.cache
+                _uiState.update {
+                    it.copy(
+                        needsMaskingAnalysis = computeNeedsMaskingAnalysis(
+                            source = source,
+                            targetSegment = it.targetSegment,
+                            cache = result.cache,
+                            state = it
+                        )
+                    )
+                }
                 showError(result.message)
             }
             is ExecuteAnalysisGenerationResult.Success -> {
+                consecutiveClarifications = 0
                 handleGenerationSuccess(
                     result = result,
                     snapshot = snapshot,
@@ -544,6 +672,31 @@ class AnalysisViewModel(
                 _uiState.update { it.copy(message = "생성 결과를 복사했습니다.", error = "") }
             } catch (error: RuntimeException) {
                 showError(error.message ?: "복사에 실패했습니다.")
+            }
+        }
+    }
+
+    override fun copyDynamicPrompt() {
+        val state = _uiState.value
+        if (state.isBusy || state.generatedCandidates.isEmpty()) return
+        val sanitizedCandidates = state.generatedCandidates
+            .map { it.trim().replace("\r\n", " ").replace("\n", " ") }
+            .filter { it.isNotEmpty() }
+
+        when (val result = WildcardDynamicPromptComposer.compose(sanitizedCandidates)) {
+            WildcardDynamicPromptComposer.ComposeResult.NoSelection -> showError("복사할 생성 결과가 없습니다.")
+            is WildcardDynamicPromptComposer.ComposeResult.InvalidCharacters -> showError("| 또는 <> 기호가 포함된 후보는 다이나믹 프롬프트로 복사할 수 없습니다.")
+            is WildcardDynamicPromptComposer.ComposeResult.Success -> {
+                scope.launch {
+                    try {
+                        withContext(dispatchers.io) {
+                            clipboardGateway.writeText(result.dynamicPrompt)
+                        }
+                        _uiState.update { it.copy(message = "다이나믹 프롬프트를 클립보드에 복사했습니다.", error = "") }
+                    } catch (error: RuntimeException) {
+                        showError(error.message ?: "다이나믹 프롬프트 복사에 실패했습니다.")
+                    }
+                }
             }
         }
     }
@@ -731,7 +884,6 @@ class AnalysisViewModel(
         val state = _uiState.value
         val keyToEdit = state.editingApiKey ?: return
         updateApiKeys(
-            invalidateCache = false,
             fallbackErrorMessage = "API 키 이름 수정에 실패했습니다.",
             action = {
                 keyManager.updateKeyLabel(
@@ -752,16 +904,12 @@ class AnalysisViewModel(
     }
 
     private fun updateApiKeys(
-        invalidateCache: Boolean = true,
         fallbackErrorMessage: String,
         action: suspend () -> List<GeminiApiKeySummary>,
         onSuccess: (AnalysisUiState, List<GeminiApiKeySummary>) -> AnalysisUiState
     ) {
         scope.launch {
             try {
-                if (invalidateCache) {
-                    analysisCache = null
-                }
                 val keys = action()
                 _uiState.update { onSuccess(it, keys) }
             } catch (error: RuntimeException) {
@@ -772,7 +920,6 @@ class AnalysisViewModel(
 
     override fun onRoleProviderSelected(role: AnalysisModelRole, provider: AnalysisProvider) {
         if (_uiState.value.providerFor(role) == provider) return
-        analysisCache = null
         scope.launch {
             val setting = keyManager.setRoleProvider(role, provider)
             applyRoleSetting(setting.role, setting.provider, setting.modelId)
@@ -894,7 +1041,6 @@ class AnalysisViewModel(
     override fun logoutGrok() {
         scope.launch {
             try {
-                analysisCache = null
                 val status = grokAuth.logout()
                 _uiState.update {
                     it.copy(
@@ -940,6 +1086,7 @@ class AnalysisViewModel(
         runningJob = null
         analysisCache = null
         lastObservedSourcePrompt = ""
+        resetClarification()
         candidateHandoff.clearSession()
         sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("")
 
@@ -955,6 +1102,7 @@ class AnalysisViewModel(
                 txtCount = AnalysisTxtCountPolicy.DEFAULT_COUNT,
                 selectedDirectionIds = emptySet(),
                 customHint = "",
+                clarificationQuestion = null,
                 hasAppliedCandidateToAutomation = false,
                 resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
                 pendingOverwriteFileName = null,
@@ -981,7 +1129,7 @@ class AnalysisViewModel(
         category = category,
         targetSegment = targetSegment,
         cache = cache,
-        directions = AnalysisDummyDirections.values,
+        directions = state.allDirections,
         selectedDirectionIds = selectedDirectionIds,
         customHint = customHint
     )
@@ -989,7 +1137,7 @@ class AnalysisViewModel(
     private fun currentDirectionInput(
         state: AnalysisUiState = _uiState.value
     ): AnalysisDirectionInput = AnalysisMaskingPolicy.extractDirectionInput(
-        directions = AnalysisDummyDirections.values,
+        directions = state.allDirections,
         selectedDirectionIds = state.selectedDirectionIds,
         customHint = state.customHint
     )
@@ -1048,4 +1196,14 @@ private fun AnalysisUiState.resetGrokLoginDialog(): AnalysisUiState = copy(
     isGrokLoginPolling = false,
     grokLoginUserCode = "",
     grokLoginVerificationUri = ""
+)
+
+private const val MAX_CONSECUTIVE_CLARIFICATIONS = 2
+
+private data class PendingGeneration(
+    val count: Int,
+    val presentation: AnalysisResultPresentation,
+    val generatingMessage: String,
+    val failureFallback: String,
+    val updateResultFileName: Boolean
 )

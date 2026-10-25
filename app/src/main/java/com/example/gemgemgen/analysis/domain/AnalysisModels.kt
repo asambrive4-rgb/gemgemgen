@@ -1,4 +1,4 @@
-// 역할: AI 분석 요청 상태, 결과 데이터, 세그먼트 모델 및 생성 개수/쿼터 정책을 정의합니다.
+// 역할: AI 분석 요청 상태, 결과 데이터, 세그먼트 모델, 4가지 기본 변주 방향 지시문 및 생성 개수/쿼터 정책을 정의합니다.
 package com.example.gemgemgen.analysis.domain
 
 enum class AnalysisStatus {
@@ -23,7 +23,6 @@ data class AnalysisTargetSegment(
     val startIndex: Int,
     val endIndex: Int,
     val category: AnalysisCategory,
-    val confidence: Double = 1.0,
     /** 연쇄 보완을 포함한 치환 범위 안에서 실제 편집이 허용된 구간들. */
     val editableRanges: List<AnalysisSourceRange> = emptyList()
 ) {
@@ -34,8 +33,7 @@ data class AnalysisTargetSegment(
 data class AnalysisDetectedSegment(
     val exactText: String,
     val startIndex: Int,
-    val endIndex: Int,
-    val confidence: Double
+    val endIndex: Int
 ) {
     val isValid: Boolean
         get() = exactText.isNotBlank() && startIndex >= 0 && endIndex > startIndex
@@ -85,38 +83,28 @@ data class AnalysisDirection(
     val hint: String
 )
 
-object AnalysisDummyDirections {
-    // 관련 페어 묶기: 분량끼리 → 계열끼리 → 야한 엣지 → 장소 맞춤 의상
+/** 모든 카테고리 공통으로 제공하는 기본 추천 방향 칩. */
+object AnalysisDefaultDirections {
     val values = listOf(
         AnalysisDirection(
             id = "length-only",
             title = "분량 추가",
-            hint = "Do not change genre, erotic tone, or core concept. Mainly expand length and richness: add more descriptive clauses about the same subject while keeping the overall character of the original segment."
+            hint = "Do NOT invent new items, ornaments, or extra details; keep the exact same subject, items, and meaning as the original segment, and rewrite it into a noticeably longer, fuller phrasing by expanding the wording of those same elements (e.g. '흰 크롭티, 청바지' -> '깔끔한 흰색 톤의 짧은 크롭 티셔츠 상의와 기본 푸른 데님 소재의 청바지를 매치한 착장')."
         ),
         AnalysisDirection(
-            id = "detail-and-length",
-            title = "디테일+분량",
-            hint = "Keep the same concept and composition. Enrich design details (texture, material, color nuance, form, ornament, fabric folds, sheen) and write a longer, denser Korean fragment—not a short summary."
+            id = "detail-add",
+            title = "디테일 추가",
+            hint = "Keep the exact original items/nouns as the base, and enrich each element by attaching specific visual details such as prints/graphics, accessories, ornaments, fit, cut, or material modifiers (e.g. '흰 크롭티, 청바지' -> '커다란 해바라기가 전면에 프린팅된 흰 크롭티, 얇은 가죽 벨트 로우라이즈 청바지'). Allow the length to expand naturally to include the added details."
         ),
         AnalysisDirection(
             id = "same-lineage-other-kind",
-            title = "같은 계열·다른 종류",
-            hint = "Stay within the same lineage/family for the selected category (style genre, mood family, or item type). Swap only to a different kind/option inside that family—not a totally different genre."
+            title = "같은계열 다른 종류",
+            hint = "Stay within the same style family, mood, and vibe as the original segment, but swap each item or element 1:1 to a different kind/sub-type and adjacent color or material within that same family while keeping a similar concise structure (e.g. '흰 크롭티, 청바지' -> '베이지 크롭 나시, 데님 미니스커트')."
         ),
         AnalysisDirection(
             id = "other-lineage",
-            title = "다른 계열 변주",
-            hint = "For the selected category, shift the lineage/genre axis itself to a different family (e.g. romantic soft → dark fantasy, casual everyday → high fashion). Bigger jump than same-lineage options; still replace only the target segment."
-        ),
-        AnalysisDirection(
-            id = "erotic-edge",
-            title = "야한 엣지",
-            hint = "Keep the scene skeleton, but add erotic edge by changing what would make THIS situation hotter: relationship/setup (e.g. age gap, taboo power dynamic), character attributes (e.g. ethnicity, muscular build), pose intimacy/dominance, or clothing exposure/style. Prefer situational spice over vague adjectives alone."
-        ),
-        AnalysisDirection(
-            id = "outfit-fits-location",
-            title = "장소에 어울리는 의상",
-            hint = "Rewrite the target toward clothing that naturally fits the location, background, and situation in the original prompt (e.g. beachwear at the beach, formal attire at a gala, outdoor gear on a mountain trail). Prioritize outfit-place coherence over random fashion changes; do not invent a new location unless the segment itself is the outfit description."
+            title = "다른계열",
+            hint = "Shift the style family to a distinctly different realistic lineage (e.g. casual to formal/office, sporty, or chic) while keeping the corresponding pairing structure and concise length of the original segment, without jumping to unrelated fantasy genres (e.g. '흰 크롭티, 청바지' -> '흰 셔츠, 슬랙스')."
         )
     )
 }
@@ -148,4 +136,3 @@ const val DEFAULT_ANALYSIS_MODEL = MODEL_GEMINI_3_7_FLASH
 const val MODEL_GEMINI_3_6_FLASH = "gemini-3.6-flash"
 const val MODEL_GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite"
 const val MODEL_GROK_4_5 = "grok-4.5"
-

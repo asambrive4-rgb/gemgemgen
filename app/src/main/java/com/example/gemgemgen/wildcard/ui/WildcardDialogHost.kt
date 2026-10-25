@@ -1,7 +1,6 @@
 // 역할: 와일드카드 화면의 활성 다이얼로그 상태를 판별하고 TextFieldState 기반 파일 관리·AI 분류 팝업을 통합 표시합니다.
 package com.example.gemgemgen.wildcard.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -423,8 +422,7 @@ private fun ClassifyPreviewContent(
             OutlinedButton(
                 onClick = actions::runClassify,
                 enabled = dialog.canRerun,
-                modifier = Modifier.fillMaxWidth(),
-                border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text("다시 분류 (전체)", fontWeight = FontWeight.Bold)
             }

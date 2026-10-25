@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 전제조건 검사, 타겟 구간 확정 및 텍스트 생성을 조율합니다.
+// 역할: AI 프롬프트 분석 전제조건 검사, 타겟 구간 확정·캐시 보존 및 텍스트 생성을 조율합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
@@ -45,8 +45,11 @@ sealed interface ExecuteAnalysisGenerationResult {
         val didAnalyze: Boolean
     ) : ExecuteAnalysisGenerationResult
     data class Failure(
-        val message: String
+        val message: String,
+        val cache: AnalysisReportCache? = null
     ) : ExecuteAnalysisGenerationResult
+    /** 분석 모델이 되물은 질문. 사용자가 답하면 지시에 합쳐 다시 실행한다. */
+    data class NeedsClarification(val question: String) : ExecuteAnalysisGenerationResult
 }
 
 class ExecuteAnalysisGenerationUseCase(
@@ -87,6 +90,7 @@ class ExecuteAnalysisGenerationUseCase(
             onStep?.invoke(AnalysisGenerationStep.GENERATING)
         }
 
+        var resolvedCache: AnalysisReportCache? = if (!needsMaskingAnalysis) request.cache else null
         try {
             val ensured = resolveTarget.ensureForGeneration(
                 source = request.sourcePrompt,
@@ -97,6 +101,7 @@ class ExecuteAnalysisGenerationUseCase(
                 customHint = request.customHint,
                 needsAnalyze = needsMaskingAnalysis
             )
+            resolvedCache = ensured.cache
             coroutineContext.ensureActive()
 
             if (ensured.targetChanged) {
@@ -127,9 +132,12 @@ class ExecuteAnalysisGenerationUseCase(
             )
         } catch (e: CancellationException) {
             throw e
+        } catch (e: AnalysisClarificationNeededException) {
+            ExecuteAnalysisGenerationResult.NeedsClarification(e.question)
         } catch (e: Exception) {
             ExecuteAnalysisGenerationResult.Failure(
-                message = e.message ?: request.failureFallback
+                message = e.message ?: request.failureFallback,
+                cache = resolvedCache
             )
         }
     }

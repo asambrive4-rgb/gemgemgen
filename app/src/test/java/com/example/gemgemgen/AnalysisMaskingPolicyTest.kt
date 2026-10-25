@@ -187,4 +187,25 @@ class AnalysisMaskingPolicyTest {
         )
         assertTrue(result)
     }
+
+    @Test
+    fun shouldAnalyzeMasking_ignoresCustomHintWhitespaceDifferences() {
+        val cache = AnalysisReportCache(
+            sourcePrompt = "test prompt",
+            category = AnalysisCategory.WOMEN_HAIRSTYLE,
+            targetSegment = null,
+            selectedHints = listOf("hint 1"),
+            customHint = "custom"
+        )
+        assertFalse(
+            AnalysisMaskingPolicy.shouldAnalyzeMasking(
+                source = "test prompt",
+                category = AnalysisCategory.WOMEN_HAIRSTYLE,
+                targetSegment = null,
+                cache = cache,
+                selectedHints = listOf("hint 1"),
+                customHint = "  custom  "
+            )
+        )
+    }
 }

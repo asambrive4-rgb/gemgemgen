@@ -1,4 +1,4 @@
-﻿// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(계정 전환 버튼, 사용불가 내림/복구 외부 원터치 토글, 실시간 초기화 만료 보정, 소진 Dim UI, 소진 뱃지, 별칭, 게이지, 당분간 사용 금지 메뉴)를 제공합니다.
+// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(토스 침전 바닥형 부유 카드, 대표 계정 6dp 풀높이 플러시 액센트 바, 테마별 원형 체크마크 인디케이터, 8dp 게이지 바, 우측 상단 계정 전환 버튼 유지, 소진 Dim UI)를 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -8,8 +8,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -56,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +65,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.AppThemePalette
+import com.example.gemgemgen.ui.theme.LocalAppThemePalette
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.ui.theme.NeuInsetBed
@@ -106,16 +110,9 @@ fun GeminiAccountRowCard(
     val isLoading = entry.usageState is GeminiUsageState.Loading || entry.isRefreshing
     val fiveHourWarning = entry.fiveHourWarningLevel(nowMillis)
     val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
+    val checkColor = resolveAccountCheckColor()
     val exhaustionReason = entry.quotaExhaustionReason(nowMillis)
     val isExhausted = exhaustionReason != null
-
-    val cardBorderColor = when {
-        isExhausted -> AppTheme.colors.cardBorder.copy(alpha = 0.25f)
-        fiveHourWarning == GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.65f)
-        fiveHourWarning == GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.65f)
-        isRepresentative -> brandHighlightColor.copy(alpha = 0.7f)
-        else -> AppTheme.colors.cardBorder
-    }
 
     var showMenu by remember { mutableStateOf(false) }
     var isConfirmingDelete by remember { mutableStateOf(false) }
@@ -127,63 +124,94 @@ fun GeminiAccountRowCard(
             .clickable(onClick = onSelectRepresentative),
         shape = RoundedCornerShape(16.dp),
         backgroundColor = if (isExhausted) AppTheme.colors.card.copy(alpha = 0.65f) else AppTheme.colors.card,
-        borderColor = cardBorderColor,
-        elevation = if (isExhausted) 0.dp else if (isRepresentative) 5.dp else 3.dp
+        elevation = if (isExhausted) 0.dp else if (isRepresentative) 4.dp else 2.dp
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .alpha(if (isExhausted) 0.38f else 1f)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            // 1. 상단 1줄 컴팩트 헤더: 별칭, 대표 뱃지, 위험/소진 뱃지, 갱신 시각 + 우측 [전환], 새로고침/메뉴 아이콘
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (isRepresentative && !isExhausted) {
+                Box(
+                    modifier = Modifier.matchParentSize(),
+                    contentAlignment = Alignment.CenterStart
                 ) {
-                    Text(
-                        text = entry.profile.displayAlias,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = AppTheme.colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(6.dp)
+                            .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                            .background(brandHighlightColor)
                     )
-
-                    if (isRepresentative) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = brandHighlightColor.copy(alpha = 0.14f),
-                            border = BorderStroke(1.dp, brandHighlightColor.copy(alpha = 0.45f))
-                        ) {
-                            Text(
-                                text = "대표",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = brandHighlightColor,
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .alpha(if (isExhausted) 0.38f else 1f)
+                    .padding(
+                        start = 14.dp,
+                        end = 12.dp,
+                        top = 8.dp,
+                        bottom = 8.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // 1. 상단 1줄 컴팩트 헤더: 별칭, 위험/소진 뱃지, 갱신 시각 + 우측 [전환], 새로고침/메뉴 아이콘
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // 대표 계정 식별 원형 체크마크 인디케이터
+                        if (isRepresentative && !isExhausted) {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(checkColor),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "대표 계정 선택됨",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .border(
+                                        width = 1.5.dp,
+                                        color = if (isExhausted) AppTheme.colors.cardBorder.copy(alpha = 0.35f) else AppTheme.colors.cardBorder,
+                                        shape = CircleShape
+                                    )
                             )
                         }
-                    }
 
-                    if (exhaustionReason != null) {
-                        GeminiQuotaExhaustionBadge(reason = exhaustionReason)
-                    } else if (fiveHourWarning != GeminiUsageWarningLevel.NORMAL) {
-                        GeminiUsageWarningBadge(
-                            warningLevel = fiveHourWarning,
-                            color = resolveGeminiUsageWarningColor(fiveHourWarning)
+                        Text(
+                            text = entry.profile.displayAlias,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    }
+
+                        if (exhaustionReason != null) {
+                            GeminiQuotaExhaustionBadge(reason = exhaustionReason)
+                        } else if (fiveHourWarning != GeminiUsageWarningLevel.NORMAL) {
+                            GeminiUsageWarningBadge(
+                                warningLevel = fiveHourWarning,
+                                color = resolveGeminiUsageWarningColor(fiveHourWarning)
+                            )
+                        }
 
                     if (displayedSuccess != null && displayedSuccess.updatedAt > 0L) {
                         Text(
@@ -205,8 +233,7 @@ fun GeminiAccountRowCard(
                     if (onSwitchAccount != null) {
                         Surface(
                             shape = RoundedCornerShape(9.dp),
-                            color = brandHighlightColor.copy(alpha = 0.14f),
-                            border = BorderStroke(1.dp, brandHighlightColor.copy(alpha = 0.5f)),
+                            color = brandHighlightColor.copy(alpha = 0.16f),
                             modifier = Modifier
                                 .height(32.dp)
                                 .clip(RoundedCornerShape(9.dp))
@@ -251,7 +278,6 @@ fun GeminiAccountRowCard(
                         Surface(
                             shape = CircleShape,
                             color = AppTheme.colors.insetBed,
-                            border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
                             modifier = Modifier
                                 .size(32.dp)
                                 .clip(CircleShape)
@@ -280,7 +306,6 @@ fun GeminiAccountRowCard(
                     Surface(
                         shape = CircleShape,
                         color = AppTheme.colors.insetBed,
-                        border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
@@ -314,7 +339,6 @@ fun GeminiAccountRowCard(
                         Surface(
                             shape = CircleShape,
                             color = AppTheme.colors.insetBed,
-                            border = BorderStroke(1.dp, AppTheme.colors.insetBorder),
                             modifier = Modifier
                                 .size(32.dp)
                                 .clip(CircleShape)
@@ -341,7 +365,6 @@ fun GeminiAccountRowCard(
                             onDismissRequest = { showMenu = false },
                             shape = RoundedCornerShape(16.dp),
                             containerColor = AppTheme.colors.card,
-                            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
                             shadowElevation = 8.dp
                         ) {
                             DropdownMenuItem(
@@ -498,7 +521,6 @@ fun GeminiAccountRowCard(
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -543,6 +565,7 @@ fun GeminiAccountRowCard(
         }
     }
 }
+}
 
 /**
  * 할당량 소진 사유 뱃지 ([5시간 소진], [주간 소진]).
@@ -554,8 +577,7 @@ fun GeminiQuotaExhaustionBadge(
 ) {
     Surface(
         shape = RoundedCornerShape(6.dp),
-        color = MultiUsageWarningRed.copy(alpha = 0.14f),
-        border = BorderStroke(1.dp, MultiUsageWarningRed.copy(alpha = 0.45f)),
+        color = MultiUsageWarningRed.copy(alpha = 0.16f),
         modifier = modifier
     ) {
         Text(
@@ -652,8 +674,7 @@ private fun AccountUsageGaugeRow(
                 )
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = gaugeColor.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, gaugeColor.copy(alpha = 0.45f))
+                    color = gaugeColor.copy(alpha = 0.16f)
                 ) {
                     Text(
                         text = "${clampedPercent}%",
@@ -667,8 +688,7 @@ private fun AccountUsageGaugeRow(
                 if (exhaustionBadgeText != null) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = MultiUsageWarningRed.copy(alpha = 0.14f),
-                        border = BorderStroke(1.dp, MultiUsageWarningRed.copy(alpha = 0.45f))
+                        color = MultiUsageWarningRed.copy(alpha = 0.16f)
                     ) {
                         Text(
                             text = exhaustionBadgeText,
@@ -702,7 +722,7 @@ private fun AccountUsageGaugeRow(
         NeuInsetBed(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp),
+                .height(8.dp),
             shape = RoundedCornerShape(999.dp)
         ) {
             Box(
@@ -816,7 +836,6 @@ private fun AccountCompactActionButton(
     Surface(
         shape = RoundedCornerShape(9.dp),
         color = AppTheme.colors.card,
-        border = BorderStroke(1.1.dp, AppTheme.colors.cardBorder),
         modifier = Modifier
             .height(34.dp)
             .clip(RoundedCornerShape(9.dp))
@@ -877,3 +896,32 @@ private fun formatAccountUpdatedAtTime(updatedAt: Long): String {
         formatter.format(Date(updatedAt))
     }.getOrDefault("")
 }
+
+/**
+ * 테마별 대표 계정 체크마크 전용 컬러.
+ * 메인 브랜드 색상과 확실히 대비되는 산뜻한 포인트 컬러(토스/코랄/인디고: 그린, 세이지: 블루)를 반환합니다.
+ */
+@Composable
+private fun resolveAccountCheckColor(): Color {
+    val palette = LocalAppThemePalette.current
+    val isDark = AppTheme.colors.card == Color(0xFF1C222D)
+    return when (palette) {
+        AppThemePalette.SAGE_MATCHA -> {
+            // 노르딕 세이지는 메인 브랜드가 딥 세이지 녹색이므로, 메인과 뚜렷이 구별되는 선명한 블루 계열 사용
+            if (isDark) Color(0xFF60A5FA) else Color(0xFF2563EB)
+        }
+        AppThemePalette.CORAL_CREAM -> {
+            // 웜 코랄 크림은 산뜻한 민트 그린 계열 사용
+            if (isDark) Color(0xFF34D399) else Color(0xFF00B06B)
+        }
+        AppThemePalette.PURE_INDIGO -> {
+            // 퓨어 인디고는 선명한 에메랄드 그린 계열 사용
+            if (isDark) Color(0xFF2DD4BF) else Color(0xFF00C471)
+        }
+        AppThemePalette.TOSS_SIGNATURE -> {
+            // 토스 시그니처(토스 블루)는 토스 에메랄드 그린 사용
+            if (isDark) Color(0xFF34D399) else Color(0xFF00C471)
+        }
+    }
+}
+

@@ -178,7 +178,7 @@ val PureIndigoColors = AppColors(
     snippetShadow = Color(0xFFE55A34).copy(alpha = 0.20f)
 )
 
-// --- 다크모드 팔레트 (선명한 3단계 표면 대비: 딥 블랙 캔버스 -> 다크 슬레이트 카드 -> 인셋 베드) ---
+// --- 다크모드 팔레트 (선명한 3단계 표면 대비: Level 1 마일드 토스 다크: 캔버스 #0D1117 -> 부유 카드 #1C222D -> 인셋 베드 #131720) ---
 
 private fun createDarkAppColors(
     primary: Color,
@@ -188,18 +188,18 @@ private fun createDarkAppColors(
     snippetPrimary: Color,
     snippetBorder: Color
 ): AppColors = AppColors(
-    canvas = Color(0xFF0A0A0C),
-    card = Color(0xFF171B22),
-    insetBed = Color(0xFF222731),
+    canvas = Color(0xFF0D1117),
+    card = Color(0xFF1C222D),
+    insetBed = Color(0xFF131720),
     primary = primary,
     onPrimary = Color(0xFFFFFFFF),
     accent = accent,
     textPrimary = Color(0xFFEDEDF0),
     textSecondary = Color(0xFF9EA6B2),
     cardBorder = cardBorder,
-    shadowDark = Color(0x66000000),
-    insetBorder = Color(0xFF2A303C),
-    inputBackground = Color(0xFF222731),
+    shadowDark = Color(0x80000000),
+    insetBorder = Color(0xFF1E2430),
+    inputBackground = Color(0xFF131720),
     inputBorder = inputBorder,
     snippetPrimary = snippetPrimary,
     snippetBorder = snippetBorder,

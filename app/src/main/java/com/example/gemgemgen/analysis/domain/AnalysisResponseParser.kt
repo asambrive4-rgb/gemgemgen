@@ -1,4 +1,4 @@
-// 역할: AI 모델의 응답 텍스트를 파싱하여 카테고리별 분석 결과 세그먼트로 변환합니다.
+// 역할: AI 모델의 응답 텍스트를 관대하게 파싱하여 카테고리별 분석 결과 세그먼트로 변환합니다.
 package com.example.gemgemgen.analysis.domain
 
 import com.example.gemgemgen.analysis.android.analysisJson
@@ -70,12 +70,12 @@ object AnalysisResponseParser {
 
     private fun parseRanges(element: JsonElement?, source: String): List<AnalysisSourceRange> {
         if (element == null) return emptyList()
-        val items = element.jsonArrayOrNull()
-            ?: throw AnalysisParseException("원문 편집 범위 목록 형식이 올바르지 않습니다.")
-        return items.map {
-            val range = parseRange(it.jsonObjectOrNull()
-                ?: throw AnalysisParseException("원문 편집 범위 형식이 올바르지 않습니다."))
-            AnalysisSourceLocator.resolve(source, range)
+        val items = element.jsonArrayOrNull() ?: return emptyList()
+        return items.mapNotNull { item ->
+            val obj = item.jsonObjectOrNull() ?: return@mapNotNull null
+            runCatching {
+                resolveWithFallback(source, parseRange(obj))
+            }.getOrNull()
         }
     }
 
@@ -126,16 +126,26 @@ object AnalysisResponseParser {
     ): AnalysisDetectedSegment? {
         val exactText = obj["exactText"].stringOrBlank()
         if (exactText.isBlank()) return null
-        val confidence = obj["confidence"].doubleOrNull() ?: 0.5
-        val resolved = runCatching { AnalysisSourceLocator.resolve(sourcePrompt, parseRange(obj)) }
+        val resolved = runCatching { resolveWithFallback(sourcePrompt, parseRange(obj)) }
         return resolved.fold(
             onSuccess = {
-                AnalysisDetectedSegment(it.exactText, it.startIndex, it.endIndex, confidence)
+                AnalysisDetectedSegment(it.exactText, it.startIndex, it.endIndex)
             },
             onFailure = {
-                AnalysisDetectedSegment(exactText, -1, -1, 0.1)
+                AnalysisDetectedSegment(exactText, -1, -1)
             }
         )
+    }
+
+    private fun resolveWithFallback(source: String, range: AnalysisSourceRange): AnalysisSourceRange {
+        return runCatching { AnalysisSourceLocator.resolve(source, range) }
+            .recoverCatching {
+                if (range.occurrence == null) {
+                    AnalysisSourceLocator.resolve(source, range.copy(occurrence = 1))
+                } else {
+                    throw it
+                }
+            }.getOrThrow()
     }
 
     private fun parseVisualContext(obj: JsonObject): AnalysisVisualContext {

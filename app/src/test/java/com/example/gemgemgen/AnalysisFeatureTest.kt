@@ -1,10 +1,10 @@
-// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름과 단일화된 화면 액션 인터페이스(AnalysisScreenActions) 및 모델 요약 라벨을 검증합니다.
+// 역할: AI 프롬프트 분석 기능 전반의 동작 흐름과 단일화된 화면 액션 인터페이스(다이나믹 프롬프트 복사 포함) 및 모델 요약 라벨을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
-import com.example.gemgemgen.analysis.domain.AnalysisDummyDirections
+import com.example.gemgemgen.analysis.domain.AnalysisDefaultDirections
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
@@ -96,7 +96,7 @@ class AnalysisFeatureTest {
     }
 
     @Test
-    fun essentialClarification_stopsBeforeGenerationAndPromptsForCustomHint() {
+    fun essentialClarification_stopsBeforeGenerationAndOpensClarificationDialog() {
         val analysis = analysisJson("blue dress").trimEnd().dropLast(1) +
             """, "clarificationQuestion":"의상 길이를 어떻게 바꿀까요?" }"""
         val gateway = FakeAnalysisAiGateway(analyzeResponse = analysis)
@@ -105,11 +105,64 @@ class AnalysisFeatureTest {
         viewModel.onSourcePromptChange("blue dress")
         viewModel.generate()
         assertEquals(0, gateway.generateCallCount)
-        assertEquals(AnalysisStatus.ERROR, viewModel.uiState.value.status)
-        assertTrue(viewModel.uiState.value.error.contains("추가 요구사항"))
-        assertTrue(viewModel.uiState.value.error.contains("의상 길이"))
+        assertEquals(AnalysisStatus.IDLE, viewModel.uiState.value.status)
+        assertEquals("의상 길이를 어떻게 바꿀까요?", viewModel.uiState.value.clarificationQuestion)
+        assertEquals("", viewModel.uiState.value.error)
     }
 
+    @Test
+    fun clarificationAnswer_isMergedIntoUserDirectiveAndGenerationContinues() {
+        val clarifying = analysisJson("blue dress").trimEnd().dropLast(1) +
+            """, "clarificationQuestion":"의상 길이를 어떻게 바꿀까요?" }"""
+        val resolved = analysisJson("blue dress")
+        val analyzePrompts = mutableListOf<String>()
+        val gateway = object : AnalysisAiGateway {
+            override suspend fun analyze(
+                apiKey: String,
+                modelId: String,
+                payload: AnalysisPromptPayload,
+                provider: AnalysisProvider
+            ): String {
+                if (payload.systemInstruction.contains("Generate exactly")) {
+                    return """[{"edits":[{"exactText":"blue dress","replacement":"blue long dress"}]}]"""
+                }
+                analyzePrompts += payload.userPrompt
+                return if (analyzePrompts.size == 1) clarifying else resolved
+            }
+        }
+        val viewModel = analysisViewModel(gateway, FakeGeminiApiKeyRepository(activeKey = "test-credential"))
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("blue dress")
+        viewModel.onSourcePromptChange("blue dress")
+        viewModel.generate()
+        viewModel.submitClarification("무릎 아래 길이로")
+        assertEquals(null, viewModel.uiState.value.clarificationQuestion)
+        assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+        assertEquals(2, analyzePrompts.size)
+        assertTrue(analyzePrompts[1].contains("무릎 아래 길이로"))
+        assertTrue(analyzePrompts[1].contains("의상 길이를 어떻게 바꿀까요?"))
+    }
+
+    @Test
+    fun clarificationDismiss_keepsInputsAndRepeatedQuestionsEventuallyBecomeError() {
+        val analysis = analysisJson("blue dress").trimEnd().dropLast(1) +
+            """, "clarificationQuestion":"반복 질문" }"""
+        val gateway = FakeAnalysisAiGateway(analyzeResponse = analysis)
+        val viewModel = analysisViewModel(gateway, FakeGeminiApiKeyRepository(activeKey = "test-credential"))
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd("blue dress")
+        viewModel.onSourcePromptChange("blue dress")
+        viewModel.onCustomHintChange("더 밝게")
+        viewModel.generate()
+        viewModel.dismissClarification()
+        assertEquals(null, viewModel.uiState.value.clarificationQuestion)
+        assertEquals("더 밝게", viewModel.uiState.value.customHint)
+
+        viewModel.generate()
+        viewModel.submitClarification("답1")
+        viewModel.submitClarification("답2")
+        assertEquals(null, viewModel.uiState.value.clarificationQuestion)
+        assertEquals(AnalysisStatus.ERROR, viewModel.uiState.value.status)
+        assertTrue(viewModel.uiState.value.error.contains("반복 질문"))
+    }
     @Test
     fun multilineWildcardCandidate_isRejectedBeforeCreatingFile() = runBlocking {
         val repository = FakeWildcardRepository()
@@ -195,7 +248,10 @@ class AnalysisFeatureTest {
         assertTrue(payload.systemInstruction.contains("Infer variationGoal"))
         assertTrue(payload.userPrompt.contains("Keep the same concept and write longer"))
         assertTrue(payload.userPrompt.contains("레이스 디테일 추가"))
-        assertTrue(payload.userPrompt.contains("Selected direction chips:"))
+        assertTrue(payload.userPrompt.contains("User directive:"))
+        assertTrue(payload.userPrompt.contains("1. \"Keep the same concept and write longer\""))
+        assertTrue(payload.userPrompt.contains("2. \"레이스 디테일 추가\""))
+        assertTrue(payload.systemInstruction.contains("Length policy:"))
     }
 
     @Test
@@ -741,6 +797,81 @@ class AnalysisFeatureTest {
     }
 
     @Test
+    fun viewModel_copyDynamicPrompt_inCardsMode_copiesFormattedDynamicPrompt() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"검은 원피스","explanation":""},{"text":"흰 셔츠","explanation":""}]"""
+        )
+        val clipboard = RecordingClipboard()
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            clipboardGateway = clipboard
+        )
+        val original = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
+        viewModel.onSourcePromptChange(original)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.generate()
+
+        viewModel.copyDynamicPrompt()
+
+        assertEquals("<검은 원피스|흰 셔츠>", clipboard.writtenText)
+        assertEquals("다이나믹 프롬프트를 클립보드에 복사했습니다.", viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun viewModel_copyDynamicPrompt_inTxtMode_copiesFormattedDynamicPrompt() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"검은 원피스","explanation":""},{"text":"흰 셔츠","explanation":""},{"text":"청바지","explanation":""}]"""
+        )
+        val clipboard = RecordingClipboard()
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            clipboardGateway = clipboard
+        )
+        val original = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
+        viewModel.onSourcePromptChange(original)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.generateTxt()
+
+        viewModel.copyDynamicPrompt()
+
+        assertEquals("<검은 원피스|흰 셔츠|청바지>", clipboard.writtenText)
+        assertEquals("다이나믹 프롬프트를 클립보드에 복사했습니다.", viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun viewModel_copyDynamicPrompt_whenInvalidCharacters_showsErrorMessage() {
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"검은|원피스","explanation":""}]"""
+        )
+        val clipboard = RecordingClipboard()
+        val viewModel = analysisViewModel(
+            aiGateway = aiGateway,
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            clipboardGateway = clipboard
+        )
+        val original = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
+        viewModel.onSourcePromptChange(original)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+        viewModel.generate()
+
+        viewModel.copyDynamicPrompt()
+
+        assertEquals("", clipboard.writtenText)
+        assertEquals("| 또는 <> 기호가 포함된 후보는 다이나믹 프롬프트로 복사할 수 없습니다.", viewModel.uiState.value.error)
+    }
+
+    @Test
     fun viewModel_resetSession_requiresConfirmationAndClearsOnlyAnalysisSession() {
         val aiGateway = FakeAnalysisAiGateway(
             analyzeResponse = analysisJson(exactText = "blue dress"),
@@ -764,7 +895,7 @@ class AnalysisFeatureTest {
             keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
             promptWorkspace = promptWorkspace
         )
-        val directionId = AnalysisDummyDirections.values.first().id
+        val directionId = AnalysisDefaultDirections.values.first().id
 
         viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(original)
         viewModel.onSourcePromptChange(original)
@@ -902,6 +1033,45 @@ class AnalysisFeatureTest {
         // 5. 동일 상태에서 다시 TXT 생성 (캐시 재사용)
         viewModel.generateTxt()
         assertEquals(3, aiGateway.analyzeCallCount)
+
+        // 6. 이미 선택된 카테고리를 다시 눌러도 캐시와 결과가 유지됨
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_HAIRSTYLE)
+        viewModel.generateTxt()
+        assertEquals(3, aiGateway.analyzeCallCount)
+    }
+
+    @Test
+    fun viewModel_generationFailure_preservesAnalysisCacheForRetry() {
+        var failGeneration = true
+        val aiGateway = FakeAnalysisAiGateway(
+            analyzeResponse = analysisJson(exactText = "blue dress"),
+            generateResponse = """[{"text":"재시도 후보"}]""",
+            onGenerateTxt = {
+                if (failGeneration) {
+                    throw IllegalStateException("일시적 생성 오류")
+                }
+            }
+        )
+        val keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret")
+        val viewModel = analysisViewModel(aiGateway, keyRepository)
+        val prompt = "red hair and blue dress"
+
+        viewModel.sourcePromptTextFieldState.setTextAndPlaceCursorAtEnd(prompt)
+        viewModel.onSourcePromptChange(prompt)
+        viewModel.onCategorySelected(AnalysisCategory.WOMEN_CLOTHING)
+
+        // 1차 시도: 분석(Step 1)은 성공하고 생성(Step 2)에서 실패
+        viewModel.generate()
+        assertEquals(AnalysisStatus.ERROR, viewModel.uiState.value.status)
+        assertEquals(1, aiGateway.analyzeCallCount)
+        assertFalse(viewModel.uiState.value.needsMaskingAnalysis)
+
+        // 2차 재시도: 분석 캐시가 보존되어 Step 1 재호출 없이 Step 2만 수행
+        failGeneration = false
+        viewModel.generate()
+        assertEquals(AnalysisStatus.SUCCESS, viewModel.uiState.value.status)
+        assertEquals(1, aiGateway.analyzeCallCount)
+        assertEquals(listOf("재시도 후보"), viewModel.uiState.value.generatedCandidates)
     }
 
     @Test
@@ -1587,8 +1757,7 @@ class AnalysisFeatureTest {
               "targetSegment": {
                 "exactText": "$exactText",
                 "startIndex": 0,
-                "endIndex": 1,
-                "confidence": 0.9
+                "endIndex": 1
               },
               "visualContext": {
                 "viewpoint": "정면",
@@ -1820,8 +1989,7 @@ class AnalysisFeatureTest {
                   "targetSegment": {
                     "exactText": "$exactText",
                     "startIndex": 0,
-                    "endIndex": 1,
-                    "confidence": 0.9
+                    "endIndex": 1
                   },
                   "visualContext": {
                     "viewpoint": "정면",

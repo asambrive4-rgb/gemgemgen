@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면과 다이얼로그에서 발생하는 모든 사용자 인터랙션(Grok 승인 코드 복사 포함)을 캡슐화한 인터페이스입니다.
+// 역할: AI 프롬프트 분석 화면과 다이얼로그에서 발생하는 모든 사용자 인터랙션(다이나믹 프롬프트 복사, Grok 승인 코드 복사 포함)을 캡슐화한 인터페이스입니다.
 package com.example.gemgemgen.analysis.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
@@ -20,11 +20,18 @@ interface AnalysisScreenActions {
     fun onTxtCountChange(value: Int) {}
     fun toggleDirection(id: String) {}
     fun onCustomHintChange(value: String) {}
+    fun showAddDirectionDialog() {}
+    fun submitClarification(answer: String) {}
+    fun dismissClarification() {}
+    fun dismissAddDirectionDialog() {}
+    fun addUserDirection(title: String, instruction: String) {}
+    fun deleteUserDirection(id: String) {}
     fun onResultFileNameChange(value: String) {}
     fun applyCandidate(index: Int) {}
     fun copyCandidate(index: Int) {}
     fun restoreOriginalPrompt() {}
     fun copyGeneratedResults() {}
+    fun copyDynamicPrompt() {}
     fun onSaveResults() {}
     fun onConfirmOverwrite() {}
     fun dismissOverwrite() {}

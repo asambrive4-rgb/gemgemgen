@@ -1,4 +1,4 @@
-// 역할: AI 분석 및 인증 게이트웨이의 공통 HTTP 입출력과 오류 메시지 변환을 지원합니다.
+// 역할: AI 분석 및 인증 게이트웨이의 Keep-Alive 친화적 공통 HTTP 입출력과 오류 메시지 변환을 지원합니다.
 package com.example.gemgemgen.analysis.android
 
 import java.io.OutputStreamWriter
@@ -24,15 +24,11 @@ internal fun executeHttpRequest(
     connection: HttpURLConnection,
     requestBody: String? = null
 ): AnalysisHttpResponse {
-    return try {
-        if (requestBody != null) {
-            writeRequestBody(connection, requestBody)
-        }
-        val code = connection.responseCode
-        AnalysisHttpResponse(code, readResponseBody(connection, code))
-    } finally {
-        connection.disconnect()
+    if (requestBody != null) {
+        writeRequestBody(connection, requestBody)
     }
+    val code = connection.responseCode
+    return AnalysisHttpResponse(code, readResponseBody(connection, code))
 }
 
 internal fun writeRequestBody(connection: HttpURLConnection, body: String) {
