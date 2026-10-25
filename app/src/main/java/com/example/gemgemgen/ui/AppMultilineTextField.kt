@@ -24,7 +24,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -242,19 +241,13 @@ fun AppMultilineTextField(
         Modifier
     }
 
-    val fieldShape = RoundedCornerShape(14.dp)
+    val fieldShape = RoundedCornerShape(16.dp)
 
     OutlinedTextField(
         state = state,
         // 메인 탭 좌우 스와이프와 분리 — 입력칸 위 제스처는 탭 전환에 쓰지 않는다.
         modifier = modifier
             .graphicsLayer()
-            .shadow(
-                elevation = 2.dp,
-                shape = fieldShape,
-                ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.35f),
-                spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f)
-            )
             .then(paragraphTapModifier),
         enabled = enabled,
         shape = fieldShape,

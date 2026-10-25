@@ -1,17 +1,14 @@
-// 역할: AI 프롬프트 분석 화면의 전체 레이아웃과 접이식 모델 설정, 마스킹 결과 및 하단 액션 패널을 화면에 표시합니다.
+// 역할: 토스 스타일(Clean & Borderless) 단계별 카드 레이아웃으로 AI 프롬프트 분석·변주 설정(1줄 통합 헤더, 풀폭 원문·인라인 마스킹·2줄 그리드 카테고리, 방향·힌트, 결과 카드/TXT 일체형 저장 및 1줄 플로팅 액션 독)을 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,11 +16,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -37,23 +36,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.CheckCircleOutline
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,7 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -99,7 +94,7 @@ import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlin.math.roundToInt
 
 // =============================================================================
-// 1. Screen Root & Layout Host
+// 1. Screen Root & Step-by-Step Layout Host
 // =============================================================================
 
 @Composable
@@ -121,10 +116,11 @@ internal fun AnalysisScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ApiKeyHeader(
+            // 상단: 1줄 통합 캡슐 헤더 (모델 선택 + API 키/Grok 배지)
+            UnifiedEnginePillHeader(
                 uiState = uiState,
                 onRoleProviderSelected = { role, provider ->
                     actions.onRoleProviderSelected(role, provider)
@@ -137,58 +133,57 @@ internal fun AnalysisScreen(
                 onLogoutGrok = { actions.logoutGrok() }
             )
 
-            SourcePromptAndMaskingRow(
+            // STEP 1 카드: 풀폭 원문 에디터 + 인라인 마스킹 타겟 배너 + 2줄 그리드 카테고리 선택
+            Step1SourceAndMaskingCard(
                 sourcePromptState = sourcePromptState,
                 onSourcePromptChange = { actions.onSourcePromptChange(it) },
                 onImportFromAutomation = { actions.importSourcePromptFromAutomation() },
                 targetSegment = uiState.targetSegment,
-                onClearTargetSegment = { actions.clearTargetSegment() }
+                onClearTargetSegment = { actions.clearTargetSegment() },
+                selectedCategory = uiState.selectedCategory,
+                isBusy = uiState.isBusy,
+                onCategorySelected = { actions.onCategorySelected(it) }
             )
 
-            DirectionSection(
+            // STEP 2 카드: 변주 방향 칩 + 1줄 인셋 추가 요청사항
+            Step2DirectionsAndHintCard(
                 directions = AnalysisDummyDirections.values,
                 selectedIds = uiState.selectedDirectionIds,
-                onToggleDirection = { actions.toggleDirection(it) }
-            )
-
-            CustomHintSection(
+                onToggleDirection = { actions.toggleDirection(it) },
                 customHint = uiState.customHint,
                 onCustomHintChange = { actions.onCustomHintChange(it) }
             )
 
-            ResultSection(
+            // STEP 3 카드: 생성 결과 (카드 6개 또는 TXT 목록 + 일체형 파일 저장)
+            Step3ResultSectionCard(
                 uiState = uiState,
                 onResultFileNameChange = { actions.onResultFileNameChange(it) },
                 onApplyCandidate = { actions.applyCandidate(it) },
                 onCopyCandidate = { actions.copyCandidate(it) },
-                onRestoreOriginalPrompt = { actions.restoreOriginalPrompt() }
+                onRestoreOriginalPrompt = { actions.restoreOriginalPrompt() },
+                onCopyResults = { actions.copyGeneratedResults() },
+                onSaveResults = { actions.onSaveResults() }
             )
 
-            // 하단 고정바에 가려지지 않도록 메인 스크롤 하단에 키보드 반응형 동적 여백 제공
-            AnalysisBottomSpacer()
+            // 하단 플로팅 독에 가려지지 않도록 여백 확보
+            AnalysisBottomSpacer(isKeyboardVisible = isKeyboardVisible)
         }
 
-        // 하단 고정바는 항상 유지하되, 키보드가 올라왔을 때는 슬림 모드로 표시하여
-        // TXT 개수 입력창의 포커스가 끊기지 않게 보호하면서 에디터 시야를 확보합니다.
-        Surface(
+        // 하단: 토스식 1줄 플로팅 액션 독 (Floating Action Dock)
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-            color = AppTheme.colors.card.copy(alpha = 0.98f),
-            tonalElevation = 3.dp,
-            shadowElevation = 8.dp
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            StickyBottomActionPanel(
+            FloatingBottomActionDock(
                 uiState = uiState,
                 isKeyboardVisible = isKeyboardVisible,
-                onCategorySelected = { actions.onCategorySelected(it) },
                 onTxtCountChange = { actions.onTxtCountChange(it) },
                 onGenerate = { actions.generate() },
                 onGenerateTxt = { actions.generateTxt() },
                 onCancelWork = { actions.cancelActiveWork() },
-                onRequestResetSession = { actions.requestResetSession() },
-                onCopyResults = { actions.copyGeneratedResults() },
-                onSaveResults = { actions.onSaveResults() }
+                onRequestResetSession = { actions.requestResetSession() }
             )
         }
     }
@@ -204,17 +199,58 @@ internal fun AnalysisScreen(
 }
 
 @Composable
-private fun AnalysisBottomSpacer() {
-    val isKeyboardVisible = rememberIsImeVisible()
-    Spacer(modifier = Modifier.height(if (isKeyboardVisible) 80.dp else 148.dp))
+private fun AnalysisBottomSpacer(isKeyboardVisible: Boolean) {
+    Spacer(modifier = Modifier.height(if (isKeyboardVisible) 88.dp else 116.dp))
+}
+
+@Composable
+private fun StepBadgeHeader(
+    stepNumber: String,
+    title: String,
+    badgeColor: Color = AppTheme.colors.primary,
+    trailingContent: @Composable () -> Unit = {}
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(badgeColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stepNumber,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = AppTheme.colors.textPrimary
+            )
+        }
+        trailingContent()
+    }
 }
 
 // =============================================================================
-// 2. Header & Role Model Selector (1줄 요약 접이식)
+// 2. Unified Pill Header (1줄 통합 캡슐 바: 모델 선택 + API/Grok 배지)
 // =============================================================================
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ApiKeyHeader(
+private fun UnifiedEnginePillHeader(
     uiState: AnalysisUiState,
     onRoleProviderSelected: (AnalysisModelRole, AnalysisProvider) -> Unit,
     onRoleModelSelected: (AnalysisModelRole, String) -> Unit,
@@ -223,44 +259,80 @@ private fun ApiKeyHeader(
     onLogoutGrok: () -> Unit
 ) {
     var expandedRole by remember { mutableStateOf<AnalysisModelRole?>(null) }
-    val headerShape = RoundedCornerShape(18.dp)
 
     NeuCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = headerShape,
-        elevation = 3.dp
+        shape = RoundedCornerShape(20.dp),
+        elevation = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 평소에는 두 역할을 좌우 1행에 컴팩트한 1줄 요약 버튼으로 표시
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RoleSummaryButton(
-                    roleTitle = "자동 마스킹",
-                    summaryText = formatModelSummaryLabel(uiState.maskingProvider, uiState.maskingModel),
-                    isExpanded = expandedRole == AnalysisModelRole.MASKING,
-                    onClick = {
-                        expandedRole = if (expandedRole == AnalysisModelRole.MASKING) null else AnalysisModelRole.MASKING
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                RoleSummaryButton(
-                    roleTitle = "TXT 생성",
-                    summaryText = formatModelSummaryLabel(uiState.generationProvider, uiState.generationModel),
-                    isExpanded = expandedRole == AnalysisModelRole.GENERATION,
-                    onClick = {
-                        expandedRole = if (expandedRole == AnalysisModelRole.GENERATION) null else AnalysisModelRole.GENERATION
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+                // 좌측: 마스킹 / 생성 모델 캡슐 버튼
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    CompactRolePillButton(
+                        roleTitle = "마스킹",
+                        modelLabel = formatCompactModelName(uiState.maskingProvider, uiState.maskingModel),
+                        isExpanded = expandedRole == AnalysisModelRole.MASKING,
+                        onClick = {
+                            expandedRole = if (expandedRole == AnalysisModelRole.MASKING) null else AnalysisModelRole.MASKING
+                        }
+                    )
+                    CompactRolePillButton(
+                        roleTitle = "생성",
+                        modelLabel = formatCompactModelName(uiState.generationProvider, uiState.generationModel),
+                        isExpanded = expandedRole == AnalysisModelRole.GENERATION,
+                        onClick = {
+                            expandedRole = if (expandedRole == AnalysisModelRole.GENERATION) null else AnalysisModelRole.GENERATION
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // 우측: 키 관리 & Grok 상태 캡슐 배지
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (uiState.usesGemini) {
+                        val hasActiveKey = uiState.geminiKeyPreview.isNotBlank()
+                        TossMiniBadgeButton(
+                            text = if (hasActiveKey) "🔑 키 활성" else "🔑 키 등록",
+                            isHighlighted = !hasActiveKey,
+                            onClick = onShowKeyDialog
+                        )
+                    }
+                    if (uiState.usesGrok) {
+                        if (uiState.isGrokLoggedIn) {
+                            val grokLabel = uiState.grokRemainingPercent?.let { "Grok ${it}%" } ?: "Grok 연동됨"
+                            TossMiniBadgeButton(
+                                text = grokLabel,
+                                isHighlighted = true,
+                                onClick = onLogoutGrok
+                            )
+                        } else {
+                            TossMiniBadgeButton(
+                                text = "Grok 로그인",
+                                isHighlighted = true,
+                                onClick = onStartGrokLogin
+                            )
+                        }
+                    }
+                }
             }
 
-            // 특정 역할을 누르면 해당 역할의 모델 선택 칩 영역이 애니메이션과 함께 펼쳐짐
+            // 역할 클릭 시 펼쳐지는 깔끔한 모델 선택 서랍
             AnimatedVisibility(visible = expandedRole != null) {
                 val currentRole = expandedRole
                 if (currentRole != null) {
@@ -271,19 +343,39 @@ private fun ApiKeyHeader(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(AppTheme.colors.insetBed, RoundedCornerShape(12.dp))
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(AppTheme.colors.insetBed)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = when (currentRole) {
-                                AnalysisModelRole.MASKING -> "자동 마스킹 프로바이더 및 모델 선택"
-                                AnalysisModelRole.GENERATION -> "TXT 생성 프로바이더 및 모델 선택"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.colors.textSecondary
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when (currentRole) {
+                                    AnalysisModelRole.MASKING -> "자동 마스킹 엔진 선택"
+                                    AnalysisModelRole.GENERATION -> "변주 생성 엔진 선택"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.colors.textSecondary
+                            )
+                            if (currentRole == AnalysisModelRole.MASKING && uiState.geminiKeyPreview.isNotBlank()) {
+                                Text(
+                                    text = "활성 키: ${uiState.geminiKeyPreview}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AppTheme.colors.textSecondary
+                                )
+                            } else if (currentRole == AnalysisModelRole.GENERATION && uiState.grokAccountPreview.isNotBlank()) {
+                                Text(
+                                    text = uiState.grokAccountPreview,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AppTheme.colors.textSecondary
+                                )
+                            }
+                        }
                         ModelSelectorChips(
                             selectedProvider = provider,
                             selectedModelId = modelId,
@@ -298,359 +390,295 @@ private fun ApiKeyHeader(
                     }
                 }
             }
-
-            AuthActionsRow(
-                uiState = uiState,
-                onShowKeyDialog = onShowKeyDialog,
-                onStartGrokLogin = onStartGrokLogin,
-                onLogoutGrok = onLogoutGrok
-            )
         }
     }
 }
 
+private fun formatCompactModelName(provider: AnalysisProvider, modelId: String): String {
+    val summary = formatModelSummaryLabel(provider, modelId)
+    return summary.substringAfter("· ").trim().ifBlank { summary }
+}
+
 @Composable
-private fun RoleSummaryButton(
+private fun CompactRolePillButton(
     roleTitle: String,
-    summaryText: String,
+    modelLabel: String,
     isExpanded: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = if (isExpanded) AppTheme.colors.primary.copy(alpha = 0.12f) else AppTheme.colors.insetBed,
-        border = BorderStroke(
-            1.dp,
-            if (isExpanded) AppTheme.colors.primary else AppTheme.colors.insetBorder
-        ),
-        modifier = modifier.height(34.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f, fill = false)
-            ) {
-                Text(
-                    text = "$roleTitle: ",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textSecondary,
-                    maxLines = 1
-                )
-                Text(
-                    text = summaryText,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isExpanded) AppTheme.colors.primary else AppTheme.colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Icon(
-                imageVector = if (isExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                contentDescription = if (isExpanded) "접기" else "펼치기",
-                tint = if (isExpanded) AppTheme.colors.primary else AppTheme.colors.textSecondary,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun AuthActionsRow(
-    uiState: AnalysisUiState,
-    onShowKeyDialog: () -> Unit,
-    onStartGrokLogin: () -> Unit,
-    onLogoutGrok: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (uiState.usesGemini) {
-            CompactOutlinedButton(text = "키 관리", onClick = onShowKeyDialog)
-            if (uiState.geminiKeyPreview.isNotBlank()) {
-                Text(
-                    text = "(${uiState.geminiKeyPreview})",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AppTheme.colors.textSecondary
-                )
-            }
-        }
-        if (uiState.usesGrok) {
-            if (uiState.isGrokLoggedIn) {
-                CompactOutlinedButton(text = "Grok 로그아웃", onClick = onLogoutGrok)
-                if (uiState.grokAccountPreview.isNotBlank()) {
-                    Text(
-                        text = "(${uiState.grokAccountPreview})",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AppTheme.colors.textSecondary
-                    )
-                }
-                uiState.grokRemainingPercent?.let { remaining ->
-                    Text(
-                        text = "남은 ${remaining}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AppTheme.colors.primary
-                    )
-                }
-            } else {
-                CompactOutlinedButton(text = "Grok 로그인", onClick = onStartGrokLogin)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompactOutlinedButton(
-    text: String,
     onClick: () -> Unit
 ) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.height(30.dp),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, AppTheme.colors.cardBorder)
+    val bgColor = if (isExpanded) {
+        AppTheme.colors.primary.copy(alpha = 0.14f)
+    } else {
+        AppTheme.colors.insetBed
+    }
+    Row(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(bgColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = roleTitle,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = AppTheme.colors.textSecondary,
+            maxLines = 1
+        )
+        Text(
+            text = modelLabel,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (isExpanded) AppTheme.colors.primary else AppTheme.colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Icon(
+            imageVector = if (isExpanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+            contentDescription = if (isExpanded) "접기" else "펼치기",
+            tint = if (isExpanded) AppTheme.colors.primary else AppTheme.colors.textSecondary,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun TossMiniBadgeButton(
+    text: String,
+    isHighlighted: Boolean,
+    onClick: () -> Unit
+) {
+    val bgColor = if (isHighlighted) {
+        AppTheme.colors.primary.copy(alpha = 0.12f)
+    } else {
+        AppTheme.colors.insetBed
+    }
+    val contentColor = if (isHighlighted) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.textSecondary
+    }
+    Box(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(bgColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelMedium,
-            color = AppTheme.colors.textPrimary
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = contentColor,
+            maxLines = 1
         )
     }
 }
 
 // =============================================================================
-// 3. Source Prompt & Masking Columns
+// 3. STEP 1 Card: 원문 에디터 (100% 풀폭) + 인라인 마스킹 배너 + 2줄 그리드 카테고리
 // =============================================================================
 
-/** 좌·우 섹션 제목 줄 공통 높이 (단차 정렬용). CompactOutlinedButton과 동일. */
-private val SectionHeaderHeight = 32.dp
-
-/**
- * 원문 입력(좌)과 마스킹 결과(우)를 50:50으로 나란히 배치한다.
- * 좌·우 헤더 높이(32dp)와 본문 하단을 맞춰 단차가 생기지 않게 한다.
- */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SourcePromptAndMaskingRow(
+private fun Step1SourceAndMaskingCard(
     sourcePromptState: TextFieldState,
     onSourcePromptChange: (String) -> Unit,
     onImportFromAutomation: () -> Unit,
-    targetSegment: AnalysisTargetSegment?,
-    onClearTargetSegment: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Max),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        SourcePromptInputColumn(
-            sourcePromptState = sourcePromptState,
-            onSourcePromptChange = onSourcePromptChange,
-            onImportFromAutomation = onImportFromAutomation,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-        )
-
-        MaskingResultColumn(
-            targetSegment = targetSegment,
-            onClearTargetSegment = onClearTargetSegment,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-        )
-    }
-}
-
-@Composable
-private fun SourcePromptInputColumn(
-    sourcePromptState: TextFieldState,
-    onSourcePromptChange: (String) -> Unit,
-    onImportFromAutomation: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(SectionHeaderHeight),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "원문 입력",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.textPrimary
-            )
-            CompactOutlinedButton(
-                text = "가져오기",
-                onClick = onImportFromAutomation
-            )
-        }
-        AppMultilineTextField(
-            state = sourcePromptState,
-            onValueChange = onSourcePromptChange,
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 4,
-            maxLines = 4,
-            placeholder = "분석과 변주의 대상이 되는 전체 이미지 프롬프트를 입력하세요."
-        )
-    }
-}
-
-@Composable
-private fun MaskingResultColumn(
     targetSegment: AnalysisTargetSegment?,
     onClearTargetSegment: () -> Unit,
-    modifier: Modifier = Modifier
+    selectedCategory: AnalysisCategory,
+    isBusy: Boolean,
+    onCategorySelected: (AnalysisCategory) -> Unit
 ) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(SectionHeaderHeight),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (targetSegment == null) "마스킹 결과" else "자동 마스킹",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.textPrimary
-            )
-            if (targetSegment != null) {
-                TextButton(
-                    onClick = onClearTargetSegment,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                    modifier = Modifier.height(SectionHeaderHeight)
-                ) {
-                    Text("해제", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
-        TargetSegmentBody(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            targetSegment = targetSegment
-        )
-    }
-}
-
-/** 마스킹 결과 본문 카드. 긴 텍스트도 스크롤해 모두 확인할 수 있도록 지원합니다. */
-@Composable
-private fun TargetSegmentBody(
-    targetSegment: AnalysisTargetSegment?,
-    modifier: Modifier = Modifier
-) {
-    val hasSegment = targetSegment != null
-    val shape = RoundedCornerShape(18.dp)
     NeuCard(
-        modifier = modifier,
-        shape = shape,
-        elevation = 2.dp,
-        backgroundColor = if (hasSegment) {
-            AppTheme.colors.primary.copy(alpha = 0.08f)
-        } else {
-            AppTheme.colors.inputBackground
-        },
-        borderColor = if (hasSegment) {
-            AppTheme.colors.primary.copy(alpha = 0.45f)
-        } else {
-            AppTheme.colors.inputBorder
-        }
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        elevation = 2.dp
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (targetSegment != null) {
+            StepBadgeHeader(
+                stepNumber = "1",
+                title = "원문 & 분석 타겟",
+                trailingContent = {
+                    TossMiniBadgeButton(
+                        text = "자동화에서 가져오기",
+                        isHighlighted = true,
+                        onClick = onImportFromAutomation
+                    )
+                }
+            )
+
+            // 100% 풀폭 무테두리 인셋 원문 입력창
+            AppMultilineTextField(
+                state = sourcePromptState,
+                onValueChange = onSourcePromptChange,
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4,
+                maxLines = 6,
+                placeholder = "분석할 원본 프롬프트를 입력하거나 가져오세요."
+            )
+
+            // 인라인 마스킹 타겟 하이라이트 배너 (inline_banner)
+            InlineMaskingTargetBanner(
+                targetSegment = targetSegment,
+                selectedCategory = selectedCategory,
+                onClearTargetSegment = onClearTargetSegment
+            )
+
+            // 분석 카테고리 선택기: 한눈에 보는 2줄 플로우 그리드 (grid_chips)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "무엇을 집중 변주할까요?",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.colors.textSecondary
+                    )
+                    Text(
+                        text = selectedCategory.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = AppTheme.colors.primary
+                    )
+                }
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    AnalysisCategory.entries.forEach { category ->
+                        NeuPillChip(
+                            text = category.label,
+                            selected = selectedCategory == category,
+                            enabled = !isBusy,
+                            shape = RoundedCornerShape(10.dp),
+                            onClick = { onCategorySelected(category) },
+                            modifier = Modifier.alpha(if (isBusy) 0.45f else 1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InlineMaskingTargetBanner(
+    targetSegment: AnalysisTargetSegment?,
+    selectedCategory: AnalysisCategory,
+    onClearTargetSegment: () -> Unit
+) {
+    if (targetSegment != null) {
+        val confidencePercent = ((targetSegment.confidence * 100).roundToInt()).coerceIn(0, 100)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(AppTheme.colors.primary.copy(alpha = 0.10f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "🎯 마스킹 타겟 구간",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = AppTheme.colors.primary
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(AppTheme.colors.card)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "신뢰도 ${confidencePercent}%",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.primary
+                        )
+                    }
+                }
                 Text(
                     text = "\"${targetSegment.text}\"",
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = AppTheme.colors.textPrimary,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                )
-                Text(
-                    text = "신뢰도 ${((targetSegment.confidence * 100).roundToInt()).coerceIn(0, 100)}%",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AppTheme.colors.textSecondary
-                )
-            } else {
-                Text(
-                    text = "자동 분석 후 마스킹 구간이 여기에 표시됩니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTheme.colors.textSecondary,
-                    modifier = Modifier.fillMaxWidth()
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(AppTheme.colors.card)
+                    .clickable(onClick = onClearTargetSegment)
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "해제",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.colors.textSecondary
+                )
+            }
+        }
+    } else {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(AppTheme.colors.insetBed)
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "✨ 생성 시 [${selectedCategory.label}] 구간을 자동 감지해 마스킹합니다.",
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTheme.colors.textSecondary
+            )
         }
     }
 }
 
 // =============================================================================
-// 4. Analysis Options & Controls
+// 4. STEP 2 Card: 변주 방향 칩 + 1줄 인셋 추가 요청사항
 // =============================================================================
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DirectionSection(
+private fun Step2DirectionsAndHintCard(
     directions: List<AnalysisDirection>,
     selectedIds: Set<String>,
-    onToggleDirection: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = "추천 방향",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.colors.textPrimary
-        )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            directions.forEach { direction ->
-                NeuPillChip(
-                    text = direction.title,
-                    selected = direction.id in selectedIds,
-                    onClick = { onToggleDirection(direction.id) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CustomHintSection(
+    onToggleDirection: (String) -> Unit,
     customHint: String,
     onCustomHintChange: (String) -> Unit
 ) {
@@ -659,56 +687,119 @@ private fun CustomHintSection(
         onValueChange = onCustomHintChange
     )
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    NeuCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        elevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "추가 요청사항 (선택)",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.textPrimary
+            StepBadgeHeader(
+                stepNumber = "2",
+                title = "변주 방향 & 요청사항",
+                trailingContent = {
+                    Text(
+                        text = if (selectedIds.isEmpty()) "선택 안 함" else "${selectedIds.size}개 선택됨",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (selectedIds.isEmpty()) AppTheme.colors.textSecondary else AppTheme.colors.primary
+                    )
+                }
             )
-            Text(
-                text = "${hintState.text.length}/100",
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTheme.colors.textSecondary
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                directions.forEach { direction ->
+                    val isSelected = direction.id in selectedIds
+                    TossDirectionChip(
+                        text = direction.title,
+                        selected = isSelected,
+                        onClick = { onToggleDirection(direction.id) }
+                    )
+                }
+            }
+
+            // 무테두리 인셋 힌트 입력창 (불필요한 제목·글자수 카운터 제거로 시각적 피로도 해소)
+            OutlinedTextField(
+                state = hintState,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = appTextFieldColors(),
+                inputTransformation = InputTransformation.maxLength(100),
+                lineLimits = TextFieldLineLimits.MultiLine(
+                    minHeightInLines = 1,
+                    maxHeightInLines = 3
+                ),
+                placeholder = {
+                    Text(
+                        text = "💡 추가 요청사항 입력 (선택 · 예: 더 밝은 톤, 실크 소재 등)",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             )
         }
-        OutlinedTextField(
-            state = hintState,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            colors = appTextFieldColors(),
-            inputTransformation = InputTransformation.maxLength(100),
-            lineLimits = TextFieldLineLimits.MultiLine(
-                minHeightInLines = 1,
-                maxHeightInLines = 3
-            ),
-            placeholder = { Text("예: 더 밝은 톤으로, 디테일한 묘사 추가 등") }
+    }
+}
+
+@Composable
+private fun TossDirectionChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val bgColor = if (selected) {
+        AppTheme.colors.primary.copy(alpha = 0.14f)
+    } else {
+        AppTheme.colors.insetBed
+    }
+    val textColor = if (selected) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.textSecondary
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(bgColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (selected) "✓ $text" else text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = textColor
         )
     }
 }
 
 // =============================================================================
-// 5. Result Presentation
+// 5. STEP 3 Card: 생성 결과 (카드 6개 모드 & TXT 목록 일체형 저장 모드)
 // =============================================================================
 
 @Composable
-private fun ResultSection(
+private fun Step3ResultSectionCard(
     uiState: AnalysisUiState,
     onResultFileNameChange: (String) -> Unit,
     onApplyCandidate: (Int) -> Unit,
     onCopyCandidate: (Int) -> Unit,
-    onRestoreOriginalPrompt: () -> Unit
+    onRestoreOriginalPrompt: () -> Unit,
+    onCopyResults: () -> Unit,
+    onSaveResults: () -> Unit
 ) {
     if (uiState.generatedCandidates.isEmpty()) return
 
     when (uiState.resultPresentation) {
         AnalysisResultPresentation.CARDS -> {
-            CardResultSection(
+            Step3CardsResultCard(
                 candidates = uiState.generatedCandidates,
                 selectedIndex = uiState.selectedCandidateIndex,
                 canRestoreOriginal = uiState.hasAppliedCandidateToAutomation,
@@ -719,10 +810,13 @@ private fun ResultSection(
             )
         }
         AnalysisResultPresentation.TXT -> {
-            TxtResultSection(
+            Step3TxtResultCard(
                 candidates = uiState.generatedCandidates,
                 resultFileName = uiState.resultFileName,
-                onResultFileNameChange = onResultFileNameChange
+                canCopyOrSave = uiState.canCopyOrSave,
+                onResultFileNameChange = onResultFileNameChange,
+                onCopyResults = onCopyResults,
+                onSaveResults = onSaveResults
             )
         }
         AnalysisResultPresentation.NONE -> Unit
@@ -730,7 +824,7 @@ private fun ResultSection(
 }
 
 @Composable
-private fun CardResultSection(
+private fun Step3CardsResultCard(
     candidates: List<String>,
     selectedIndex: Int?,
     canRestoreOriginal: Boolean,
@@ -739,100 +833,111 @@ private fun CardResultSection(
     onCopyCandidate: (Int) -> Unit,
     onRestoreOriginalPrompt: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        HorizontalDivider(color = AppTheme.colors.cardBorder)
-        Text(
-            text = "생성 결과 ${candidates.size}개",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.colors.textPrimary
-        )
-        Text(
-            text = "카드 본문을 누르면 자동화 프롬프트에 반영하고, 오른쪽 버튼을 누르면 해당 후보만 복사합니다.",
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTheme.colors.textSecondary
-        )
-        if (canRestoreOriginal) {
-            NeuButton(
-                onClick = onRestoreOriginalPrompt,
-                enabled = enabled,
-                isPrimary = false,
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = "원본으로 되돌리기",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-        }
-        candidates.forEachIndexed { index, candidate ->
-            val selected = selectedIndex == index
-            NeuCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = if (selected) 4.dp else 2.dp,
-                backgroundColor = if (selected) {
+    NeuCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        elevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            StepBadgeHeader(
+                stepNumber = "3",
+                title = "추천 후보 ${candidates.size}",
+                badgeColor = AppTheme.colors.accent,
+                trailingContent = {
+                    if (canRestoreOriginal) {
+                        TossMiniBadgeButton(
+                            text = "원본 되돌리기",
+                            isHighlighted = false,
+                            onClick = { if (enabled) onRestoreOriginalPrompt() }
+                        )
+                    }
+                }
+            )
+
+            candidates.forEachIndexed { index, candidate ->
+                val selected = selectedIndex == index
+                val itemBg = if (selected) {
                     AppTheme.colors.primary.copy(alpha = 0.12f)
                 } else {
-                    AppTheme.colors.card
-                },
-                borderColor = if (selected) {
+                    AppTheme.colors.insetBed
+                }
+                val numBadgeBg = if (selected) {
                     AppTheme.colors.primary
                 } else {
-                    AppTheme.colors.cardBorder
+                    AppTheme.colors.card
                 }
-            ) {
+                val numBadgeText = if (selected) {
+                    AppTheme.colors.onPrimary
+                } else {
+                    AppTheme.colors.textSecondary
+                }
+
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(itemBg)
+                        .clickable(enabled = enabled) { onApplyCandidate(index) }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(
+                    // 번호 배지
+                    Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .clickable(enabled = enabled) { onApplyCandidate(index) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                            .size(22.dp)
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(numBadgeBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = numBadgeText
+                        )
+                    }
+
+                    // 후보 본문
+                    Column(
+                        modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                        Text(
+                            text = candidate,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = AppTheme.colors.textPrimary
+                        )
+                        if (selected) {
                             Text(
-                                text = "${index + 1}",
+                                text = "✓ 자동화 탭에 적용됨",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = AppTheme.colors.primary
                             )
-                            if (selected) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = AppTheme.colors.primary
-                                ) {
-                                    Text(
-                                        text = "적용됨",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                        fontWeight = FontWeight.Bold,
-                                        color = AppTheme.colors.onPrimary,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
                         }
-                        Text(
-                            text = candidate,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTheme.colors.textPrimary
-                        )
                     }
-                    IconButton(
-                        onClick = { onCopyCandidate(index) },
-                        enabled = enabled
+
+                    // 우측 복사 미니 버튼
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(AppTheme.colors.card)
+                            .clickable(enabled = enabled) { onCopyCandidate(index) }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "${index + 1}번 후보 복사",
-                            tint = AppTheme.colors.textSecondary
+                        Text(
+                            text = "복사",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.textSecondary
                         )
                     }
                 }
@@ -842,10 +947,13 @@ private fun CardResultSection(
 }
 
 @Composable
-private fun TxtResultSection(
+private fun Step3TxtResultCard(
     candidates: List<String>,
     resultFileName: String,
-    onResultFileNameChange: (String) -> Unit
+    canCopyOrSave: Boolean,
+    onResultFileNameChange: (String) -> Unit,
+    onCopyResults: () -> Unit,
+    onSaveResults: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
     val joinedCandidates = remember(candidates) { candidates.joinToString(separator = "\n") }
@@ -854,179 +962,344 @@ private fun TxtResultSection(
         onValueChange = onResultFileNameChange
     )
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        HorizontalDivider(color = AppTheme.colors.cardBorder)
-        Text(
-            text = "생성 결과 ${candidates.size}개",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.colors.textPrimary
-        )
-        NeuCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            elevation = 1.dp,
-            backgroundColor = AppTheme.colors.inputBackground,
-            borderColor = AppTheme.colors.inputBorder
+    NeuCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        elevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = joinedCandidates,
+            StepBadgeHeader(
+                stepNumber = "3",
+                title = "TXT 생성 결과 ${candidates.size}줄",
+                badgeColor = AppTheme.colors.accent,
+                trailingContent = {
+                    TossMiniBadgeButton(
+                        text = "전체 복사",
+                        isHighlighted = true,
+                        onClick = { if (canCopyOrSave) onCopyResults() }
+                    )
+                }
+            )
+
+            // 줄 목록 프리뷰 박스
+            NeuInsetBed(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color = AppTheme.colors.textPrimary
-            )
+                    .heightIn(max = 220.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = joinedCandidates,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    color = AppTheme.colors.textPrimary
+                )
+            }
+
+            // 카드 하단 일체형 파일명 입력 & 저장 바 (하단 플로팅 바의 복잡도를 없앰)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    state = fileNameState,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = appTextFieldColors(),
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    onKeyboardAction = { focusManager.clearFocus(force = true) },
+                    placeholder = { Text("파일명 (예: 여성의상.txt)") }
+                )
+
+                NeuButton(
+                    onClick = onSaveResults,
+                    enabled = canCopyOrSave,
+                    isPrimary = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.height(52.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = "파일 저장",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
-        OutlinedTextField(
-            state = fileNameState,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = appTextFieldColors(),
-            lineLimits = TextFieldLineLimits.SingleLine,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            onKeyboardAction = { focusManager.clearFocus(force = true) },
-            label = { Text("저장할 와일드카드 파일명") },
-            placeholder = { Text("옷.txt") }
-        )
     }
 }
 
 // =============================================================================
-// 6. Sticky Bottom Action Panel
+// 6. Floating Bottom Action Dock (토스식 1줄 플로팅 액션 독)
 // =============================================================================
 
-/** 하단 주 액션(TXT 생성 / 생성) 높이 - 터치 규격 44~52dp 가이드 준수 (48dp) */
-private val PrimaryActionButtonHeight = 48.dp
+private val DockButtonHeight = 46.dp
 
 @Composable
-private fun StickyBottomActionPanel(
+private fun FloatingBottomActionDock(
     uiState: AnalysisUiState,
     isKeyboardVisible: Boolean,
-    onCategorySelected: (AnalysisCategory) -> Unit,
     onTxtCountChange: (Int) -> Unit,
     onGenerate: () -> Unit,
     onGenerateTxt: () -> Unit,
     onCancelWork: () -> Unit,
-    onRequestResetSession: () -> Unit,
-    onCopyResults: () -> Unit,
-    onSaveResults: () -> Unit
+    onRequestResetSession: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        if (!isKeyboardVisible) {
-            StickyCategorySelectorRow(
-                selectedCategory = uiState.selectedCategory,
-                isBusy = uiState.isBusy,
-                onCategorySelected = onCategorySelected
-            )
+        if (!isKeyboardVisible && !uiState.isBusy) {
+            StickyStatusBanner(uiState = uiState)
+        }
 
-            if (uiState.resultPresentation == AnalysisResultPresentation.TXT &&
-                uiState.generatedCandidates.isNotEmpty()
+        NeuCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            elevation = 6.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                StickyTxtActionRow(
-                    canCopyOrSave = uiState.canCopyOrSave,
-                    onCopyResults = onCopyResults,
-                    onSaveResults = onSaveResults
-                )
+                // 1) 세션 초기화 아이콘 버튼
+                Box(
+                    modifier = Modifier
+                        .size(DockButtonHeight)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (uiState.canResetSession) AppTheme.colors.insetBed
+                            else AppTheme.colors.insetBed.copy(alpha = 0.45f)
+                        )
+                        .clickable(
+                            enabled = uiState.canResetSession,
+                            onClick = onRequestResetSession
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RestartAlt,
+                        contentDescription = "분석 세션 비우기",
+                        tint = if (uiState.canResetSession) {
+                            AppTheme.colors.textSecondary
+                        } else {
+                            AppTheme.colors.textSecondary.copy(alpha = 0.35f)
+                        },
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                if (uiState.status == AnalysisStatus.GENERATING) {
+                    // 작업 진행 중: 풀폭 중지 버튼
+                    NeuButton(
+                        onClick = onCancelWork,
+                        shape = RoundedCornerShape(14.dp),
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                        elevation = 2.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(DockButtonHeight)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onError
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${uiState.message.ifBlank { "분석·생성 중..." }} · 중지",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    // 2) 일체형 TXT 개수 + TXT 생성 복합 버튼 (Toss Soft Split Button)
+                    TossSplitTxtGenerateButton(
+                        count = uiState.txtCount,
+                        canGenerate = uiState.canGenerate,
+                        onCountChange = onTxtCountChange,
+                        onGenerateTxt = onGenerateTxt,
+                        modifier = Modifier
+                            .weight(1.15f)
+                            .height(DockButtonHeight)
+                    )
+
+                    // 3) 메인 카드 생성 (6) 솔리드 버튼
+                    NeuButton(
+                        onClick = onGenerate,
+                        enabled = uiState.canGenerate,
+                        isPrimary = true,
+                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(DockButtonHeight)
+                    ) {
+                        Text(
+                            text = "✨ 카드 생성 (${AnalysisGenerationCountPolicy.FIXED_COUNT})",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
-
-            if (!uiState.isBusy) {
-                StickyStatusBanner(uiState = uiState)
-            }
-        }
-
-        StickyMainActionButtons(
-            canResetSession = uiState.canResetSession,
-            canGenerate = uiState.canGenerate,
-            status = uiState.status,
-            uiState = uiState,
-            onTxtCountChange = onTxtCountChange,
-            onRequestResetSession = onRequestResetSession,
-            onCancelWork = onCancelWork,
-            onGenerateTxt = onGenerateTxt,
-            onGenerate = onGenerate
-        )
-    }
-}
-
-// =============================================================================
-// 7. Compact TXT Count Input
-// =============================================================================
-
-@Composable
-private fun StickyCategorySelectorRow(
-    selectedCategory: AnalysisCategory,
-    isBusy: Boolean,
-    onCategorySelected: (AnalysisCategory) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AnalysisCategory.entries.forEach { category ->
-            NeuPillChip(
-                text = category.label,
-                selected = selectedCategory == category,
-                enabled = !isBusy,
-                onClick = { onCategorySelected(category) },
-                modifier = Modifier.alpha(if (isBusy) 0.45f else 1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun StickyTxtActionRow(
-    canCopyOrSave: Boolean,
-    onCopyResults: () -> Unit,
-    onSaveResults: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        NeuButton(
-            onClick = onCopyResults,
-            enabled = canCopyOrSave,
-            isPrimary = false,
-            modifier = Modifier
-                .weight(1f)
-                .height(40.dp),
-            shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text("목록 복사", style = MaterialTheme.typography.labelMedium)
-        }
-        NeuButton(
-            onClick = onSaveResults,
-            enabled = canCopyOrSave,
-            isPrimary = true,
-            modifier = Modifier
-                .weight(1f)
-                .height(40.dp),
-            shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text("와일드카드 파일 저장", style = MaterialTheme.typography.labelMedium)
         }
     }
 }
 
 /**
- * 메인 액션 버튼 바로 위에 노출되는 단일 상태 배너입니다.
- * 우선순위: 1) 에러 -> 2) 경고 -> 3) 전제조건 안내 -> 4) 작업 완료/안내
+ * 토스 플로팅 독 내부의 [개수 입력 | TXT 생성] 일체형 분할 버튼.
+ * 좌측 영역을 터치하면 숫자를 직접 타이핑해 바꿀 수 있고, 우측 영역을 터치하면 즉시 TXT 생성을 시작합니다.
  */
+@Composable
+private fun TossSplitTxtGenerateButton(
+    count: Int,
+    canGenerate: Boolean,
+    onCountChange: (Int) -> Unit,
+    onGenerateTxt: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val focusManager = LocalFocusManager.current
+    var text by remember { mutableStateOf(count.toString()) }
+    var isFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(count, isFocused) {
+        if (!isFocused && text != count.toString()) {
+            text = count.toString()
+        }
+    }
+
+    val containerBg = if (canGenerate) {
+        AppTheme.colors.primary.copy(alpha = 0.12f)
+    } else {
+        AppTheme.colors.insetBed.copy(alpha = 0.6f)
+    }
+    val activeTextColor = if (canGenerate) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.textSecondary.copy(alpha = 0.45f)
+    }
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(containerBg),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 좌측: 인라인 개수 편집 칸
+        Column(
+            modifier = Modifier
+                .width(54.dp)
+                .fillMaxHeight()
+                .padding(horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "개수",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                color = activeTextColor.copy(alpha = 0.8f),
+                maxLines = 1
+            )
+            BasicTextField(
+                value = text,
+                onValueChange = { input ->
+                    val digits = input.filter { it.isDigit() }.take(3)
+                    text = digits
+                    digits.toIntOrNull()?.let { parsed ->
+                        onCountChange(parsed)
+                    }
+                },
+                textStyle = TextStyle(
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = activeTextColor,
+                    textAlign = TextAlign.Center
+                ),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        val parsed = text.toIntOrNull()
+                        val coerced = AnalysisTxtCountPolicy.coerce(parsed ?: count)
+                        text = coerced.toString()
+                        onCountChange(coerced)
+                        focusManager.clearFocus(force = true)
+                    }
+                ),
+                singleLine = true,
+                cursorBrush = SolidColor(AppTheme.colors.primary),
+                modifier = Modifier
+                    .widthIn(min = 24.dp, max = 42.dp)
+                    .onFocusChanged { focusState ->
+                        val wasFocused = isFocused
+                        isFocused = focusState.isFocused
+                        if (wasFocused && !focusState.isFocused) {
+                            val parsed = text.toIntOrNull()
+                            val coerced = AnalysisTxtCountPolicy.coerce(parsed ?: count)
+                            text = coerced.toString()
+                            onCountChange(coerced)
+                        }
+                    }
+            )
+        }
+
+        // 미세 구분선
+        Box(
+            modifier = Modifier
+                .width(1.dp)
+                .fillMaxHeight(0.6f)
+                .background(AppTheme.colors.card.copy(alpha = 0.8f))
+        )
+
+        // 우측: TXT 생성 실행 버튼
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .clickable(enabled = canGenerate, onClick = onGenerateTxt)
+                .padding(horizontal = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "TXT 생성",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = activeTextColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
 @Composable
 private fun StickyStatusBanner(
     uiState: AnalysisUiState,
@@ -1037,7 +1310,7 @@ private fun StickyStatusBanner(
             BannerData(
                 text = uiState.error,
                 icon = Icons.Default.ErrorOutline,
-                bgColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+                bgColor = MaterialTheme.colorScheme.errorContainer,
                 textColor = MaterialTheme.colorScheme.error
             )
         }
@@ -1053,7 +1326,7 @@ private fun StickyStatusBanner(
             BannerData(
                 text = uiState.preconditionHintMessage!!,
                 icon = Icons.Default.Info,
-                bgColor = AppTheme.colors.insetBed,
+                bgColor = AppTheme.colors.card,
                 textColor = AppTheme.colors.textSecondary
             )
         }
@@ -1061,7 +1334,7 @@ private fun StickyStatusBanner(
             BannerData(
                 text = uiState.message,
                 icon = Icons.Default.CheckCircleOutline,
-                bgColor = AppTheme.colors.primary.copy(alpha = 0.12f),
+                bgColor = AppTheme.colors.card,
                 textColor = AppTheme.colors.primary
             )
         }
@@ -1069,12 +1342,13 @@ private fun StickyStatusBanner(
     } ?: return
 
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(14.dp),
         color = bannerData.bgColor,
+        shadowElevation = 2.dp,
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -1086,7 +1360,8 @@ private fun StickyStatusBanner(
             )
             Text(
                 text = bannerData.text,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
                 color = bannerData.textColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -1102,228 +1377,3 @@ private data class BannerData(
     val bgColor: Color,
     val textColor: Color
 )
-
-@Composable
-private fun StickyMainActionButtons(
-    canResetSession: Boolean,
-    canGenerate: Boolean,
-    status: AnalysisStatus,
-    uiState: AnalysisUiState,
-    onTxtCountChange: (Int) -> Unit,
-    onRequestResetSession: () -> Unit,
-    onCancelWork: () -> Unit,
-    onGenerateTxt: () -> Unit,
-    onGenerate: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 세션 비우기(초기화) 버튼
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = if (canResetSession) AppTheme.colors.card else AppTheme.colors.card.copy(alpha = 0.5f),
-            contentColor = if (canResetSession) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary.copy(alpha = 0.5f),
-            border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
-            modifier = Modifier
-                .size(PrimaryActionButtonHeight)
-                .shadow(
-                    elevation = if (canResetSession) 3.dp else 0.dp,
-                    shape = RoundedCornerShape(14.dp),
-                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-                )
-                .clickable(
-                    enabled = canResetSession,
-                    onClick = onRequestResetSession
-                )
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Icon(
-                    imageVector = Icons.Default.RestartAlt,
-                    contentDescription = "분석 세션 비우기"
-                )
-            }
-        }
-
-        if (status == AnalysisStatus.GENERATING) {
-            // 작업 진행 중 상태: 인라인 진행 표시 및 중지 버튼
-            NeuButton(
-                onClick = onCancelWork,
-                shape = RoundedCornerShape(14.dp),
-                containerColor = MaterialTheme.colorScheme.error,
-                contentColor = MaterialTheme.colorScheme.onError,
-                borderColor = MaterialTheme.colorScheme.error,
-                elevation = 6.dp,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(PrimaryActionButtonHeight)
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onError
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = Icons.Default.Stop,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "${uiState.message.ifBlank { "생성 중..." }} · 중지",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        } else {
-            // 대기/완료 상태: TXT 개수 숫자 입력칸 + TXT 생성 버튼 + 생성 버튼
-            CompactTxtCountInput(
-                count = uiState.txtCount,
-                onCountChange = onTxtCountChange
-            )
-
-            NeuButton(
-                onClick = onGenerateTxt,
-                enabled = canGenerate,
-                isPrimary = true,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(PrimaryActionButtonHeight)
-            ) {
-                Text(
-                    text = "TXT 생성 (${uiState.txtCount})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            NeuButton(
-                onClick = onGenerate,
-                enabled = canGenerate,
-                isPrimary = true,
-                containerColor = AppTheme.colors.accent,
-                contentColor = AppTheme.colors.onPrimary,
-                borderColor = AppTheme.colors.accent,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(PrimaryActionButtonHeight)
-            ) {
-                Text(
-                    text = "생성 (${AnalysisGenerationCountPolicy.FIXED_COUNT})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-/**
- * 하단 고정 액션 줄에 배치되는 컴팩트 숫자 직접 타이핑 입력칸입니다.
- */
-@Composable
-private fun CompactTxtCountInput(
-    count: Int,
-    onCountChange: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val focusManager = LocalFocusManager.current
-    var text by remember { mutableStateOf(count.toString()) }
-    var isFocused by remember { mutableStateOf(false) }
-
-    androidx.compose.runtime.LaunchedEffect(count, isFocused) {
-        if (!isFocused && text != count.toString()) {
-            text = count.toString()
-        }
-    }
-
-    NeuInsetBed(
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier
-            .width(68.dp)
-            .height(PrimaryActionButtonHeight)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 4.dp, vertical = 2.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "TXT 개수",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = AppTheme.colors.textSecondary,
-                maxLines = 1
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                BasicTextField(
-                    value = text,
-                    onValueChange = { input ->
-                        val digits = input.filter { it.isDigit() }.take(3)
-                        text = digits
-                        digits.toIntOrNull()?.let { parsed ->
-                            onCountChange(parsed)
-                        }
-                    },
-                    textStyle = TextStyle(
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AppTheme.colors.textPrimary,
-                        textAlign = TextAlign.Center
-                    ),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            val parsed = text.toIntOrNull()
-                            val coerced = AnalysisTxtCountPolicy.coerce(parsed ?: count)
-                            text = coerced.toString()
-                            onCountChange(coerced)
-                            focusManager.clearFocus(force = true)
-                        }
-                    ),
-                    singleLine = true,
-                    cursorBrush = SolidColor(AppTheme.colors.primary),
-                    modifier = Modifier
-                        .widthIn(min = 20.dp, max = 34.dp)
-                        .onFocusChanged { focusState ->
-                            val wasFocused = isFocused
-                            isFocused = focusState.isFocused
-                            if (wasFocused && !focusState.isFocused) {
-                                val parsed = text.toIntOrNull()
-                                val coerced = AnalysisTxtCountPolicy.coerce(parsed ?: count)
-                                text = coerced.toString()
-                                onCountChange(coerced)
-                            }
-                        }
-                )
-                Text(
-                    text = "개",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    color = AppTheme.colors.textSecondary
-                )
-            }
-        }
-    }
-}

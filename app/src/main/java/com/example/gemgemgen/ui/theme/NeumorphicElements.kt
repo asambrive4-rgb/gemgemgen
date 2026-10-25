@@ -1,4 +1,4 @@
-// 역할: 볼드 테두리와 섀도우를 적용한 뉴모피즘 카드, 버튼, 인셋 베드, 칩, 세그먼트 탭바 및 공통 모달·확인 다이얼로그 셸 UI 요소를 제공합니다.
+// 역할: 토스 스타일의 무테두리(Borderless) 고대비 카드, 버튼, 인셋 베드, 칩, 세그먼트 탭바 및 공통 모달·확인 다이얼로그 셸 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.animation.AnimatedContent
@@ -6,9 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,7 +47,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -59,27 +56,25 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 
 /**
- * 3D 조약돌 카드 (Extruded Pebble Card)
- * 부드러운 엠보싱 섀도우와 선명한 볼드 테두리로 바닥에서 솟아오른 듯한 깊이감을 줍니다.
+ * 토스 스타일 무테두리 클린 카드 (Borderless Clean Card)
+ * 외곽선 없이 배경과 카드의 명도 대비 및 은은한 소프트 그림자로 깔끔한 단계별 분리감을 제공합니다.
  */
 @Composable
 fun NeuCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(18.dp),
+    shape: Shape = RoundedCornerShape(20.dp),
     backgroundColor: Color = AppTheme.colors.card,
-    borderColor: Color = AppTheme.colors.cardBorder,
-    elevation: Dp = 6.dp,
+    @Suppress("UNUSED_PARAMETER") borderColor: Color = Color.Transparent,
+    elevation: Dp = 2.dp,
     content: @Composable () -> Unit
 ) {
     Surface(
-        modifier = modifier
-            .shadow(
-                elevation = elevation,
-                shape = shape,
-                ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.5f),
-                spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f)
-            )
-            .border(BorderStroke(2.dp, borderColor), shape),
+        modifier = modifier.shadow(
+            elevation = elevation,
+            shape = shape,
+            ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.22f),
+            spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.16f)
+        ),
         shape = shape,
         color = backgroundColor,
         content = content
@@ -87,32 +82,28 @@ fun NeuCard(
 }
 
 /**
- * 3D 음각 인셋 베드 (Inset Bed)
- * 텍스트 입력창이나 탭바 트랙처럼 바닥으로 오목하게 들어간 느낌을 줍니다.
+ * 토스 스타일 무테두리 인셋 베드 (Borderless Inset Bed)
+ * 테두리 선 없이 부드러운 톤온톤 면(Surface) 색상 차이만으로 입력 영역과 트랙을 분리합니다.
  */
 @Composable
 fun NeuInsetBed(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(14.dp),
     backgroundColor: Color = AppTheme.colors.insetBed,
-    borderColor: Color = AppTheme.colors.insetBorder,
+    @Suppress("UNUSED_PARAMETER") borderColor: Color = Color.Transparent,
     content: @Composable () -> Unit
 ) {
     Box(
         modifier = modifier
             .clip(shape)
             .background(backgroundColor)
-            .border(BorderStroke(1.5.dp, borderColor), shape)
     ) {
         content()
     }
 }
 
 /**
- * 3D 쫀득한 조약돌 칩 (Pebble Pill Chip)
- */
-/**
- * 3D 쫀득한 조약돌 칩 (Pebble Pill Chip)
+ * 토스 스타일 무테두리 알약 칩 (Clean Pill Chip)
  */
 @Composable
 fun NeuPillChip(
@@ -120,7 +111,7 @@ fun NeuPillChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(10.dp),
+    shape: Shape = RoundedCornerShape(12.dp),
     enabled: Boolean = true,
     height: Dp? = null,
     textStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.labelMedium
@@ -128,33 +119,21 @@ fun NeuPillChip(
     val containerColor = if (selected) {
         AppTheme.colors.primary
     } else {
-        AppTheme.colors.card
+        AppTheme.colors.insetBed
     }
     val contentColor = if (selected) {
         AppTheme.colors.onPrimary
     } else {
         AppTheme.colors.textSecondary
     }
-    val borderStroke = if (selected) {
-        BorderStroke(1.5.dp, AppTheme.colors.primary)
-    } else {
-        null
-    }
 
     Box(
         modifier = modifier
             .then(if (height != null) Modifier.height(height) else Modifier)
-            .shadow(
-                elevation = if (selected) 3.dp else 0.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.25f) else AppTheme.colors.shadowDark.copy(alpha = 0.15f)
-            )
             .clip(shape)
             .background(containerColor)
-            .then(if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = if (height != null) 3.dp else 6.dp),
+            .padding(horizontal = 12.dp, vertical = if (height != null) 3.dp else 7.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -167,7 +146,7 @@ fun NeuPillChip(
 }
 
 /**
- * 3D 쫀득한 클레이 버튼 (Clay Pill Button)
+ * 토스 스타일 무테두리 솔리드 버튼 (Clean Solid Button)
  */
 @Composable
 fun NeuButton(
@@ -178,20 +157,18 @@ fun NeuButton(
     isPrimary: Boolean = true,
     containerColor: Color? = null,
     contentColor: Color? = null,
-    borderColor: Color? = null,
+    @Suppress("UNUSED_PARAMETER") borderColor: Color? = null,
     elevation: Dp? = null,
-    shape: Shape = RoundedCornerShape(12.dp),
+    shape: Shape = RoundedCornerShape(14.dp),
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
     content: @Composable RowScope.() -> Unit
 ) {
-    val defaultBg = if (isPrimary) AppTheme.colors.primary else AppTheme.colors.card
+    val defaultBg = if (isPrimary) AppTheme.colors.primary else AppTheme.colors.insetBed
     val defaultContent = if (isPrimary) AppTheme.colors.onPrimary else AppTheme.colors.textPrimary
-    val defaultBorder = if (isPrimary) AppTheme.colors.primary else AppTheme.colors.cardBorder
-    val defaultElevation = if (isPrimary) 6.dp else 3.dp
+    val defaultElevation = if (isPrimary) 2.dp else 0.dp
 
     val resolvedBg = containerColor ?: defaultBg
     val resolvedContent = contentColor ?: defaultContent
-    val resolvedBorder = borderColor ?: (if (containerColor != null) containerColor else defaultBorder)
     val resolvedElevation = elevation ?: defaultElevation
 
     val shadowBaseColor = AppTheme.colors.shadowDark
@@ -200,14 +177,13 @@ fun NeuButton(
         onClick = onClick,
         enabled = enabled,
         shape = shape,
-        color = if (enabled) resolvedBg else resolvedBg.copy(alpha = 0.5f),
-        contentColor = if (enabled) resolvedContent else resolvedContent.copy(alpha = 0.5f),
-        border = BorderStroke(1.5.dp, resolvedBorder),
+        color = if (enabled) resolvedBg else resolvedBg.copy(alpha = 0.45f),
+        contentColor = if (enabled) resolvedContent else resolvedContent.copy(alpha = 0.45f),
         modifier = modifier.shadow(
             elevation = if (enabled) resolvedElevation else 0.dp,
             shape = shape,
-            ambientColor = shadowBaseColor.copy(alpha = 0.4f),
-            spotColor = shadowBaseColor.copy(alpha = 0.3f)
+            ambientColor = shadowBaseColor.copy(alpha = 0.25f),
+            spotColor = shadowBaseColor.copy(alpha = 0.18f)
         )
     ) {
         Row(
@@ -220,23 +196,25 @@ fun NeuButton(
 }
 
 /**
- * 3D 뉴모피즘 텍스트 입력창 전용 컬러 체계.
+ * 토스 스타일 무테두리 인셋 텍스트 입력창 전용 컬러 체계.
+ * 비포커스 시에는 테두리를 투명하게 숨기고 부드러운 인셋 면(`insetBed`)으로 표시하며,
+ * 포커스 시에만 얇은 포인트 컬러로 활성 상태를 안내합니다.
  */
 @Composable
 fun appTextFieldColors(
-    containerColor: Color = AppTheme.colors.inputBackground,
-    unfocusedBorderColor: Color = AppTheme.colors.inputBorder,
-    focusedBorderColor: Color = AppTheme.colors.primary,
+    containerColor: Color = AppTheme.colors.insetBed,
+    unfocusedBorderColor: Color = Color.Transparent,
+    focusedBorderColor: Color = AppTheme.colors.primary.copy(alpha = 0.55f),
     textColor: Color = AppTheme.colors.textPrimary,
     cursorColor: Color = AppTheme.colors.primary,
-    placeholderColor: Color = AppTheme.colors.textSecondary.copy(alpha = 0.6f)
+    placeholderColor: Color = AppTheme.colors.textSecondary.copy(alpha = 0.65f)
 ): TextFieldColors = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = containerColor,
     unfocusedContainerColor = containerColor,
     disabledContainerColor = containerColor.copy(alpha = 0.6f),
     focusedBorderColor = focusedBorderColor,
     unfocusedBorderColor = unfocusedBorderColor,
-    disabledBorderColor = unfocusedBorderColor.copy(alpha = 0.5f),
+    disabledBorderColor = Color.Transparent,
     focusedTextColor = textColor,
     unfocusedTextColor = textColor,
     disabledTextColor = textColor.copy(alpha = 0.5f),
@@ -280,7 +258,7 @@ fun <T : Any> AppDialogHostShell(
                 .clearFocusOnOutsideTap { focusManager.clearFocus(force = true) },
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+            tonalElevation = 4.dp
         ) {
             AnimatedContent(
                 targetState = activeDialog,
@@ -349,8 +327,8 @@ fun AppConfirmDialogContent(
 }
 
 /**
- * 3D 뉴모피즘 음각 베드 기반 세그먼트 탭바 (Segmented Tab Bar).
- * 메인 상단 탭, 모드 선택, 다이얼로그 내 세그먼트 전환 등에서 일관된 조약돌 탭 UI를 제공합니다.
+ * 토스 스타일 세그먼트 탭바 (Clean Segmented Tab Bar).
+ * 무테두리 인셋 트랙 내부에 선택된 탭을 깨끗한 카드 서피스로 띄워 표시합니다.
  */
 @Composable
 fun <T> NeuSegmentedTabBar(
@@ -360,10 +338,10 @@ fun <T> NeuSegmentedTabBar(
     modifier: Modifier = Modifier,
     itemLabel: (T) -> String = { it.toString() },
     enabled: Boolean = true,
-    height: Dp = 38.dp,
-    shape: Shape = RoundedCornerShape(14.dp),
-    pillShape: Shape = RoundedCornerShape(10.dp),
-    contentPadding: PaddingValues = PaddingValues(3.dp),
+    height: Dp = 40.dp,
+    shape: Shape = RoundedCornerShape(16.dp),
+    pillShape: Shape = RoundedCornerShape(12.dp),
+    contentPadding: PaddingValues = PaddingValues(4.dp),
     tabSpacing: Dp = 0.dp
 ) {
     NeuInsetBed(
@@ -371,8 +349,7 @@ fun <T> NeuSegmentedTabBar(
             .fillMaxWidth()
             .height(height),
         shape = shape,
-        backgroundColor = AppTheme.colors.insetBed,
-        borderColor = AppTheme.colors.insetBorder
+        backgroundColor = AppTheme.colors.insetBed
     ) {
         Row(
             modifier = Modifier
@@ -392,8 +369,8 @@ fun <T> NeuSegmentedTabBar(
                                 Modifier.shadow(
                                     elevation = 2.dp,
                                     shape = pillShape,
-                                    ambientColor = AppTheme.colors.primary.copy(alpha = 0.35f),
-                                    spotColor = AppTheme.colors.primary.copy(alpha = 0.25f)
+                                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f),
+                                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.18f)
                                 )
                             } else {
                                 Modifier
@@ -401,7 +378,7 @@ fun <T> NeuSegmentedTabBar(
                         )
                         .clip(pillShape)
                         .background(
-                            if (isSelected) AppTheme.colors.primary else Color.Transparent
+                            if (isSelected) AppTheme.colors.card else Color.Transparent
                         )
                         .clickable(enabled = enabled) {
                             if (item != selectedItem) {
@@ -412,7 +389,7 @@ fun <T> NeuSegmentedTabBar(
                 ) {
                     Text(
                         text = itemLabel(item),
-                        color = if (isSelected) AppTheme.colors.onPrimary else AppTheme.colors.textSecondary,
+                        color = if (isSelected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
@@ -423,8 +400,8 @@ fun <T> NeuSegmentedTabBar(
 }
 
 /**
- * 3D 뉴모피즘 모달 다이얼로그 공통 외곽 프레임.
- * 크기 비율, 키보드 인셋(imePadding), 외부 탭 포커스 해제, 3D 조약돌 카드 컨테이너를 일관되게 제공합니다.
+ * 모달 다이얼로그 공통 외곽 프레임.
+ * 크기 비율, 키보드 인셋(imePadding), 외부 탭 포커스 해제, 무테두리 카드 컨테이너를 일관되게 제공합니다.
  */
 @Composable
 fun NeuModalDialogFrame(
@@ -450,14 +427,14 @@ fun NeuModalDialogFrame(
             contentAlignment = Alignment.Center
         ) {
             NeuCard(
-                shape = RoundedCornerShape(22.dp),
-                elevation = 6.dp,
+                shape = RoundedCornerShape(24.dp),
+                elevation = 4.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     content = content
                 )
@@ -468,7 +445,6 @@ fun NeuModalDialogFrame(
 
 /**
  * 상단 제목/설명과 하단 취소/확인 액션 버튼을 갖춘 공통 설정 다이얼로그 컨텐츠.
- * AppDialogHostShell 내부나 모달 다이얼로그 윈도우에서 재사용할 수 있는 순수 레이아웃을 제공합니다.
  */
 @Composable
 fun NeuConfigDialogContent(
@@ -522,7 +498,7 @@ fun NeuConfigDialogContent(
                 NeuButton(
                     onClick = onDismiss,
                     isPrimary = false,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.weight(1f),
                     contentModifier = Modifier.fillMaxWidth()
                 ) {
@@ -537,7 +513,7 @@ fun NeuConfigDialogContent(
                     onClick = onConfirm,
                     isPrimary = true,
                     enabled = confirmEnabled,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.weight(1f),
                     contentModifier = Modifier.fillMaxWidth()
                 ) {
@@ -603,7 +579,7 @@ fun NeuConfigDialogFrame(
 }
 
 /**
- * 다이얼로그 내부나 툴바에서 빠른 동작(가져오기, 기본값, 복사 등)을 수행하는 컴팩트 조약돌 액션 칩.
+ * 다이얼로그 내부나 툴바에서 빠른 동작(가져오기, 기본값, 복사 등)을 수행하는 컴팩트 무테두리 액션 칩.
  */
 @Composable
 fun NeuActionChip(
@@ -612,16 +588,16 @@ fun NeuActionChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    NeuCard(
-        shape = RoundedCornerShape(8.dp),
-        elevation = 2.dp,
+    Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(AppTheme.colors.insetBed)
             .clickable(onClick = onClick)
             .semantics { contentDescription = text }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -635,10 +611,9 @@ fun NeuActionChip(
                 text = text,
                 style = MaterialTheme.typography.labelSmall,
                 color = AppTheme.colors.textPrimary,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
                 fontSize = 11.sp
             )
         }
     }
 }
-

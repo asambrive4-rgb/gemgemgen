@@ -1,7 +1,6 @@
-// 역할: 프롬프트 에디터 내 TextFieldState 기반 텍스트 검색창과 일치 항목 이동 네비게이션 UI를 제공합니다.
+// 역할: 프롬프트 에디터 내 TextFieldState 기반 무테두리 인셋 텍스트 검색창과 일치 항목 이동 네비게이션 UI를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -50,10 +49,8 @@ internal fun PromptSearchBar(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        color = AppTheme.colors.card,
-        border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
-        shadowElevation = 2.dp
+        shape = RoundedCornerShape(12.dp),
+        color = AppTheme.colors.insetBed
     ) {
         Row(
             modifier = Modifier

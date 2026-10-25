@@ -1,13 +1,12 @@
-// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 분류 작업을 수행하는 메인 탭 화면 UI를 제공합니다 (TextFieldState 기반 에디터 국소 리컴포지션 격리).
+// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 분류 작업을 수행하는 무테두리 토스 카드 스타일의 메인 탭 화면 UI를 제공합니다 (TextFieldState 기반 에디터 국소 리컴포지션 격리).
 package com.example.gemgemgen.wildcard.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,12 +30,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,7 +42,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
@@ -367,26 +363,20 @@ private fun FileTabIconActionButton(
     contentDescription: String,
     enabled: Boolean,
     activeTint: Color,
-    activeBorderColor: Color,
+    @Suppress("UNUSED_PARAMETER") activeBorderColor: Color,
     onClick: () -> Unit
 ) {
     val actionBtnShape = RoundedCornerShape(10.dp)
+    val bgColor = if (enabled) {
+        activeTint.copy(alpha = 0.14f)
+    } else {
+        AppTheme.colors.insetBed.copy(alpha = 0.6f)
+    }
     Box(
         modifier = Modifier
             .size(36.dp)
-            .shadow(
-                elevation = if (enabled) 2.dp else 0.dp,
-                shape = actionBtnShape,
-                ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
             .clip(actionBtnShape)
-            .background(AppTheme.colors.card)
-            .border(
-                width = 1.dp,
-                color = if (enabled) activeBorderColor else AppTheme.colors.cardBorder,
-                shape = actionBtnShape
-            )
+            .background(bgColor)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -410,61 +400,65 @@ private fun FolderInfoSection(
         setupInfo.wildcardDirectoryPath
     )
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, AppTheme.colors.cardBorder, RoundedCornerShape(12.dp))
-            .background(AppTheme.colors.card, RoundedCornerShape(12.dp))
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+    NeuCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        elevation = 2.dp
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "와일드카드 저장소",
-                color = AppTheme.colors.textSecondary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Text(
-                text = folderPathDesc,
-                color = AppTheme.colors.textPrimary,
-                fontSize = 14.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (!environmentStatus.isWildcardDirectoryAccessible) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
-                    text = "와일드카드 폴더를 선택해주세요.",
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 12.sp
+                    text = "와일드카드 저장소",
+                    color = AppTheme.colors.textSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
                 )
-            } else if (!environmentStatus.isWildcardDirectoryWritable) {
+
                 Text(
-                    text = "파일 편집을 위해 폴더를 다시 선택해주세요.",
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 12.sp
+                    text = folderPathDesc,
+                    color = AppTheme.colors.textPrimary,
+                    fontSize = 14.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (!environmentStatus.isWildcardDirectoryAccessible) {
+                    Text(
+                        text = "와일드카드 폴더를 선택해주세요.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                } else if (!environmentStatus.isWildcardDirectoryWritable) {
+                    Text(
+                        text = "파일 편집을 위해 폴더를 다시 선택해주세요.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 12.dp)
+            ) {
+                FolderActionButton(
+                    label = if (setupInfo.wildcardDirectoryPath.isBlank()) "폴더 선택" else "폴더 변경",
+                    onClick = onSelectFolder
+                )
+                FolderActionButton(
+                    label = "새로고침",
+                    onClick = onRefresh
                 )
             }
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 12.dp)
-        ) {
-            FolderActionButton(
-                label = if (setupInfo.wildcardDirectoryPath.isBlank()) "폴더 선택" else "폴더 변경",
-                onClick = onSelectFolder
-            )
-            FolderActionButton(
-                label = "새로고침",
-                onClick = onRefresh
-            )
         }
     }
 }
@@ -474,15 +468,12 @@ private fun FolderActionButton(
     label: String,
     onClick: () -> Unit
 ) {
-    OutlinedButton(
+    NeuButton(
         onClick = onClick,
-        border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = AppTheme.colors.card,
-            contentColor = AppTheme.colors.textPrimary
-        ),
+        isPrimary = false,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.height(40.dp)
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        modifier = Modifier.height(38.dp)
     ) {
         Text(
             text = label,

@@ -1,4 +1,4 @@
-// 역할: 앱에서 지원하는 테마 색상 팔레트 옵션과 시맨틱 컬러 토큰을 정의합니다.
+// 역할: 앱에서 지원하는 4종 토스 스타일 테마 색상 팔레트(토스 시그니처 기본 포함)와 시맨틱 컬러 토큰을 정의합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.runtime.Composable
@@ -7,8 +7,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
- * GemGemGen 앱의 3가지 소프트 3D 뉴모피즘 테마 색상 팔레트.
- * 기본값은 SAGE_MATCHA (팔레트 2: 노르딕 세이지 & 말차)입니다.
+ * GemGemGen 앱의 4가지 토스 스타일(Clean & Borderless) 테마 색상 팔레트.
+ * 기본값은 TOSS_SIGNATURE (팔레트 0: 토스 시그니처)입니다.
  */
 enum class AppThemePalette(
     val id: String,
@@ -16,27 +16,33 @@ enum class AppThemePalette(
     val description: String,
     val previewColor: Color
 ) {
+    TOSS_SIGNATURE(
+        id = "toss_signature",
+        title = "팔레트 0: 토스 시그니처 (기본값)",
+        description = "차분한 쿨 그레이 배경과 순백색 카드, 선명한 토스 블루",
+        previewColor = Color(0xFF3182F6)
+    ),
     CORAL_CREAM(
         id = "coral_cream",
         title = "팔레트 1: 웜 코랄 크림",
-        description = "포근한 우유빛 아이보리와 생동감 넘치는 코랄 피치",
-        previewColor = Color(0xFFD9532F)
+        description = "포근한 웜 스톤 배경과 순백색 카드, 생동감 있는 테라코타 코랄",
+        previewColor = Color(0xFFE55A34)
     ),
     SAGE_MATCHA(
         id = "sage_matcha",
-        title = "팔레트 2: 노르딕 세이지 (기본값)",
-        description = "눈이 편안한 세이지 그린과 차분한 에메랄드",
-        previewColor = Color(0xFF1B7A5A)
+        title = "팔레트 2: 노르딕 세이지",
+        description = "산뜻한 미스트 그린 배경과 순백색 카드, 차분한 딥 세이지",
+        previewColor = Color(0xFF15805D)
     ),
     PURE_INDIGO(
         id = "pure_indigo",
         title = "팔레트 3: 퓨어 인디고",
-        description = "맑은 쿨 화이트와 청량한 일렉트릭 블루/인디고",
-        previewColor = Color(0xFF2E5EB8)
+        description = "맑은 아이스 블루 배경과 순백색 카드, 세련된 로얄 인디고",
+        previewColor = Color(0xFF4F46E5)
     );
 
     companion object {
-        val DEFAULT = SAGE_MATCHA
+        val DEFAULT = TOSS_SIGNATURE
 
         fun fromId(id: String?): AppThemePalette {
             return entries.firstOrNull { it.id == id } ?: DEFAULT
@@ -75,7 +81,7 @@ enum class AppThemeMode(
 }
 
 /**
- * 소프트 3D 뉴모피즘 디자인 시스템을 위한 시맨틱 컬러 토큰.
+ * 토스 스타일(Clean & Borderless) 디자인 시스템을 위한 시맨틱 컬러 토큰.
  */
 data class AppColors(
     val canvas: Color,
@@ -96,66 +102,86 @@ data class AppColors(
     val snippetShadow: Color = accent.copy(alpha = 0.25f)
 )
 
+val TossSignatureColors = AppColors(
+    canvas = Color(0xFFE9EDF2),
+    card = Color(0xFFFFFFFF),
+    insetBed = Color(0xFFF2F5F8),
+    primary = Color(0xFF3182F6),
+    onPrimary = Color(0xFFFFFFFF),
+    accent = Color(0xFF00C471),
+    textPrimary = Color(0xFF191F28),
+    textSecondary = Color(0xFF8B95A1),
+    cardBorder = Color(0xFFE5E8EB),
+    shadowDark = Color(0xFFCBD5E1),
+    insetBorder = Color(0xFFE8ECEF),
+    inputBackground = Color(0xFFFFFFFF),
+    inputBorder = Color(0xFFD1D6DB),
+    snippetPrimary = Color(0xFF00C471),
+    snippetBorder = Color(0xFF00C471).copy(alpha = 0.45f),
+    snippetShadow = Color(0xFF00C471).copy(alpha = 0.20f)
+)
+
 val CoralCreamColors = AppColors(
-    canvas = Color(0xFFF6F2EA),
-    card = Color(0xFFFAF6EE),
-    insetBed = Color(0xFFF0EAE0),
-    primary = Color(0xFFD9532F),
+    canvas = Color(0xFFEAE3DC),
+    card = Color(0xFFFFFFFF),
+    insetBed = Color(0xFFF4EFEA),
+    primary = Color(0xFFE55A34),
     onPrimary = Color(0xFFFFFFFF),
     accent = Color(0xFFFF8A65),
-    textPrimary = Color(0xFF2E2419),
-    textSecondary = Color(0xFF7A6F62),
-    cardBorder = Color(0xFFEDE4D5),
+    textPrimary = Color(0xFF221C16),
+    textSecondary = Color(0xFF7E7266),
+    cardBorder = Color(0xFFE8E1D7),
     shadowDark = Color(0xFFDCD4C7),
-    insetBorder = Color(0xFFE4DAD0),
+    insetBorder = Color(0xFFEDE7DF),
     inputBackground = Color(0xFFFFFFFF),
-    inputBorder = Color(0xFFC4B6A3),
-    snippetPrimary = Color(0xFF1B7A5A),
-    snippetBorder = Color(0xFF1B7A5A).copy(alpha = 0.45f),
-    snippetShadow = Color(0xFF1B7A5A).copy(alpha = 0.20f)
+    inputBorder = Color(0xFFD5CBBF),
+    snippetPrimary = Color(0xFF15805D),
+    snippetBorder = Color(0xFF15805D).copy(alpha = 0.45f),
+    snippetShadow = Color(0xFF15805D).copy(alpha = 0.20f)
 )
 
 val SageMatchaColors = AppColors(
-    canvas = Color(0xFFEBF0E9),
-    card = Color(0xFFF2F6F0),
-    insetBed = Color(0xFFE2EBE0),
-    primary = Color(0xFF1B7A5A),
+    canvas = Color(0xFFE2EBE4),
+    card = Color(0xFFFFFFFF),
+    insetBed = Color(0xFFEDF3EF),
+    primary = Color(0xFF15805D),
     onPrimary = Color(0xFFFFFFFF),
-    accent = Color(0xFF34D399),
-    textPrimary = Color(0xFF14261C),
-    textSecondary = Color(0xFF52665B),
-    cardBorder = Color(0xFFDEE7DD),
+    accent = Color(0xFF2563EB),
+    textPrimary = Color(0xFF14221B),
+    textSecondary = Color(0xFF64786D),
+    cardBorder = Color(0xFFE0E8E2),
     shadowDark = Color(0xFFC5D3C2),
-    insetBorder = Color(0xFFD3DFD1),
+    insetBorder = Color(0xFFE4EDE6),
     inputBackground = Color(0xFFFFFFFF),
-    inputBorder = Color(0xFF9AB197),
-    snippetPrimary = Color(0xFF2E5EB8),
-    snippetBorder = Color(0xFF2E5EB8).copy(alpha = 0.45f),
-    snippetShadow = Color(0xFF2E5EB8).copy(alpha = 0.20f)
+    inputBorder = Color(0xFFC4D4C8),
+    snippetPrimary = Color(0xFF2563EB),
+    snippetBorder = Color(0xFF2563EB).copy(alpha = 0.45f),
+    snippetShadow = Color(0xFF2563EB).copy(alpha = 0.20f)
 )
 
 val PureIndigoColors = AppColors(
-    canvas = Color(0xFFEEF4FA),
-    card = Color(0xFFF8FAFD),
-    insetBed = Color(0xFFE6EEF8),
-    primary = Color(0xFF2E5EB8),
+    canvas = Color(0xFFE4EAF3),
+    card = Color(0xFFFFFFFF),
+    insetBed = Color(0xFFF0F4FA),
+    primary = Color(0xFF4F46E5),
     onPrimary = Color(0xFFFFFFFF),
-    accent = Color(0xFF6366F1),
-    textPrimary = Color(0xFF0B1A30),
-    textSecondary = Color(0xFF587494),
-    cardBorder = Color(0xFFDEE9F5),
+    accent = Color(0xFFEC4899),
+    textPrimary = Color(0xFF111827),
+    textSecondary = Color(0xFF64748B),
+    cardBorder = Color(0xFFE2E8F0),
     shadowDark = Color(0xFFCCD9E8),
-    insetBorder = Color(0xFFD5E3F2),
+    insetBorder = Color(0xFFE6ECF5),
     inputBackground = Color(0xFFFFFFFF),
-    inputBorder = Color(0xFF9EB7CF),
-    snippetPrimary = Color(0xFFD9532F),
-    snippetBorder = Color(0xFFD9532F).copy(alpha = 0.45f),
-    snippetShadow = Color(0xFFD9532F).copy(alpha = 0.20f)
+    inputBorder = Color(0xFFCBD5E1),
+    snippetPrimary = Color(0xFFE55A34),
+    snippetBorder = Color(0xFFE55A34).copy(alpha = 0.45f),
+    snippetShadow = Color(0xFFE55A34).copy(alpha = 0.20f)
 )
 
-// --- 다크모드 팔레트 (공통 기본 베이스 + 악센트·테두리 팩토리) ---
+// --- 다크모드 팔레트 (선명한 3단계 표면 대비: 딥 블랙 캔버스 -> 다크 슬레이트 카드 -> 인셋 베드) ---
 
 private fun createDarkAppColors(
+    primary: Color,
     accent: Color,
     cardBorder: Color,
     inputBorder: Color,
@@ -163,24 +189,34 @@ private fun createDarkAppColors(
     snippetBorder: Color
 ): AppColors = AppColors(
     canvas = Color(0xFF0A0A0C),
-    card = Color(0xFF16171A),
-    insetBed = Color(0xFF101113),
-    primary = Color(0xFF24272B),
-    onPrimary = Color(0xFFEDEDF0),
+    card = Color(0xFF171B22),
+    insetBed = Color(0xFF222731),
+    primary = primary,
+    onPrimary = Color(0xFFFFFFFF),
     accent = accent,
     textPrimary = Color(0xFFEDEDF0),
-    textSecondary = Color(0xFF8E929B),
+    textSecondary = Color(0xFF9EA6B2),
     cardBorder = cardBorder,
     shadowDark = Color(0x66000000),
-    insetBorder = Color(0xFF202227),
-    inputBackground = Color(0xFF18191D),
+    insetBorder = Color(0xFF2A303C),
+    inputBackground = Color(0xFF222731),
     inputBorder = inputBorder,
     snippetPrimary = snippetPrimary,
     snippetBorder = snippetBorder,
     snippetShadow = Color(0x40000000)
 )
 
+val TossSignatureDarkColors = createDarkAppColors(
+    primary = Color(0xFF3182F6),
+    accent = Color(0xFF00C471),
+    cardBorder = Color(0xFF252830),
+    inputBorder = Color(0xFF2E323C),
+    snippetPrimary = Color(0xFF00C471),
+    snippetBorder = Color(0xFF1A5C40)
+)
+
 val CoralCreamDarkColors = createDarkAppColors(
+    primary = Color(0xFFE55A34),
     accent = Color(0xFFFF8A65),
     cardBorder = Color(0xFF332928),
     inputBorder = Color(0xFF3D3230),
@@ -189,6 +225,7 @@ val CoralCreamDarkColors = createDarkAppColors(
 )
 
 val SageMatchaDarkColors = createDarkAppColors(
+    primary = Color(0xFF15805D),
     accent = Color(0xFF34D399),
     cardBorder = Color(0xFF26302A),
     inputBorder = Color(0xFF2D3830),
@@ -197,7 +234,8 @@ val SageMatchaDarkColors = createDarkAppColors(
 )
 
 val PureIndigoDarkColors = createDarkAppColors(
-    accent = Color(0xFF6366F1),
+    primary = Color(0xFF6366F1),
+    accent = Color(0xFFEC4899),
     cardBorder = Color(0xFF262C36),
     inputBorder = Color(0xFF2D3545),
     snippetPrimary = Color(0xFFFF8A65),
@@ -207,12 +245,14 @@ val PureIndigoDarkColors = createDarkAppColors(
 fun AppThemePalette.toAppColors(isDark: Boolean = false): AppColors {
     return if (isDark) {
         when (this) {
+            AppThemePalette.TOSS_SIGNATURE -> TossSignatureDarkColors
             AppThemePalette.CORAL_CREAM -> CoralCreamDarkColors
             AppThemePalette.SAGE_MATCHA -> SageMatchaDarkColors
             AppThemePalette.PURE_INDIGO -> PureIndigoDarkColors
         }
     } else {
         when (this) {
+            AppThemePalette.TOSS_SIGNATURE -> TossSignatureColors
             AppThemePalette.CORAL_CREAM -> CoralCreamColors
             AppThemePalette.SAGE_MATCHA -> SageMatchaColors
             AppThemePalette.PURE_INDIGO -> PureIndigoColors
@@ -220,7 +260,7 @@ fun AppThemePalette.toAppColors(isDark: Boolean = false): AppColors {
     }
 }
 
-val LocalAppColors = staticCompositionLocalOf { SageMatchaColors }
+val LocalAppColors = staticCompositionLocalOf { TossSignatureColors }
 
 object AppTheme {
     val colors: AppColors
@@ -228,4 +268,3 @@ object AppTheme {
         @ReadOnlyComposable
         get() = LocalAppColors.current
 }
-

@@ -1,7 +1,6 @@
-// 역할: 메인 화면 프롬프트 에디터 하단에 대표 계정의 제미나이 사용률(%·만료 자동 보정)과 70%/90% 주의·경고 컬러를 표시하고, 모달 진입 없이 즉시 새로고침하거나 다중 계정 모달을 여는 요약 바입니다.
+// 역할: 메인 화면 프롬프트 에디터 하단에 대표 계정의 제미나이 사용률(%·만료 자동 보정)과 70%/90% 주의·경고 컬러를 무테두리 토스 카드 스타일로 표시하고, 모달 진입 없이 즉시 새로고침하거나 다중 계정 모달을 여는 요약 바입니다.
 package com.example.gemgemgen.usage.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -52,12 +50,7 @@ internal val MultiUsageWarningRed = Color(0xFFD93025)
 
 @Composable
 internal fun resolveGeminiUsageNormalHighlightColor(): Color {
-    val colors = AppTheme.colors
-    return if (colors.canvas.luminance() < 0.5f) {
-        colors.accent
-    } else {
-        colors.primary
-    }
+    return AppTheme.colors.primary
 }
 
 @Composable
@@ -100,42 +93,36 @@ fun GeminiUsageSummaryButton(
     val summaryButtonText = multiUsageState.summaryButtonText(nowMillis)
 
     val containerColor = when (warningLevel) {
-        GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.11f)
-        GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.10f)
+        GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.14f)
+        GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.13f)
         GeminiUsageWarningLevel.NORMAL -> AppTheme.colors.card
     }
-    val borderColor = when (warningLevel) {
-        GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.75f)
-        GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.75f)
-        GeminiUsageWarningLevel.NORMAL -> AppTheme.colors.cardBorder
-    }
 
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(16.dp)
 
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
             shape = shape,
             color = containerColor,
-            border = BorderStroke(if (isWarningOrCaution) 1.6.dp else 1.3.dp, borderColor),
             modifier = Modifier
                 .weight(1f)
-                .height(38.dp)
+                .height(42.dp)
                 .shadow(
-                    elevation = 3.dp,
+                    elevation = 2.dp,
                     shape = shape,
                     ambientColor = if (isWarningOrCaution) {
-                        accentColor.copy(alpha = 0.35f)
-                    } else {
-                        AppTheme.colors.shadowDark.copy(alpha = 0.4f)
-                    },
-                    spotColor = if (isWarningOrCaution) {
                         accentColor.copy(alpha = 0.25f)
                     } else {
-                        AppTheme.colors.shadowDark.copy(alpha = 0.3f)
+                        AppTheme.colors.shadowDark.copy(alpha = 0.22f)
+                    },
+                    spotColor = if (isWarningOrCaution) {
+                        accentColor.copy(alpha = 0.18f)
+                    } else {
+                        AppTheme.colors.shadowDark.copy(alpha = 0.16f)
                     }
                 )
                 .clip(shape)
@@ -148,7 +135,7 @@ fun GeminiUsageSummaryButton(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -174,9 +161,8 @@ fun GeminiUsageSummaryButton(
 
                     badgeText?.let { badge ->
                         Surface(
-                            shape = RoundedCornerShape(7.dp),
-                            color = accentColor.copy(alpha = 0.16f),
-                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.55f))
+                            shape = RoundedCornerShape(8.dp),
+                            color = accentColor.copy(alpha = 0.15f)
                         ) {
                             Text(
                                 text = badge,
@@ -184,7 +170,7 @@ fun GeminiUsageSummaryButton(
                                 fontWeight = FontWeight.ExtraBold,
                                 color = accentColor,
                                 fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                             )
                         }
                     }
@@ -232,14 +218,13 @@ fun GeminiUsageSummaryButton(
         Surface(
             shape = shape,
             color = AppTheme.colors.card,
-            border = BorderStroke(1.3.dp, AppTheme.colors.cardBorder),
             modifier = Modifier
-                .size(38.dp)
+                .size(42.dp)
                 .shadow(
-                    elevation = 3.dp,
+                    elevation = 2.dp,
                     shape = shape,
-                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
-                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
+                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.22f),
+                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.16f)
                 )
                 .clip(shape)
                 .clickable(
@@ -288,7 +273,6 @@ internal fun GeminiUsageWarningBadge(
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = color.copy(alpha = 0.15f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.45f)),
         modifier = modifier
     ) {
         Text(

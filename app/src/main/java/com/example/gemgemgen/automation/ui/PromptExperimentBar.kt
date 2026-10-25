@@ -1,10 +1,8 @@
-// 역할: 에디터 상단에 펼쳐져 프리셋(세트) 전환, 위치 태그(`{{실험}}`) 원터치 삽입, 2열 조약돌 그리드 기반 실험 프롬프트 번호 선택(기본 4개 상시 노출, 초과 시 세로 스크롤) 및 롱탭 관리를 지원하는 실험(연금술) 바 UI입니다.
+// 역할: 에디터 상단에 펼쳐져 프리셋(세트) 전환, 위치 태그(`{{실험}}`) 원터치 삽입, 2열 무테두리 그리드 기반 실험 프롬프트 번호 선택(기본 4개 상시 노출, 초과 시 세로 스크롤) 및 롱탭 관리를 지원하는 실험(연금술) 바 UI입니다.
 package com.example.gemgemgen.automation.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -121,7 +118,6 @@ internal fun PromptExperimentBar(
                     onClick = onOpenManageDialog,
                     shape = RoundedCornerShape(12.dp),
                     color = AppTheme.colors.card,
-                    border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
@@ -232,16 +228,9 @@ private fun ExperimentPresetDropdownButton(
             onClick = { expanded = true },
             shape = shape,
             color = AppTheme.colors.card,
-            border = BorderStroke(1.5.dp, AppTheme.colors.cardBorder),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
-                .shadow(
-                    elevation = 2.dp,
-                    shape = shape,
-                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-                )
         ) {
             Row(
                 modifier = Modifier
@@ -382,7 +371,6 @@ private fun ExperimentGridChip(
     val shape = RoundedCornerShape(12.dp)
     val containerColor = if (selected) AppTheme.colors.primary else AppTheme.colors.card
     val contentColor = if (selected) AppTheme.colors.onPrimary else AppTheme.colors.textPrimary
-    val borderColor = if (selected) AppTheme.colors.primary else AppTheme.colors.cardBorder
     val badgeBgColor = if (selected) AppTheme.colors.onPrimary.copy(alpha = 0.22f) else AppTheme.colors.insetBed
     val badgeTextColor = if (selected) AppTheme.colors.onPrimary else AppTheme.colors.primary
 
@@ -393,15 +381,8 @@ private fun ExperimentGridChip(
     Row(
         modifier = modifier
             .height(44.dp)
-            .shadow(
-                elevation = if (selected) 4.dp else 1.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.25f) else AppTheme.colors.shadowDark.copy(alpha = 0.15f)
-            )
             .clip(shape)
             .background(containerColor)
-            .border(BorderStroke(if (selected) 2.dp else 1.5.dp, borderColor), shape)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -447,8 +428,7 @@ private fun ExperimentQuickAddGridChip(
         modifier = modifier
             .height(44.dp)
             .clip(shape)
-            .background(AppTheme.colors.card.copy(alpha = 0.65f))
-            .border(BorderStroke(1.5.dp, AppTheme.colors.cardBorder), shape)
+            .background(AppTheme.colors.card.copy(alpha = 0.75f))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

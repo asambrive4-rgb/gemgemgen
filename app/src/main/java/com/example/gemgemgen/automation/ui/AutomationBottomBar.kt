@@ -1,7 +1,6 @@
-// 역할: 자동화 화면 하단에 고정되어 시작·중지·원격 실행을 제어하는 액션 바 UI를 제공합니다.
+// 역할: 자동화 화면 하단에 고정되어 시작·중지·원격 실행을 제어하는 무테두리 플로팅 액션 독 UI를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -70,7 +69,7 @@ internal fun AutomationBottomBar(
                 hasPreStartMemoryCleanup = hasPreStartMemoryCleanup
             )
 
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
             RepeatCountStepper(
                 repeatCountText = repeatCountText,
@@ -146,10 +145,9 @@ internal fun AutomationProgressBadge(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = AppTheme.colors.primary.copy(alpha = 0.15f),
+        color = AppTheme.colors.primary.copy(alpha = 0.14f),
         contentColor = AppTheme.colors.primary,
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.3f)),
         modifier = modifier
     ) {
         Text(

@@ -426,7 +426,7 @@ private fun StatusSettingsDialogContent(
 
             // 테마 색상 팔레트 선택 섹션
             Text(
-                text = "🎨 소프트 3D 테마 팔레트",
+                text = "🎨 토스 스타일 테마 팔레트",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )

@@ -1,7 +1,6 @@
 // 역할: 상단 고정 탭 전환과 하단 키보드 반응형 키보드 닫기 바를 제공하고 화면 간 0ms 무지연 전환을 조율합니다.
 package com.example.gemgemgen.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -99,9 +98,9 @@ internal fun MainTabbedScreen(
                     onItemSelected = onSelectTab,
                     itemLabel = { it.label },
                     height = 38.dp,
-                    shape = RoundedCornerShape(19.dp),
-                    pillShape = RoundedCornerShape(16.dp),
-                    contentPadding = PaddingValues(2.5.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    pillShape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(3.dp),
                     modifier = Modifier
                         .weight(1f)
                         .graphicsLayer()
@@ -113,14 +112,13 @@ internal fun MainTabbedScreen(
                     onClick = onShowSettings,
                     shape = CircleShape,
                     color = AppTheme.colors.card,
-                    border = BorderStroke(1.dp, AppTheme.colors.cardBorder),
                     modifier = Modifier
                         .size(36.dp)
                         .shadow(
-                            elevation = 3.dp,
+                            elevation = 2.dp,
                             shape = CircleShape,
-                            ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
-                            spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
+                            ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.25f),
+                            spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.18f)
                         )
                 ) {
                     Box(
@@ -175,17 +173,10 @@ internal fun MainTabbedScreen(
                     Surface(
                         onClick = { focusManager.clearFocus(force = true) },
                         shape = RoundedCornerShape(14.dp),
-                        color = AppTheme.colors.primary.copy(alpha = 0.12f),
-                        border = BorderStroke(1.5.dp, AppTheme.colors.primary.copy(alpha = 0.45f)),
+                        color = AppTheme.colors.primary.copy(alpha = 0.14f),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(38.dp)
-                            .shadow(
-                                elevation = 3.dp,
-                                shape = RoundedCornerShape(14.dp),
-                                ambientColor = AppTheme.colors.primary.copy(alpha = 0.35f),
-                                spotColor = AppTheme.colors.primary.copy(alpha = 0.25f)
-                            )
                             .semantics { contentDescription = "가상 키보드 닫기" }
                     ) {
                         Row(

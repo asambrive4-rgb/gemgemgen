@@ -1,4 +1,4 @@
-// 역할: 프롬프트 에디터의 인스트럭션 삽입, 문단 편집, 히스토리 탐색 등 액션 버튼 툴바를 제공합니다.
+// 역할: 프롬프트 에디터의 인스트럭션 삽입, 문단 편집, 히스토리 탐색 등 액션 버튼 툴바를 토스 3단계 무테두리 플랫 칩 위계로 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -7,7 +7,6 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -34,6 +33,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -44,12 +45,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -99,10 +98,11 @@ internal fun PromptActionRow(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        // 1행: 시스템 & 디바이스 관리 바 (앱 종료, 리셋, 메모리 정리 ── 문단 편집)
+        // 1행: 시스템 & 디바이스 관리 바 (앱 종료, 리셋, 메모리 정리 ── 변주, 문단 편집)
         PromptSystemDeviceBar(
+            promptTemplateState = promptTemplateState,
             canCloseSelfApp = canCloseSelfApp,
             canCloseGemini = canCloseGemini,
             canCleanMemory = canCleanMemory,
@@ -112,10 +112,15 @@ internal fun PromptActionRow(
             onTerminateSelfApp = onTerminateSelfApp,
             onCloseGeminiApp = onCloseGeminiApp,
             onCleanDeviceMemory = onCleanDeviceMemory,
-            onToggleParagraphSelectionMode = onToggleParagraphSelectionMode
+            onToggleParagraphSelectionMode = onToggleParagraphSelectionMode,
+            showVariationButton = showVariationButton,
+            isVariationButtonEnabled = isVariationButtonEnabled,
+            variationAutomationState = variationAutomationState,
+            onRunVariation = onRunVariation,
+            onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
         )
 
-        // 2행: 프롬프트 에디터 전용 툴바 (히스토리 네비게이션 ── SI 삽입 + 복사 + 가져오기)
+        // 2행: 프롬프트 에디터 전용 툴바 (히스토리 네비게이션 ── 삽입 아이콘군 ── 복사 + 가져오기)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -132,18 +137,12 @@ internal fun PromptActionRow(
             )
 
             PromptEditorActionGroup(
-                promptTemplateState = promptTemplateState,
                 canCopyPrompt = canCopyPrompt,
                 onInsertTopInstruction = onInsertTopInstruction,
                 onInsertBottomInstruction = onInsertBottomInstruction,
                 onOpenInstructionConfigDialog = onOpenInstructionConfigDialog,
                 onImportFromClipboard = onImportFromClipboard,
-                onCopyPromptToClipboard = onCopyPromptToClipboard,
-                showVariationButton = showVariationButton,
-                isVariationButtonEnabled = isVariationButtonEnabled,
-                variationAutomationState = variationAutomationState,
-                onRunVariation = onRunVariation,
-                onOpenVariationPromptConfigDialog = onOpenVariationPromptConfigDialog
+                onCopyPromptToClipboard = onCopyPromptToClipboard
             )
         }
     }
@@ -151,6 +150,7 @@ internal fun PromptActionRow(
 
 @Composable
 internal fun PromptSystemDeviceBar(
+    promptTemplateState: TextFieldState,
     canCloseSelfApp: Boolean,
     canCloseGemini: Boolean,
     canCleanMemory: Boolean,
@@ -161,18 +161,25 @@ internal fun PromptSystemDeviceBar(
     onCloseGeminiApp: () -> Unit,
     onCleanDeviceMemory: () -> Unit,
     onToggleParagraphSelectionMode: () -> Unit,
+    showVariationButton: Boolean = true,
+    isVariationButtonEnabled: Boolean = true,
+    variationAutomationState: AutomationRunState = AutomationRunState.Idle,
+    onRunVariation: (String?) -> Unit = {},
+    onOpenVariationPromptConfigDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ActionIsland {
+        ActionIsland(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             PebbleButton(
                 onClick = onTerminateSelfApp,
                 enabled = canCloseSelfApp && !isMaintenanceBusy,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
                 modifier = Modifier.semantics { contentDescription = "GemGemGen 앱 종료" }
             ) {
                 Row(
@@ -195,7 +202,7 @@ internal fun PromptSystemDeviceBar(
             PebbleButton(
                 onClick = onCloseGeminiApp,
                 enabled = canCloseGemini && !isMaintenanceBusy,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
                 modifier = Modifier.semantics { contentDescription = "Gemini 앱 리셋" }
             ) {
                 Row(
@@ -219,7 +226,7 @@ internal fun PromptSystemDeviceBar(
                 onClick = onCleanDeviceMemory,
                 enabled = canCleanMemory && !isMaintenanceBusy,
                 isHighlighted = isMemoryCleanupScheduled,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
                 modifier = Modifier.semantics {
                     contentDescription = if (isMemoryCleanupScheduled) "메모리 정리 예약됨" else "메모리 정리"
                 }
@@ -233,7 +240,41 @@ internal fun PromptSystemDeviceBar(
             }
         }
 
-        ActionIsland {
+        // 우측: [변주] (일반 버튼 처리) + [문단 편집]
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (showVariationButton) {
+                PebbleButton(
+                    onClick = {
+                        val selectedText = variationSelectedTextAtPress.value
+                            ?: promptTemplateState.selectedTextOrNull()
+                        variationSelectedTextAtPress.value = null
+                        onRunVariation(selectedText)
+                    },
+                    onPointerDown = {
+                        variationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
+                    },
+                    onLongClick = onOpenVariationPromptConfigDialog,
+                    enabled = isVariationButtonEnabled,
+                    isHighlighted = false,
+                    contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
+                    modifier = Modifier.semantics { contentDescription = "변주" }
+                ) {
+                    Text(
+                        text = if (variationAutomationState is AutomationRunState.Running) {
+                            "변주 중"
+                        } else {
+                            "변주"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.colors.textPrimary
+                    )
+                }
+            }
+
             ParagraphSelectionModeButton(
                 selected = isParagraphSelectionMode,
                 onClick = onToggleParagraphSelectionMode
@@ -315,7 +356,6 @@ internal fun PromptHistoryNavigationIsland(
 
 @Composable
 internal fun PromptEditorActionGroup(
-    promptTemplateState: TextFieldState,
     canCopyPrompt: Boolean,
     onInsertTopInstruction: () -> Unit,
     onInsertBottomInstruction: () -> Unit,
@@ -323,104 +363,82 @@ internal fun PromptEditorActionGroup(
     onImportFromClipboard: () -> Unit,
     onCopyPromptToClipboard: () -> Unit,
     showInsertButtons: Boolean = true,
-    showVariationButton: Boolean = true,
-    isVariationButtonEnabled: Boolean = true,
-    variationAutomationState: AutomationRunState = AutomationRunState.Idle,
-    onRunVariation: (String?) -> Unit = {},
-    onOpenVariationPromptConfigDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val variationSelectedTextAtPress = remember { mutableStateOf<String?>(null) }
-
-    ActionIsland(modifier = modifier) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         if (showInsertButtons) {
-            PebbleButton(
-                onClick = onInsertTopInstruction,
-                onLongClick = { onOpenInstructionConfigDialog(InstructionTab.TOP) },
-                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
-                modifier = Modifier.semantics { contentDescription = "상단 삽입" }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "상단 삽입",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
-                )
-            }
+                PebbleButton(
+                    onClick = onInsertTopInstruction,
+                    onLongClick = { onOpenInstructionConfigDialog(InstructionTab.TOP) },
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier
+                        .size(width = 36.dp, height = 36.dp)
+                        .semantics { contentDescription = "상단 삽입" }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VerticalAlignTop,
+                        contentDescription = "상단 삽입",
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
 
-            PebbleButton(
-                onClick = onInsertBottomInstruction,
-                onLongClick = { onOpenInstructionConfigDialog(InstructionTab.BOTTOM) },
-                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
-                modifier = Modifier.semantics { contentDescription = "하단 삽입" }
-            ) {
-                Text(
-                    text = "하단 삽입",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
-                )
+                PebbleButton(
+                    onClick = onInsertBottomInstruction,
+                    onLongClick = { onOpenInstructionConfigDialog(InstructionTab.BOTTOM) },
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier
+                        .size(width = 36.dp, height = 36.dp)
+                        .semantics { contentDescription = "하단 삽입" }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VerticalAlignBottom,
+                        contentDescription = "하단 삽입",
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
             }
         }
 
-        if (showVariationButton) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             PebbleButton(
-                onClick = {
-                    val selectedText = variationSelectedTextAtPress.value
-                        ?: promptTemplateState.selectedTextOrNull()
-                    variationSelectedTextAtPress.value = null
-                    onRunVariation(selectedText)
-                },
-                onPointerDown = {
-                    variationSelectedTextAtPress.value = promptTemplateState.selectedTextOrNull()
-                },
-                onLongClick = onOpenVariationPromptConfigDialog,
-                enabled = isVariationButtonEnabled,
+                onClick = onCopyPromptToClipboard,
+                enabled = canCopyPrompt,
+                isHighlighted = true,
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier
+                    .size(width = 38.dp, height = 36.dp)
+                    .semantics { contentDescription = "프롬프트 복사" }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            PebbleButton(
+                onClick = onImportFromClipboard,
                 isHighlighted = true,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                modifier = Modifier.semantics { contentDescription = "변주" }
+                modifier = Modifier.semantics { contentDescription = "클립보드에서 가져오기" }
             ) {
                 Text(
-                    text = if (variationAutomationState is AutomationRunState.Running) {
-                        "변주 중"
-                    } else {
-                        "변주"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
+                    text = "가져오기",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
-        }
-
-        PebbleButton(
-            onClick = onCopyPromptToClipboard,
-            enabled = canCopyPrompt,
-            isHighlighted = true,
-            contentPadding = PaddingValues(0.dp),
-            modifier = Modifier
-                .size(width = 39.dp, height = 37.dp)
-                .semantics { contentDescription = "프롬프트 복사" }
-        ) {
-            Icon(
-                imageVector = Icons.Default.ContentCopy,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-
-        PebbleButton(
-            onClick = onImportFromClipboard,
-            isHighlighted = true,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-            modifier = Modifier.semantics { contentDescription = "클립보드에서 가져오기" }
-        ) {
-            Text(
-                text = "가져오기",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp
-            )
         }
     }
 }
@@ -428,26 +446,15 @@ internal fun PromptEditorActionGroup(
 @Composable
 internal fun ActionIsland(
     modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(4.dp),
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(5.dp),
     content: @Composable RowScope.() -> Unit
 ) {
-    val islandShape = RoundedCornerShape(12.dp)
-    Surface(
-        shape = islandShape,
-        border = BorderStroke(1.2.dp, AppTheme.colors.insetBorder),
-        color = AppTheme.colors.insetBed,
-        modifier = modifier.graphicsLayer {
-            clip = true
-            shape = islandShape
-        }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
-            horizontalArrangement = horizontalArrangement,
-            verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
-    }
+    Row(
+        modifier = modifier,
+        horizontalArrangement = horizontalArrangement,
+        verticalAlignment = Alignment.CenterVertically,
+        content = content
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -459,15 +466,22 @@ internal fun PebbleButton(
     onLongClick: (() -> Unit)? = null,
     enabled: Boolean = true,
     isHighlighted: Boolean = false,
-    borderColor: Color = if (isHighlighted) AppTheme.colors.primary else AppTheme.colors.cardBorder,
-    containerColor: Color = AppTheme.colors.card,
-    contentColor: Color = AppTheme.colors.textPrimary,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+    @Suppress("UNUSED_PARAMETER") borderColor: Color = Color.Transparent,
+    containerColor: Color = if (isHighlighted) {
+        AppTheme.colors.primary.copy(alpha = 0.14f)
+    } else {
+        AppTheme.colors.insetBed
+    },
+    contentColor: Color = if (isHighlighted) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.textPrimary
+    },
+    contentPadding: PaddingValues = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
     content: @Composable RowScope.() -> Unit
 ) {
-    val resolvedBorderColor = if (enabled) borderColor else borderColor.copy(alpha = 0.45f)
-    val resolvedContainerColor = if (enabled) containerColor else containerColor.copy(alpha = 0.65f)
-    val resolvedContentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.4f)
+    val resolvedContainerColor = if (enabled) containerColor else containerColor.copy(alpha = 0.55f)
+    val resolvedContentColor = if (enabled) contentColor else AppTheme.colors.textSecondary.copy(alpha = 0.38f)
 
     val shape = RoundedCornerShape(10.dp)
     val pointerDownModifier = if (enabled) {
@@ -488,7 +502,7 @@ internal fun PebbleButton(
     }
     Surface(
         modifier = modifier
-            .height(37.dp)
+            .height(36.dp)
             .clip(shape)
             .then(pointerDownModifier)
             .combinedClickable(
@@ -498,8 +512,7 @@ internal fun PebbleButton(
             ),
         shape = shape,
         color = resolvedContainerColor,
-        contentColor = resolvedContentColor,
-        border = BorderStroke(if (isHighlighted) 1.5.dp else 1.2.dp, resolvedBorderColor)
+        contentColor = resolvedContentColor
     ) {
         Row(
             modifier = Modifier.padding(contentPadding),
@@ -517,31 +530,21 @@ internal fun ParagraphSelectionModeButton(
     onClick: () -> Unit
 ) {
     val containerColor = if (selected) {
-        AppTheme.colors.primary.copy(alpha = 0.16f)
+        AppTheme.colors.primary.copy(alpha = 0.14f)
     } else {
-        AppTheme.colors.card
+        AppTheme.colors.insetBed
     }
     val contentColor = if (selected) {
         AppTheme.colors.primary
     } else {
         AppTheme.colors.textSecondary
     }
-    val borderColor = if (selected) {
-        AppTheme.colors.primary
-    } else {
-        AppTheme.colors.cardBorder
-    }
     val shape = RoundedCornerShape(10.dp)
 
     Surface(
         modifier = Modifier
-            .height(37.dp)
-            .shadow(
-                elevation = if (selected) 2.dp else 0.dp,
-                shape = shape,
-                ambientColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.35f) else AppTheme.colors.shadowDark.copy(alpha = 0.3f),
-                spotColor = if (selected) AppTheme.colors.primary.copy(alpha = 0.3f) else AppTheme.colors.shadowDark.copy(alpha = 0.2f)
-            )
+            .height(36.dp)
+            .clip(shape)
             .selectable(
                 selected = selected,
                 enabled = enabled,
@@ -550,11 +553,10 @@ internal fun ParagraphSelectionModeButton(
             ),
         shape = shape,
         color = containerColor,
-        contentColor = contentColor,
-        border = BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor)
+        contentColor = contentColor
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -567,7 +569,7 @@ internal fun ParagraphSelectionModeButton(
             Text(
                 text = "문단 편집",
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                 color = contentColor
             )
         }

@@ -3,18 +3,25 @@ package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.ui.theme.AppTheme
 
 @Composable
 internal fun KeyboardPromptAccessoryBar(
@@ -72,14 +79,35 @@ internal fun KeyboardPromptAccessoryBar(
             }
         }
 
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
-        // 중앙 및 우측: [문단 편집] 별도 섬 + [변주] · [복사] · [가져오기] 섬 (상단/하단 삽입 제외)
+        // 중앙 및 우측: [변주] · [문단 편집] 섬 + [복사] · [가져오기] 섬 (상단/하단 삽입 제외)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            ActionIsland {
+            ActionIsland(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (uiState.automationMode != AutomationMode.RECEIVER) {
+                    PebbleButton(
+                        onClick = {
+                            actions.onClearFocus()
+                            actions.onRunVariation(promptTemplateState.selectedTextOrNull())
+                        },
+                        onLongClick = actions::openVariationPromptConfigDialog,
+                        enabled = uiState.canInteractWithVariation,
+                        isHighlighted = false,
+                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
+                        modifier = Modifier.semantics { contentDescription = "변주" }
+                    ) {
+                        Text(
+                            text = if (uiState.variationAutomationState is AutomationRunState.Running) "변주 중" else "변주",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.textPrimary
+                        )
+                    }
+                }
+
                 ParagraphSelectionModeButton(
                     selected = uiState.editor.isParagraphSelectionMode,
                     onClick = actions.promptEditor::toggleParagraphSelectionMode
@@ -87,22 +115,13 @@ internal fun KeyboardPromptAccessoryBar(
             }
 
             PromptEditorActionGroup(
-                promptTemplateState = promptTemplateState,
                 canCopyPrompt = uiState.hasPromptTemplate,
                 onInsertTopInstruction = actions::insertTopInstruction,
                 onInsertBottomInstruction = actions::insertBottomInstruction,
                 onOpenInstructionConfigDialog = actions::openInstructionConfigDialog,
                 onImportFromClipboard = actions.promptEditor::importPromptFromClipboard,
                 onCopyPromptToClipboard = actions.promptEditor::copyPromptToClipboard,
-                showInsertButtons = false,
-                showVariationButton = uiState.automationMode != AutomationMode.RECEIVER,
-                isVariationButtonEnabled = uiState.canInteractWithVariation,
-                variationAutomationState = uiState.variationAutomationState,
-                onRunVariation = { selectedText ->
-                    actions.onClearFocus()
-                    actions.onRunVariation(selectedText)
-                },
-                onOpenVariationPromptConfigDialog = actions::openVariationPromptConfigDialog
+                showInsertButtons = false
             )
         }
     }

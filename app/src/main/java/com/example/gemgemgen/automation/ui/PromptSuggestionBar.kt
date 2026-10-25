@@ -1,7 +1,6 @@
-// 역할: 와일드카드 및 프롬프트 상용구 추천 칩을 가로 스크롤 목록으로 표시합니다.
+// 역할: 와일드카드 및 프롬프트 상용구 추천 칩을 무테두리 소프트 틴트 가로 스크롤 목록으로 표시합니다.
 package com.example.gemgemgen.automation.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -19,7 +18,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -83,20 +81,15 @@ internal fun WildcardSuggestionChip(
 ) {
     val isSnippet = candidate.type == WildcardTokenAutocomplete.Candidate.Type.SNIPPET
     val shape = RoundedCornerShape(10.dp)
-    val borderColor = if (isSnippet) {
-        AppTheme.colors.snippetBorder
+    val containerColor = if (isSnippet) {
+        AppTheme.colors.snippetPrimary.copy(alpha = 0.14f)
     } else {
-        AppTheme.colors.primary.copy(alpha = 0.4f)
+        AppTheme.colors.primary.copy(alpha = 0.14f)
     }
     val textColor = if (isSnippet) {
         AppTheme.colors.snippetPrimary
     } else {
         AppTheme.colors.primary
-    }
-    val shadowColor = if (isSnippet) {
-        AppTheme.colors.snippetShadow
-    } else {
-        AppTheme.colors.primary.copy(alpha = 0.2f)
     }
     val description = if (isSnippet) {
         "상용구 ${candidate.name} 치환"
@@ -107,18 +100,10 @@ internal fun WildcardSuggestionChip(
     Surface(
         onClick = onClick,
         shape = shape,
-        color = AppTheme.colors.card,
-        border = BorderStroke(1.5.dp, borderColor),
-        modifier = modifier
-            .shadow(
-                elevation = 2.dp,
-                shape = shape,
-                ambientColor = shadowColor,
-                spotColor = shadowColor.copy(alpha = 0.15f)
-            )
-            .semantics {
-                contentDescription = description
-            }
+        color = containerColor,
+        modifier = modifier.semantics {
+            contentDescription = description
+        }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

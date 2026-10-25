@@ -1,4 +1,4 @@
-﻿// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 실험(연금술) 관리 모달 연동, 상용구 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
+// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 실험(연금술) 관리 모달 연동, 상용구 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -29,14 +29,15 @@ import com.example.gemgemgen.remote.ui.AutomationReceiverBottomBar
 import com.example.gemgemgen.remote.ui.resolveConnectionText
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.rememberIsImeVisible
+import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.usage.ui.GeminiUsageSummaryButton
 import com.example.gemgemgen.usage.ui.MultiGeminiUsageDialog
 
 /** 스크롤 본문·키보드 하단 고정 패널이 같은 가로 폭을 쓰도록 공통 패딩 */
-private val AutomationScreenContentPadding = 8.dp
+private val AutomationScreenContentPadding = 12.dp
 
-/** 액션 줄·시작 바·섹션 사이 간격 */
-private val AutomationScreenSectionSpacing = 5.dp
+/** 단계별 카드(프롬프트 입력 / 빠른 도구 / 사용량 요약) 사이 간격 */
+private val AutomationScreenSectionSpacing = 10.dp
 
 @Composable
 internal fun AutomationScreen(
@@ -49,7 +50,10 @@ internal fun AutomationScreen(
     val isKeyboardVisible = rememberIsImeVisible()
     var showPairDialog by remember { mutableStateOf(false) }
 
-    Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = AppTheme.colors.canvas
+    ) { innerPadding ->
         Box(
             modifier = Modifier
                 .padding(innerPadding)
@@ -118,9 +122,9 @@ internal fun AutomationScreen(
                 } else {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                        tonalElevation = 3.dp,
-                        shadowElevation = 8.dp
+                        color = AppTheme.colors.card,
+                        tonalElevation = 2.dp,
+                        shadowElevation = 6.dp
                     ) {
                         Column(
                             modifier = Modifier

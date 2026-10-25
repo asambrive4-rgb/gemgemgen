@@ -1,9 +1,7 @@
-// 역할: 반복 실행 횟수를 숫자로 직접 입력하거나 증감 버튼으로 조절하는 UI를 제공합니다.
+// 역할: 반복 실행 횟수를 숫자로 직접 입력하거나 무테두리 증감 버튼으로 조절하는 UI를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,13 +37,12 @@ internal fun RepeatCountStepper(
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         NeuInsetBed(
-            shape = RoundedCornerShape(14.dp),
-            backgroundColor = AppTheme.colors.insetBed,
-            borderColor = AppTheme.colors.insetBorder
+            shape = RoundedCornerShape(12.dp),
+            backgroundColor = AppTheme.colors.insetBed
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp)
             ) {
                 StepperButton(
                     symbol = "—",
@@ -85,39 +81,20 @@ private fun StepperButton(
 
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(36.dp)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
-                .then(
-                    if (enabled) {
-                        Modifier.shadow(
-                            elevation = 2.dp,
-                            shape = buttonShape,
-                            ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.4f),
-                            spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.3f)
-                        )
-                    } else {
-                        Modifier
-                    }
-                )
+                .size(32.dp)
                 .clip(buttonShape)
                 .background(
                     color = if (enabled) {
                         AppTheme.colors.card
                     } else {
-                        AppTheme.colors.card.copy(alpha = 0.4f)
+                        AppTheme.colors.card.copy(alpha = 0.45f)
                     }
-                )
-                .border(
-                    BorderStroke(
-                        1.5.dp,
-                        if (enabled) AppTheme.colors.cardBorder else AppTheme.colors.cardBorder.copy(alpha = 0.4f)
-                    ),
-                    buttonShape
                 ),
             contentAlignment = Alignment.Center
         ) {
