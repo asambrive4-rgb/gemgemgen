@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 실험(연금술) 세트/항목 관리 및 위치 태그 합성, 상용구/와일드카드(일괄 치환 포함), 다중 계정 제미나이 사용량 모니터링 상태 및 모달 제어, 자동/예약 메모리 정리를 총괄 관리하는 뷰모델입니다.
+﻿// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 실험 세트 관리, 상용구/연동 와일드카드 자동완성 및 일괄 치환, 제미나이 사용량 모니터링, 메모리 정리를 총괄 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -44,6 +44,8 @@ import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository
 import com.example.gemgemgen.wildcard.usecase.WildcardFileRepository
+import com.example.gemgemgen.wildcard.usecase.WildcardLinkedFilesRepository
+import com.example.gemgemgen.wildcard.usecase.loadWildcardSets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -88,6 +90,7 @@ class AutomationViewModel(
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
     private val automationSettingsStore: com.example.gemgemgen.automation.android.AutomationSettingsStore? = null,
     private val multiGeminiUsageRepository: MultiGeminiUsageRepository? = null,
+    private val wildcardLinkedFilesRepository: WildcardLinkedFilesRepository? = null,
     coroutineScope: CoroutineScope? = null
 ) : ViewModel(), AutomationScreenActions {
     private val scope = coroutineScope ?: viewModelScope
@@ -119,6 +122,14 @@ class AutomationViewModel(
         _automationBarUiState.asStateFlow()
 
     init {
+        refreshAutocompleteCandidates()
+        wildcardLinkedFilesRepository?.let { repo ->
+            scope.launch {
+                repo.observeLinkedFileNames().collect {
+                    refreshAutocompleteCandidates()
+                }
+            }
+        }
         scope.launch {
             promptEditor.editorUiState.collect { editorState ->
                 _uiState.update { current ->
@@ -509,32 +520,76 @@ class AutomationViewModel(
     }
 
 
-    /** 와일드카드 폴더 및 상용구 목록으로 추천 후보를 다시 읽는다. */
+    private data class SnippetCatalogSnapshot(
+        val candidates: List<WildcardTokenAutocomplete.Candidate>,
+        val snippets: List<PromptSnippet>,
+        val categories: List<String>
+    )
+
+    /** 와일드카드 폴더, 상용구 및 카테고리 목록으로 추천 후보를 다시 읽는다. */
     fun refreshAutocompleteCandidates() {
         scope.launch {
-            val (combined, snippets) = withContext(dispatchers.io) {
+            val catalog = withContext(dispatchers.io) {
                 loadSortedCandidatesAndSnippets()
             }
-            promptEditor.updateAutocompleteCandidates(combined)
+            promptEditor.updateAutocompleteCandidates(catalog.candidates)
             _uiState.update { state ->
-                state.copy(promptSnippets = snippets)
+                state.copy(
+                    promptSnippets = catalog.snippets,
+                    promptSnippetCategories = catalog.categories
+                )
             }
         }
     }
 
-    private fun loadSortedCandidatesAndSnippets(): Pair<List<WildcardTokenAutocomplete.Candidate>, List<PromptSnippet>> {
+    private fun loadSortedCandidatesAndSnippets(): SnippetCatalogSnapshot {
         val wildcardCandidates = runCatching {
             WildcardTokenAutocomplete.candidatesFromFileNames(
                 wildcardFileRepository?.listFiles().orEmpty().map { it.fileName }
             )
         }.getOrDefault(emptyList())
         val snippets = runCatching { promptSnippetRepository?.load().orEmpty() }.getOrDefault(emptyList())
+        val storedCategories = runCatching { promptSnippetRepository?.loadCategories().orEmpty() }.getOrDefault(emptyList())
+        val mergedCategories = mergeSnippetCategories(storedCategories, snippets)
+        if (mergedCategories != storedCategories) {
+            runCatching { promptSnippetRepository?.saveCategories(mergedCategories) }
+        }
         val snippetCandidates = WildcardTokenAutocomplete.candidatesFromSnippets(snippets)
-        val combined = (wildcardCandidates + snippetCandidates).sortedWith(
+        val linkedFileNames = runCatching { wildcardLinkedFilesRepository?.getLinkedFileNames().orEmpty() }.getOrDefault(emptySet())
+        val linkedSets = if (linkedFileNames.isNotEmpty()) {
+            runCatching { wildcardFileRepository?.loadWildcardSets(linkedFileNames).orEmpty() }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+        val wildcardItemCandidates = WildcardTokenAutocomplete.candidatesFromWildcardSets(linkedSets)
+        val combined = (wildcardCandidates + snippetCandidates + wildcardItemCandidates).sortedWith(
             WildcardTokenAutocomplete.CANDIDATE_COMPARATOR
-
         )
-        return combined to snippets
+        return SnippetCatalogSnapshot(
+            candidates = combined,
+            snippets = snippets,
+            categories = mergedCategories
+        )
+    }
+
+    private fun mergeSnippetCategories(
+        storedCategories: List<String>,
+        snippets: List<PromptSnippet>
+    ): List<String> {
+        val result = mutableListOf<String>()
+        storedCategories.forEach { cat ->
+            val trimmed = cat.trim()
+            if (trimmed.isNotEmpty() && result.none { it.equals(trimmed, ignoreCase = true) }) {
+                result.add(trimmed)
+            }
+        }
+        snippets.forEach { snippet ->
+            val trimmed = snippet.category.trim()
+            if (trimmed.isNotEmpty() && result.none { it.equals(trimmed, ignoreCase = true) }) {
+                result.add(trimmed)
+            }
+        }
+        return result
     }
 
     override fun showPromptSnippetDialog() {
@@ -545,18 +600,27 @@ class AutomationViewModel(
         _uiState.update { it.copy(showPromptSnippetDialog = false) }
     }
 
-    override fun addPromptSnippet(shortcut: String, content: String) {
+    override fun addPromptSnippet(shortcut: String, content: String, category: String) {
         scope.launch {
             withContext(dispatchers.io) {
+                val trimmedCategory = category.trim()
                 val current = promptSnippetRepository?.load().orEmpty().toMutableList()
                 current.removeAll { it.shortcut.equals(shortcut.trim(), ignoreCase = true) }
                 current.add(
                     PromptSnippet(
                         shortcut = shortcut.trim(),
-                        content = content.trim()
+                        content = content.trim(),
+                        category = trimmedCategory
                     )
                 )
                 promptSnippetRepository?.save(current)
+                if (trimmedCategory.isNotEmpty()) {
+                    val categories = promptSnippetRepository?.loadCategories().orEmpty().toMutableList()
+                    if (categories.none { it.equals(trimmedCategory, ignoreCase = true) }) {
+                        categories.add(trimmedCategory)
+                        promptSnippetRepository?.saveCategories(categories)
+                    }
+                }
             }
             refreshAutocompleteCandidates()
         }
@@ -573,17 +637,26 @@ class AutomationViewModel(
         }
     }
 
-    override fun updatePromptSnippet(id: String, shortcut: String, content: String) {
+    override fun updatePromptSnippet(id: String, shortcut: String, content: String, category: String) {
         scope.launch {
             withContext(dispatchers.io) {
+                val trimmedCategory = category.trim()
                 val current = promptSnippetRepository?.load().orEmpty().toMutableList()
                 val index = current.indexOfFirst { it.id == id }
                 if (index != -1) {
                     current[index] = current[index].copy(
                         shortcut = shortcut.trim(),
-                        content = content.trim()
+                        content = content.trim(),
+                        category = trimmedCategory
                     )
                     promptSnippetRepository?.save(current)
+                }
+                if (trimmedCategory.isNotEmpty()) {
+                    val categories = promptSnippetRepository?.loadCategories().orEmpty().toMutableList()
+                    if (categories.none { it.equals(trimmedCategory, ignoreCase = true) }) {
+                        categories.add(trimmedCategory)
+                        promptSnippetRepository?.saveCategories(categories)
+                    }
                 }
             }
             refreshAutocompleteCandidates()
@@ -598,6 +671,116 @@ class AutomationViewModel(
                 val (updated, changedCount) = useCase.replaceContent(current, searchText, replacementText)
                 if (changedCount > 0) {
                     promptSnippetRepository?.save(updated)
+                }
+            }
+            refreshAutocompleteCandidates()
+        }
+    }
+
+    override fun addPromptSnippetCategory(category: String) {
+        val trimmed = category.trim()
+        if (trimmed.isEmpty()) return
+        scope.launch {
+            withContext(dispatchers.io) {
+                val current = promptSnippetRepository?.loadCategories().orEmpty().toMutableList()
+                if (current.none { it.equals(trimmed, ignoreCase = true) }) {
+                    current.add(trimmed)
+                    promptSnippetRepository?.saveCategories(current)
+                }
+            }
+            refreshAutocompleteCandidates()
+        }
+    }
+
+    override fun renamePromptSnippetCategory(oldCategory: String, newCategory: String) {
+        val oldTrimmed = oldCategory.trim()
+        val newTrimmed = newCategory.trim()
+        if (oldTrimmed.isEmpty() || newTrimmed.isEmpty()) return
+        scope.launch {
+            withContext(dispatchers.io) {
+                val currentCategories = promptSnippetRepository?.loadCategories().orEmpty().toMutableList()
+                val index = currentCategories.indexOfFirst { it.equals(oldTrimmed, ignoreCase = true) }
+                if (index != -1) {
+                    val duplicateIndex = currentCategories.indexOfFirst {
+                        it.equals(newTrimmed, ignoreCase = true)
+                    }
+                    if (duplicateIndex != -1 && duplicateIndex != index) {
+                        currentCategories.removeAt(index)
+                    } else {
+                        currentCategories[index] = newTrimmed
+                    }
+                    promptSnippetRepository?.saveCategories(currentCategories)
+                }
+
+                val currentSnippets = promptSnippetRepository?.load().orEmpty()
+                var changed = false
+                val updatedSnippets = currentSnippets.map { snippet ->
+                    if (snippet.category.trim().equals(oldTrimmed, ignoreCase = true)) {
+                        changed = true
+                        snippet.copy(category = newTrimmed)
+                    } else {
+                        snippet
+                    }
+                }
+                if (changed) {
+                    promptSnippetRepository?.save(updatedSnippets)
+                }
+            }
+            refreshAutocompleteCandidates()
+        }
+    }
+
+    override fun deletePromptSnippetCategory(category: String) {
+        val trimmed = category.trim()
+        if (trimmed.isEmpty()) return
+        scope.launch {
+            withContext(dispatchers.io) {
+                val currentCategories = promptSnippetRepository?.loadCategories().orEmpty()
+                    .filterNot { it.equals(trimmed, ignoreCase = true) }
+                promptSnippetRepository?.saveCategories(currentCategories)
+
+                // 소속 상용구들은 삭제하지 않고 안전하게 '미분류("")' 상태로 전환
+                val currentSnippets = promptSnippetRepository?.load().orEmpty()
+                var changed = false
+                val updatedSnippets = currentSnippets.map { snippet ->
+                    if (snippet.category.trim().equals(trimmed, ignoreCase = true)) {
+                        changed = true
+                        snippet.copy(category = "")
+                    } else {
+                        snippet
+                    }
+                }
+                if (changed) {
+                    promptSnippetRepository?.save(updatedSnippets)
+                }
+            }
+            refreshAutocompleteCandidates()
+        }
+    }
+
+    override fun movePromptSnippetCategory(category: String, delta: Int) {
+        val trimmed = category.trim()
+        if (trimmed.isEmpty()) return
+        scope.launch {
+            withContext(dispatchers.io) {
+                val current = promptSnippetRepository?.loadCategories().orEmpty()
+                val fromIndex = current.indexOfFirst { it.equals(trimmed, ignoreCase = true) }
+                val updated = PromptExperimentPolicy.moveElement(current, fromIndex, delta)
+                if (updated != current) {
+                    promptSnippetRepository?.saveCategories(updated)
+                }
+            }
+            refreshAutocompleteCandidates()
+        }
+    }
+
+    override fun reorderPromptSnippetCategories(fromIndex: Int, toIndex: Int) {
+        scope.launch {
+            withContext(dispatchers.io) {
+                val current = promptSnippetRepository?.loadCategories().orEmpty()
+                val updated = PromptExperimentPolicy.moveElementTo(current, fromIndex, toIndex)
+                if (updated != current) {
+                    promptSnippetRepository?.saveCategories(updated)
                 }
             }
             refreshAutocompleteCandidates()
@@ -1230,13 +1413,13 @@ class AutomationViewModel(
                     loadSortedCandidatesAndSnippets()
                 )
             }
-            val (combined, snippets) = candidatesAndSnippets
+            val catalog = candidatesAndSnippets
             val snapshot = initialState.lastRunSnapshot
             val history = initialState.historyItems
             val defaultRepeat = AppDefaults.DEFAULT_REPEAT_COUNT.toString()
             val restoredPrompt = _uiState.value.promptTemplate.ifBlank { snapshot?.promptTemplate.orEmpty() }
 
-            promptEditor.updateAutocompleteCandidates(combined)
+            promptEditor.updateAutocompleteCandidates(catalog.candidates)
             promptEditor.restorePrompt(restoredPrompt)
             promptEditor.syncHistoryItems(history.map { it.prompt })
 
@@ -1248,7 +1431,8 @@ class AutomationViewModel(
                     flowImageCount = snapshot?.flowImageCount ?: it.flowImageCount,
                     environmentStatus = report.status,
                     environmentSetupInfo = report.setupInfo,
-                    promptSnippets = snippets,
+                    promptSnippets = catalog.snippets,
+                    promptSnippetCategories = catalog.categories,
                     experimentPresets = initialState.experimentPresets,
                     activeExperimentPresetId = initialState.activeExperimentPresetId,
                     promptInstructionConfig = initialState.instructionConfig,

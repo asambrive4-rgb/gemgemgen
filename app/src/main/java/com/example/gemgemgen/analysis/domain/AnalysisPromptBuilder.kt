@@ -1,4 +1,4 @@
-// 역할: 카테고리와 변주 방향 지시(User directive 최우선 적용)에 맞춰 완화된 규칙으로 AI 분석·생성 프롬프트와 JSON 스키마를 조립합니다.
+// 역할: 카테고리와 변주 방향 지시(User directive 최우선 적용, 생성 단계에서도 재명시)에 맞춰 완화된 규칙으로 AI 분석·생성 프롬프트와 JSON 스키마를 조립합니다.
 package com.example.gemgemgen.analysis.domain
 
 import kotlinx.serialization.json.JsonArray
@@ -140,6 +140,9 @@ Category Rules (User directive always overrides these when they conflict):
 Variation goal (from analysis; follow this as the primary creative objective):
 $variationGoal
 
+User directive (restated; top priority, the variation goal must never weaken or contradict it):
+$userDirectiveText
+
 Context:
 - Current visual context: ${formatVisualContext(analysisReport.visualContext)}
 - Target visual context: ${formatVisualContext(analysisReport.targetVisualContext)}
@@ -174,9 +177,11 @@ $userDirectiveText
     ): String {
         val items = selectedHints + listOfNotNull(customHint?.trim()?.takeIf { it.isNotEmpty() })
         if (items.isEmpty()) return "NONE"
-        return items
-            .mapIndexed { index, item -> "${index + 1}. \"$item\"" }
+        val numbered = items
+            .mapIndexed { index, item -> "${index + 1}. \"${item.replace("\"", "'")}\"" }
             .joinToString(separator = "\n")
+        if (items.size == 1) return numbered
+        return "$numbered\n(Satisfy all items together; if two items truly conflict, the later-numbered item wins.)"
     }
 
 

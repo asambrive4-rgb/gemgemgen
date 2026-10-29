@@ -1,4 +1,4 @@
-// 역할: 자동화 화면 하단에 고정되어 시작·중지·원격 실행을 제어하는 무테두리 플로팅 액션 독 UI를 제공합니다.
+// 역할: 자동화 화면 하단에 고정되어 시작·중지·원격 실행을 제어하고 최신 실행·유지보수 상태를 단일 행(말줄임)으로 표시하는 무테두리 플로팅 액션 독 UI를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +44,7 @@ internal fun AutomationBottomBar(
     automationState: AutomationRunState,
     isRemoteSendMode: Boolean = false,
     hasPreStartMemoryCleanup: Boolean = false,
+    footerStatus: FooterStatusInfo? = null,
     modifier: Modifier = Modifier
 ) {
     NeuCard(
@@ -80,6 +81,7 @@ internal fun AutomationBottomBar(
 
             AutomationStatusSection(
                 automationState = automationState,
+                footerStatus = footerStatus,
                 modifier = Modifier
                     .weight(1f)
                     .padding(start = 4.dp)
@@ -91,16 +93,36 @@ internal fun AutomationBottomBar(
 @Composable
 private fun AutomationStatusSection(
     automationState: AutomationRunState,
+    footerStatus: FooterStatusInfo? = null,
     modifier: Modifier = Modifier
 ) {
-    val statusText = AutomationUiText.statusText(automationState)
-    val isError = automationState is AutomationRunState.Failure
+    val isRunning = automationState is AutomationRunState.Running
+    val isAutomationFailure = automationState is AutomationRunState.Failure
 
-    val dotColor = when {
-        isError -> MaterialTheme.colorScheme.error
-        automationState is AutomationRunState.Running -> AppTheme.colors.primary
-        automationState is AutomationRunState.Success -> AppTheme.colors.primary
-        else -> AppTheme.colors.cardBorder
+    val (displayText, isError, dotColor) = when {
+        isRunning -> Triple(
+            AutomationUiText.statusText(automationState),
+            false,
+            AppTheme.colors.primary
+        )
+        isAutomationFailure -> Triple(
+            AutomationUiText.statusText(automationState),
+            true,
+            MaterialTheme.colorScheme.error
+        )
+        footerStatus != null -> Triple(
+            footerStatus.text,
+            footerStatus.isError,
+            if (footerStatus.isError) MaterialTheme.colorScheme.error else AppTheme.colors.primary
+        )
+        else -> Triple(
+            AutomationUiText.statusText(automationState),
+            false,
+            when (automationState) {
+                is AutomationRunState.Success -> AppTheme.colors.primary
+                else -> AppTheme.colors.cardBorder
+            }
+        )
     }
 
     Row(
@@ -114,7 +136,7 @@ private fun AutomationStatusSection(
             color = dotColor
         ) {}
 
-        if (automationState is AutomationRunState.Running &&
+        if (isRunning &&
             automationState.currentIndex != null &&
             automationState.totalCount != null
         ) {
@@ -125,16 +147,18 @@ private fun AutomationStatusSection(
         }
 
         Text(
-            text = statusText,
+            text = displayText,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Ellipsis,
             color = if (isError) {
                 MaterialTheme.colorScheme.error
             } else {
                 AppTheme.colors.textSecondary
-            }
+            },
+            modifier = Modifier.weight(1f, fill = false)
         )
     }
 }

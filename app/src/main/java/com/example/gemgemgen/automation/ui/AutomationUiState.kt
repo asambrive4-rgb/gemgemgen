@@ -1,4 +1,4 @@
-// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
+// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 상용구·카테고리 목록, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
@@ -48,6 +48,8 @@ data class AutomationUiState(
     val showExperimentDialog: Boolean = false,
     /** 등록된 프롬프트 상용구(스니펫) 목록 */
     val promptSnippets: List<com.example.gemgemgen.automation.domain.PromptSnippet> = emptyList(),
+    /** 등록된 프롬프트 상용구 카테고리 이름 및 순서 목록 */
+    val promptSnippetCategories: List<String> = emptyList(),
     /** 상용구(텍스트 대치) 관리 다이얼로그 표시 여부 */
     val showPromptSnippetDialog: Boolean = false,
     val promptInstructionConfig: com.example.gemgemgen.automation.domain.PromptInstructionConfig =

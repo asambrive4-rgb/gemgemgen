@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
+import com.example.gemgemgen.analysis.domain.AnalysisDefaultDirections
 import com.example.gemgemgen.analysis.domain.AnalysisDirectionInput
 import com.example.gemgemgen.analysis.domain.AnalysisDirectionCatalog
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
@@ -259,7 +260,7 @@ class AnalysisViewModel(
             val nextIds = if (id in state.selectedDirectionIds) {
                 state.selectedDirectionIds - id
             } else {
-                state.selectedDirectionIds + id
+                state.selectedDirectionIds - AnalysisDefaultDirections.conflictingIds(id) + id
             }
             state.copy(
                 sourcePrompt = source,

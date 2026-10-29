@@ -1,4 +1,4 @@
-// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량, 프롬프트 실험 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
+﻿// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량, 프롬프트 실험 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.Context
@@ -158,7 +158,8 @@ class AndroidAppContainer(context: Context) {
                 targetAppLauncher = AndroidTargetAppLauncher(appContext)
             ),
             automationSettingsStore = automationSettingsStore,
-            multiGeminiUsageRepository = multiGeminiUsageRepository
+            multiGeminiUsageRepository = multiGeminiUsageRepository,
+            wildcardLinkedFilesRepository = wildcardFolderRepository
         )
     }
 

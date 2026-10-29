@@ -99,7 +99,9 @@ data class AppColors(
     val inputBorder: Color,
     val snippetPrimary: Color = accent,
     val snippetBorder: Color = accent.copy(alpha = 0.55f),
-    val snippetShadow: Color = accent.copy(alpha = 0.25f)
+    val snippetShadow: Color = accent.copy(alpha = 0.25f),
+    val wildcardItemPrimary: Color = Color(0xFF7C3AED),
+    val wildcardItemBorder: Color = Color(0xFF7C3AED).copy(alpha = 0.45f)
 )
 
 val TossSignatureColors = AppColors(
@@ -118,7 +120,9 @@ val TossSignatureColors = AppColors(
     inputBorder = Color(0xFFD1D6DB),
     snippetPrimary = Color(0xFF00C471),
     snippetBorder = Color(0xFF00C471).copy(alpha = 0.45f),
-    snippetShadow = Color(0xFF00C471).copy(alpha = 0.20f)
+    snippetShadow = Color(0xFF00C471).copy(alpha = 0.20f),
+    wildcardItemPrimary = Color(0xFF7C3AED),
+    wildcardItemBorder = Color(0xFF7C3AED).copy(alpha = 0.45f)
 )
 
 val CoralCreamColors = AppColors(
@@ -137,7 +141,9 @@ val CoralCreamColors = AppColors(
     inputBorder = Color(0xFFD5CBBF),
     snippetPrimary = Color(0xFF15805D),
     snippetBorder = Color(0xFF15805D).copy(alpha = 0.45f),
-    snippetShadow = Color(0xFF15805D).copy(alpha = 0.20f)
+    snippetShadow = Color(0xFF15805D).copy(alpha = 0.20f),
+    wildcardItemPrimary = Color(0xFF4338CA),
+    wildcardItemBorder = Color(0xFF4338CA).copy(alpha = 0.45f)
 )
 
 val SageMatchaColors = AppColors(
@@ -156,7 +162,9 @@ val SageMatchaColors = AppColors(
     inputBorder = Color(0xFFC4D4C8),
     snippetPrimary = Color(0xFF2563EB),
     snippetBorder = Color(0xFF2563EB).copy(alpha = 0.45f),
-    snippetShadow = Color(0xFF2563EB).copy(alpha = 0.20f)
+    snippetShadow = Color(0xFF2563EB).copy(alpha = 0.20f),
+    wildcardItemPrimary = Color(0xFFD97706),
+    wildcardItemBorder = Color(0xFFD97706).copy(alpha = 0.45f)
 )
 
 val PureIndigoColors = AppColors(
@@ -175,7 +183,9 @@ val PureIndigoColors = AppColors(
     inputBorder = Color(0xFFCBD5E1),
     snippetPrimary = Color(0xFFE55A34),
     snippetBorder = Color(0xFFE55A34).copy(alpha = 0.45f),
-    snippetShadow = Color(0xFFE55A34).copy(alpha = 0.20f)
+    snippetShadow = Color(0xFFE55A34).copy(alpha = 0.20f),
+    wildcardItemPrimary = Color(0xFF0D9488),
+    wildcardItemBorder = Color(0xFF0D9488).copy(alpha = 0.45f)
 )
 
 // --- 다크모드 팔레트 (선명한 3단계 표면 대비: Level 1 마일드 토스 다크: 캔버스 #0D1117 -> 부유 카드 #1C222D -> 인셋 베드 #131720) ---
@@ -186,7 +196,9 @@ private fun createDarkAppColors(
     cardBorder: Color,
     inputBorder: Color,
     snippetPrimary: Color,
-    snippetBorder: Color
+    snippetBorder: Color,
+    wildcardItemPrimary: Color = Color(0xFFA78BFA),
+    wildcardItemBorder: Color = Color(0xFF5B21B6)
 ): AppColors = AppColors(
     canvas = Color(0xFF0D1117),
     card = Color(0xFF1C222D),
@@ -203,7 +215,9 @@ private fun createDarkAppColors(
     inputBorder = inputBorder,
     snippetPrimary = snippetPrimary,
     snippetBorder = snippetBorder,
-    snippetShadow = Color(0x40000000)
+    snippetShadow = Color(0x40000000),
+    wildcardItemPrimary = wildcardItemPrimary,
+    wildcardItemBorder = wildcardItemBorder
 )
 
 val TossSignatureDarkColors = createDarkAppColors(
@@ -212,7 +226,9 @@ val TossSignatureDarkColors = createDarkAppColors(
     cardBorder = Color(0xFF252830),
     inputBorder = Color(0xFF2E323C),
     snippetPrimary = Color(0xFF00C471),
-    snippetBorder = Color(0xFF1A5C40)
+    snippetBorder = Color(0xFF1A5C40),
+    wildcardItemPrimary = Color(0xFFA78BFA),
+    wildcardItemBorder = Color(0xFF5B21B6)
 )
 
 val CoralCreamDarkColors = createDarkAppColors(
@@ -221,7 +237,9 @@ val CoralCreamDarkColors = createDarkAppColors(
     cardBorder = Color(0xFF332928),
     inputBorder = Color(0xFF3D3230),
     snippetPrimary = Color(0xFF34D399),
-    snippetBorder = Color(0xFF205E44)
+    snippetBorder = Color(0xFF205E44),
+    wildcardItemPrimary = Color(0xFF818CF8),
+    wildcardItemBorder = Color(0xFF3730A3)
 )
 
 val SageMatchaDarkColors = createDarkAppColors(
@@ -230,7 +248,9 @@ val SageMatchaDarkColors = createDarkAppColors(
     cardBorder = Color(0xFF26302A),
     inputBorder = Color(0xFF2D3830),
     snippetPrimary = Color(0xFF82AAFF),
-    snippetBorder = Color(0xFF435B88)
+    snippetBorder = Color(0xFF435B88),
+    wildcardItemPrimary = Color(0xFFFBBF24),
+    wildcardItemBorder = Color(0xFF92400E)
 )
 
 val PureIndigoDarkColors = createDarkAppColors(
@@ -239,7 +259,9 @@ val PureIndigoDarkColors = createDarkAppColors(
     cardBorder = Color(0xFF262C36),
     inputBorder = Color(0xFF2D3545),
     snippetPrimary = Color(0xFFFF8A65),
-    snippetBorder = Color(0xFF7A3B2B)
+    snippetBorder = Color(0xFF7A3B2B),
+    wildcardItemPrimary = Color(0xFF2DD4BF),
+    wildcardItemBorder = Color(0xFF115E59)
 )
 
 fun AppThemePalette.toAppColors(isDark: Boolean = false): AppColors {

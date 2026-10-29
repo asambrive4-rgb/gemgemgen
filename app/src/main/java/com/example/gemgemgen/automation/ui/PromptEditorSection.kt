@@ -1,4 +1,4 @@
-// 역할: 프롬프트 에디터의 2단 분리형 토스 카드(카드 1: 프롬프트 입력 워크스페이스 / 카드 2: 빠른 도구 모음), 무테두리 대상 앱 드롭다운 및 자동화 모드 헤더, 실험·검색·추천 칩 바를 제공합니다.
+// 역할: 프롬프트 에디터의 2단 분리형 토스 카드(카드 1: 프롬프트 입력 워크스페이스 / 카드 2: 빠른 도구 모음), 무테두리 대상 앱 드롭다운 및 통일된 상용구·실험·검색 헤더 버튼, 실험·검색·추천 칩 바를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -75,17 +75,6 @@ internal fun PromptEditorSection(
     showWildcardSuggestions: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val subBarStatusInfo = resolveFooterStatus(
-        maintenanceMessage = uiState.maintenanceMessage,
-        variationAutomationState = uiState.variationAutomationState,
-        automationMode = if (uiState.automationMode == AutomationMode.RECEIVER) {
-            AutomationMode.NORMAL
-        } else {
-            uiState.automationMode
-        },
-        remoteStatus = uiState.remoteAutomationStatus
-    )
-
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -124,8 +113,8 @@ internal fun PromptEditorSection(
                         uiState.automationMode
                     },
                     status = uiState.remoteAutomationStatus,
-                    statusText = subBarStatusInfo?.text,
-                    isStatusError = subBarStatusInfo?.isError == true,
+                    statusText = null,
+                    isStatusError = false,
                     onRequestPair = onRequestPair
                 )
 
@@ -306,7 +295,6 @@ internal fun PromptEditorHeader(
             HeaderIconPillButton(
                 icon = Icons.Default.Bookmarks,
                 isActive = false,
-                tintOverride = AppTheme.colors.accent,
                 contentDescription = "상용구(텍스트 대치) 관리",
                 onClick = onShowPromptSnippetDialog
             )
@@ -326,8 +314,7 @@ private fun HeaderIconPillButton(
     icon: ImageVector,
     isActive: Boolean,
     contentDescription: String,
-    onClick: () -> Unit,
-    tintOverride: androidx.compose.ui.graphics.Color? = null
+    onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(10.dp)
     val bgColor = if (isActive) {
@@ -335,10 +322,10 @@ private fun HeaderIconPillButton(
     } else {
         AppTheme.colors.insetBed
     }
-    val iconTint = when {
-        isActive -> AppTheme.colors.primary
-        tintOverride != null -> tintOverride
-        else -> AppTheme.colors.textSecondary
+    val iconTint = if (isActive) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.textSecondary
     }
 
     Box(

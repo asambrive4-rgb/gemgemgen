@@ -10,6 +10,7 @@ interface WildcardScreenActions {
     fun onRefresh() {}
     fun onSelectFolder() {}
     fun selectFile(file: WildcardTextFile) {}
+    fun toggleAutocompleteLink(file: WildcardTextFile) {}
     fun requestNewFile() {}
     fun onNewFileNameChange(name: String) {}
     fun createNewFile() {}

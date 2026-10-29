@@ -1,4 +1,4 @@
-// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 실험(연금술) 액션, 다중 계정 제미나이 액션 및 상용구 일괄 치환 액션을 제공하는 안정적인(Stable) UI 액션 인터페이스입니다.
+// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 실험(연금술) 액션, 다중 계정 제미나이 액션 및 상용구·카테고리 관리 액션을 제공하는 안정적인(Stable) UI 액션 인터페이스입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.runtime.Stable
@@ -60,13 +60,18 @@ interface AutomationScreenActions {
     fun moveExperimentItem(presetId: String, itemId: String, delta: Int) {}
     fun reorderExperimentItems(presetId: String, fromIndex: Int, toIndex: Int) {}
 
-    // 상용구 (Prompt Snippet)
+    // 상용구 (Prompt Snippet) 및 카테고리 관리
     fun showPromptSnippetDialog() {}
     fun dismissPromptSnippetDialog() {}
-    fun addPromptSnippet(shortcut: String, content: String) {}
-    fun updatePromptSnippet(id: String, shortcut: String, content: String) {}
+    fun addPromptSnippet(shortcut: String, content: String, category: String = "") {}
+    fun updatePromptSnippet(id: String, shortcut: String, content: String, category: String = "") {}
     fun deletePromptSnippet(id: String) {}
     fun batchReplacePromptSnippets(searchText: String, replacementText: String) {}
+    fun addPromptSnippetCategory(category: String) {}
+    fun renamePromptSnippetCategory(oldCategory: String, newCategory: String) {}
+    fun deletePromptSnippetCategory(category: String) {}
+    fun movePromptSnippetCategory(category: String, delta: Int) {}
+    fun reorderPromptSnippetCategories(fromIndex: Int, toIndex: Int) {}
 
     // 유지보수 및 앱 제어
     fun closeGeminiApp() {}

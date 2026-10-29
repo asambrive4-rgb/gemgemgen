@@ -1,6 +1,7 @@
-// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 분류 작업을 수행하는 무테두리 토스 카드 스타일의 메인 탭 화면 UI를 제공합니다 (TextFieldState 기반 에디터 국소 리컴포지션 격리).
+// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 상용구 칩 연동 및 분류 작업을 수행하는 무테두리 토스 카드 스타일의 메인 탭 화면 UI를 제공합니다 (TextFieldState 기반 에디터 국소 리컴포지션 격리).
 package com.example.gemgemgen.wildcard.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
@@ -35,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -77,13 +80,15 @@ internal fun WildcardScreen(
     val selectedFile = uiState.editor.selectedFile
     val isKeyboardVisible = rememberIsImeVisible()
     val isDirty = uiState.editor.hasUnsavedChanges
-    val fileItems = remember(uiState.files, selectedFile?.id, isDirty) {
+    val fileItems = remember(uiState.files, selectedFile?.id, isDirty, uiState.linkedFileNames) {
         uiState.files.map { file ->
             val isSelected = selectedFile?.id == file.id
+            val isLinked = file.fileName in uiState.linkedFileNames
             WildcardFileUiItem(
                 file = file,
                 displayName = if (isSelected && isDirty) "${file.fileName} *" else file.fileName,
-                isSelected = isSelected
+                isSelected = isSelected,
+                isLinkedToAutocomplete = isLinked
             )
         }
     }
@@ -149,6 +154,44 @@ internal fun WildcardScreen(
                             modifier = Modifier.weight(1f)
                         )
                         if (selectedFile != null && !uiState.isLineSelectionMode) {
+                            val isLinked = uiState.isCurrentFileLinkedToAutocomplete
+                            Surface(
+                                onClick = { actions.toggleAutocompleteLink(selectedFile) },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isLinked) {
+                                    AppTheme.colors.wildcardItemPrimary.copy(alpha = 0.15f)
+                                } else {
+                                    Color.Transparent
+                                },
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isLinked) {
+                                        AppTheme.colors.wildcardItemPrimary.copy(alpha = 0.45f)
+                                    } else {
+                                        AppTheme.colors.cardBorder
+                                    }
+                                ),
+                                modifier = Modifier.padding(end = 4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Bookmarks,
+                                        contentDescription = null,
+                                        tint = if (isLinked) AppTheme.colors.wildcardItemPrimary else AppTheme.colors.textSecondary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = if (isLinked) "상용구 연동 됨" else "상용구 연동",
+                                        color = if (isLinked) AppTheme.colors.wildcardItemPrimary else AppTheme.colors.textSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isLinked) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
                             TextButton(
                                 onClick = actions.classify::requestClassify,
                                 enabled = uiState.canRequestClassify
@@ -319,8 +362,10 @@ private fun FileTabsSection(
                         items = fileItems,
                         key = { it.file.id }
                     ) { item ->
+                        val baseName = item.displayName.removeSuffix(".txt")
+                        val label = if (item.isLinkedToAutocomplete) "🔖 $baseName" else baseName
                         NeuPillChip(
-                            text = item.displayName.removeSuffix(".txt"),
+                            text = label,
                             selected = item.isSelected,
                             onClick = { onFileClick(item.file) },
                             shape = RoundedCornerShape(14.dp)

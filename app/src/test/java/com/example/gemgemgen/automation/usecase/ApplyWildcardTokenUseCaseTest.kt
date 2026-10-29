@@ -1,4 +1,4 @@
-// 역할: 와일드카드 토큰 및 상용구 치환 규칙 동작과 안전성 조건을 검증합니다.
+// 역할: 와일드카드 토큰 및 상용구(단축어·카테고리 접두사 매칭 포함) 치환 규칙 동작과 안전성 조건을 검증합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
@@ -188,5 +188,28 @@ class ApplyWildcardTokenUseCaseTest {
 
         assertNotNull(result)
         assertEquals("여성은 두툼하고 존재감이 뚜렷한 두꺼운 허벅지.", result?.newText)
+    }
+
+    @Test
+    fun invoke_replacesWhenWordAtCursorMatchesSnippetCategoryPrefix() {
+        val snippetCandidate = Candidate(
+            name = "고화질",
+            token = "8k masterpiece, best quality",
+            displayText = "고화질",
+            category = "스타일",
+            type = Candidate.Type.SNIPPET
+        )
+        val text = "배경은 스타"
+        val result = useCase(
+            text = text,
+            selectionStart = text.length,
+            selectionEnd = text.length,
+            candidate = snippetCandidate,
+            candidates = listOf(snippetCandidate)
+        )
+
+        assertNotNull(result)
+        assertEquals("배경은 8k masterpiece, best quality", result?.newText)
+        assertEquals("배경은 8k masterpiece, best quality".length, result?.cursorAfter)
     }
 }

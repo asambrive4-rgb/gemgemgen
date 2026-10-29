@@ -20,7 +20,14 @@ fun WildcardFileRepository.loadWildcardSets(tokens: Set<String>? = null): List<W
         .mapNotNull { file ->
             val token = WildcardFileParser.tokenFromFileName(file.fileName)
                 ?: return@mapNotNull null
-            if (tokens != null && token !in tokens) return@mapNotNull null
+            if (tokens != null) {
+                val baseName = file.fileName.removeSuffix(".txt")
+                val isMatched = token in tokens ||
+                    file.fileName in tokens ||
+                    baseName in tokens ||
+                    token.removePrefix("__").removeSuffix("__") in tokens
+                if (!isMatched) return@mapNotNull null
+            }
             val text = runCatching { readFile(file) }.getOrDefault("")
             WildcardSet(
                 token = token,

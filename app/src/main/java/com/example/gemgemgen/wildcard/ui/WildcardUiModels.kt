@@ -7,7 +7,8 @@ import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 data class WildcardFileUiItem(
     val file: WildcardTextFile,
     val displayName: String,
-    val isSelected: Boolean
+    val isSelected: Boolean,
+    val isLinkedToAutocomplete: Boolean = false
 )
 
 data class WildcardUiState(
@@ -29,10 +30,15 @@ data class WildcardUiState(
     val isLineSelectionMode: Boolean = false,
     /** [selectableLines] 인덱스 집합. 파일 순서로 조립한다. */
     val selectedLineIndices: Set<Int> = emptySet(),
-    val classify: WildcardClassifyUiState = WildcardClassifyUiState()
+    val classify: WildcardClassifyUiState = WildcardClassifyUiState(),
+    /** 상용구 자동완성 칩 연동 대상 와일드카드 파일명 집합 */
+    val linkedFileNames: Set<String> = emptySet()
 ) {
     val selectableLines: List<String>
         get() = editor.selectableLines
+
+    val isCurrentFileLinkedToAutocomplete: Boolean
+        get() = editor.selectedFile?.let { it.fileName in linkedFileNames } ?: false
 
     val canCreateFile: Boolean
         get() = canModifyFiles && !isFileOperationInProgress && !isLineSelectionMode && !classify.isBusy

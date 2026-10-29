@@ -1,4 +1,4 @@
-// 역할: PromptSnippetStore의 Preferences DataStore 기반 상용구 저장, 복원 및 JSON 직렬화 동작을 검증합니다.
+// 역할: PromptSnippetStore의 Preferences DataStore 기반 상용구·카테고리 저장, 복원 및 JSON 직렬화 동작을 검증합니다.
 package com.example.gemgemgen.automation.android
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -56,6 +56,7 @@ class PromptSnippetStoreTest {
             id = "snip-001",
             shortcut = "품질",
             content = "masterpiece, best quality, ultra-detailed",
+            category = "스타일",
             createdAtMillis = 1700000000000L
         )
         store.save(listOf(snippet))
@@ -66,7 +67,17 @@ class PromptSnippetStoreTest {
         assertEquals("snip-001", item.id)
         assertEquals("품질", item.shortcut)
         assertEquals("masterpiece, best quality, ultra-detailed", item.content)
+        assertEquals("스타일", item.category)
         assertEquals(1700000000000L, item.createdAtMillis)
+    }
+
+    @Test
+    fun saveCategories_and_loadCategories_preservesOrderAndDeduplicatesCaseInsensitively() {
+        assertTrue(store.loadCategories().isEmpty())
+
+        store.saveCategories(listOf("스타일", "조명", "카메라", "스타일", "  "))
+        val loaded = store.loadCategories()
+        assertEquals(listOf("스타일", "조명", "카메라"), loaded)
     }
 
     @Test

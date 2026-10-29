@@ -1,4 +1,4 @@
-// 역할: 분석 모델의 기본 상수 설정, 4가지 변주 방향 지시문 및 완화된 카테고리 규칙을 검증합니다.
+// 역할: 분석 모델의 기본 상수 설정, 4가지 변주 방향 지시문(모순 칩 해제·카테고리 공통 안내 포함) 및 완화된 카테고리 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
@@ -39,6 +39,18 @@ class AnalysisModelsTest {
         assertEquals("다른계열", otherLineage.title)
         assertTrue(otherLineage.hint.contains("흰 셔츠, 슬랙스"))
         assertFalse(otherLineage.hint.contains("dark fantasy"))
+    }
+
+    @Test
+    fun `모순되는 기본 칩은 서로를 해제 대상으로 돌려준다`() {
+        assertEquals(setOf("detail-add"), AnalysisDefaultDirections.conflictingIds("length-only"))
+        assertEquals(setOf("same-lineage-other-kind"), AnalysisDefaultDirections.conflictingIds("other-lineage"))
+        assertTrue(AnalysisDefaultDirections.conflictingIds("user-abc").isEmpty())
+    }
+
+    @Test
+    fun `기본 칩은 의상 외 카테고리 적용 안내를 포함한다`() {
+        assertTrue(AnalysisDefaultDirections.values.all { it.hint.contains("for other categories") })
     }
 
     @Test

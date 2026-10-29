@@ -1,4 +1,4 @@
-// 역할: AI 분석 요청 상태, 결과 데이터, 세그먼트 모델, 4가지 기본 변주 방향 지시문 및 생성 개수/쿼터 정책을 정의합니다.
+// 역할: AI 분석 요청 상태, 결과 데이터, 세그먼트 모델, 4가지 기본 변주 방향 지시문(동시 선택 불가 묶음 포함) 및 생성 개수/쿼터 정책을 정의합니다.
 package com.example.gemgemgen.analysis.domain
 
 enum class AnalysisStatus {
@@ -85,26 +85,40 @@ data class AnalysisDirection(
 
 /** 모든 카테고리 공통으로 제공하는 기본 추천 방향 칩. */
 object AnalysisDefaultDirections {
+    /** 칩 예시가 의상 기준이라, 다른 카테고리에서는 그 카테고리의 요소에 같은 규칙을 적용하도록 안내한다. */
+    private const val EXAMPLE_NOTE =
+        " (The example is for clothing; for other categories, apply the same rule to that category's own elements, e.g. camera, texture, location, pose, expression.)"
+
+    /** 동시에 고를 수 없는(서로 모순되는) 기본 칩 묶음. 하나를 고르면 같은 묶음의 다른 칩은 해제된다. */
+    val exclusiveGroups: List<Set<String>> = listOf(
+        setOf("length-only", "detail-add"),
+        setOf("same-lineage-other-kind", "other-lineage")
+    )
+
+    /** [id]를 새로 선택할 때 함께 해제해야 하는 칩 id 목록. */
+    fun conflictingIds(id: String): Set<String> =
+        exclusiveGroups.firstOrNull { id in it }.orEmpty() - id
+
     val values = listOf(
         AnalysisDirection(
             id = "length-only",
             title = "분량 추가",
-            hint = "Do NOT invent new items, ornaments, or extra details; keep the exact same subject, items, and meaning as the original segment, and rewrite it into a noticeably longer, fuller phrasing by expanding the wording of those same elements (e.g. '흰 크롭티, 청바지' -> '깔끔한 흰색 톤의 짧은 크롭 티셔츠 상의와 기본 푸른 데님 소재의 청바지를 매치한 착장')."
+            hint = "Do NOT invent new items, ornaments, or extra details; keep the exact same subject, items, and meaning as the original segment, and rewrite it into a noticeably longer, fuller phrasing by expanding the wording of those same elements (e.g. '흰 크롭티, 청바지' -> '깔끔한 흰색 톤의 짧은 크롭 티셔츠 상의와 기본 푸른 데님 소재의 청바지를 매치한 착장')." + EXAMPLE_NOTE
         ),
         AnalysisDirection(
             id = "detail-add",
             title = "디테일 추가",
-            hint = "Keep the exact original items/nouns as the base, and enrich each element by attaching specific visual details such as prints/graphics, accessories, ornaments, fit, cut, or material modifiers (e.g. '흰 크롭티, 청바지' -> '커다란 해바라기가 전면에 프린팅된 흰 크롭티, 얇은 가죽 벨트 로우라이즈 청바지'). Allow the length to expand naturally to include the added details."
+            hint = "Keep the exact original items/nouns as the base, and enrich each element by attaching specific visual details such as prints/graphics, accessories, ornaments, fit, cut, or material modifiers (e.g. '흰 크롭티, 청바지' -> '커다란 해바라기가 전면에 프린팅된 흰 크롭티, 얇은 가죽 벨트 로우라이즈 청바지'). Allow the length to expand naturally to include the added details." + EXAMPLE_NOTE
         ),
         AnalysisDirection(
             id = "same-lineage-other-kind",
             title = "같은계열 다른 종류",
-            hint = "Stay within the same style family, mood, and vibe as the original segment, but swap each item or element 1:1 to a different kind/sub-type and adjacent color or material within that same family while keeping a similar concise structure (e.g. '흰 크롭티, 청바지' -> '베이지 크롭 나시, 데님 미니스커트')."
+            hint = "Stay within the same style family, mood, and vibe as the original segment, but swap each item or element 1:1 to a different kind/sub-type and adjacent color or material within that same family while keeping a similar concise structure (e.g. '흰 크롭티, 청바지' -> '베이지 크롭 나시, 데님 미니스커트')." + EXAMPLE_NOTE
         ),
         AnalysisDirection(
             id = "other-lineage",
             title = "다른계열",
-            hint = "Shift the style family to a distinctly different realistic lineage (e.g. casual to formal/office, sporty, or chic) while keeping the corresponding pairing structure and concise length of the original segment, without jumping to unrelated fantasy genres (e.g. '흰 크롭티, 청바지' -> '흰 셔츠, 슬랙스')."
+            hint = "Shift the style family to a distinctly different realistic lineage (e.g. casual to formal/office, sporty, or chic) while keeping the corresponding pairing structure and concise length of the original segment, without jumping to unrelated fantasy genres (e.g. '흰 크롭티, 청바지' -> '흰 셔츠, 슬랙스')." + EXAMPLE_NOTE
         )
     )
 }

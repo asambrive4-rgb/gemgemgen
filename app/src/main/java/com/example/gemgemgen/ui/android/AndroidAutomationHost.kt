@@ -1,4 +1,4 @@
-// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함) 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
+﻿// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함) 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
@@ -162,13 +162,9 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         }
         if (selectedTab != tab) {
             trimInactiveTabs(exceptTab = tab)
-            // 와일드카드 탭에서 파일 추가/이름변경/삭제 후 자동화 탭으로 돌아왔을 때만 추천 목록 갱신
+            // 와일드카드 탭에서 연동 설정 변경이나 파일 수정 후 자동화 탭으로 돌아왔을 때 추천 목록 갱신
             if (tab == MainTab.AUTOMATION && selectedTab == MainTab.WILDCARD) {
-                val currentFiles = getInitializedWildcardViewModel()?.uiState?.value?.files
-                if (currentFiles != null && currentFiles != lastSyncedWildcardFiles) {
-                    lastSyncedWildcardFiles = currentFiles
-                    automationViewModel.refreshAutocompleteCandidates()
-                }
+                automationViewModel.refreshAutocompleteCandidates()
             }
         }
         selectedTab = tab

@@ -1,4 +1,4 @@
-// 역할: 프롬프트 상용구 모델 생성, 수정 및 자동완성 후보 변환 로직을 검증합니다.
+// 역할: 프롬프트 상용구(카테고리 포함) 모델 생성, 수정 및 자동완성 후보 변환 로직을 검증합니다.
 package com.example.gemgemgen.automation.usecase
 
 import com.example.gemgemgen.automation.domain.PromptSnippet
@@ -23,8 +23,8 @@ class PromptSnippetTest {
     fun candidatesFromSnippets_transformsSnippetsCorrectly() {
         val fakeRepo = FakePromptSnippetRepository(
             listOf(
-                PromptSnippet(shortcut = "품질", content = "masterpiece, best quality"),
-                PromptSnippet(shortcut = "구도", content = "cinematic lighting, dynamic angle")
+                PromptSnippet(shortcut = "품질", content = "masterpiece, best quality", category = "스타일"),
+                PromptSnippet(shortcut = "구도", content = "cinematic lighting, dynamic angle", category = "카메라")
             )
         )
 
@@ -33,8 +33,8 @@ class PromptSnippetTest {
         assertEquals(2, candidates.size)
         // 구도(2), 품질(2) -> 이름순
         assertTrue(candidates.all { it.type == Candidate.Type.SNIPPET })
-        assertTrue(candidates.any { it.name == "품질" && it.token == "masterpiece, best quality" && it.displayText == "품질" })
-        assertTrue(candidates.any { it.name == "구도" && it.token == "cinematic lighting, dynamic angle" && it.displayText == "구도" })
+        assertTrue(candidates.any { it.name == "품질" && it.token == "masterpiece, best quality" && it.displayText == "품질" && it.category == "스타일" })
+        assertTrue(candidates.any { it.name == "구도" && it.token == "cinematic lighting, dynamic angle" && it.displayText == "구도" && it.category == "카메라" })
     }
 
     @Test

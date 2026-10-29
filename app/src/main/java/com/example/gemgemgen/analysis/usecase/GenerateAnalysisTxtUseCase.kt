@@ -1,4 +1,4 @@
-// 역할: 인증 조회와 프롬프트 조립을 병렬 준비해 AI 분석 결과를 바탕으로 후보 결과물을 관대하게 생성합니다.
+// 역할: 인증 조회와 프롬프트 조립을 병렬 준비해 AI 분석 결과를 바탕으로 후보 결과물을 관대하게 생성하고 중복 후보를 제거합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
@@ -80,7 +80,7 @@ class GenerateAnalysisTxtUseCase(
                     AnalysisSourceRange(targetSegment.startIndex, targetSegment.endIndex, targetSegment.text), candidate
                 )), analysisReport)
             }
-        }
+        }.distinct()
         val warning = if (candidates.size < normalizedCount) {
             "요청한 ${normalizedCount}개보다 적은 ${candidates.size}개만 생성되었습니다."
         } else {

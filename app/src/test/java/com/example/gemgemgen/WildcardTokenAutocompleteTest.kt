@@ -1,4 +1,4 @@
-// 역할: 와일드카드 토큰 및 상용구 자동완성 제안 목록 추출 및 우선순위 정렬을 검증합니다.
+﻿// 역할: 와일드카드 토큰·상용구·연동 와일드카드 개별 항목 자동완성 제안 목록 추출, 3단계 우선순위 정렬 및 텍스트 치환을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
@@ -78,7 +78,7 @@ class WildcardTokenAutocompleteTest {
     }
 
     @Test
-    fun suggestCandidates_limitsToMaxFiveByDefault() {
+    fun suggestCandidates_returnsAllMatchingCandidatesWithoutLimitByDefault() {
         val many = (1..10).map { i ->
             Candidate(name = "a$i", token = "__a${i}__")
         }
@@ -87,7 +87,7 @@ class WildcardTokenAutocompleteTest {
             cursor = 1,
             candidates = many
         )
-        assertEquals(5, result.size)
+        assertEquals(10, result.size)
     }
 
     @Test
@@ -270,5 +270,158 @@ class WildcardTokenAutocompleteTest {
 
         assertEquals("프롬프트 시작 8k masterpiece, photorealistic, best quality", replacement?.newText)
         assertEquals("프롬프트 시작 8k masterpiece, photorealistic, best quality".length, replacement?.cursorAfter)
+    }
+
+    @Test
+    fun suggestCandidates_matchesCategoryPrefixAndPrioritizesDirectShortcutMatchFirst() {
+        val snippets = listOf(
+            com.example.gemgemgen.automation.domain.PromptSnippet(
+                shortcut = "고화질",
+                content = "8k masterpiece",
+                category = "스타일"
+            ),
+            com.example.gemgemgen.automation.domain.PromptSnippet(
+                shortcut = "시네마틱",
+                content = "cinematic lighting",
+                category = "스타일"
+            ),
+            com.example.gemgemgen.automation.domain.PromptSnippet(
+                shortcut = "스타일링",
+                content = "fashion styling",
+                category = "의상"
+            )
+        )
+        val wildcardCandidates = listOf(
+            Candidate(name = "스타디움", token = "__스타디움__", displayText = "__스타디움__", type = Candidate.Type.WILDCARD)
+        )
+        val combined = wildcardCandidates + WildcardTokenAutocomplete.candidatesFromSnippets(snippets)
+
+        // "스타" 입력 시:
+        // 1순위: 단축어 직접 접두사 일치 ("스타일링")
+        // 2순위: 카테고리 접두사 일치 ("[스타일] 고화질", "[스타일] 시네마틱")
+        // 3순위: 와일드카드 접두사 일치 ("__스타디움__")
+        val suggestions = WildcardTokenAutocomplete.suggestCandidates(
+            text = "스타",
+            cursor = 2,
+            candidates = combined
+        )
+
+        assertEquals(
+            listOf("스타일링", "고화질", "시네마틱", "스타디움"),
+            suggestions.map { it.name }
+        )
+        assertEquals("의상", suggestions[0].category)
+        assertEquals("스타일", suggestions[1].category)
+        assertEquals("스타일", suggestions[2].category)
+    }
+
+    @Test
+    fun candidatesFromWildcardSets_mapsItemsToWildcardItemCandidates() {
+        val wildcardSets = listOf(
+            com.example.gemgemgen.wildcard.domain.WildcardSet(
+                token = "__헤어스타일__",
+                fileName = "헤어스타일.txt",
+                items = listOf("포니테일", "단발", "트윈테일", "  ")
+            )
+        )
+        val result = WildcardTokenAutocomplete.candidatesFromWildcardSets(wildcardSets)
+
+        assertEquals(3, result.size)
+        assertEquals("단발", result[0].name)
+        assertEquals("단발", result[0].token)
+        assertEquals("헤어스타일", result[0].category)
+        assertEquals(Candidate.Type.WILDCARD_ITEM, result[0].type)
+
+        assertEquals("트윈테일", result[1].name)
+        assertEquals("포니테일", result[2].name)
+    }
+
+    @Test
+    fun suggestCandidates_prioritizesSnippetThenWildcardItemThenWildcard() {
+        val snippet = Candidate(
+            name = "포커스",
+            token = "depth of field focus",
+            displayText = "포커스",
+            type = Candidate.Type.SNIPPET
+        )
+        val wildcardItem = Candidate(
+            name = "포니테일",
+            token = "포니테일",
+            displayText = "포니테일",
+            category = "헤어스타일",
+            type = Candidate.Type.WILDCARD_ITEM
+        )
+        val wildcardToken = Candidate(
+            name = "포즈",
+            token = "__포즈__",
+            displayText = "__포즈__",
+            type = Candidate.Type.WILDCARD
+        )
+
+        val combined = listOf(wildcardToken, wildcardItem, snippet)
+        val suggestions = WildcardTokenAutocomplete.suggestCandidates(
+            text = "포",
+            cursor = 1,
+            candidates = combined
+        )
+
+        // 우선순위: 1순위 상용구(포커스) > 2순위 와일드카드 항목(포니테일) > 3순위 와일드카드 토큰(포즈)
+        assertEquals(
+            listOf("포커스", "포니테일", "포즈"),
+            suggestions.map { it.name }
+        )
+        assertEquals(Candidate.Type.SNIPPET, suggestions[0].type)
+        assertEquals(Candidate.Type.WILDCARD_ITEM, suggestions[1].type)
+        assertEquals(Candidate.Type.WILDCARD, suggestions[2].type)
+    }
+
+    @Test
+    fun suggestCandidates_wildcardItemOnlyMatchesWordPrefixNotCategory() {
+        val hairItem = Candidate(
+            name = "포니테일",
+            token = "포니테일",
+            displayText = "포니테일",
+            category = "헤어스타일",
+            type = Candidate.Type.WILDCARD_ITEM
+        )
+        val hairBand = Candidate(
+            name = "헤어밴드",
+            token = "헤어밴드",
+            displayText = "헤어밴드",
+            category = "헤어스타일",
+            type = Candidate.Type.WILDCARD_ITEM
+        )
+
+        // "헤어" 입력 시: category 가 "헤어스타일"이어도 name 이 "헤어"로 시작하는 항목만 매칭됨 (방식 1)
+        val suggestions = WildcardTokenAutocomplete.suggestCandidates(
+            text = "헤어",
+            cursor = 2,
+            candidates = listOf(hairItem, hairBand)
+        )
+
+        assertEquals(listOf("헤어밴드"), suggestions.map { it.name })
+    }
+
+    @Test
+    fun applyToken_replacesWithItemDirectlyForWildcardItem() {
+        val hairItem = Candidate(
+            name = "포니테일",
+            token = "포니테일",
+            displayText = "포니테일",
+            category = "헤어스타일",
+            type = Candidate.Type.WILDCARD_ITEM
+        )
+
+        val result = WildcardTokenAutocomplete.applyToken(
+            text = "1girl, 포",
+            selectionStart = 9,
+            selectionEnd = 9,
+            candidate = hairItem,
+            candidates = listOf(hairItem)
+        )
+
+        org.junit.Assert.assertNotNull(result)
+        assertEquals("1girl, 포니테일", result?.newText)
+        assertEquals(11, result?.cursorAfter)
     }
 }

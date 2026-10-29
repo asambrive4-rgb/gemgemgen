@@ -1,4 +1,4 @@
-// 역할: 와일드카드 세트·단어 편집, 폴더 관리, AI 분류 조율 및 화면 액션 처리를 총괄하는 뷰모델입니다.
+// 역할: 와일드카드 세트·단어 편집, 폴더 관리, 상용구 자동완성 칩 연동 토글, AI 분류 조율 및 화면 액션 처리를 총괄하는 뷰모델입니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel
@@ -15,6 +15,7 @@ import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
 import com.example.gemgemgen.wildcard.usecase.ManageWildcardFilesUseCase
 import com.example.gemgemgen.wildcard.usecase.SaveWildcardClassifyResultUseCase
 import com.example.gemgemgen.wildcard.usecase.WildcardFolderRepository
+import com.example.gemgemgen.wildcard.usecase.WildcardLinkedFilesRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +30,8 @@ class WildcardViewModel(
     saveWildcardClassifyResult: SaveWildcardClassifyResultUseCase,
     analysisKeyManager: ManageGeminiApiKeysUseCase,
     coroutineScope: CoroutineScope? = null,
-    private val saveWildcardFolder: WildcardFolderRepository
+    private val saveWildcardFolder: WildcardFolderRepository,
+    private val linkedFilesRepository: WildcardLinkedFilesRepository? = saveWildcardFolder as? WildcardLinkedFilesRepository
 ) : ViewModel(), WildcardScreenActions {
     private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardUiState())
@@ -60,6 +62,17 @@ class WildcardViewModel(
 
     init {
         refreshFiles(openFirstFile = true)
+        observeLinkedFiles()
+    }
+
+    private fun observeLinkedFiles() {
+        linkedFilesRepository?.let { repo ->
+            scope.launch {
+                repo.observeLinkedFileNames().collect { linked ->
+                    _uiState.update { it.copy(linkedFileNames = linked) }
+                }
+            }
+        }
     }
 
     fun onFolderAccessChanged(canModifyFiles: Boolean) {
@@ -366,6 +379,20 @@ class WildcardViewModel(
         _uiState.update { it.copy(showRenameDialog = false, renameFileName = "", error = "") }
     }
 
+    override fun toggleAutocompleteLink(file: WildcardTextFile) {
+        val repo = linkedFilesRepository ?: return
+        val current = _uiState.value.linkedFileNames
+        val next = if (file.fileName in current) {
+            current - file.fileName
+        } else {
+            current + file.fileName
+        }
+        _uiState.update { it.copy(linkedFileNames = next) }
+        scope.launch {
+            runCatching { repo.saveLinkedFileNames(next) }
+        }
+    }
+
     override fun renameSelectedFile() {
         val file = uiState.value.editor.selectedFile ?: return showError("수정할 파일을 선택해주세요.")
         val newName = uiState.value.renameFileName
@@ -373,12 +400,24 @@ class WildcardViewModel(
         launchFileOperation(errorMessage = "파일 이름을 수정하지 못했습니다.") {
             val workspace = manageWildcardFiles.renameFile(file, newName)
             val updatedFile = checkNotNull(workspace.selectedFile)
+            val currentLinked = _uiState.value.linkedFileNames
+            val nextLinked = if (file.fileName in currentLinked) {
+                (currentLinked - file.fileName) + updatedFile.fileName
+            } else {
+                currentLinked
+            }
+            if (nextLinked != currentLinked) {
+                linkedFilesRepository?.let { repo ->
+                    runCatching { repo.saveLinkedFileNames(nextLinked) }
+                }
+            }
             _uiState.update {
                 it.copy(
                     files = workspace.files,
                     editor = it.editor.rename(updatedFile),
                     showRenameDialog = false,
                     renameFileName = "",
+                    linkedFileNames = nextLinked,
                     message = "${updatedFile.fileName}으로 이름 수정 완료",
                     error = ""
                 )
@@ -410,8 +449,25 @@ class WildcardViewModel(
         ) {
             val workspace = manageWildcardFiles.deleteFile(file, uiState.value.files)
             val nextFile = workspace.selectedFile
+            val currentLinked = _uiState.value.linkedFileNames
+            val nextLinked = if (file.fileName in currentLinked) {
+                currentLinked - file.fileName
+            } else {
+                currentLinked
+            }
+            if (nextLinked != currentLinked) {
+                linkedFilesRepository?.let { repo ->
+                    runCatching { repo.saveLinkedFileNames(nextLinked) }
+                }
+            }
             _uiState.update {
-                it.copy(files = workspace.files, showDeleteConfirm = false, message = "${file.fileName} 삭제 완료", error = "")
+                it.copy(
+                    files = workspace.files,
+                    showDeleteConfirm = false,
+                    linkedFileNames = nextLinked,
+                    message = "${file.fileName} 삭제 완료",
+                    error = ""
+                )
             }
             if (nextFile == null) {
                 clearSelectedFile("txt 파일이 없습니다.")
