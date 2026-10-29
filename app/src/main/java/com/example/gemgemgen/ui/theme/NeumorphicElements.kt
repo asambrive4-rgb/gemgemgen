@@ -1,4 +1,4 @@
-// 역할: 토스 스타일의 무테두리(Borderless) 고대비 카드, 버튼, 인셋 베드, 칩, 세그먼트 탭바 및 공통 모달·확인 다이얼로그 셸 UI 요소를 제공합니다.
+// 역할: 토스 스타일의 무테두리(Borderless) 고대비 카드, 버튼, 인셋 베드, 칩, 드롭다운 메뉴(NeuDropdownMenu), 세그먼트 탭바 및 공통 모달·확인 다이얼로그 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.animation.AnimatedContent
@@ -27,7 +27,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -49,10 +53,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.PopupProperties
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 
 /**
@@ -68,13 +74,18 @@ fun NeuCard(
     elevation: Dp = 2.dp,
     content: @Composable () -> Unit
 ) {
-    Surface(
-        modifier = modifier.shadow(
+    val shadowModifier = if (elevation > 0.dp) {
+        modifier.shadow(
             elevation = elevation,
             shape = shape,
             ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.22f),
             spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.16f)
-        ),
+        )
+    } else {
+        modifier
+    }
+    Surface(
+        modifier = shadowModifier,
         shape = shape,
         color = backgroundColor,
         content = content
@@ -284,7 +295,7 @@ fun AppConfirmDialogContent(
     message: String,
     confirmLabel: String,
     dismissLabel: String = "취소",
-    useFilledConfirmButton: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") useFilledConfirmButton: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -298,29 +309,34 @@ fun AppConfirmDialogContent(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = AppTheme.colors.textPrimary
         )
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = AppTheme.colors.textSecondary
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            TextButton(onClick = onDismiss) {
+            NeuButton(
+                onClick = onDismiss,
+                isPrimary = false,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.weight(1f),
+                contentModifier = Modifier.fillMaxWidth()
+            ) {
                 Text(dismissLabel)
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            if (useFilledConfirmButton) {
-                Button(onClick = onConfirm) {
-                    Text(confirmLabel)
-                }
-            } else {
-                TextButton(onClick = onConfirm) {
-                    Text(confirmLabel)
-                }
+            NeuButton(
+                onClick = onConfirm,
+                isPrimary = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.weight(1f),
+                contentModifier = Modifier.fillMaxWidth()
+            ) {
+                Text(confirmLabel)
             }
         }
     }
@@ -616,4 +632,101 @@ fun NeuActionChip(
             )
         }
     }
+}
+
+/**
+ * 토스 스타일 무테두리 클린 드롭다운 메뉴 (Clean Dropdown Menu).
+ * 계정 사용량 더보기 양식(16dp 라운딩, AppTheme.colors.card 배경, 8dp 그림자)을 기준으로 앱 전역에 일관된 팝업 메뉴를 제공합니다.
+ */
+@Composable
+fun NeuDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    offset: DpOffset = DpOffset(0.dp, 0.dp),
+    properties: PopupProperties = PopupProperties(focusable = true),
+    shape: Shape = RoundedCornerShape(16.dp),
+    containerColor: Color = AppTheme.colors.card,
+    shadowElevation: Dp = 8.dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        offset = offset,
+        properties = properties,
+        shape = shape,
+        containerColor = containerColor,
+        shadowElevation = shadowElevation,
+        content = content
+    )
+}
+
+/**
+ * 드롭다운 메뉴 내부 항목 간의 부드러운 토스 스타일 구분선.
+ */
+@Composable
+fun NeuDropdownMenuDivider(
+    modifier: Modifier = Modifier,
+    paddingHorizontal: Dp = 12.dp,
+    color: Color = AppTheme.colors.insetBorder.copy(alpha = 0.65f),
+    thickness: Dp = 0.8.dp
+) {
+    HorizontalDivider(
+        modifier = modifier.padding(horizontal = paddingHorizontal),
+        color = color,
+        thickness = thickness
+    )
+}
+
+/**
+ * 토스 스타일 드롭다운 메뉴 아이템 (Clean Dropdown Menu Item).
+ * 텍스트, 좌측 아이콘, 선택 시 우측 체크 아이콘 표시를 일관된 typography 및 색상으로 제공합니다.
+ */
+@Composable
+fun NeuDropdownMenuItem(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    leadingIcon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
+    textColor: Color = if (isSelected) AppTheme.colors.primary else AppTheme.colors.textPrimary,
+    iconTint: Color = if (isSelected) AppTheme.colors.primary else AppTheme.colors.textSecondary,
+    enabled: Boolean = true
+) {
+    DropdownMenuItem(
+        text = {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = textColor
+            )
+        },
+        leadingIcon = leadingIcon?.let {
+            {
+                Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        },
+        trailingIcon = (trailingIcon ?: if (isSelected) Icons.Default.Check else null)?.let {
+            {
+                Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    tint = if (isSelected) AppTheme.colors.primary else AppTheme.colors.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        },
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier
+    )
 }

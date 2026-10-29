@@ -1,6 +1,7 @@
 // 역할: 자동화 편의 설정(클립보드·사이드바·메모리 정리), 원격 연결, 화면 테마 및 시스템 환경 점검 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,18 +19,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -44,6 +49,8 @@ import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.ui.theme.LocalAppThemeMode
 import com.example.gemgemgen.ui.theme.LocalAppThemePalette
+
+private val SettingsWarningRed = Color(0xFFD93025)
 
 enum class SettingsDialogStage {
     ACCESSIBILITY_PROMPT,
@@ -117,7 +124,7 @@ private fun StatusSettingsDialogContent(
             text = "앱 및 환경 설정",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = AppTheme.colors.textPrimary
         )
         Spacer(modifier = Modifier.height(16.dp))
         Column(
@@ -131,13 +138,14 @@ private fun StatusSettingsDialogContent(
             Text(
                 text = "📋 자동화 편의 설정",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = AppTheme.colors.textPrimary
             )
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+                color = AppTheme.colors.insetBed
             ) {
                 Row(
                     modifier = Modifier
@@ -155,18 +163,25 @@ private fun StatusSettingsDialogContent(
                             text = "시작 시 프롬프트 클립보드 복사",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = AppTheme.colors.textPrimary
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "자동화 시작 시 원본 프롬프트 템플릿을 클립보드에 보관합니다. (삼성 기기간 클립보드 공유 스낵바가 1회 발생할 수 있습니다.)",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = AppTheme.colors.textSecondary
                         )
                     }
                     Switch(
                         checked = uiState.copyPromptOnStart,
-                        onCheckedChange = { actions.onToggleCopyPromptOnStart(it) }
+                        onCheckedChange = { actions.onToggleCopyPromptOnStart(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = AppTheme.colors.card,
+                            checkedTrackColor = AppTheme.colors.primary,
+                            uncheckedThumbColor = AppTheme.colors.card,
+                            uncheckedTrackColor = AppTheme.colors.cardBorder,
+                            uncheckedBorderColor = Color.Transparent
+                        )
                     )
                 }
             }
@@ -174,7 +189,7 @@ private fun StatusSettingsDialogContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+                color = AppTheme.colors.insetBed
             ) {
                 Row(
                     modifier = Modifier
@@ -192,18 +207,25 @@ private fun StatusSettingsDialogContent(
                             text = "사이드바 열림 상태 자동화 (Gemini)",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = AppTheme.colors.textPrimary
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "태블릿 가로 화면 등 사이드바가 항상 열린 상태에서 사용할 때 켜주세요. 사이드바 열기 단계를 건너뛰고 바로 사이드바 내 새 채팅을 누릅니다.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = AppTheme.colors.textSecondary
                         )
                     }
                     Switch(
                         checked = uiState.geminiSidebarOpenMode,
-                        onCheckedChange = { actions.onToggleGeminiSidebarOpenMode(it) }
+                        onCheckedChange = { actions.onToggleGeminiSidebarOpenMode(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = AppTheme.colors.card,
+                            checkedTrackColor = AppTheme.colors.primary,
+                            uncheckedThumbColor = AppTheme.colors.card,
+                            uncheckedTrackColor = AppTheme.colors.cardBorder,
+                            uncheckedBorderColor = Color.Transparent
+                        )
                     )
                 }
             }
@@ -211,7 +233,7 @@ private fun StatusSettingsDialogContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+                color = AppTheme.colors.insetBed
             ) {
                 Column(
                     modifier = Modifier
@@ -233,23 +255,30 @@ private fun StatusSettingsDialogContent(
                                 text = "시작 전 자동 메모리 정리 (Gemini)",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = AppTheme.colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "누적 생성 횟수가 임계치 이상이면 다음 Gemini 자동화 시작 직전에 Google 앱 메모리를 정리합니다. (송신 모드에서는 수신 기기가 수행)",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = AppTheme.colors.textSecondary
                             )
                         }
                         Switch(
                             checked = uiState.autoMemoryCleanupEnabled,
-                            onCheckedChange = { actions.onToggleAutoMemoryCleanup(it) }
+                            onCheckedChange = { actions.onToggleAutoMemoryCleanup(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = AppTheme.colors.card,
+                                checkedTrackColor = AppTheme.colors.primary,
+                                uncheckedThumbColor = AppTheme.colors.card,
+                                uncheckedTrackColor = AppTheme.colors.cardBorder,
+                                uncheckedBorderColor = Color.Transparent
+                            )
                         )
                     }
 
                     if (uiState.autoMemoryCleanupEnabled) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        HorizontalDivider(color = AppTheme.colors.insetBorder)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -264,12 +293,12 @@ private fun StatusSettingsDialogContent(
                                     text = "누적 임계 횟수",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = AppTheme.colors.textPrimary
                                 )
                                 Text(
                                     text = "현재 누적 생성: ${uiState.cumulativeGeminiGenerationCount}회",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = AppTheme.colors.textSecondary
                                 )
                             }
                             RepeatCountStepper(
@@ -281,13 +310,17 @@ private fun StatusSettingsDialogContent(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = AppTheme.colors.cardBorder.copy(alpha = 0.6f)
+            )
 
             // 원격 연결 섹션
             Text(
                 text = "🌐 원격 연결",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = AppTheme.colors.textPrimary
             )
 
             val isRemoteConnected = when (remoteStatus.mode) {
@@ -305,7 +338,7 @@ private fun StatusSettingsDialogContent(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f)
+                color = AppTheme.colors.insetBed
             ) {
                 Column(
                     modifier = Modifier
@@ -323,12 +356,12 @@ private fun StatusSettingsDialogContent(
                                 text = if (isRemoteConnected) connectedDeviceName else "연결된 기기 없음",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = AppTheme.colors.textPrimary
                             )
                             Text(
                                 text = if (isRemoteConnected) "원격 연결됨" else "원격 연결 안 됨",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (isRemoteConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isRemoteConnected) AppTheme.colors.primary else AppTheme.colors.textSecondary
                             )
                         }
                         StatusBadge(isReady = isRemoteConnected)
@@ -338,7 +371,7 @@ private fun StatusSettingsDialogContent(
                         Text(
                             text = "원격 자동화를 중지한 뒤 연결을 끊어주세요.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
+                            color = SettingsWarningRed
                         )
                     }
 
@@ -347,9 +380,9 @@ private fun StatusSettingsDialogContent(
                             text = uiState.remoteDisconnectMessage,
                             style = MaterialTheme.typography.bodySmall,
                             color = if (uiState.remoteDisconnectMessage == "원격 연결을 끊었습니다.") {
-                                MaterialTheme.colorScheme.primary
+                                AppTheme.colors.primary
                             } else {
-                                MaterialTheme.colorScheme.error
+                                SettingsWarningRed
                             }
                         )
                     }
@@ -357,20 +390,36 @@ private fun StatusSettingsDialogContent(
                     OutlinedButton(
                         onClick = { actions.disconnectRemoteDevice() },
                         enabled = isRemoteConnected && !isRemoteRunning && !uiState.isDisconnectingRemote,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = AppTheme.colors.primary,
+                            disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.38f)
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isRemoteConnected && !isRemoteRunning && !uiState.isDisconnectingRemote) {
+                                AppTheme.colors.primary.copy(alpha = 0.5f)
+                            } else {
+                                AppTheme.colors.cardBorder
+                            }
+                        )
                     ) {
                         Text(if (uiState.isDisconnectingRemote) "연결 끊는 중…" else "연결 끊기")
                     }
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = AppTheme.colors.cardBorder.copy(alpha = 0.6f)
+            )
 
             // 화면 테마 모드 (시스템 설정 / 라이트 / 다크)
             Text(
                 text = "🌓 화면 테마 모드",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = AppTheme.colors.textPrimary
             )
 
             Row(
@@ -388,7 +437,7 @@ private fun StatusSettingsDialogContent(
                         color = if (isModeSelected) {
                             AppTheme.colors.accent.copy(alpha = 0.14f)
                         } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            AppTheme.colors.insetBed
                         }
                     ) {
                         Box(
@@ -418,7 +467,8 @@ private fun StatusSettingsDialogContent(
             Text(
                 text = "🎨 토스 스타일 테마 팔레트",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = AppTheme.colors.textPrimary
             )
 
             Column(
@@ -436,7 +486,7 @@ private fun StatusSettingsDialogContent(
                         color = if (isSelected) {
                             palette.previewColor.copy(alpha = 0.14f)
                         } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            AppTheme.colors.insetBed
                         }
                     ) {
                         Row(
@@ -457,24 +507,31 @@ private fun StatusSettingsDialogContent(
                                     text = palette.title,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) palette.previewColor else MaterialTheme.colorScheme.onSurface
+                                    color = if (isSelected) palette.previewColor else AppTheme.colors.textPrimary
                                 )
                                 Text(
                                     text = palette.description,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = AppTheme.colors.textSecondary
                                 )
                             }
                             RadioButton(
                                 selected = isSelected,
-                                onClick = { actions.onSelectThemePalette(palette) }
+                                onClick = { actions.onSelectThemePalette(palette) },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = palette.previewColor,
+                                    unselectedColor = AppTheme.colors.textSecondary.copy(alpha = 0.6f)
+                                )
                             )
                         }
                     }
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = AppTheme.colors.cardBorder.copy(alpha = 0.6f)
+            )
 
             // 시스템 환경 상태 섹션
             Row(
@@ -485,9 +542,14 @@ private fun StatusSettingsDialogContent(
                 Text(
                     text = "환경 점검",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.colors.textPrimary
                 )
-                OutlinedButton(onClick = { actions.refreshStatus() }) {
+                OutlinedButton(
+                    onClick = { actions.refreshStatus() },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AppTheme.colors.primary),
+                    border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.5f))
+                ) {
                     Text("새로고침")
                 }
             }
@@ -503,40 +565,63 @@ private fun StatusSettingsDialogContent(
             if (!status.isWildcardDirectoryAccessible) {
                 Text(
                     text = "Android 14 이상에서는 시스템 파일 선택기가 Download/Documents 하위 폴더를 차단할 수 있습니다. 기존 경로를 사용하려면 공유 저장소 접근을 허용하세요.",
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.colors.textSecondary
                 )
-                Button(onClick = { actions.onOpenWildcardStorageSettings() }) {
+                Button(
+                    onClick = { actions.onOpenWildcardStorageSettings() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AppTheme.colors.primary,
+                        contentColor = AppTheme.colors.onPrimary
+                    )
+                ) {
                     Text("공유 저장소 접근 설정")
                 }
             }
 
             if (!status.isAccessibilityServiceEnabled) {
-                Button(onClick = { actions.onOpenAccessibilitySettings() }) {
+                Button(
+                    onClick = { actions.onOpenAccessibilitySettings() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AppTheme.colors.primary,
+                        contentColor = AppTheme.colors.onPrimary
+                    )
+                ) {
                     Text("접근성 설정 열기")
                 }
             }
 
-            OutlinedButton(onClick = { actions.onSelectWildcardFolder() }) {
+            OutlinedButton(
+                onClick = { actions.onSelectWildcardFolder() },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppTheme.colors.primary),
+                border = BorderStroke(1.dp, AppTheme.colors.primary.copy(alpha = 0.5f))
+            ) {
                 Text("wildcard 폴더 선택")
             }
-            TextButton(onClick = { actions.onSelectSafWildcardFolder() }) {
+            TextButton(
+                onClick = { actions.onSelectSafWildcardFolder() },
+                colors = ButtonDefaults.textButtonColors(contentColor = AppTheme.colors.primary)
+            ) {
                 Text("SAF로 허용된 다른 폴더 선택")
             }
 
             if (!status.hasWriteSecureSettingsPermission && setupInfo.adbGrantCommand.isNotBlank()) {
                 Text(
                     text = "ADB 권한 명령어:\n${setupInfo.adbGrantCommand}",
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.colors.textSecondary
                 )
             }
 
             Text(
                 text = "wildcard 폴더: ${setupInfo.wildcardDirectoryPath.ifBlank { "선택 안 됨" }}",
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.colors.textSecondary
             )
             Text(
                 text = "Null Keyboard 전환 대상: ${setupInfo.nullKeyboardTargetImeId}",
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.colors.textSecondary
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -544,8 +629,11 @@ private fun StatusSettingsDialogContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = { actions.hideSettings() }) {
-                Text("닫기")
+            TextButton(
+                onClick = { actions.hideSettings() },
+                colors = ButtonDefaults.textButtonColors(contentColor = AppTheme.colors.primary)
+            ) {
+                Text("닫기", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -558,7 +646,11 @@ private fun StatusRow(label: String, isReady: Boolean) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = AppTheme.colors.textPrimary
+        )
         StatusBadge(isReady = isReady)
     }
 }
@@ -566,14 +658,14 @@ private fun StatusRow(label: String, isReady: Boolean) {
 @Composable
 private fun StatusBadge(isReady: Boolean) {
     val containerColor = if (isReady) {
-        MaterialTheme.colorScheme.primaryContainer
+        AppTheme.colors.primary.copy(alpha = 0.14f)
     } else {
-        MaterialTheme.colorScheme.errorContainer
+        SettingsWarningRed.copy(alpha = 0.14f)
     }
     val textColor = if (isReady) {
-        MaterialTheme.colorScheme.onPrimaryContainer
+        AppTheme.colors.primary
     } else {
-        MaterialTheme.colorScheme.onErrorContainer
+        SettingsWarningRed
     }
 
     Surface(
@@ -584,7 +676,8 @@ private fun StatusBadge(isReady: Boolean) {
         Text(
             text = if (isReady) "정상" else "필요",
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelMedium
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold
         )
     }
 }

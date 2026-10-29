@@ -1,4 +1,4 @@
-// 역할: 토스 스타일(Clean & Borderless) 단계별 카드 레이아웃으로 AI 프롬프트 분석·변주 설정(1줄 통합 헤더, 풀폭 원문·인라인 마스킹·2줄 그리드 카테고리, 방향·힌트, 결과 카드/TXT 다이나믹 복사·일체형 저장 및 1줄 플로팅 액션 독)을 표시합니다.
+// 역할: 토스 스타일(Clean & Borderless) 단계별 카드와 모델 선택 드롭다운(NeuDropdownMenu), 공통 인셋 베드(NeuInsetBed) 레이아웃으로 AI 프롬프트 분석·변주 설정(1줄 통합 헤더, 풀폭 원문·인라인 마스킹·2줄 그리드 카테고리, 방향·힌트, 추천 후보·TXT 결과 및 플로팅 액션 독)을 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -83,13 +85,23 @@ import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTxtCountPolicy
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
+import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
+import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.rememberIsImeVisible
 import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.AppThemeMode
+import com.example.gemgemgen.ui.theme.LocalAppThemeMode
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
+import com.example.gemgemgen.ui.theme.NeuDropdownMenu
+import com.example.gemgemgen.ui.theme.NeuDropdownMenuDivider
+import com.example.gemgemgen.ui.theme.NeuDropdownMenuItem
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.NeuPillChip
 import com.example.gemgemgen.ui.theme.appTextFieldColors
@@ -279,28 +291,58 @@ private fun UnifiedEnginePillHeader(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 좌측: 마스킹 / 생성 모델 캡슐 버튼
+                // 좌측: 마스킹 / 생성 모델 캡슐 버튼 (클릭 시 토스 스타일 드롭다운 메뉴로 선택)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    CompactRolePillButton(
-                        roleTitle = "마스킹",
-                        modelLabel = formatCompactModelName(uiState.maskingProvider, uiState.maskingModel),
-                        isExpanded = expandedRole == AnalysisModelRole.MASKING,
-                        onClick = {
-                            expandedRole = if (expandedRole == AnalysisModelRole.MASKING) null else AnalysisModelRole.MASKING
-                        }
-                    )
-                    CompactRolePillButton(
-                        roleTitle = "생성",
-                        modelLabel = formatCompactModelName(uiState.generationProvider, uiState.generationModel),
-                        isExpanded = expandedRole == AnalysisModelRole.GENERATION,
-                        onClick = {
-                            expandedRole = if (expandedRole == AnalysisModelRole.GENERATION) null else AnalysisModelRole.GENERATION
-                        }
-                    )
+                    Box {
+                        CompactRolePillButton(
+                            roleTitle = "마스킹",
+                            modelLabel = formatCompactModelName(uiState.maskingProvider, uiState.maskingModel),
+                            isExpanded = expandedRole == AnalysisModelRole.MASKING,
+                            onClick = {
+                                expandedRole = if (expandedRole == AnalysisModelRole.MASKING) null else AnalysisModelRole.MASKING
+                            }
+                        )
+                        AnalysisModelDropdownMenu(
+                            expanded = expandedRole == AnalysisModelRole.MASKING,
+                            onDismissRequest = { expandedRole = null },
+                            roleTitle = "자동 마스킹 엔진 선택",
+                            statusSubtitle = if (uiState.geminiKeyPreview.isNotBlank()) "활성 키: ${uiState.geminiKeyPreview}" else null,
+                            selectedProvider = uiState.maskingProvider,
+                            selectedModelId = uiState.maskingModel,
+                            onSelect = { provider, modelId ->
+                                onRoleProviderSelected(AnalysisModelRole.MASKING, provider)
+                                onRoleModelSelected(AnalysisModelRole.MASKING, modelId)
+                                expandedRole = null
+                            }
+                        )
+                    }
+                    Box {
+                        CompactRolePillButton(
+                            roleTitle = "생성",
+                            modelLabel = formatCompactModelName(uiState.generationProvider, uiState.generationModel),
+                            isExpanded = expandedRole == AnalysisModelRole.GENERATION,
+                            onClick = {
+                                expandedRole = if (expandedRole == AnalysisModelRole.GENERATION) null else AnalysisModelRole.GENERATION
+                            }
+                        )
+                        AnalysisModelDropdownMenu(
+                            expanded = expandedRole == AnalysisModelRole.GENERATION,
+                            onDismissRequest = { expandedRole = null },
+                            roleTitle = "변주 생성 엔진 선택",
+                            statusSubtitle = if (uiState.grokAccountPreview.isNotBlank()) uiState.grokAccountPreview else null,
+                            selectedProvider = uiState.generationProvider,
+                            selectedModelId = uiState.generationModel,
+                            onSelect = { provider, modelId ->
+                                onRoleProviderSelected(AnalysisModelRole.GENERATION, provider)
+                                onRoleModelSelected(AnalysisModelRole.GENERATION, modelId)
+                                expandedRole = null
+                            }
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(6.dp))
@@ -336,66 +378,89 @@ private fun UnifiedEnginePillHeader(
                     }
                 }
             }
+        }
+    }
+}
 
-            // 역할 클릭 시 펼쳐지는 깔끔한 모델 선택 서랍
-            AnimatedVisibility(visible = expandedRole != null) {
-                val currentRole = expandedRole
-                if (currentRole != null) {
-                    val (provider, modelId) = when (currentRole) {
-                        AnalysisModelRole.MASKING -> uiState.maskingProvider to uiState.maskingModel
-                        AnalysisModelRole.GENERATION -> uiState.generationProvider to uiState.generationModel
-                    }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(AppTheme.colors.insetBed)
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = when (currentRole) {
-                                    AnalysisModelRole.MASKING -> "자동 마스킹 엔진 선택"
-                                    AnalysisModelRole.GENERATION -> "변주 생성 엔진 선택"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = AppTheme.colors.textSecondary
-                            )
-                            if (currentRole == AnalysisModelRole.MASKING && uiState.geminiKeyPreview.isNotBlank()) {
-                                Text(
-                                    text = "활성 키: ${uiState.geminiKeyPreview}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = AppTheme.colors.textSecondary
-                                )
-                            } else if (currentRole == AnalysisModelRole.GENERATION && uiState.grokAccountPreview.isNotBlank()) {
-                                Text(
-                                    text = uiState.grokAccountPreview,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = AppTheme.colors.textSecondary
-                                )
-                            }
-                        }
-                        ModelSelectorChips(
-                            selectedProvider = provider,
-                            selectedModelId = modelId,
-                            onSelectProvider = { newProvider ->
-                                onRoleProviderSelected(currentRole, newProvider)
-                            },
-                            onSelectModel = { newModelId ->
-                                onRoleModelSelected(currentRole, newModelId)
-                                expandedRole = null
-                            }
-                        )
-                    }
-                }
+/**
+ * 분석/생성 모델 선택용 토스 스타일 드롭다운 메뉴 (계정사용량 더보기 규격 일원화).
+ */
+@Composable
+private fun AnalysisModelDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    roleTitle: String,
+    statusSubtitle: String?,
+    selectedProvider: AnalysisProvider,
+    selectedModelId: String,
+    onSelect: (AnalysisProvider, String) -> Unit
+) {
+    NeuDropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .widthIn(min = 200.dp, max = 260.dp)
+        ) {
+            Text(
+                text = roleTitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = AppTheme.colors.textSecondary,
+                fontWeight = FontWeight.Bold
+            )
+            if (!statusSubtitle.isNullOrBlank()) {
+                Text(
+                    text = statusSubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
+        NeuDropdownMenuDivider()
+
+        // Gemini 모델 그룹
+        Text(
+            text = "Gemini",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = AppTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+        )
+        val geminiModels = listOf(
+            MODEL_GEMINI_3_5_FLASH_LITE to "3.5 Lite",
+            MODEL_GEMINI_3_6_FLASH to "3.6 Flash",
+            MODEL_GEMINI_3_7_FLASH to "3.7 Flash",
+            MODEL_GEMINI_3_8_FLASH to "3.8 Flash"
+        )
+        geminiModels.forEach { (modelId, label) ->
+            val isSelected = selectedProvider == AnalysisProvider.GEMINI && selectedModelId == modelId
+            NeuDropdownMenuItem(
+                text = label,
+                isSelected = isSelected,
+                onClick = { onSelect(AnalysisProvider.GEMINI, modelId) }
+            )
+        }
+
+        NeuDropdownMenuDivider()
+
+        // Grok 모델 그룹
+        Text(
+            text = "Grok",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = AppTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+        )
+        val isGrokSelected = selectedProvider == AnalysisProvider.GROK && selectedModelId == MODEL_GROK_4_5
+        NeuDropdownMenuItem(
+            text = "Grok 4.5",
+            isSelected = isGrokSelected,
+            onClick = { onSelect(AnalysisProvider.GROK, MODEL_GROK_4_5) }
+        )
     }
 }
 
@@ -409,7 +474,8 @@ private fun CompactRolePillButton(
     roleTitle: String,
     modelLabel: String,
     isExpanded: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val bgColor = if (isExpanded) {
         AppTheme.colors.primary.copy(alpha = 0.14f)
@@ -417,12 +483,12 @@ private fun CompactRolePillButton(
         AppTheme.colors.insetBed
     }
     Row(
-        modifier = Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(10.dp))
+        modifier = modifier
+            .defaultMinSize(minHeight = 36.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 9.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -454,7 +520,8 @@ private fun CompactRolePillButton(
 private fun TossMiniBadgeButton(
     text: String,
     isHighlighted: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val bgColor = if (isHighlighted) {
         AppTheme.colors.primary.copy(alpha = 0.12f)
@@ -467,12 +534,12 @@ private fun TossMiniBadgeButton(
         AppTheme.colors.textSecondary
     }
     Box(
-        modifier = Modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(10.dp))
+        modifier = modifier
+            .defaultMinSize(minHeight = 36.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 11.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -590,67 +657,75 @@ private fun InlineMaskingTargetBanner(
     onClearTargetSegment: () -> Unit
 ) {
     if (targetSegment != null) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(AppTheme.colors.primary.copy(alpha = 0.10f))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+        NeuInsetBed(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            backgroundColor = AppTheme.colors.primary.copy(alpha = 0.10f)
         ) {
-            Column(
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = "🎯 마스킹 타겟 구간",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = AppTheme.colors.primary
-                )
-                Text(
-                    text = "\"${targetSegment.text}\"",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = AppTheme.colors.textPrimary,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(AppTheme.colors.card)
-                    .clickable(onClick = onClearTargetSegment)
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "해제",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textSecondary
-                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "🎯 마스킹 타겟 구간",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = AppTheme.colors.primary
+                    )
+                    Text(
+                        text = "\"${targetSegment.text}\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = AppTheme.colors.textPrimary,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(AppTheme.colors.card)
+                        .clickable(onClick = onClearTargetSegment)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "해제",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.colors.textSecondary
+                    )
+                }
             }
         }
     } else {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(AppTheme.colors.insetBed)
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        NeuInsetBed(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp)
         ) {
-            Text(
-                text = "✨ 생성 시 [${selectedCategory.label}] 구간을 자동 감지해 마스킹합니다.",
-                style = MaterialTheme.typography.labelSmall,
-                color = AppTheme.colors.textSecondary
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "✨ 생성 시 [${selectedCategory.label}] 구간을 자동 감지해 마스킹합니다.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTheme.colors.textSecondary
+                )
+            }
         }
     }
 }
@@ -752,6 +827,7 @@ private fun TossDirectionChip(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null
 ) {
     val bgColor = if (selected) {
@@ -765,17 +841,18 @@ private fun TossDirectionChip(
         AppTheme.colors.textSecondary
     }
     Box(
-        modifier = Modifier
+        modifier = modifier
+            .defaultMinSize(minHeight = 32.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = if (selected) "✓ $text" else text,
             style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
             color = textColor
         )
     }
@@ -891,68 +968,74 @@ private fun Step3CardsResultCard(
                     AppTheme.colors.textSecondary
                 }
 
-                Row(
+                NeuInsetBed(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(itemBg)
-                        .clickable(enabled = enabled) { onApplyCandidate(index) }
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        .clickable(enabled = enabled) { onApplyCandidate(index) },
+                    shape = RoundedCornerShape(14.dp),
+                    backgroundColor = itemBg
                 ) {
-                    // 번호 배지
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(22.dp)
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(numBadgeBg),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = "${index + 1}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = numBadgeText
-                        )
-                    }
-
-                    // 후보 본문
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = candidate,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = AppTheme.colors.textPrimary
-                        )
-                        if (selected) {
+                        // 번호 배지
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(numBadgeBg),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                                text = "✓ 자동화 탭에 적용됨",
+                                text = "${index + 1}",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = AppTheme.colors.primary
+                                fontWeight = FontWeight.ExtraBold,
+                                color = numBadgeText
                             )
                         }
-                    }
 
-                    // 우측 복사 미니 버튼
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(AppTheme.colors.card)
-                            .clickable(enabled = enabled) { onCopyCandidate(index) }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "복사",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = AppTheme.colors.textSecondary
-                        )
+                        // 후보 본문
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = candidate,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = AppTheme.colors.textPrimary
+                            )
+                            if (selected) {
+                                Text(
+                                    text = "✓ 자동화 탭에 적용됨",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.colors.primary
+                                )
+                            }
+                        }
+
+                        // 우측 복사 미니 버튼
+                        Box(
+                            modifier = Modifier
+                                .defaultMinSize(minHeight = 36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(AppTheme.colors.card)
+                                .clickable(enabled = enabled) { onCopyCandidate(index) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "복사",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.colors.textSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -1330,6 +1413,13 @@ private fun StickyStatusBanner(
     uiState: AnalysisUiState,
     modifier: Modifier = Modifier
 ) {
+    val themeMode = LocalAppThemeMode.current
+    val isDark = when (themeMode) {
+        AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+    }
+
     val bannerData = when {
         uiState.error.isNotBlank() -> {
             BannerData(
@@ -1343,8 +1433,8 @@ private fun StickyStatusBanner(
             BannerData(
                 text = uiState.warning,
                 icon = Icons.Default.WarningAmber,
-                bgColor = Color(0xFFFFF4E5),
-                textColor = Color(0xFFB26A00)
+                bgColor = if (isDark) Color(0xFF332514) else Color(0xFFFFF4E5),
+                textColor = if (isDark) Color(0xFFFFB74D) else Color(0xFFB26A00)
             )
         }
         uiState.preconditionHintMessage != null -> {

@@ -1,38 +1,55 @@
-// 역할: 와일드카드 세트 목록과 단어 목록을 관리하고 상용구 칩 연동 및 분류 작업을 수행하는 무테두리 토스 카드 스타일의 메인 탭 화면 UI를 제공합니다 (TextFieldState 기반 에디터 국소 리컴포지션 격리).
+// 역할: 와일드카드 세트 목록을 다단(Flow) 칩 및 접기/펼치기·검색 필터로 관리하고 에디터 편집, 상용구 칩 연동, 분류 작업을 제공하는 토스 카드 스타일 메인 탭 화면 UI입니다 (TextFieldState 기반 에디터 국소 리컴포지션 격리).
 package com.example.gemgemgen.wildcard.ui
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,11 +58,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
@@ -63,6 +86,9 @@ import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
+import com.example.gemgemgen.ui.theme.NeuDropdownMenu
+import com.example.gemgemgen.ui.theme.NeuDropdownMenuDivider
+import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.NeuPillChip
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
@@ -108,14 +134,18 @@ internal fun WildcardScreen(
                 .padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 1구역: Top Strip (파일 탭 목록 + 새 파일/삭제 버튼)
+            // 1구역: Top Strip (파일 탭 목록 + 새 파일/삭제/더보기 버튼)
             FileTabsSection(
                 fileItems = fileItems,
                 onFileClick = actions::selectFile,
                 canCreateFile = uiState.canCreateFile,
                 canDelete = uiState.canDelete,
                 onRequestNewFile = actions::requestNewFile,
-                onRequestDelete = actions::requestDeleteSelectedFile
+                onRequestDelete = actions::requestDeleteSelectedFile,
+                environmentStatus = environmentStatus,
+                setupInfo = environmentSetupInfo,
+                onRefresh = actions::onRefresh,
+                onSelectFolder = actions::onSelectFolder
             )
 
             // 2구역: 에디터 카드 (헤더 + 텍스트 입력창 일체화)
@@ -171,12 +201,14 @@ internal fun WildcardScreen(
                                         AppTheme.colors.cardBorder
                                     }
                                 ),
-                                modifier = Modifier.padding(end = 4.dp)
+                                modifier = Modifier
+                                    .defaultMinSize(minHeight = 36.dp)
+                                    .padding(end = 4.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Bookmarks,
@@ -289,15 +321,7 @@ internal fun WildcardScreen(
                 )
             }
 
-            if (!isKeyboardVisible) {
-                // 4구역: 폴더 정보 스트립 (화면 최하단)
-                FolderInfoSection(
-                    environmentStatus = environmentStatus,
-                    setupInfo = environmentSetupInfo,
-                    onRefresh = actions::onRefresh,
-                    onSelectFolder = actions::onSelectFolder
-                )
-            }
+
 
             if (uiState.message.isNotBlank()) {
                 Text(
@@ -326,6 +350,7 @@ internal fun WildcardScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FileTabsSection(
     fileItems: List<WildcardFileUiItem>,
@@ -333,10 +358,34 @@ private fun FileTabsSection(
     canCreateFile: Boolean,
     canDelete: Boolean,
     onRequestNewFile: () -> Unit,
-    onRequestDelete: () -> Unit
+    onRequestDelete: () -> Unit,
+    environmentStatus: EnvironmentStatus,
+    setupInfo: EnvironmentSetupInfo,
+    onRefresh: () -> Unit,
+    onSelectFolder: () -> Unit
 ) {
+    var isExpanded by rememberSaveable { mutableStateOf(true) }
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var isMoreMenuOpen by remember { mutableStateOf(false) }
+
+    val hasFolderIssue = !environmentStatus.isWildcardDirectoryAccessible || !environmentStatus.isWildcardDirectoryWritable
+    val folderPathDesc = WildcardFolderPathFormatter.summaryPath(setupInfo.wildcardDirectoryPath)
+
+    val filteredItems = remember(fileItems, searchQuery) {
+        if (searchQuery.isBlank()) {
+            fileItems
+        } else {
+            fileItems.filter {
+                it.file.fileName.contains(searchQuery.trim(), ignoreCase = true)
+            }
+        }
+    }
+
     NeuCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
         shape = RoundedCornerShape(18.dp),
         elevation = 3.dp
     ) {
@@ -346,6 +395,222 @@ private fun FileTabsSection(
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // 헤더: [파일 목록 (N) ▼/▲]  ...  [검색 🔍] [새 파일 ➕] [삭제 🗑️] [더보기 ⋮]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // 좌측: 라벨 + 접기/펼치기 토글
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { isExpanded = !isExpanded }
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "와일드카드 (${fileItems.size})",
+                        color = AppTheme.colors.textPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "접기" else "펼치기",
+                        tint = AppTheme.colors.textSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // 우측 액션 버튼들 (검색, 새 파일, 삭제, 더보기)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    FileTabIconActionButton(
+                        icon = Icons.Default.Search,
+                        contentDescription = "검색",
+                        enabled = fileItems.isNotEmpty(),
+                        activeTint = if (isSearchActive) AppTheme.colors.primary else AppTheme.colors.textSecondary,
+                        activeBorderColor = AppTheme.colors.cardBorder,
+                        onClick = {
+                            isSearchActive = !isSearchActive
+                            if (!isSearchActive) searchQuery = ""
+                            if (isSearchActive) isExpanded = true
+                        }
+                    )
+                    FileTabIconActionButton(
+                        icon = Icons.Default.Add,
+                        contentDescription = "새 파일",
+                        enabled = canCreateFile,
+                        activeTint = AppTheme.colors.primary,
+                        activeBorderColor = AppTheme.colors.cardBorder,
+                        onClick = onRequestNewFile
+                    )
+                    FileTabIconActionButton(
+                        icon = Icons.Default.Delete,
+                        contentDescription = "삭제",
+                        enabled = canDelete,
+                        activeTint = MaterialTheme.colorScheme.error,
+                        activeBorderColor = MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
+                        onClick = onRequestDelete
+                    )
+                    Box {
+                        FileTabIconActionButton(
+                            icon = Icons.Default.MoreVert,
+                            contentDescription = "더보기",
+                            enabled = true,
+                            activeTint = if (hasFolderIssue) MaterialTheme.colorScheme.error else AppTheme.colors.textSecondary,
+                            activeBorderColor = AppTheme.colors.cardBorder,
+                            onClick = { isMoreMenuOpen = true }
+                        )
+
+                        NeuDropdownMenu(
+                            expanded = isMoreMenuOpen,
+                            onDismissRequest = { isMoreMenuOpen = false }
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                                    .widthIn(max = 240.dp)
+                            ) {
+                                Text(
+                                    text = "와일드카드 저장소",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AppTheme.colors.textSecondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = folderPathDesc,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.colors.textPrimary,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (!environmentStatus.isWildcardDirectoryAccessible) {
+                                    Text(
+                                        text = "와일드카드 폴더를 선택해주세요.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                } else if (!environmentStatus.isWildcardDirectoryWritable) {
+                                    Text(
+                                        text = "파일 편집을 위해 폴더를 다시 선택해주세요.",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                            NeuDropdownMenuDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (setupInfo.wildcardDirectoryPath.isBlank()) "폴더 선택" else "폴더 변경",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = AppTheme.colors.textPrimary
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.FolderOpen,
+                                        contentDescription = null,
+                                        tint = AppTheme.colors.textSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    isMoreMenuOpen = false
+                                    onSelectFolder()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = "새로고침",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = AppTheme.colors.textPrimary
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = AppTheme.colors.textSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                onClick = {
+                                    isMoreMenuOpen = false
+                                    onRefresh()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 인셋 검색창 (검색 활성화 시 노출)
+            if (isSearchActive) {
+                NeuInsetBed(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = AppTheme.colors.textSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = AppTheme.colors.textPrimary,
+                                fontSize = 13.sp
+                            ),
+                            cursorBrush = SolidColor(AppTheme.colors.primary),
+                            decorationBox = { innerTextField ->
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "파일명 검색...",
+                                        color = AppTheme.colors.textSecondary.copy(alpha = 0.6f),
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                        if (searchQuery.isNotEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clickable { searchQuery = "" },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "검색어 지우기",
+                                    tint = AppTheme.colors.textSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 칩 목록 영역
             if (fileItems.isEmpty()) {
                 Text(
                     text = "표시할 txt 파일이 없습니다.",
@@ -353,13 +618,48 @@ private fun FileTabsSection(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
+            } else if (filteredItems.isEmpty()) {
+                Text(
+                    text = "'$searchQuery' 일치하는 파일이 없습니다.",
+                    color = AppTheme.colors.textSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else if (isExpanded) {
+                // 펼침 상태: FlowRow 다단 칩 (최대 높이 160dp 내 스크롤로 20개 이상도 쾌적하게 조망)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 160.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        filteredItems.forEach { item ->
+                            key(item.file.id) {
+                                val baseName = item.displayName.removeSuffix(".txt")
+                                val label = if (item.isLinkedToAutocomplete) "🔖 $baseName" else baseName
+                                NeuPillChip(
+                                    text = label,
+                                    selected = item.isSelected,
+                                    onClick = { onFileClick(item.file) },
+                                    shape = RoundedCornerShape(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             } else {
+                // 접힘 상태: 가로 1줄 스크롤 (에디터 공간을 최대로 넓게 쓸 때)
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(
-                        items = fileItems,
+                        items = filteredItems,
                         key = { it.file.id }
                     ) { item ->
                         val baseName = item.displayName.removeSuffix(".txt")
@@ -372,31 +672,6 @@ private fun FileTabsSection(
                         )
                     }
                 }
-            }
-
-            // 파일 추가 및 삭제 액션 버튼 영역 (우측 하단 정렬)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FileTabIconActionButton(
-                    icon = Icons.Default.Add,
-                    contentDescription = "새 파일",
-                    enabled = canCreateFile,
-                    activeTint = AppTheme.colors.primary,
-                    activeBorderColor = AppTheme.colors.cardBorder,
-                    onClick = onRequestNewFile
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                FileTabIconActionButton(
-                    icon = Icons.Default.Delete,
-                    contentDescription = "삭제",
-                    enabled = canDelete,
-                    activeTint = MaterialTheme.colorScheme.error,
-                    activeBorderColor = MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
-                    onClick = onRequestDelete
-                )
             }
         }
     }
@@ -434,99 +709,7 @@ private fun FileTabIconActionButton(
     }
 }
 
-@Composable
-private fun FolderInfoSection(
-    environmentStatus: EnvironmentStatus,
-    setupInfo: EnvironmentSetupInfo,
-    onRefresh: () -> Unit,
-    onSelectFolder: () -> Unit
-) {
-    val folderPathDesc = WildcardFolderPathFormatter.summaryPath(
-        setupInfo.wildcardDirectoryPath
-    )
 
-    NeuCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        elevation = 2.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = "와일드카드 저장소",
-                    color = AppTheme.colors.textSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Text(
-                    text = folderPathDesc,
-                    color = AppTheme.colors.textPrimary,
-                    fontSize = 14.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (!environmentStatus.isWildcardDirectoryAccessible) {
-                    Text(
-                        text = "와일드카드 폴더를 선택해주세요.",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 12.sp
-                    )
-                } else if (!environmentStatus.isWildcardDirectoryWritable) {
-                    Text(
-                        text = "파일 편집을 위해 폴더를 다시 선택해주세요.",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(start = 12.dp)
-            ) {
-                FolderActionButton(
-                    label = if (setupInfo.wildcardDirectoryPath.isBlank()) "폴더 선택" else "폴더 변경",
-                    onClick = onSelectFolder
-                )
-                FolderActionButton(
-                    label = "새로고침",
-                    onClick = onRefresh
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FolderActionButton(
-    label: String,
-    onClick: () -> Unit
-) {
-    NeuButton(
-        onClick = onClick,
-        isPrimary = false,
-        shape = RoundedCornerShape(12.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        modifier = Modifier.height(38.dp)
-    ) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
 
 @Composable
 private fun LineSelectionList(
@@ -594,7 +777,8 @@ private fun LineSelectionActionBar(
     onDeriveFile: () -> Unit,
     onExit: () -> Unit
 ) {
-    val barShape = RoundedCornerShape(16.dp)
+    val barShape = RoundedCornerShape(14.dp)
+    val btnPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -607,9 +791,10 @@ private fun LineSelectionActionBar(
             enabled = uiState.canSelectAllLines,
             isPrimary = false,
             shape = barShape,
+            contentPadding = btnPadding,
             modifier = Modifier
                 .weight(1f)
-                .height(52.dp)
+                .height(42.dp)
         ) {
             Text(text = "전체", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
@@ -618,9 +803,10 @@ private fun LineSelectionActionBar(
             enabled = uiState.canDeselectAllLines,
             isPrimary = false,
             shape = barShape,
+            contentPadding = btnPadding,
             modifier = Modifier
                 .weight(1f)
-                .height(52.dp)
+                .height(42.dp)
         ) {
             Text(text = "해제", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
@@ -629,9 +815,10 @@ private fun LineSelectionActionBar(
             enabled = uiState.canComposeDynamicPrompt,
             isPrimary = false,
             shape = barShape,
+            contentPadding = btnPadding,
             modifier = Modifier
                 .weight(1.6f)
-                .height(52.dp)
+                .height(42.dp)
         ) {
             Text(
                 text = "다이나믹",
@@ -646,9 +833,10 @@ private fun LineSelectionActionBar(
             enabled = uiState.canDeriveFile,
             isPrimary = true,
             shape = barShape,
+            contentPadding = btnPadding,
             modifier = Modifier
                 .weight(1.8f)
-                .height(52.dp)
+                .height(42.dp)
         ) {
             Text(
                 text = "새 파일로",
@@ -663,9 +851,10 @@ private fun LineSelectionActionBar(
             enabled = uiState.canExitLineSelectionMode,
             isPrimary = false,
             shape = barShape,
+            contentPadding = btnPadding,
             modifier = Modifier
                 .weight(1.1f)
-                .height(52.dp)
+                .height(42.dp)
         ) {
             Text(text = "완료", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
@@ -681,7 +870,9 @@ private fun ActionButtonsBar(
     onCopy: () -> Unit,
     onUndo: () -> Unit
 ) {
-    val barShape = RoundedCornerShape(16.dp)
+    val barShape = RoundedCornerShape(14.dp)
+    val btnPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+    val iconOnlyPadding = PaddingValues(0.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -694,15 +885,16 @@ private fun ActionButtonsBar(
             enabled = uiState.canPaste,
             isPrimary = false,
             shape = barShape,
+            contentPadding = btnPadding,
             modifier = Modifier
-                .weight(3.8f)
-                .height(52.dp)
+                .weight(1.15f)
+                .height(42.dp)
         ) {
-            Icon(imageVector = Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(4.dp))
+            Icon(imageVector = Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(3.dp))
             Text(
                 text = "아래 붙여넣기",
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -714,15 +906,16 @@ private fun ActionButtonsBar(
             enabled = uiState.canPaste,
             isPrimary = false,
             shape = barShape,
+            contentPadding = btnPadding,
             modifier = Modifier
-                .weight(3.6f)
-                .height(52.dp)
+                .weight(1f)
+                .height(42.dp)
         ) {
-            Icon(imageVector = Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(4.dp))
+            Icon(imageVector = Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(3.dp))
             Text(
                 text = "붙여넣기",
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -734,15 +927,16 @@ private fun ActionButtonsBar(
             enabled = uiState.canSave,
             isPrimary = true,
             shape = barShape,
+            contentPadding = btnPadding,
             modifier = Modifier
-                .weight(3.6f)
-                .height(52.dp)
+                .weight(1f)
+                .height(42.dp)
         ) {
-            Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(4.dp))
+            Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(3.dp))
             Text(
                 text = "저장",
-                fontSize = 12.sp,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -754,11 +948,12 @@ private fun ActionButtonsBar(
             enabled = uiState.canCopy,
             isPrimary = false,
             shape = barShape,
+            contentPadding = iconOnlyPadding,
             modifier = Modifier
-                .weight(1.2f)
-                .height(52.dp)
+                .width(42.dp)
+                .height(42.dp)
         ) {
-            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "복사", modifier = Modifier.size(16.dp))
+            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "복사", modifier = Modifier.size(18.dp))
         }
 
         NeuButton(
@@ -766,11 +961,12 @@ private fun ActionButtonsBar(
             enabled = uiState.canUndo,
             isPrimary = false,
             shape = barShape,
+            contentPadding = iconOnlyPadding,
             modifier = Modifier
-                .weight(1.2f)
-                .height(52.dp)
+                .width(42.dp)
+                .height(42.dp)
         ) {
-            Icon(imageVector = Icons.Default.Undo, contentDescription = "실행 취소", modifier = Modifier.size(16.dp))
+            Icon(imageVector = Icons.Default.Undo, contentDescription = "실행 취소", modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -797,7 +993,7 @@ private fun WildcardEditorTextField(
         state = editorState,
         modifier = modifier,
         enabled = canEditText,
-        placeholder = { Text(text = "Select a file or create a new txt file.") },
+        placeholder = { Text(text = "파일을 선택하거나 새 txt 파일을 만들어주세요.") },
         lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 8),
         shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
         textStyle = TextStyle(

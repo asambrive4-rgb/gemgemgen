@@ -1,15 +1,13 @@
-// 역할: 와일드카드 화면의 활성 다이얼로그 상태를 판별하고 TextFieldState 기반 파일 관리·AI 분류 팝업을 통합 표시합니다.
+// 역할: 와일드카드 화면의 활성 다이얼로그 상태를 판별하고 토스 스타일 NeuButton 기반 파일 관리·AI 분류 팝업을 통합 표시합니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,10 +20,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +36,7 @@ import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuConfigDialogContent
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
@@ -211,6 +208,7 @@ private fun FileNameInputDialogContent(
         subtitle = description,
         confirmLabel = confirmLabel,
         confirmEnabled = canConfirm,
+        useNeuButtons = true,
         onConfirm = onConfirm,
         onDismiss = onDismiss
     ) {
@@ -251,32 +249,64 @@ private fun UnsavedChangesContent(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "저장하지 않은 변경사항",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = "현재 파일의 변경사항을 어떻게 처리할까요?",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = actions::onConfirmPendingSave) {
-                Text("Save")
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "저장하지 않은 변경사항",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = AppTheme.colors.textPrimary
+            )
+            Text(
+                text = "현재 파일의 변경사항을 어떻게 처리할까요?",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.colors.textSecondary,
+                lineHeight = 16.sp
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                NeuButton(
+                    onClick = actions::onConfirmPendingDiscard,
+                    isPrimary = false,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f),
+                    contentModifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "변경 취소",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                NeuButton(
+                    onClick = actions::onConfirmPendingSave,
+                    isPrimary = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.weight(1f),
+                    contentModifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "저장",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
-            Spacer(modifier = Modifier.width(4.dp))
-            TextButton(onClick = actions::onConfirmPendingDiscard) {
-                Text("Discard")
-            }
-            Spacer(modifier = Modifier.width(4.dp))
-            TextButton(onClick = actions::cancelPendingAction) {
-                Text("Cancel")
+            NeuButton(
+                onClick = actions::cancelPendingAction,
+                isPrimary = false,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+                contentModifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "계속 편집",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }
@@ -287,24 +317,27 @@ private fun ClassifyLoadingContent() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(28.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
             text = "분류 중",
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = AppTheme.colors.textPrimary
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+            CircularProgressIndicator(
+                modifier = Modifier.size(32.dp),
+                color = AppTheme.colors.primary
+            )
             Text(
                 text = "분석 설정(Gemini/Grok)으로 분류하고 있습니다…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.colors.textSecondary
             )
         }
     }
@@ -324,6 +357,7 @@ private fun ClassifyCriteriaContent(
         title = "와일드카드 분류",
         confirmLabel = "분류 실행",
         confirmEnabled = dialog.canRun,
+        useNeuButtons = true,
         onConfirm = actions::runClassify,
         onDismiss = actions::dismissClassifyCriteriaDialog
     ) {
@@ -393,6 +427,7 @@ private fun ClassifyPreviewContent(
         confirmLabel = "파일로 저장",
         dismissLabel = "닫기",
         confirmEnabled = dialog.canSave,
+        useNeuButtons = true,
         onConfirm = { actions.saveClassifyResult() },
         onDismiss = actions::dismissClassifyPreview
     ) {
@@ -419,12 +454,19 @@ private fun ClassifyPreviewContent(
                 label = { Text("분류 기준 (다시 분류용)") },
                 placeholder = { Text("기준을 수정한 뒤 다시 분류") }
             )
-            OutlinedButton(
+            NeuButton(
                 onClick = actions::runClassify,
                 enabled = dialog.canRerun,
-                modifier = Modifier.fillMaxWidth()
+                isPrimary = false,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+                contentModifier = Modifier.fillMaxWidth()
             ) {
-                Text("다시 분류 (전체)", fontWeight = FontWeight.Bold)
+                Text(
+                    text = "다시 분류 (전체)",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
             }
             if (dialog.error.isNotBlank()) {
                 Text(
@@ -551,6 +593,7 @@ private fun ClassifyOverwriteContent(
         title = "파일 덮어쓰기",
         subtitle = "같은 이름의 파일이 있습니다. 덮어쓸까요?",
         confirmLabel = "덮어쓰기",
+        useNeuButtons = true,
         onConfirm = actions::confirmClassifyOverwrite,
         onDismiss = actions::dismissClassifyOverwrite
     ) {

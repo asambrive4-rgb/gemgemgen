@@ -1,4 +1,4 @@
-// 역할: 메인 화면 프롬프트 에디터 하단에 대표 계정의 제미나이 사용률(%·만료 자동 보정)과 70%/90% 주의·경고 컬러를 무테두리 토스 카드 스타일로 표시하고, 모달 진입 없이 즉시 새로고침하거나 다중 계정 모달을 여는 요약 바입니다.
+// 역할: 메인 화면 프롬프트 에디터 하단에 대표 계정의 제미나이 사용률(%·만료 자동 보정)과 70%/90% 주의·경고 컬러를 공통 NeuCard·NeuButton 기반 토스 스타일로 표시하고, 모달 진입 없이 즉시 새로고침하거나 다중 계정 모달을 여는 요약 바입니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.foundation.Image
@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,7 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.automation.ui.GeminiGradientLogo
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuButton
+import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.usage.domain.GeminiUsageWarningLevel
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 import kotlinx.coroutines.delay
@@ -63,22 +65,19 @@ internal fun resolveGeminiUsageWarningColor(level: GeminiUsageWarningLevel): Col
 }
 
 /**
- * 프롬프트 에디터 하단(상태 영역)에 배치되는 미니멀 뉴모피즘 제미나이 사용량 요약 바 및 즉시 새로고침 버튼.
- *
- * - 표시 내용: 대표/현재 계정 별칭 + 사용률(%) (예: `본계정 42% ▾`)
- * - 시각 피드백: 70% 이상 시 주황색(주의), 90% 이상 시 빨간색(경고) 포인트 컬러 적용 (초기화 경과 시 자동으로 0%·정상 보정)
- * - 좌측 요약 바 클릭 동작: 'Gemini Pro 계정별 사용량' 다중 계정 수직 목록 모달 오픈
- * - 우측 새로고침 버튼 클릭 동작: 모달 진입 없이 메인 화면에서 즉시 계정 사용량 새로고침
+ * 프롬프트 에디터 하단에 붙는 1줄 요약 버튼.
+ * 잔여 한도(0~100%), 만료(리셋)까지 남은 시간, 70%/90% 주의 배지를 토스 카드 스타일로 보여줍니다.
  */
 @Composable
 fun GeminiUsageSummaryButton(
     multiUsageState: MultiGeminiUsageState,
     onClick: () -> Unit,
-    onRefreshClick: () -> Unit = {},
+    onRefreshClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var nowMillis by remember(multiUsageState) { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(multiUsageState.representativeAccount?.displayedSuccess) {
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(Unit) {
         while (true) {
             delay(30_000L)
             nowMillis = System.currentTimeMillis()
@@ -86,8 +85,9 @@ fun GeminiUsageSummaryButton(
     }
 
     val warningLevel = multiUsageState.summaryWarningLevel(nowMillis)
-    val accentColor = resolveGeminiUsageWarningColor(warningLevel)
     val isWarningOrCaution = warningLevel != GeminiUsageWarningLevel.NORMAL
+    val accentColor = resolveGeminiUsageWarningColor(warningLevel)
+
     val badgeText = multiUsageState.summaryBadgeText(nowMillis)
     val resetTimeText = multiUsageState.summaryResetTimeText(nowMillis)
     val summaryButtonText = multiUsageState.summaryButtonText(nowMillis)
@@ -105,26 +105,13 @@ fun GeminiUsageSummaryButton(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
+        NeuCard(
             shape = shape,
-            color = containerColor,
+            backgroundColor = containerColor,
+            elevation = 2.dp,
             modifier = Modifier
                 .weight(1f)
                 .height(42.dp)
-                .shadow(
-                    elevation = 2.dp,
-                    shape = shape,
-                    ambientColor = if (isWarningOrCaution) {
-                        accentColor.copy(alpha = 0.25f)
-                    } else {
-                        AppTheme.colors.shadowDark.copy(alpha = 0.22f)
-                    },
-                    spotColor = if (isWarningOrCaution) {
-                        accentColor.copy(alpha = 0.18f)
-                    } else {
-                        AppTheme.colors.shadowDark.copy(alpha = 0.16f)
-                    }
-                )
                 .clip(shape)
                 .clickable(onClick = onClick)
                 .semantics {
@@ -215,22 +202,16 @@ fun GeminiUsageSummaryButton(
             }
         }
 
-        Surface(
+        NeuButton(
+            onClick = onRefreshClick,
+            enabled = !multiUsageState.isAnyRefreshing,
+            isPrimary = false,
             shape = shape,
-            color = AppTheme.colors.card,
+            elevation = 2.dp,
+            containerColor = AppTheme.colors.card,
+            contentPadding = PaddingValues(0.dp),
             modifier = Modifier
                 .size(42.dp)
-                .shadow(
-                    elevation = 2.dp,
-                    shape = shape,
-                    ambientColor = AppTheme.colors.shadowDark.copy(alpha = 0.22f),
-                    spotColor = AppTheme.colors.shadowDark.copy(alpha = 0.16f)
-                )
-                .clip(shape)
-                .clickable(
-                    enabled = !multiUsageState.isAnyRefreshing,
-                    onClick = onRefreshClick
-                )
                 .semantics {
                     role = Role.Button
                     contentDescription = "Gemini 사용량 즉시 새로고침"

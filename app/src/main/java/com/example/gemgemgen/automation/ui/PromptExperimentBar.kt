@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +53,8 @@ import com.example.gemgemgen.automation.domain.PromptExperimentItem
 import com.example.gemgemgen.automation.domain.PromptExperimentPreset
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
+import com.example.gemgemgen.ui.theme.NeuDropdownMenu
+import com.example.gemgemgen.ui.theme.NeuDropdownMenuDivider
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 
 @Composable
@@ -269,10 +270,9 @@ private fun ExperimentPresetDropdownButton(
             }
         }
 
-        DropdownMenu(
+        NeuDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(AppTheme.colors.card)
+            onDismissRequest = { expanded = false }
         ) {
             presets.forEach { preset ->
                 val isSelected = preset.id == activePreset.id
@@ -304,6 +304,7 @@ private fun ExperimentPresetDropdownButton(
                     }
                 )
             }
+            NeuDropdownMenuDivider()
             DropdownMenuItem(
                 text = {
                     Text(

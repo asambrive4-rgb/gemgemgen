@@ -24,8 +24,6 @@ import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -58,6 +56,8 @@ import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.TextHighlightRange
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuCard
+import com.example.gemgemgen.ui.theme.NeuDropdownMenu
+import com.example.gemgemgen.ui.theme.NeuDropdownMenuItem
 import com.example.gemgemgen.ui.theme.NeuPillChip
 import kotlinx.coroutines.flow.StateFlow
 
@@ -386,34 +386,15 @@ private fun TargetAppDropdownChip(
             )
         }
 
-        DropdownMenu(
+        NeuDropdownMenu(
             expanded = expanded && enabled,
-            onDismissRequest = { expanded = false },
-            shape = RoundedCornerShape(14.dp),
-            containerColor = AppTheme.colors.card,
-            shadowElevation = 8.dp
+            onDismissRequest = { expanded = false }
         ) {
             AutomationTargetApp.entries.forEach { targetApp ->
                 val isSelected = targetApp == selectedTargetApp
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = targetApp.displayName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) AppTheme.colors.primary else AppTheme.colors.textPrimary
-                        )
-                    },
-                    trailingIcon = if (isSelected) {
-                        {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = AppTheme.colors.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    } else null,
+                NeuDropdownMenuItem(
+                    text = targetApp.displayName,
+                    isSelected = isSelected,
                     onClick = {
                         expanded = false
                         onTargetAppSelected(targetApp)

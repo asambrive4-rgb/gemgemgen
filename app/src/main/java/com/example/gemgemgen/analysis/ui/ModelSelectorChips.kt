@@ -1,4 +1,4 @@
-// 역할: Gemini 및 Grok 프로바이더와 지원 모델 목록을 칩 형태로 선택하고 요약 라벨을 제공하는 공통 UI 컴포넌트입니다.
+// 역할: Gemini 및 Grok 프로바이더와 지원 모델 목록을 칩 형태로 선택(접근성 시맨틱 지원)하고 요약 라벨을 제공하는 공통 UI 컴포넌트입니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
@@ -51,25 +55,40 @@ fun ModelSelectorChips(
         horizontalArrangement = horizontalArrangement,
         verticalArrangement = verticalArrangement
     ) {
+        val isGeminiSelected = selectedProvider == AnalysisProvider.GEMINI
         NeuPillChip(
             text = "Gemini",
-            selected = selectedProvider == AnalysisProvider.GEMINI,
-            onClick = { onSelectProvider(AnalysisProvider.GEMINI) }
+            selected = isGeminiSelected,
+            onClick = { onSelectProvider(AnalysisProvider.GEMINI) },
+            modifier = Modifier.semantics {
+                this.selected = isGeminiSelected
+                this.role = Role.Tab
+            }
         )
+        val isGrokSelected = selectedProvider == AnalysisProvider.GROK
         NeuPillChip(
             text = "Grok",
-            selected = selectedProvider == AnalysisProvider.GROK,
-            onClick = { onSelectProvider(AnalysisProvider.GROK) }
+            selected = isGrokSelected,
+            onClick = { onSelectProvider(AnalysisProvider.GROK) },
+            modifier = Modifier.semantics {
+                this.selected = isGrokSelected
+                this.role = Role.Tab
+            }
         )
         val models = when (selectedProvider) {
             AnalysisProvider.GEMINI -> GEMINI_MODELS
             AnalysisProvider.GROK -> GROK_MODELS
         }
         models.forEach { item ->
+            val isItemSelected = selectedModelId == item.modelId
             NeuPillChip(
                 text = item.label,
-                selected = selectedModelId == item.modelId,
-                onClick = { onSelectModel(item.modelId) }
+                selected = isItemSelected,
+                onClick = { onSelectModel(item.modelId) },
+                modifier = Modifier.semantics {
+                    this.selected = isItemSelected
+                    this.role = Role.Tab
+                }
             )
         }
     }

@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -74,10 +75,12 @@ internal fun PromptSuggestionBar(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             suggestions.forEach { candidate ->
-                WildcardSuggestionChip(
-                    candidate = candidate,
-                    onClick = { onSuggestionClick(candidate) }
-                )
+                key("${candidate.type}:${candidate.name}:${candidate.token}") {
+                    WildcardSuggestionChip(
+                        candidate = candidate,
+                        onClick = { onSuggestionClick(candidate) }
+                    )
+                }
             }
         }
     }

@@ -3,11 +3,10 @@ package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.wildcard.domain.WildcardFileParser
 import com.example.gemgemgen.wildcard.domain.WildcardSet
-import java.security.SecureRandom
 import java.util.Random
 
 class PromptGenerator(
-    private val random: Random = SecureRandom()
+    private val random: Random = Random()
 ) {
     fun compile(
         basePrompt: String,
@@ -73,10 +72,31 @@ class PromptGenerator(
                 if (!inner.contains('|')) {
                     match.value
                 } else {
-                    val options = inner.split('|').map { it.trim() }
-                    options[random.nextInt(options.size)]
+                    pickDynamicOption(inner, random)
                 }
             }
+        }
+
+        private fun pickDynamicOption(inner: String, random: Random): String {
+            var pipeCount = 0
+            for (i in 0 until inner.length) {
+                if (inner[i] == '|') pipeCount++
+            }
+            if (pipeCount == 0) return inner
+
+            val chosenIndex = random.nextInt(pipeCount + 1)
+            var currentOption = 0
+            var startIndex = 0
+            for (i in 0 until inner.length) {
+                if (inner[i] == '|') {
+                    if (currentOption == chosenIndex) {
+                        return inner.substring(startIndex, i).trim()
+                    }
+                    currentOption++
+                    startIndex = i + 1
+                }
+            }
+            return inner.substring(startIndex).trim()
         }
     }
 }

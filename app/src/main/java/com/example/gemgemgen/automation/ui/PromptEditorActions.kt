@@ -55,6 +55,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -260,7 +261,10 @@ internal fun PromptSystemDeviceBar(
                     enabled = isVariationButtonEnabled,
                     isHighlighted = false,
                     contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp),
-                    modifier = Modifier.semantics { contentDescription = "변주" }
+                    modifier = Modifier.semantics {
+                        role = Role.Button
+                        contentDescription = "변주 (길게 눌러 변주 프롬프트 설정)"
+                    }
                 ) {
                     Text(
                         text = if (variationAutomationState is AutomationRunState.Running) {
@@ -381,7 +385,10 @@ internal fun PromptEditorActionGroup(
                     contentPadding = PaddingValues(0.dp),
                     modifier = Modifier
                         .size(width = 36.dp, height = 36.dp)
-                        .semantics { contentDescription = "상단 삽입" }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = "상단 지시문 삽입 (길게 눌러 설정)"
+                        }
                 ) {
                     Icon(
                         imageVector = Icons.Default.VerticalAlignTop,
@@ -396,7 +403,10 @@ internal fun PromptEditorActionGroup(
                     contentPadding = PaddingValues(0.dp),
                     modifier = Modifier
                         .size(width = 36.dp, height = 36.dp)
-                        .semantics { contentDescription = "하단 삽입" }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = "하단 지시문 삽입 (길게 눌러 설정)"
+                        }
                 ) {
                     Icon(
                         imageVector = Icons.Default.VerticalAlignBottom,

@@ -47,7 +47,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -565,6 +568,10 @@ private fun AccountTabSegmentItem(
         color = if (isSelected) AppTheme.colors.card else androidx.compose.ui.graphics.Color.Transparent,
         shadowElevation = if (isSelected) 2.dp else 0.dp,
         modifier = modifier
+            .semantics {
+                this.selected = isSelected
+                this.role = Role.Tab
+            }
             .fillMaxHeight()
             .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)

@@ -1,4 +1,4 @@
-// 역할: 기기 저장소의 와일드카드 텍스트 파일들을 읽고 쓰는 파일 입출력을 처리합니다.
+// 역할: 기기 저장소의 와일드카드 텍스트 파일들을 읽고 쓰는 파일 입출력을 처리하며, SAF 및 DirectStorage 단기 캐시(TTL)를 관리합니다.
 package com.example.gemgemgen.wildcard.android
 
 import android.content.Context
@@ -83,6 +83,8 @@ class AndroidWildcardFileRepository(
             fileName
         ) ?: throw WildcardFileException("새 파일을 만들지 못했습니다.")
 
+        clearSafCache()
+
         return WildcardTextFile(
             id = DocumentsContract.getDocumentId(documentUri),
             fileName = fileName
@@ -103,6 +105,7 @@ class AndroidWildcardFileRepository(
                 writer.write(text)
             }
         }
+        clearSafCache()
     }
 
     override fun deleteFile(file: WildcardTextFile) {
@@ -113,6 +116,7 @@ class AndroidWildcardFileRepository(
         val uri = documentUriFor(file)
         val deleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
         if (!deleted) throw WildcardFileException("${file.fileName} 파일을 삭제하지 못했습니다.")
+        clearSafCache()
     }
 
     override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile {
@@ -127,6 +131,8 @@ class AndroidWildcardFileRepository(
             newName
         ) ?: throw WildcardFileException("${file.fileName} 파일 이름을 수정하지 못했습니다.")
 
+        clearSafCache()
+
         return WildcardTextFile(
             id = DocumentsContract.getDocumentId(newUri),
             fileName = newName
@@ -135,6 +141,12 @@ class AndroidWildcardFileRepository(
 
     private fun listSafFiles(): List<WildcardTextFile> {
         val folderUri = currentFolderUri()
+        val now = System.currentTimeMillis()
+        val cached = cachedSafFiles
+        if (cached != null && cachedSafFolderUri == folderUri && now - cachedSafFilesAtMs < SAF_CACHE_TTL_MS) {
+            return cached
+        }
+
         val resolver = context.contentResolver
         val childUri = DocumentsContract.buildChildDocumentsUriUsingTree(
             folderUri,
@@ -168,7 +180,11 @@ class AndroidWildcardFileRepository(
             }
         }
 
-        return result.sortedBy { it.fileName.lowercase() }
+        val sorted = result.sortedBy { it.fileName.lowercase() }
+        cachedSafFolderUri = folderUri
+        cachedSafFiles = sorted
+        cachedSafFilesAtMs = now
+        return sorted
     }
 
     private fun currentFolderUri(): Uri {
@@ -179,6 +195,19 @@ class AndroidWildcardFileRepository(
     private fun documentUriFor(file: WildcardTextFile): Uri {
         val folderUri = currentFolderUri()
         return DocumentsContract.buildDocumentUriUsingTree(folderUri, file.id)
+    }
+
+    companion object {
+        private const val SAF_CACHE_TTL_MS = 2_000L
+        @Volatile private var cachedSafFiles: List<WildcardTextFile>? = null
+        @Volatile private var cachedSafFilesAtMs: Long = 0L
+        @Volatile private var cachedSafFolderUri: Uri? = null
+
+        fun clearSafCache() {
+            cachedSafFiles = null
+            cachedSafFilesAtMs = 0L
+            cachedSafFolderUri = null
+        }
     }
 }
 

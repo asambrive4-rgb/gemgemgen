@@ -40,9 +40,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -65,10 +63,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.ui.theme.AppTheme
-import com.example.gemgemgen.ui.theme.AppThemePalette
-import com.example.gemgemgen.ui.theme.LocalAppThemePalette
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
+import com.example.gemgemgen.ui.theme.NeuDropdownMenu
+import com.example.gemgemgen.ui.theme.NeuDropdownMenuDivider
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
@@ -360,12 +358,9 @@ fun GeminiAccountRowCard(
                             }
                         }
 
-                        DropdownMenu(
+                        NeuDropdownMenu(
                             expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                            shape = RoundedCornerShape(16.dp),
-                            containerColor = AppTheme.colors.card,
-                            shadowElevation = 8.dp
+                            onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
                                 text = {
@@ -388,11 +383,7 @@ fun GeminiAccountRowCard(
                                 }
                             )
                             if (onMoveAccountGroup != null) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = AppTheme.colors.insetBorder.copy(alpha = 0.65f),
-                                    thickness = 0.8.dp
-                                )
+                                NeuDropdownMenuDivider()
                                 val targetGroup = if (entry.profile.group == GeminiAccountGroup.MAIN) {
                                     GeminiAccountGroup.SUB
                                 } else {
@@ -421,11 +412,7 @@ fun GeminiAccountRowCard(
                                 )
                             }
                             if (onToggleAccountSuspension != null) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = AppTheme.colors.insetBorder.copy(alpha = 0.65f),
-                                    thickness = 0.8.dp
-                                )
+                                NeuDropdownMenuDivider()
                                 val isSuspended = entry.profile.isSuspended
                                 val suspendText = if (isSuspended) "사용 금지 해제" else "당분간 사용 금지"
                                 val suspendIcon = if (isSuspended) Icons.Default.CheckCircle else Icons.Default.Block
@@ -451,8 +438,7 @@ fun GeminiAccountRowCard(
                                     }
                                 )
                             }
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 12.dp),
+                            NeuDropdownMenuDivider(
                                 color = AppTheme.colors.insetBorder,
                                 thickness = 1.dp
                             )
@@ -899,29 +885,8 @@ private fun formatAccountUpdatedAtTime(updatedAt: Long): String {
 
 /**
  * 테마별 대표 계정 체크마크 전용 컬러.
- * 메인 브랜드 색상과 확실히 대비되는 산뜻한 포인트 컬러(토스/코랄/인디고: 그린, 세이지: 블루)를 반환합니다.
+ * 테마 시스템(AppTheme.colors.accent)에 정의된 산뜻한 포인트 액센트 컬러를 반환합니다.
  */
 @Composable
-private fun resolveAccountCheckColor(): Color {
-    val palette = LocalAppThemePalette.current
-    val isDark = AppTheme.colors.card == Color(0xFF1C222D)
-    return when (palette) {
-        AppThemePalette.SAGE_MATCHA -> {
-            // 노르딕 세이지는 메인 브랜드가 딥 세이지 녹색이므로, 메인과 뚜렷이 구별되는 선명한 블루 계열 사용
-            if (isDark) Color(0xFF60A5FA) else Color(0xFF2563EB)
-        }
-        AppThemePalette.CORAL_CREAM -> {
-            // 웜 코랄 크림은 산뜻한 민트 그린 계열 사용
-            if (isDark) Color(0xFF34D399) else Color(0xFF00B06B)
-        }
-        AppThemePalette.PURE_INDIGO -> {
-            // 퓨어 인디고는 선명한 에메랄드 그린 계열 사용
-            if (isDark) Color(0xFF2DD4BF) else Color(0xFF00C471)
-        }
-        AppThemePalette.TOSS_SIGNATURE -> {
-            // 토스 시그니처(토스 블루)는 토스 에메랄드 그린 사용
-            if (isDark) Color(0xFF34D399) else Color(0xFF00C471)
-        }
-    }
-}
+private fun resolveAccountCheckColor(): Color = AppTheme.colors.accent
 
