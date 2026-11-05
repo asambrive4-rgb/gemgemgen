@@ -1,4 +1,4 @@
-// 역할: 최근 앱 제어, 제스처 주입, 메모리 정리, Gemini 구글 계정 자동 전환 및 앱별 자동화 게이트웨이를 제공하는 접근성 인프라 서비스
+// 역할: 최근 앱 제어, 제스처 주입, 메모리 정리, 계정 자동 전환 및 생명주기 안전(onUnbind/WeakReference) 게이트웨이를 제공하는 접근성 인프라 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -9,6 +9,7 @@ import android.content.ClipDescription
 import android.os.PersistableBundle
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Path
 import android.os.Handler
 import android.os.Looper
@@ -23,6 +24,7 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountResult
+import java.lang.ref.WeakReference
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -87,7 +89,7 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     override fun onServiceConnected() {
-        activeService = this
+        setInstance(this)
         setWindowEventTracking(enabled = false)
     }
 
@@ -118,17 +120,28 @@ class GeminiAccessibilityService : AccessibilityService() {
         // 진행 중인 접근성 자동화 핸들러(accountSwitch 등)를 강제 종료하지 않습니다.
     }
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        tearDownService("접근성 서비스 연결이 해제되었습니다.")
+        return super.onUnbind(intent)
+    }
+
     override fun onDestroy() {
-        finishMemoryCleanup(MemoryCleanupResult.Failure("접근성 서비스가 종료되었습니다."))
-        finishAccountSwitch(SwitchGeminiAccountResult.Failure("접근성 서비스가 종료되었습니다."))
-        if (activeService == this) {
-            activeService = null
-        }
-        finishCloseApp(CloseGeminiAppResult.Failure("접근성 서비스가 종료되었습니다."))
-        ProcessAutomationHolder.onAccessibilityLost()
+        tearDownService("접근성 서비스가 종료되었습니다.")
         serviceScope.cancel()
-        handler.removeCallbacksAndMessages(null)
         super.onDestroy()
+    }
+
+    private fun tearDownService(reason: String) {
+        clearInstance(this)
+        setWindowEventTracking(enabled = false)
+        finishMemoryCleanup(MemoryCleanupResult.Failure(reason))
+        cancelMemoryCleanup(memoryCleanupToken ?: Any())
+        finishAccountSwitch(SwitchGeminiAccountResult.Failure(reason))
+        cancelAccountSwitch(accountSwitchToken ?: Any())
+        finishCloseApp(CloseGeminiAppResult.Failure(reason))
+        ProcessAutomationHolder.onAccessibilityLost()
+        serviceScope.coroutineContext.cancelChildren()
+        handler.removeCallbacksAndMessages(null)
     }
 
     internal fun gatewayFor(targetApp: AutomationTargetApp): PromptAutomationGateway {
@@ -534,8 +547,24 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     companion object {
-        var activeService: GeminiAccessibilityService? = null
-            private set
+        private var serviceRef: WeakReference<GeminiAccessibilityService>? = null
+
+        val activeService: GeminiAccessibilityService?
+            get() = serviceRef?.get()
+
+        internal fun setInstance(service: GeminiAccessibilityService) {
+            serviceRef = WeakReference(service)
+        }
+
+        internal fun clearInstance(service: GeminiAccessibilityService) {
+            if (serviceRef?.get() === service) {
+                serviceRef = null
+            }
+        }
+
+        internal fun clearForTesting() {
+            serviceRef = null
+        }
 
         private const val GEMINI_TASK_TITLE = "Gemini"
         private const val GEMINI_CLOSE_DESCRIPTION = "Gemini 앱 종료"
