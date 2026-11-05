@@ -10,8 +10,8 @@ import com.example.gemgemgen.automation.usecase.MaintenanceResult
 import com.example.gemgemgen.automation.usecase.MemoryCleanupGateway
 import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountResult
-import com.example.gemgemgen.remote.domain.AutomationMode
-import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.automation.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
@@ -215,7 +215,7 @@ class AppMaintenanceUseCaseTest {
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
             memoryCleanupGateway = gateway,
-            manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway)
+            remoteSenderGateway = ManageRemoteAutomationUseCase(remoteGateway)
         )
 
         val result = useCase.cleanMemory(AutomationMode.RECEIVER)
@@ -256,7 +256,7 @@ class AppMaintenanceUseCaseTest {
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = closer,
             memoryCleanupGateway = memoryGateway,
-            manageRemoteAutomation = manageRemote
+            remoteSenderGateway = manageRemote
         )
 
         val result = useCase.cleanMemory(AutomationMode.SENDER)
@@ -279,7 +279,7 @@ class AppMaintenanceUseCaseTest {
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = closer,
             memoryCleanupGateway = memoryGateway,
-            manageRemoteAutomation = manageRemote
+            remoteSenderGateway = manageRemote
         )
 
         val result = useCase.cleanMemory(AutomationMode.SENDER)
@@ -315,7 +315,7 @@ class AppMaintenanceUseCaseTest {
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = closer,
             memoryCleanupGateway = memoryGateway,
-            manageRemoteAutomation = manageRemote
+            remoteSenderGateway = manageRemote
         )
 
         val result = useCase.cleanRemoteMemory()
@@ -349,7 +349,7 @@ class AppMaintenanceUseCaseTest {
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
             memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success),
-            manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway),
+            remoteSenderGateway = ManageRemoteAutomationUseCase(remoteGateway),
             geminiAccountSwitchGateway = accountGateway
         )
 
@@ -405,7 +405,7 @@ class AppMaintenanceUseCaseTest {
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
             memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success),
-            manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway),
+            remoteSenderGateway = ManageRemoteAutomationUseCase(remoteGateway),
             geminiAccountSwitchGateway = accountGateway
         )
 
@@ -438,7 +438,7 @@ class AppMaintenanceUseCaseTest {
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
             memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success),
-            manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway),
+            remoteSenderGateway = ManageRemoteAutomationUseCase(remoteGateway),
             geminiAccountSwitchGateway = accountGateway
         )
 
@@ -469,7 +469,7 @@ class AppMaintenanceUseCaseTest {
         val useCase = AppMaintenanceUseCase(
             geminiRestartCloser = FakeGeminiCloser(CloseGeminiAppResult.NotFound),
             memoryCleanupGateway = FakeMemoryGateway(MemoryCleanupResult.Success),
-            manageRemoteAutomation = ManageRemoteAutomationUseCase(remoteGateway),
+            remoteSenderGateway = ManageRemoteAutomationUseCase(remoteGateway),
             geminiAccountSwitchGateway = accountGateway
         )
 

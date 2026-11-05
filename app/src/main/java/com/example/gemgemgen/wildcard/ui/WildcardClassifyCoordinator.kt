@@ -1,11 +1,11 @@
 // 역할: AI 단어 분류 기능의 실행, 결과 검토 및 저장 단계를 조율합니다.
 package com.example.gemgemgen.wildcard.ui
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
-import com.example.gemgemgen.analysis.usecase.AnalysisRoleModelSetting
-import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.MODEL_GROK_4_5
+import com.example.gemgemgen.core.credential.domain.AnalysisRoleModelSetting
+import com.example.gemgemgen.core.credential.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyFileName
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResult
 import com.example.gemgemgen.wildcard.domain.WildcardClassifySaveEntry

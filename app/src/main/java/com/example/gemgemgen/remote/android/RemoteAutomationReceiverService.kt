@@ -1,4 +1,4 @@
-// 역할: 포그라운드 서비스로 상주하며 NSD 수신 등록 및 원격 송신 기기의 최상위 명령(자동화 선점 실행, 취소, 메모리 정리, 계정 전환)을 수신·조율합니다.
+﻿// 역할: 포그라운드 서비스로 상주하며 NSD 수신 등록 및 원격 송신 기기의 최상위 명령(자동화 선점 실행, 취소, 메모리 정리, 계정 전환)을 수신·조율합니다.
 package com.example.gemgemgen.remote.android
 
 import android.app.KeyguardManager
@@ -26,10 +26,10 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountResult
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.environment.android.AndroidEnvironmentGateway
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteExecutionConditions
 import com.example.gemgemgen.remote.usecase.ExecuteRemoteAutomationUseCase
-import com.example.gemgemgen.remote.usecase.CheckRemoteExecutionUseCase
+
 import com.example.gemgemgen.ui.MainActivity
 import com.example.gemgemgen.usage.android.DataStoreMultiGeminiUsageDataSource
 import java.io.BufferedReader
@@ -72,7 +72,7 @@ class RemoteAutomationReceiverService : Service() {
         super.onCreate()
         store = RemoteAutomationStore(this)
         executeRemoteAutomation = ExecuteRemoteAutomationUseCase(
-            checkExecution = CheckRemoteExecutionUseCase(),
+
             automation = AndroidAutomationRuntimeProvider.get(this)
         )
         environmentGateway = AndroidEnvironmentGateway(this)

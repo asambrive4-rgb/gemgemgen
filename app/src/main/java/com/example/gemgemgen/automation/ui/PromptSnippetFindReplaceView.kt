@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.automation.domain.PromptSnippet
 import com.example.gemgemgen.automation.domain.PromptSnippetMatch
-import com.example.gemgemgen.automation.domain.PromptSnippetTextUseCase
+import com.example.gemgemgen.automation.domain.findMatches
 import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
@@ -65,7 +65,7 @@ fun PromptSnippetFindReplaceView(
     modifier: Modifier = Modifier
 ) {
     val focusManager = LocalFocusManager.current
-    val useCase = remember { PromptSnippetTextUseCase() }
+
 
     var searchInput by remember { mutableStateOf("") }
     var replacementInput by remember { mutableStateOf("") }
@@ -98,7 +98,7 @@ fun PromptSnippetFindReplaceView(
     LaunchedEffect(snippets) {
         val query = searchedQuery
         if (!query.isNullOrEmpty()) {
-            matchedResults = useCase.findMatches(snippets, query)
+            matchedResults = snippets.findMatches(query)
         }
     }
 
@@ -168,7 +168,7 @@ fun PromptSnippetFindReplaceView(
                         focusManager.clearFocus()
                         if (searchInput.isNotEmpty()) {
                             searchedQuery = searchInput
-                            matchedResults = useCase.findMatches(snippets, searchInput)
+                            matchedResults = snippets.findMatches(searchInput)
                             isConfirmingReplace = false
                             successMessage = null
                         }

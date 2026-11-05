@@ -2,10 +2,13 @@
 package com.example.gemgemgen.usage.domain
 
 import java.util.UUID
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /**
  * 다중 계정의 표시 탭 및 용도 구분 (메인: 주 사용 계정, 서브: 보조 계정).
  */
+@Serializable
 enum class GeminiAccountGroup(val label: String) {
     MAIN("메인"),
     SUB("서브")
@@ -23,15 +26,21 @@ enum class GeminiAccountGroup(val label: String) {
  * @property group 계정 용도 그룹 (메인: 주 사용 계정, 서브: 보조 계정)
  * @property manualExhaustedUntilMillis 수동 '사용불가' 자동 복구 시각 (epoch millis, 0이면 수동 제외 아님)
  */
+@Serializable
 data class GeminiAccountProfile(
     val id: String,
     val alias: String,
     val email: String = "",
+    @SerialName("sort_order")
     val sortOrder: Int = 0,
+    @SerialName("webview_profile_name")
     val webViewProfileName: String = buildWebViewProfileName(id),
+    @SerialName("created_at")
     val createdAt: Long = 0L,
     val group: GeminiAccountGroup = GeminiAccountGroup.MAIN,
+    @SerialName("manual_exhausted_until")
     val manualExhaustedUntilMillis: Long = 0L,
+    @SerialName("is_suspended")
     val isSuspended: Boolean = false
 ) {
     /** 수동 사용불가 상태 여부. 자동 복구 시각이 지나면 사용자의 조작 없이 false가 됩니다. */

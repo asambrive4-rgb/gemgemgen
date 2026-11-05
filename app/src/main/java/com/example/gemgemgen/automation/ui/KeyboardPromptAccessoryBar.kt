@@ -1,4 +1,4 @@
-// 역할: 가상 키보드 노출 시 시작/중지 제어, 개수 조절 스텝퍼, 문단 편집 및 에디터 액션 버튼을 단일 행으로 제공합니다.
+﻿// 역할: 가상 키보드 노출 시 시작/중지 제어, 개수 조절 스텝퍼, 문단 편집 및 에디터 액션 버튼을 단일 행으로 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.horizontalScroll
@@ -20,7 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.ui.theme.AppTheme
 
 @Composable

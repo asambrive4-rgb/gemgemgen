@@ -3,7 +3,7 @@ package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisEditPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisPromptBuilder
 import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
@@ -11,6 +11,9 @@ import com.example.gemgemgen.analysis.domain.AnalysisSourceRange
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTextEdit
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.credential.domain.AnalysisException
+import com.example.gemgemgen.core.credential.usecase.AnalysisAiGateway
+import com.example.gemgemgen.core.credential.usecase.ResolveAnalysisCredentialUseCase
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext

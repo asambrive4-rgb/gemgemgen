@@ -79,8 +79,8 @@ import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisDirectionCatalog
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
@@ -93,6 +93,7 @@ import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.ui.AppMultilineTextField
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.rememberIsImeVisible
+import com.example.gemgemgen.ui.components.formatModelSummaryLabel
 import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.AppThemeMode
@@ -1413,28 +1414,21 @@ private fun StickyStatusBanner(
     uiState: AnalysisUiState,
     modifier: Modifier = Modifier
 ) {
-    val themeMode = LocalAppThemeMode.current
-    val isDark = when (themeMode) {
-        AppThemeMode.SYSTEM -> isSystemInDarkTheme()
-        AppThemeMode.LIGHT -> false
-        AppThemeMode.DARK -> true
-    }
-
     val bannerData = when {
         uiState.error.isNotBlank() -> {
             BannerData(
                 text = uiState.error,
                 icon = Icons.Default.ErrorOutline,
-                bgColor = MaterialTheme.colorScheme.errorContainer,
-                textColor = MaterialTheme.colorScheme.error
+                bgColor = AppTheme.colors.errorContainer,
+                textColor = AppTheme.colors.onErrorContainer
             )
         }
         uiState.warning.isNotBlank() -> {
             BannerData(
                 text = uiState.warning,
                 icon = Icons.Default.WarningAmber,
-                bgColor = if (isDark) Color(0xFF332514) else Color(0xFFFFF4E5),
-                textColor = if (isDark) Color(0xFFFFB74D) else Color(0xFFB26A00)
+                bgColor = AppTheme.colors.warningContainer,
+                textColor = AppTheme.colors.onWarningContainer
             )
         }
         uiState.preconditionHintMessage != null -> {

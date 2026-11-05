@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore와 JSON을 활용하여 프롬프트 상용구(스니펫) 목록과 카테고리 목록을 로컬에 영구 저장합니다.
+// 역할: Jetpack DataStore와 kotlinx.serialization을 활용하여 프롬프트 상용구(스니펫) 목록과 카테고리 목록을 로컬에 영구 저장합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -18,19 +18,18 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.put
 
 private val Context.promptSnippetDataStore: DataStore<Preferences> by preferencesDataStore(
     name = PromptSnippetStore.DATASTORE_NAME
 )
+
+private val snippetJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+    encodeDefaults = true
+}
 
 class PromptSnippetStore(
     private val dataStore: DataStore<Preferences>,
@@ -135,90 +134,28 @@ class PromptSnippetStore(
     private fun parseSnippets(jsonString: String?): List<PromptSnippet> {
         if (jsonString.isNullOrBlank()) return emptyList()
         return runCatching {
-            val jsonArray = Json.parseToJsonElement(jsonString).jsonArray
-            jsonArray.mapNotNull { element ->
-                val obj = element.jsonObject
-                val id = obj[KEY_ID]?.jsonPrimitive?.content ?: return@mapNotNull null
-                val shortcut = obj[KEY_SHORTCUT]?.jsonPrimitive?.content ?: return@mapNotNull null
-                val content = obj[KEY_CONTENT]?.jsonPrimitive?.content ?: return@mapNotNull null
-                val category = obj[KEY_CATEGORY]?.jsonPrimitive?.content?.trim().orEmpty()
-                val createdAt = obj[KEY_CREATED_AT]?.jsonPrimitive?.longOrNull ?: 0L
-                val additionalShortcuts = runCatching {
-                    obj[KEY_ADDITIONAL_SHORTCUTS]?.jsonArray?.mapNotNull { item ->
-                        item.jsonPrimitive.content.trim().takeIf { it.isNotEmpty() }
-                    }
-                }.getOrNull().orEmpty()
-                PromptSnippet(
-                    id = id,
-                    shortcut = shortcut,
-                    additionalShortcuts = additionalShortcuts,
-                    content = content,
-                    category = category,
-                    createdAtMillis = createdAt
-                )
-            }
+            snippetJson.decodeFromString<List<PromptSnippet>>(jsonString)
         }.getOrDefault(emptyList())
     }
 
     private fun serializeSnippets(snippets: List<PromptSnippet>): String {
-        val array = buildJsonArray {
-            snippets.forEach { item ->
-                add(
-                    buildJsonObject {
-                        put(KEY_ID, item.id)
-                        put(KEY_SHORTCUT, item.shortcut)
-                        put(
-                            KEY_ADDITIONAL_SHORTCUTS,
-                            buildJsonArray {
-                                item.additionalShortcuts.forEach { alias ->
-                                    val trimmed = alias.trim()
-                                    if (trimmed.isNotEmpty()) {
-                                        add(JsonPrimitive(trimmed))
-                                    }
-                                }
-                            }
-                        )
-                        put(KEY_CONTENT, item.content)
-                        put(KEY_CATEGORY, item.category.trim())
-                        put(KEY_CREATED_AT, item.createdAtMillis)
-                    }
-                )
-            }
-        }
-        return array.toString()
+        return snippetJson.encodeToString(snippets)
     }
 
     private fun parseCategories(jsonString: String?): List<String> {
         if (jsonString.isNullOrBlank()) return emptyList()
         return runCatching {
-            val jsonArray = Json.parseToJsonElement(jsonString).jsonArray
-            sanitizeCategories(
-                jsonArray.mapNotNull { element ->
-                    element.jsonPrimitive.content.takeIf { it.isNotBlank() }
-                }
-            )
+            sanitizeCategories(snippetJson.decodeFromString<List<String>>(jsonString))
         }.getOrDefault(emptyList())
     }
 
     private fun serializeCategories(categories: List<String>): String {
-        val array = buildJsonArray {
-            categories.forEach { category ->
-                add(JsonPrimitive(category.trim()))
-            }
-        }
-        return array.toString()
+        return snippetJson.encodeToString(categories.map { it.trim() })
     }
 
     companion object {
         const val DATASTORE_NAME = "prompt_snippets"
         val KEY_SNIPPET_ITEMS = stringPreferencesKey("snippet_items")
         val KEY_SNIPPET_CATEGORIES = stringPreferencesKey("snippet_categories")
-
-        private const val KEY_ID = "id"
-        private const val KEY_SHORTCUT = "shortcut"
-        private const val KEY_ADDITIONAL_SHORTCUTS = "additional_shortcuts"
-        private const val KEY_CONTENT = "content"
-        private const val KEY_CATEGORY = "category"
-        private const val KEY_CREATED_AT = "created_at"
     }
 }

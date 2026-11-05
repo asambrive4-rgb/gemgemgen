@@ -1,7 +1,9 @@
-// 역할: Grok 계정 로그인 세션의 생성, 갱신 및 로그아웃을 처리합니다.
+// 역할: Grok 계정 로그인 세션의 생성, 갱신 및 로그아웃을 처리하며 AI 토큰 공급자 역할을 수행합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.credential.domain.AnalysisException
+import com.example.gemgemgen.core.credential.usecase.GrokTokenProvider
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
@@ -13,10 +15,9 @@ data class GrokAuthStatus(
 class ManageGrokAuthUseCase(
     private val gateway: GrokAuthGateway,
     private val repository: GrokAuthRepository,
-    private val billingGateway: GrokBillingGateway? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val dispatchers: AppDispatchers = AppDispatchers()
-) {
+) : GrokTokenProvider {
     suspend fun status(): GrokAuthStatus = withContext(dispatchers.io) {
         val session = repository.loadSession()
         if (session == null || session.accessToken.isBlank()) {
@@ -73,16 +74,15 @@ class ManageGrokAuthUseCase(
      * 남은 크레딧 비율(%). 미로그인·조회 실패 시 null.
      */
     suspend fun fetchQuota(): GrokQuotaInfo? = withContext(dispatchers.io) {
-        val billing = billingGateway ?: return@withContext null
         val token = runCatching { requireValidAccessToken() }.getOrNull()
             ?: return@withContext null
-        runCatching { billing.fetchQuota(token) }.getOrNull()
+        runCatching { gateway.fetchQuota(token) }.getOrNull()
     }
 
     /**
      * 분석 호출용 access token. 만료 임박 시 refresh 후 저장.
      */
-    suspend fun requireValidAccessToken(): String = withContext(dispatchers.io) {
+    override suspend fun requireValidAccessToken(): String = withContext(dispatchers.io) {
         val session = repository.loadSession()
             ?: throw AnalysisException("Grok 로그인이 필요합니다.")
         if (session.accessToken.isBlank()) {

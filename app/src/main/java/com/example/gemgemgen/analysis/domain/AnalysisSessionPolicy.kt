@@ -1,6 +1,8 @@
 // 역할: AI 분석 세션의 실행 전제조건·차단 사유 판정, 결과 및 다이나믹 프롬프트 복사/저장 권한, 세션 초기화 가능 여부를 판정합니다.
 package com.example.gemgemgen.analysis.domain
 
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
+
 internal const val DEFAULT_ANALYSIS_RESULT_FILE_NAME = "analysis-wildcard-results.txt"
 internal val DEFAULT_ANALYSIS_CATEGORY: AnalysisCategory = AnalysisCategory.FREE_EDIT
 

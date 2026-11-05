@@ -1,4 +1,4 @@
-// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 상용구·카테고리 목록, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
+﻿// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 상용구·카테고리 목록, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
@@ -16,7 +16,7 @@ import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 

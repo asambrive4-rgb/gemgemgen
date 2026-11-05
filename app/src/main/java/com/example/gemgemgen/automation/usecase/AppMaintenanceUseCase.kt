@@ -1,9 +1,8 @@
 // 역할: 앱 유지보수(앱 재시작/종료), 모드별 로컬·원격 메모리 정리 및 제미나이 구글 계정 자동 전환 오케스트레이션을 수행하는 유스케이스입니다.
 package com.example.gemgemgen.automation.usecase
 
-import com.example.gemgemgen.remote.domain.AutomationMode
-import com.example.gemgemgen.remote.domain.RemoteActionResult
-import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
+import com.example.gemgemgen.automation.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.RemoteActionResult
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -65,7 +64,7 @@ class AppMaintenanceUseCase(
     private val geminiAccountSwitchGateway: GeminiAccountSwitchGateway = GeminiAccountSwitchGateway { _, _, _ ->
         SwitchGeminiAccountResult.AccessibilityUnavailable
     },
-    private val manageRemoteAutomation: ManageRemoteAutomationUseCase? = null
+    private val remoteSenderGateway: RemoteAutomationSenderGateway? = null
 ) {
     suspend fun restartGemini(): MaintenanceResult =
         closeApp(geminiRestartCloser, "Gemini 앱을 재시작했습니다.", "Gemini 앱 %d개를 종료하고 재시작했습니다.", "Gemini 재시작 실패: %s", "최근 앱에서 Gemini를 찾지 못했습니다.")
@@ -106,8 +105,8 @@ class AppMaintenanceUseCase(
         }
 
     suspend fun cleanRemoteMemory(): MaintenanceResult =
-        if (manageRemoteAutomation != null) {
-            when (val result = manageRemoteAutomation.cleanMemory()) {
+        if (remoteSenderGateway != null) {
+            when (val result = remoteSenderGateway.cleanMemory()) {
                 RemoteActionResult.Success -> MaintenanceResult.Success("수신 기기 메모리를 정리했습니다.")
                 is RemoteActionResult.Failure -> MaintenanceResult.Failure(result.message)
             }
@@ -179,8 +178,8 @@ class AppMaintenanceUseCase(
         alias: String
     ): MaintenanceResult {
         val displayLabel = alias.trim().ifBlank { email.trim().ifBlank { "선택한 계정" } }
-        return if (manageRemoteAutomation != null) {
-            when (val result = manageRemoteAutomation.switchGeminiAccount(email = email, alias = alias)) {
+        return if (remoteSenderGateway != null) {
+            when (val result = remoteSenderGateway.switchGeminiAccount(email = email, alias = alias)) {
                 RemoteActionResult.Success ->
                     MaintenanceResult.Success("수신 기기 Gemini 계정을 '$displayLabel'(으)로 전환했습니다.")
                 is RemoteActionResult.Failure ->
@@ -216,4 +215,3 @@ class AppMaintenanceUseCase(
         }
     }
 }
-

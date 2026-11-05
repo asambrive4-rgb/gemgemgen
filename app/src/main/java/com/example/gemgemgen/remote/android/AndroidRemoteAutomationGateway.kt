@@ -1,12 +1,12 @@
-// 역할: RemoteServiceDiscovery 탐색 및 소켓 통신을 통해 원격 수신 기기와 통신·재시도하고, 생명주기 종료 시 자원을 회수하며 진행 상태를 상태 허브로 전파합니다.
+﻿// 역할: RemoteServiceDiscovery 탐색 및 소켓 통신을 통해 원격 수신 기기와 통신·재시도하고, 생명주기 종료 시 자원을 회수하며 진행 상태를 상태 허브로 전파합니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
 import androidx.core.content.ContextCompat
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.isTerminal
-import com.example.gemgemgen.remote.domain.AutomationMode
-import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.automation.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.usecase.RemoteAutomationGateway
 import java.io.BufferedReader

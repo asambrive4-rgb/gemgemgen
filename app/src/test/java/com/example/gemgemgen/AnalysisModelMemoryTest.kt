@@ -1,14 +1,14 @@
-// 역할: 분석 모델 사용량 및 메모리 보관 상태를 검증합니다.
+﻿// 역할: 분석 모델 사용량 및 메모리 보관 상태를 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
-import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeyRecord
+import com.example.gemgemgen.core.credential.usecase.GeminiApiKeyRepository
+import com.example.gemgemgen.core.credential.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking

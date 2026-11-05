@@ -1,10 +1,10 @@
-// 역할: 다이얼로그 호스트의 화면 상태별 활성 다이얼로그 타입 파생 및 우선순위를 검증합니다.
+﻿// 역할: 다이얼로그 호스트의 화면 상태별 활성 다이얼로그 타입 파생 및 우선순위를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.ui.AnalysisDialogType
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.ui.deriveActiveAnalysisDialog
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeySummary
 import com.example.gemgemgen.automation.ui.SettingsDialogStage
 import com.example.gemgemgen.wildcard.ui.WildcardDialogType
 import com.example.gemgemgen.wildcard.ui.WildcardUiState

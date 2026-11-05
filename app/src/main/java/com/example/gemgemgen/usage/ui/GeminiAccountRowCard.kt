@@ -415,13 +415,13 @@ fun GeminiAccountRowCard(
                                 val isSuspended = entry.profile.isSuspended
                                 val suspendText = if (isSuspended) "사용 금지 해제" else "당분간 사용 금지"
                                 val suspendIcon = if (isSuspended) Icons.Default.CheckCircle else Icons.Default.Block
-                                val suspendColor = if (isSuspended) brandHighlightColor else MultiUsageWarningRed
+                                val suspendColor = if (isSuspended) brandHighlightColor else AppTheme.colors.error
                                 DropdownMenuItem(
                                     text = {
                                         Text(
                                             text = suspendText,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = if (isSuspended) AppTheme.colors.textPrimary else MultiUsageWarningRed
+                                            color = if (isSuspended) AppTheme.colors.textPrimary else AppTheme.colors.error
                                         )
                                     },
                                     leadingIcon = {
@@ -535,7 +535,7 @@ fun GeminiAccountRowCard(
                                     isConfirmingDelete = false
                                     onDeleteAccount()
                                 },
-                                contentColor = MaterialTheme.colorScheme.error,
+                                contentColor = AppTheme.colors.error,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                 modifier = Modifier.height(30.dp)
                             ) {
@@ -560,14 +560,14 @@ fun GeminiQuotaExhaustionBadge(
 ) {
     Surface(
         shape = RoundedCornerShape(6.dp),
-        color = MultiUsageWarningRed.copy(alpha = 0.16f),
+        color = AppTheme.colors.error.copy(alpha = 0.16f),
         modifier = modifier
     ) {
         Text(
             text = reason.badgeLabel,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = MultiUsageWarningRed,
+            color = AppTheme.colors.error,
             fontSize = 10.sp,
             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
         )
@@ -671,13 +671,13 @@ private fun AccountUsageGaugeRow(
                 if (exhaustionBadgeText != null) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = MultiUsageWarningRed.copy(alpha = 0.16f)
+                        color = AppTheme.colors.error.copy(alpha = 0.16f)
                     ) {
                         Text(
                             text = exhaustionBadgeText,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MultiUsageWarningRed,
+                            color = AppTheme.colors.error,
                             fontSize = 10.sp,
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                         )

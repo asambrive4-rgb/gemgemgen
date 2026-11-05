@@ -1,11 +1,6 @@
-// 역할: 분석에 사용되는 AI 모델의 역할과 분류 유형을 정의합니다.
-package com.example.gemgemgen.analysis.domain
+// 역할: AI 모델의 역할(마스킹, 후보 생성, 분류 등)과 기본 프로바이더/모델 매핑을 정의합니다.
+package com.example.gemgemgen.core.credential.domain
 
-/**
- * 분석 파이프라인 단계별 모델 역할.
- * - [MASKING]: 자동 마스킹 버튼 + TXT 생성 전 구간 분석/재분석
- * - [GENERATION]: TXT 후보 생성만
- */
 enum class AnalysisModelRole(val storageValue: String) {
     MASKING("masking"),
     GENERATION("generation");
@@ -30,3 +25,9 @@ enum class AnalysisModelRole(val storageValue: String) {
         }
     }
 }
+
+data class AnalysisRoleModelSetting(
+    val role: AnalysisModelRole,
+    val provider: AnalysisProvider,
+    val modelId: String
+)

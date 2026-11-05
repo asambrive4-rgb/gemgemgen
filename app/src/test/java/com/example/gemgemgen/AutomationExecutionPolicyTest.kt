@@ -1,10 +1,10 @@
-// 역할: 자동화 실행, 변주, 앱 제어 및 메모리 정리 인가 정책의 도메인 규칙을 검증합니다.
+﻿// 역할: 자동화 실행, 변주, 앱 제어 및 메모리 정리 인가 정책의 도메인 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

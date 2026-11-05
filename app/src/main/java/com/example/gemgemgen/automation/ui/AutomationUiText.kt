@@ -1,11 +1,11 @@
-// 역할: 자동화 화면과 플로팅 바에 표시되는 상태 메시지 및 버튼 문구를 제공합니다.
+﻿// 역할: 자동화 화면과 플로팅 바에 표시되는 상태 메시지 및 버튼 문구를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.PromptParagraphMessageKey
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 
 object AutomationUiText {
     const val ACCESSIBILITY_PROMPT_TITLE: String = "접근성 서비스 필요"

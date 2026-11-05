@@ -1,10 +1,10 @@
-// 역할: AI 프롬프트 분석 전제조건 검사, 타겟 구간 확정·캐시 보존 및 텍스트 생성을 조율합니다.
+﻿// 역할: AI 프롬프트 분석 전제조건 검사, 타겟 구간 확정·캐시 보존 및 텍스트 생성을 조율합니다.
 package com.example.gemgemgen.analysis.usecase
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisReportCache
 import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason

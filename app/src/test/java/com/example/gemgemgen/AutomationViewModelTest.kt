@@ -1275,7 +1275,13 @@ class AutomationViewModelTest {
     @Test
     fun runVariation_inParagraphSelectionMode_includesSelectedParagraphInPrompt() {
         var pastedPrompt: String? = null
-        val gateway = object : VariationPromptAutomationGateway {
+        val gateway = object : PromptAutomationGateway {
+            override fun sendPrompt(
+                prompt: String,
+                newChatMode: NewChatMode,
+                onStateChange: (AutomationRunState) -> Unit,
+                onDone: () -> Unit
+            ) = Unit
             override fun pastePromptOnly(
                 prompt: String,
                 onStateChange: (AutomationRunState) -> Unit,
@@ -1311,7 +1317,13 @@ class AutomationViewModelTest {
     @Test
     fun runVariation_withExplicitDragSelection_includesDragTextInPrompt() {
         var pastedPrompt: String? = null
-        val gateway = object : VariationPromptAutomationGateway {
+        val gateway = object : PromptAutomationGateway {
+            override fun sendPrompt(
+                prompt: String,
+                newChatMode: NewChatMode,
+                onStateChange: (AutomationRunState) -> Unit,
+                onDone: () -> Unit
+            ) = Unit
             override fun pastePromptOnly(
                 prompt: String,
                 onStateChange: (AutomationRunState) -> Unit,
@@ -1577,7 +1589,7 @@ class AutomationViewModelTest {
             geminiRestartCloser = closeGeminiCloser ?: FakeGeminiAppCloser(),
             selfAppCloser = terminateSelfCloser ?: FakeGeminiAppCloser(),
             memoryCleanupGateway = cleanMemoryGateway ?: FakeMemoryCleanupGateway(),
-            manageRemoteAutomation = resolvedRemote
+            remoteSenderGateway = resolvedRemote
         )
         val resolvedExecute = CoordinateAutomationExecutionUseCase(
             automationHistoryRecorder = RecordAutomationHistoryUseCase(
@@ -1586,7 +1598,7 @@ class AutomationViewModelTest {
                 dispatchers = dispatchers
             ),
             automation = resolvedAutomation,
-            manageRemoteAutomation = resolvedRemote
+            remoteAutomationSenderGateway = resolvedRemote
         )
         return AutomationViewModel(
             checkEnvironmentStatus = environmentStatusReader,

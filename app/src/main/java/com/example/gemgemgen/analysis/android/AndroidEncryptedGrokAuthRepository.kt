@@ -10,17 +10,15 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.analysis.usecase.GrokAuthRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession
+import com.example.gemgemgen.core.credential.android.AndroidKeyStoreCipher
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 
 private val Context.grokAuthDataStore: DataStore<Preferences> by preferencesDataStore(
     name = AndroidEncryptedGrokAuthRepository.DATASTORE_NAME
@@ -49,7 +47,7 @@ class AndroidEncryptedGrokAuthRepository internal constructor(
                         val plain = cipher.decrypt(encrypted)
                         if (!plain.isNullOrBlank()) {
                             cachedSession = runCatching {
-                                analysisJson.parseToJsonElement(plain).jsonObject.toSessionOrNull()
+                                analysisJson.decodeFromString<StoredGrokAuthSession>(plain).toDomain()
                             }.getOrNull()
                         }
                     } else {
@@ -65,16 +63,7 @@ class AndroidEncryptedGrokAuthRepository internal constructor(
 
     override fun saveSession(session: GrokAuthSession) {
         cachedSession = session
-        val payload = buildJsonObject {
-            put("accessToken", JsonPrimitive(session.accessToken))
-            put("refreshToken", JsonPrimitive(session.refreshToken.orEmpty()))
-            put(
-                "expiresAtMillis",
-                JsonPrimitive(session.expiresAtMillis ?: -1L)
-            )
-            put("tokenEndpoint", JsonPrimitive(session.tokenEndpoint.orEmpty()))
-            put("accountPreview", JsonPrimitive(session.accountPreview))
-        }.toString()
+        val payload = analysisJson.encodeToString(StoredGrokAuthSession.fromDomain(session))
         scope.launch {
             val encrypted = cipher.encrypt(payload)
             dataStore.edit { preferences ->
@@ -92,20 +81,34 @@ class AndroidEncryptedGrokAuthRepository internal constructor(
         }
     }
 
-    private fun JsonObject.toSessionOrNull(): GrokAuthSession? {
-        val accessToken = this["accessToken"]?.jsonPrimitive?.content.orEmpty()
-        if (accessToken.isBlank()) return null
-        val refreshRaw = this["refreshToken"]?.jsonPrimitive?.content.orEmpty()
-        val expiresRaw = this["expiresAtMillis"]?.jsonPrimitive?.content?.toLongOrNull()
-        val tokenEndpointRaw = this["tokenEndpoint"]?.jsonPrimitive?.content.orEmpty()
-        val preview = this["accountPreview"]?.jsonPrimitive?.content.orEmpty()
-        return GrokAuthSession(
-            accessToken = accessToken,
-            refreshToken = refreshRaw.ifBlank { null },
-            expiresAtMillis = expiresRaw?.takeIf { it > 0L },
-            tokenEndpoint = tokenEndpointRaw.ifBlank { null },
-            accountPreview = preview
-        )
+    @Serializable
+    private data class StoredGrokAuthSession(
+        val accessToken: String = "",
+        val refreshToken: String? = null,
+        val expiresAtMillis: Long? = null,
+        val tokenEndpoint: String? = null,
+        val accountPreview: String = ""
+    ) {
+        fun toDomain(): GrokAuthSession? {
+            if (accessToken.isBlank()) return null
+            return GrokAuthSession(
+                accessToken = accessToken,
+                refreshToken = refreshToken?.ifBlank { null },
+                expiresAtMillis = expiresAtMillis?.takeIf { it > 0L },
+                tokenEndpoint = tokenEndpoint?.ifBlank { null },
+                accountPreview = accountPreview
+            )
+        }
+
+        companion object {
+            fun fromDomain(session: GrokAuthSession): StoredGrokAuthSession = StoredGrokAuthSession(
+                accessToken = session.accessToken,
+                refreshToken = session.refreshToken.orEmpty(),
+                expiresAtMillis = session.expiresAtMillis ?: -1L,
+                tokenEndpoint = session.tokenEndpoint.orEmpty(),
+                accountPreview = session.accountPreview
+            )
+        }
     }
 
     companion object {

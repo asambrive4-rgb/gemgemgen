@@ -39,16 +39,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.gemgemgen.automation.ui.GeminiGradientLogo
+import com.example.gemgemgen.core.brand.GeminiGradientLogo
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.usage.domain.GeminiUsageWarningLevel
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 import kotlinx.coroutines.delay
-
-internal val MultiUsageCautionAmber = Color(0xFFE67E22)
-internal val MultiUsageWarningRed = Color(0xFFD93025)
 
 @Composable
 internal fun resolveGeminiUsageNormalHighlightColor(): Color {
@@ -59,8 +56,8 @@ internal fun resolveGeminiUsageNormalHighlightColor(): Color {
 internal fun resolveGeminiUsageWarningColor(level: GeminiUsageWarningLevel): Color {
     return when (level) {
         GeminiUsageWarningLevel.NORMAL -> resolveGeminiUsageNormalHighlightColor()
-        GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber
-        GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed
+        GeminiUsageWarningLevel.CAUTION -> AppTheme.colors.warning
+        GeminiUsageWarningLevel.WARNING -> AppTheme.colors.error
     }
 }
 
@@ -93,8 +90,8 @@ fun GeminiUsageSummaryButton(
     val summaryButtonText = multiUsageState.summaryButtonText(nowMillis)
 
     val containerColor = when (warningLevel) {
-        GeminiUsageWarningLevel.WARNING -> MultiUsageWarningRed.copy(alpha = 0.14f)
-        GeminiUsageWarningLevel.CAUTION -> MultiUsageCautionAmber.copy(alpha = 0.13f)
+        GeminiUsageWarningLevel.WARNING -> AppTheme.colors.error.copy(alpha = 0.14f)
+        GeminiUsageWarningLevel.CAUTION -> AppTheme.colors.warning.copy(alpha = 0.13f)
         GeminiUsageWarningLevel.NORMAL -> AppTheme.colors.card
     }
 

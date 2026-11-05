@@ -1,17 +1,17 @@
 // 역할: 와일드카드 AI 단어 분류 코디네이터의 상태 전이를 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
-import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
+import com.example.gemgemgen.core.credential.domain.DEFAULT_ANALYSIS_MODEL
+import com.example.gemgemgen.core.credential.usecase.AnalysisAiGateway
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeyRecord
+import com.example.gemgemgen.core.credential.usecase.GeminiApiKeyRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthGateway
 import com.example.gemgemgen.analysis.usecase.GrokAuthRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession
 import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
-import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.core.credential.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
+import com.example.gemgemgen.core.credential.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.wildcard.domain.WildcardEditorSession
 import com.example.gemgemgen.wildcard.domain.WildcardFileException

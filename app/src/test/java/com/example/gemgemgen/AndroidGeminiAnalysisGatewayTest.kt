@@ -1,9 +1,9 @@
-// 역할: Gemini 분석 통신 게이트웨이 및 공통 HTTP/오류 변환 헬퍼의 처리를 검증합니다.
+﻿// 역할: Gemini 분석 통신 게이트웨이 및 공통 HTTP/오류 변환 헬퍼의 처리를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.android.AndroidGeminiAnalysisGateway
 import com.example.gemgemgen.analysis.android.extractJsonErrorMessage
-import com.example.gemgemgen.analysis.usecase.AnalysisException
+import com.example.gemgemgen.core.credential.domain.AnalysisException
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows

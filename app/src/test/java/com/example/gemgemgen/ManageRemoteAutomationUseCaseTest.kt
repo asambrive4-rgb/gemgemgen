@@ -1,12 +1,12 @@
-// 역할: 원격 자동화 서비스 제어 및 상태 관리 유스케이스를 검증합니다.
+﻿// 역할: 원격 자동화 서비스 제어 및 상태 관리 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
-import com.example.gemgemgen.remote.domain.AutomationMode
-import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.automation.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase

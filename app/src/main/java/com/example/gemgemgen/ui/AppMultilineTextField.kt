@@ -191,18 +191,22 @@ fun AppMultilineTextField(
         }
     }
 
+    val searchHighlightColor = AppTheme.colors.searchHighlight
+    val activeSearchHighlightColor = AppTheme.colors.activeSearchHighlight
     val textHighlightTransformation = remember(
         highlightRange,
         selectedParagraphColor,
         searchHighlightRanges,
-        activeSearchMatchIndex
+        activeSearchMatchIndex,
+        searchHighlightColor,
+        activeSearchHighlightColor
     ) {
         if (highlightRange == null && searchHighlightRanges.isEmpty()) {
             null
         } else {
             val paragraphSpanStyle = highlightRange?.let { SpanStyle(background = selectedParagraphColor) }
-            val activeSearchSpanStyle = SpanStyle(background = ACTIVE_SEARCH_HIGHLIGHT_COLOR)
-            val normalSearchSpanStyle = SpanStyle(background = SEARCH_HIGHLIGHT_COLOR)
+            val activeSearchSpanStyle = SpanStyle(background = activeSearchHighlightColor)
+            val normalSearchSpanStyle = SpanStyle(background = searchHighlightColor)
             OutputTransformation {
                 val pSpan = paragraphSpanStyle
                 if (highlightRange != null && pSpan != null && highlightRange.endExclusive <= length) {
@@ -278,8 +282,6 @@ fun AppMultilineTextField(
 }
 
 private const val TEXT_CHANGE_DEBOUNCE_MILLIS = 75L
-private val SEARCH_HIGHLIGHT_COLOR = Color(0x66FFEB3B)
-private val ACTIVE_SEARCH_HIGHLIGHT_COLOR = Color(0xFFFF9800)
 
 @OptIn(ExperimentalFoundationApi::class)
 private fun insertedTextFromChanges(

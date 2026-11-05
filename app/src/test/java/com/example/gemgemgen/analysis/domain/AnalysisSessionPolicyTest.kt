@@ -1,6 +1,8 @@
 // 역할: AI 분석 세션 정책(사전조건 평가, 생성 권한, 결과/다이나믹 프롬프트 복사·저장 권한, 세션 초기화 가능 여부)의 도메인 규칙을 검증합니다.
 package com.example.gemgemgen.analysis.domain
 
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
+
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
 import com.example.gemgemgen.analysis.ui.canResetSession
 import org.junit.Assert.assertEquals

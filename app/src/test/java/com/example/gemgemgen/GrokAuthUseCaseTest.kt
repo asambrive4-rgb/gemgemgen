@@ -1,11 +1,11 @@
-// 역할: Grok 계정 로그인 및 토큰 발급 유스케이스를 검증합니다.
+﻿// 역할: Grok 계정 로그인 및 토큰 발급 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
-import com.example.gemgemgen.analysis.usecase.AnalysisException
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.usecase.ResolveAnalysisCredentialUseCase
+import com.example.gemgemgen.core.credential.domain.AnalysisException
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeyRecord
+import com.example.gemgemgen.core.credential.usecase.GeminiApiKeyRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthGateway
 import com.example.gemgemgen.analysis.usecase.GrokAuthRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession

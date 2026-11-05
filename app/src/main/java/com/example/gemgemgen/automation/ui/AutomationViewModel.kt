@@ -13,7 +13,7 @@ import com.example.gemgemgen.automation.domain.PromptExperimentPreset
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.PromptSnippet
-import com.example.gemgemgen.automation.domain.PromptSnippetTextUseCase
+import com.example.gemgemgen.automation.domain.replaceContent
 import com.example.gemgemgen.automation.domain.RepeatCountParser
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
@@ -21,7 +21,7 @@ import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
 import com.example.gemgemgen.automation.usecase.AutomationSettingsRepository
-import com.example.gemgemgen.automation.usecase.AutomationStartDecision
+import com.example.gemgemgen.automation.domain.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshot
@@ -39,8 +39,8 @@ import com.example.gemgemgen.core.PromptHandoffEvent
 import com.example.gemgemgen.core.PromptWorkspace
 import com.example.gemgemgen.core.SoundAlertGateway
 import com.example.gemgemgen.environment.usecase.EnvironmentGateway
-import com.example.gemgemgen.remote.domain.AutomationMode
-import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.automation.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.RemoteActionResult
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository
@@ -691,8 +691,8 @@ class AutomationViewModel(
         scope.launch {
             withContext(dispatchers.io) {
                 val current = promptSnippetRepository?.load().orEmpty()
-                val useCase = PromptSnippetTextUseCase()
-                val (updated, changedCount) = useCase.replaceContent(current, searchText, replacementText)
+
+                val (updated, changedCount) = current.replaceContent(searchText, replacementText)
                 if (changedCount > 0) {
                     promptSnippetRepository?.save(updated)
                 }

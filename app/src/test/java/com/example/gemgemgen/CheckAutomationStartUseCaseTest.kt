@@ -1,11 +1,11 @@
-// 역할: 자동화 실행 전 오버레이 권한 및 도메인 비즈니스 불변식을 사전 판별하는 CheckAutomationStartUseCase 동작을 검증합니다.
+﻿// 역할: 자동화 실행 전 오버레이 권한 및 도메인 비즈니스 불변식을 사전 판별하는 AutomationExecutionPolicy.decideStart 순수 함수 동작을 검증합니다.
 package com.example.gemgemgen
 
+import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
+import com.example.gemgemgen.automation.domain.AutomationStartDecision
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
-import com.example.gemgemgen.automation.usecase.AutomationStartDecision
-import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
-import com.example.gemgemgen.automation.usecase.OverlayPermissionGateway
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
+import com.example.gemgemgen.automation.domain.AutomationMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -21,14 +21,12 @@ class CheckAutomationStartUseCaseTest {
 
     @Test
     fun decide_withDomainContext_requiresOverlayPermission() {
-        val useCase = CheckAutomationStartUseCase(
-            OverlayPermissionGateway { false }
-        )
-
-        val decision = useCase.decide(
+        val decision = AutomationExecutionPolicy.decideStart(
+            mode = AutomationMode.NORMAL,
             environmentStatus = readyEnvironment(),
             targetApp = AutomationTargetApp.GEMINI,
-            promptTemplate = "test prompt"
+            promptTemplate = "test prompt",
+            isOverlayGranted = false
         )
 
         assertEquals(AutomationStartDecision.PermissionRequired, decision)
@@ -36,14 +34,12 @@ class CheckAutomationStartUseCaseTest {
 
     @Test
     fun decide_withDomainContext_startsWhenAllInvariantsSatisfied() {
-        val useCase = CheckAutomationStartUseCase(
-            OverlayPermissionGateway { true }
-        )
-
-        val decision = useCase.decide(
+        val decision = AutomationExecutionPolicy.decideStart(
+            mode = AutomationMode.NORMAL,
             environmentStatus = readyEnvironment(),
             targetApp = AutomationTargetApp.GEMINI,
-            promptTemplate = "test prompt"
+            promptTemplate = "test prompt",
+            isOverlayGranted = true
         )
 
         assertEquals(AutomationStartDecision.Started, decision)
@@ -51,50 +47,54 @@ class CheckAutomationStartUseCaseTest {
 
     @Test
     fun decide_withDomainContext_rejectsWhenInvariantsViolated() {
-        val useCase = CheckAutomationStartUseCase(
-            OverlayPermissionGateway { true }
-        )
-
         // 빈 프롬프트
         assertEquals(
             AutomationStartDecision.Rejected,
-            useCase.decide(
+            AutomationExecutionPolicy.decideStart(
+                mode = AutomationMode.NORMAL,
                 environmentStatus = readyEnvironment(),
                 targetApp = AutomationTargetApp.GEMINI,
-                promptTemplate = ""
+                promptTemplate = "",
+                isOverlayGranted = true
             )
         )
 
         // 이미 실행 중
         assertEquals(
             AutomationStartDecision.Rejected,
-            useCase.decide(
+            AutomationExecutionPolicy.decideStart(
+                mode = AutomationMode.NORMAL,
                 environmentStatus = readyEnvironment(),
                 targetApp = AutomationTargetApp.GEMINI,
                 promptTemplate = "test prompt",
-                isRunning = true
+                isRunning = true,
+                isOverlayGranted = true
             )
         )
 
         // 시작 준비 진행 중 (StartInProgress)
         assertEquals(
             AutomationStartDecision.Rejected,
-            useCase.decide(
+            AutomationExecutionPolicy.decideStart(
+                mode = AutomationMode.NORMAL,
                 environmentStatus = readyEnvironment(),
                 targetApp = AutomationTargetApp.GEMINI,
                 promptTemplate = "test prompt",
-                isStartInProgress = true
+                isStartInProgress = true,
+                isOverlayGranted = true
             )
         )
 
         // 유지보수 진행 중
         assertEquals(
             AutomationStartDecision.Rejected,
-            useCase.decide(
+            AutomationExecutionPolicy.decideStart(
+                mode = AutomationMode.NORMAL,
                 environmentStatus = readyEnvironment(),
                 targetApp = AutomationTargetApp.GEMINI,
                 promptTemplate = "test prompt",
-                isMaintenanceBusy = true
+                isMaintenanceBusy = true,
+                isOverlayGranted = true
             )
         )
     }

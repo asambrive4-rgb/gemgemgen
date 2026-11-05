@@ -1,4 +1,4 @@
-// 역할: 자동화 편의 설정(클립보드·사이드바·메모리 정리), 원격 연결·재시도, 화면 테마 및 표준 회색 알약 버튼 기반 시스템 환경 점검 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
+﻿// 역할: 자동화 편의 설정(클립보드·사이드바·메모리 정리), 원격 연결·재시도, 화면 테마 및 표준 회색 알약 버튼 기반 시스템 환경 점검 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
@@ -50,8 +50,6 @@ import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.ui.theme.LocalAppThemeMode
 import com.example.gemgemgen.ui.theme.LocalAppThemePalette
-
-private val SettingsWarningRed = Color(0xFFD93025)
 
 enum class SettingsDialogStage {
     ACCESSIBILITY_PROMPT,
@@ -396,7 +394,7 @@ private fun StatusSettingsDialogContent(
                         Text(
                             text = "원격 자동화를 중지한 뒤 연결을 끊어주세요.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = SettingsWarningRed
+                            color = AppTheme.colors.error
                         )
                     }
 
@@ -407,7 +405,7 @@ private fun StatusSettingsDialogContent(
                             color = if (uiState.remoteDisconnectMessage == "원격 연결을 끊었습니다.") {
                                 AppTheme.colors.primary
                             } else {
-                                SettingsWarningRed
+                                AppTheme.colors.error
                             }
                         )
                     }
@@ -420,13 +418,13 @@ private fun StatusSettingsDialogContent(
                                     enabled = !isRemoteRunning && !uiState.isDisconnectingRemote,
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = SettingsWarningRed,
+                                        contentColor = AppTheme.colors.error,
                                         disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.38f)
                                     ),
                                     border = BorderStroke(
                                         1.dp,
                                         if (!isRemoteRunning && !uiState.isDisconnectingRemote) {
-                                            SettingsWarningRed.copy(alpha = 0.5f)
+                                            AppTheme.colors.error.copy(alpha = 0.5f)
                                         } else {
                                             AppTheme.colors.cardBorder
                                         }
@@ -463,13 +461,13 @@ private fun StatusSettingsDialogContent(
                                     enabled = !uiState.isDisconnectingRemote,
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = SettingsWarningRed,
+                                        contentColor = AppTheme.colors.error,
                                         disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.38f)
                                     ),
                                     border = BorderStroke(
                                         1.dp,
                                         if (!uiState.isDisconnectingRemote) {
-                                            SettingsWarningRed.copy(alpha = 0.5f)
+                                            AppTheme.colors.error.copy(alpha = 0.5f)
                                         } else {
                                             AppTheme.colors.cardBorder
                                         }
@@ -759,12 +757,12 @@ private fun StatusBadge(isReady: Boolean) {
     val containerColor = if (isReady) {
         AppTheme.colors.primary.copy(alpha = 0.14f)
     } else {
-        SettingsWarningRed.copy(alpha = 0.14f)
+        AppTheme.colors.error.copy(alpha = 0.14f)
     }
     val textColor = if (isReady) {
         AppTheme.colors.primary
     } else {
-        SettingsWarningRed
+        AppTheme.colors.error
     }
 
     Surface(

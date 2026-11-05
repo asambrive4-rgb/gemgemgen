@@ -1,14 +1,25 @@
-// 역할: AI 서비스 호출에 필요한 API 키나 인증 토큰이 유효하게 등록되었는지 확인하는 유스케이스입니다.
-package com.example.gemgemgen.analysis.usecase
+// 역할: AI 모델 역할(마스킹, 생성, 분류)에 따라 활성화된 Gemini API 키 또는 Grok 토큰을 결정하는 유스케이스입니다.
+package com.example.gemgemgen.core.credential.usecase
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.credential.domain.AnalysisException
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
 import kotlinx.coroutines.withContext
+
+fun interface GrokTokenProvider {
+    suspend fun requireValidAccessToken(): String
+}
+
+data class ResolvedAnalysisCredential(
+    val accessTokenOrApiKey: String,
+    val modelId: String,
+    val provider: AnalysisProvider
+)
 
 class ResolveAnalysisCredentialUseCase(
     private val apiKeyRepository: GeminiApiKeyRepository,
-    private val grokAuth: ManageGrokAuthUseCase,
+    private val grokAuth: GrokTokenProvider,
     private val dispatchers: AppDispatchers = AppDispatchers()
 ) {
     suspend fun resolveForRole(role: AnalysisModelRole): ResolvedAnalysisCredential =
@@ -31,9 +42,3 @@ class ResolveAnalysisCredentialUseCase(
             )
         }
 }
-
-data class ResolvedAnalysisCredential(
-    val accessTokenOrApiKey: String,
-    val modelId: String,
-    val provider: AnalysisProvider
-)

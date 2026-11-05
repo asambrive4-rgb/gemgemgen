@@ -1,16 +1,13 @@
-// 역할: 사용자가 입력한 Gemini API 키의 저장, 조회 및 삭제를 처리합니다.
-package com.example.gemgemgen.analysis.usecase
+// 역할: Gemini API 키의 등록, 목록 조회, 레이블 수정, 활성화, 삭제 및 역할별 모델 설정을 조율하는 유스케이스입니다.
+package com.example.gemgemgen.core.credential.usecase
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.credential.domain.AnalysisException
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.AnalysisRoleModelSetting
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeySummary
 import kotlinx.coroutines.withContext
-
-data class AnalysisRoleModelSetting(
-    val role: AnalysisModelRole,
-    val provider: AnalysisProvider,
-    val modelId: String
-)
 
 class ManageGeminiApiKeysUseCase(
     private val repository: GeminiApiKeyRepository,

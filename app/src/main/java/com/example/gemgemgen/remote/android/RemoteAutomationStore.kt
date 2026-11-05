@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore를 통해 원격 자동화 수신 기록 및 세션 연결 정보를 로컬에 보관하는 저장소입니다.
+﻿// 역할: Jetpack DataStore를 통해 원격 자동화 수신 기록 및 세션 연결 정보를 로컬에 보관하는 저장소입니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
@@ -9,7 +9,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope

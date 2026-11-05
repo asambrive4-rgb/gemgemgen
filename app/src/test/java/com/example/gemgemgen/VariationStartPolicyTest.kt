@@ -1,9 +1,9 @@
-// 역할: 변주 자동화의 실행 가능 여부 및 각 케이스별 거절 사유 판별 정책을 검증하는 단위 테스트입니다.
+﻿// 역할: 변주 자동화의 실행 가능 여부 및 각 케이스별 거절 사유 판별 정책을 검증하는 단위 테스트입니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

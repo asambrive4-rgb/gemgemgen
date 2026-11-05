@@ -5,8 +5,8 @@ import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.usecase.AutomationHistoryRecorder
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
-import com.example.gemgemgen.automation.usecase.AutomationStartDecision
-import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
+import com.example.gemgemgen.automation.domain.AutomationStartDecision
+
 import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
 import com.example.gemgemgen.automation.usecase.ManageImeUseCase
@@ -18,8 +18,8 @@ import com.example.gemgemgen.automation.usecase.PromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.usecase.TargetAppLauncher
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
-import com.example.gemgemgen.remote.domain.AutomationMode
-import com.example.gemgemgen.remote.domain.RemoteActionResult
+import com.example.gemgemgen.automation.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.RemoteActionResult
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
@@ -215,7 +215,7 @@ class CoordinateAutomationExecutionUseCaseTest {
         isOverlayGranted: Boolean = true,
         isRemotePaired: Boolean = true
     ): Pair<CoordinateAutomationExecutionUseCase, TestContext> {
-        val checkAutomationStart = CheckAutomationStartUseCase(OverlayPermissionGateway { isOverlayGranted })
+        val overlayGateway = OverlayPermissionGateway { isOverlayGranted }
         val startRecorder = FakeAutomationHistoryRecorder()
         val localAutomation = createLocalAutomation()
 
@@ -233,10 +233,10 @@ class CoordinateAutomationExecutionUseCaseTest {
         )
 
         val useCase = CoordinateAutomationExecutionUseCase(
-            checkAutomationStart = checkAutomationStart,
+            overlayPermissionGateway = overlayGateway,
             automationHistoryRecorder = startRecorder,
             automation = localAutomation,
-            manageRemoteAutomation = manageRemoteAutomation
+            remoteAutomationSenderGateway = manageRemoteAutomation
         )
 
         return useCase to TestContext(

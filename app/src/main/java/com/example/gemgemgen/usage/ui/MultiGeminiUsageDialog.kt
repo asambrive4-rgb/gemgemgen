@@ -56,7 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.gemgemgen.automation.ui.GeminiGradientLogo
+import com.example.gemgemgen.core.brand.GeminiGradientLogo
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuInsetBed
@@ -468,7 +468,7 @@ private fun MultiAccountListContent(
                             AccountSectionHeader(
                                 title = "사용 불가 ${exhaustedAccounts.size}개",
                                 hint = "해제 임박 순 · 탭하여 선택 가능",
-                                indicatorColor = MultiUsageWarningRed
+                                indicatorColor = AppTheme.colors.error
                             )
                         }
                     }

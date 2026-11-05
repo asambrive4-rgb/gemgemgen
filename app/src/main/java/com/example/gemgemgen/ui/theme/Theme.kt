@@ -66,7 +66,11 @@ fun GemgemgenTheme(
             surfaceVariant = appColors.insetBed,
             onSurfaceVariant = appColors.textSecondary,
             outline = appColors.inputBorder,
-            outlineVariant = appColors.cardBorder
+            outlineVariant = appColors.cardBorder,
+            error = appColors.error,
+            onError = appColors.onError,
+            errorContainer = appColors.errorContainer,
+            onErrorContainer = appColors.onErrorContainer
         )
     } else {
         lightColorScheme(
@@ -85,7 +89,11 @@ fun GemgemgenTheme(
             surfaceVariant = appColors.insetBed,
             onSurfaceVariant = appColors.textSecondary,
             outline = appColors.inputBorder,
-            outlineVariant = appColors.cardBorder
+            outlineVariant = appColors.cardBorder,
+            error = appColors.error,
+            onError = appColors.onError,
+            errorContainer = appColors.errorContainer,
+            onErrorContainer = appColors.onErrorContainer
         )
     }
 
@@ -107,4 +115,3 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
-

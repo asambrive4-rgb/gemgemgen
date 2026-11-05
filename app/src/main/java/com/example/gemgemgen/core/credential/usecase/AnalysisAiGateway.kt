@@ -1,8 +1,8 @@
-// 역할: AI 분석 통신과 텍스트 생성을 위한 외부 서비스 연동 인터페이스를 정의합니다.
-package com.example.gemgemgen.analysis.usecase
+// 역할: Gemini, Grok 등 다양한 AI 모델 프로바이더와의 텍스트 분석 및 생성 통신을 위한 게이트웨이 인터페이스입니다.
+package com.example.gemgemgen.core.credential.usecase
 
-import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.AnalysisPromptPayload
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
 
 fun interface AnalysisAiGateway {
     suspend fun analyze(

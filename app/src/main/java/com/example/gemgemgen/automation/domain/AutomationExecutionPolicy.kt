@@ -1,8 +1,8 @@
-// 역할: 자동화 실행(프롬프트 실험 모드 조건 검증 포함), 변주, 앱 제어, 메모리 정리 및 Gemini 계정 전환 등 전반적인 실행 인가 정책을 총괄하는 도메인 정책입니다.
+﻿// 역할: 자동화 실행(프롬프트 실험 모드 조건 검증 포함), 변주, 앱 제어, 메모리 정리 및 Gemini 계정 전환 등 전반적인 실행 인가 정책을 총괄하는 도메인 정책입니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 
 enum class GeminiAppControlBlockReason {
@@ -22,7 +22,76 @@ enum class SelfAppControlBlockReason {
  * 자동화 화면의 모든 실행 인가 및 권한 정책을 집약한 도메인 정책 객체입니다.
  * UI State의 비즈니스 불변식 판정 책임을 온전히 도메인 레이어로 승격합니다.
  */
+sealed interface AutomationStartDecision {
+    data object Started : AutomationStartDecision
+    data object RemoteStarted : AutomationStartDecision
+    data object PermissionRequired : AutomationStartDecision
+    data object Rejected : AutomationStartDecision
+}
+
 object AutomationExecutionPolicy {
+
+    /**
+     * 비즈니스 컨텍스트와 오버레이 권한 상태를 전달받아 자동화 시작 결정을 내리는 순수 판별 함수입니다.
+     */
+    fun decideStart(
+        mode: AutomationMode,
+        environmentStatus: EnvironmentStatus,
+        targetApp: AutomationTargetApp,
+        promptTemplate: String,
+        isRunning: Boolean = false,
+        remoteAutomationStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
+        isVariationRunning: Boolean = false,
+        isMaintenanceBusy: Boolean = false,
+        isStartInProgress: Boolean = false,
+        isExperimentMode: Boolean = false,
+        selectedExperimentItem: PromptExperimentItem? = null,
+        isOverlayGranted: Boolean = true
+    ): AutomationStartDecision = when (mode) {
+        AutomationMode.RECEIVER -> AutomationStartDecision.Rejected
+        AutomationMode.SENDER -> {
+            val canRunSender = canRun(
+                mode = AutomationMode.SENDER,
+                environmentStatus = environmentStatus,
+                targetApp = targetApp,
+                promptTemplate = promptTemplate,
+                isRunning = isRunning,
+                remoteAutomationStatus = remoteAutomationStatus,
+                isVariationRunning = isVariationRunning,
+                isMaintenanceBusy = isMaintenanceBusy,
+                isExperimentMode = isExperimentMode,
+                selectedExperimentItem = selectedExperimentItem
+            )
+            if (canRunSender && !isStartInProgress) {
+                AutomationStartDecision.RemoteStarted
+            } else {
+                AutomationStartDecision.Rejected
+            }
+        }
+        AutomationMode.NORMAL -> {
+            if (!isOverlayGranted) {
+                AutomationStartDecision.PermissionRequired
+            } else {
+                val canRunNormal = canRun(
+                    mode = AutomationMode.NORMAL,
+                    environmentStatus = environmentStatus,
+                    targetApp = targetApp,
+                    promptTemplate = promptTemplate,
+                    isRunning = isRunning,
+                    remoteAutomationStatus = RemoteAutomationStatus(),
+                    isVariationRunning = isVariationRunning,
+                    isMaintenanceBusy = isMaintenanceBusy,
+                    isExperimentMode = isExperimentMode,
+                    selectedExperimentItem = selectedExperimentItem
+                )
+                if (canRunNormal && !isStartInProgress) {
+                    AutomationStartDecision.Started
+                } else {
+                    AutomationStartDecision.Rejected
+                }
+            }
+        }
+    }
 
     fun hasPromptTemplate(promptTemplate: String): Boolean =
         promptTemplate.isNotBlank()

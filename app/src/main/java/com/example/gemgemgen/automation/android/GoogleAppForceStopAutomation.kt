@@ -9,21 +9,13 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 
 internal data class ForceStopNodeLabels(
     val settingsPackageNames: List<String> = listOf("com.android.settings"),
-    val forceStopButtonIds: List<String> = listOf(
-        "com.android.settings:id/forcestop_button",
-        "com.android.settings:id/button2_negative",
-        "com.android.settings:id/force_stop_button",
-        "com.android.settings:id/right_button"
-    ),
+    val forceStopButtonIds: List<String> = GeminiNodeDescriptors.ForceStop.DEFAULT_FORCE_STOP_BUTTON_IDS,
     val forceStopButtonCandidates: List<String> = listOf(
         "강제 중지",
         "강제 종료",
         "Force stop"
     ),
-    val confirmDialogButtonIds: List<String> = listOf(
-        "android:id/button1",
-        "com.android.settings:id/button1"
-    ),
+    val confirmDialogButtonIds: List<String> = GeminiNodeDescriptors.ForceStop.DEFAULT_CONFIRM_DIALOG_BUTTON_IDS,
     val confirmDialogCandidates: List<String> = listOf(
         "강제 중지",
         "강제 종료",
@@ -219,7 +211,7 @@ internal class GoogleAppForceStopAutomation(
                 idOnlyMatch = node
             }
             if (labelMatch == null) {
-                val isCancel = node.viewIdResourceName == "android:id/button2" ||
+                val isCancel = node.viewIdResourceName == GeminiNodeDescriptors.ForceStop.ANDROID_BUTTON2_CANCEL ||
                     nodeValue(node)?.equals("취소", ignoreCase = true) == true
                 if (!isCancel && hasCandidateLabel && isButtonLike(node)) {
                     labelMatch = node

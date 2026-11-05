@@ -6,8 +6,8 @@ import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisDefaultDirections
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.AnalysisPromptPayload
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisStatus
@@ -17,19 +17,20 @@ import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_MODEL
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
+import com.example.gemgemgen.ui.components.formatModelSummaryLabel
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
-import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
+import com.example.gemgemgen.core.credential.usecase.AnalysisAiGateway
+import com.example.gemgemgen.core.credential.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.AnalysisSaveAndReplaceResult
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeyRecord
+import com.example.gemgemgen.core.credential.usecase.GeminiApiKeyRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthGateway
 import com.example.gemgemgen.analysis.usecase.GrokAuthRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession
 import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
-import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.core.credential.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
@@ -1476,8 +1477,8 @@ class AnalysisFeatureTest {
         val viewModel = analysisViewModel(aiGateway = aiGateway, keyRepository = keyRepo)
         // 생성 프로바이더를 Grok으로 명시적 설정 (Grok 미로그인 상태)
         viewModel.onRoleProviderSelected(
-            com.example.gemgemgen.analysis.domain.AnalysisModelRole.GENERATION,
-            com.example.gemgemgen.analysis.domain.AnalysisProvider.GROK
+            com.example.gemgemgen.core.credential.domain.AnalysisModelRole.GENERATION,
+            com.example.gemgemgen.core.credential.domain.AnalysisProvider.GROK
         )
 
         // 1. 원문 없음 -> 원문 안내 + canGenerate false
@@ -1504,8 +1505,8 @@ class AnalysisFeatureTest {
 
         // 마스킹 모델을 Grok으로 변경 시 -> Grok 로그인 안내
         viewModel.onRoleProviderSelected(
-            com.example.gemgemgen.analysis.domain.AnalysisModelRole.MASKING,
-            com.example.gemgemgen.analysis.domain.AnalysisProvider.GROK
+            com.example.gemgemgen.core.credential.domain.AnalysisModelRole.MASKING,
+            com.example.gemgemgen.core.credential.domain.AnalysisProvider.GROK
         )
         assertEquals(
             "자동 마스킹용 Grok에 로그인하세요.",
@@ -1515,8 +1516,8 @@ class AnalysisFeatureTest {
 
         // 마스킹 모델을 다시 Gemini로 변경 후 Gemini 키 등록/활성화 -> 마스킹 인증 충족
         viewModel.onRoleProviderSelected(
-            com.example.gemgemgen.analysis.domain.AnalysisModelRole.MASKING,
-            com.example.gemgemgen.analysis.domain.AnalysisProvider.GEMINI
+            com.example.gemgemgen.core.credential.domain.AnalysisModelRole.MASKING,
+            com.example.gemgemgen.core.credential.domain.AnalysisProvider.GEMINI
         )
         viewModel.onKeyLabelChange("gemini-key")
         viewModel.onKeyValueChange("valid-key-value")
@@ -1530,8 +1531,8 @@ class AnalysisFeatureTest {
 
         // 생성 모델도 Gemini로 변경 -> Gemini 키가 이미 있으므로 모든 조건 충족!
         viewModel.onRoleProviderSelected(
-            com.example.gemgemgen.analysis.domain.AnalysisModelRole.GENERATION,
-            com.example.gemgemgen.analysis.domain.AnalysisProvider.GEMINI
+            com.example.gemgemgen.core.credential.domain.AnalysisModelRole.GENERATION,
+            com.example.gemgemgen.core.credential.domain.AnalysisProvider.GEMINI
         )
         org.junit.Assert.assertNull(viewModel.uiState.value.preconditionHintMessage)
         assertTrue(viewModel.uiState.value.canGenerate)
@@ -1549,12 +1550,12 @@ class AnalysisFeatureTest {
             keyRepository = keyRepo
         )
         viewModel.onRoleProviderSelected(
-            com.example.gemgemgen.analysis.domain.AnalysisModelRole.MASKING,
-            com.example.gemgemgen.analysis.domain.AnalysisProvider.GEMINI
+            com.example.gemgemgen.core.credential.domain.AnalysisModelRole.MASKING,
+            com.example.gemgemgen.core.credential.domain.AnalysisProvider.GEMINI
         )
         viewModel.onRoleProviderSelected(
-            com.example.gemgemgen.analysis.domain.AnalysisModelRole.GENERATION,
-            com.example.gemgemgen.analysis.domain.AnalysisProvider.GEMINI
+            com.example.gemgemgen.core.credential.domain.AnalysisModelRole.GENERATION,
+            com.example.gemgemgen.core.credential.domain.AnalysisProvider.GEMINI
         )
 
         val prompt = "red hair and blue dress"
@@ -1573,8 +1574,8 @@ class AnalysisFeatureTest {
 
         // 이제 마스킹 프로바이더를 Grok(로그인 안 됨)으로 변경
         viewModel.onRoleProviderSelected(
-            com.example.gemgemgen.analysis.domain.AnalysisModelRole.MASKING,
-            com.example.gemgemgen.analysis.domain.AnalysisProvider.GROK
+            com.example.gemgemgen.core.credential.domain.AnalysisModelRole.MASKING,
+            com.example.gemgemgen.core.credential.domain.AnalysisProvider.GROK
         )
         assertFalse(viewModel.uiState.value.hasMaskingCredential)
         assertTrue(viewModel.uiState.value.hasGenerationCredential)
@@ -1704,16 +1705,16 @@ class AnalysisFeatureTest {
     fun formatModelSummaryLabel_returnsCompactProviderAndModelSummary() {
         assertEquals(
             "Gemini · 3.5 Lite",
-            com.example.gemgemgen.analysis.ui.formatModelSummaryLabel(
+            com.example.gemgemgen.ui.components.formatModelSummaryLabel(
                 AnalysisProvider.GEMINI,
-                com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
+                com.example.gemgemgen.core.credential.domain.MODEL_GEMINI_3_5_FLASH_LITE
             )
         )
         assertEquals(
             "Grok · 4.5",
-            com.example.gemgemgen.analysis.ui.formatModelSummaryLabel(
+            com.example.gemgemgen.ui.components.formatModelSummaryLabel(
                 AnalysisProvider.GROK,
-                com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
+                com.example.gemgemgen.core.credential.domain.MODEL_GROK_4_5
             )
         )
     }

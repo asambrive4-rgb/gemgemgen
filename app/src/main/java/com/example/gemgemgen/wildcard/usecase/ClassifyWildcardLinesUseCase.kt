@@ -1,10 +1,10 @@
 // 역할: AI 모델을 호출하여 와일드카드 파일 내의 단어들을 의미별로 자동 분류합니다.
 package com.example.gemgemgen.wildcard.usecase
 
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.usecase.AnalysisException
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
+import com.example.gemgemgen.core.credential.domain.AnalysisException
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.usecase.AnalysisAiGateway
+import com.example.gemgemgen.core.credential.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyPromptBuilder
 import com.example.gemgemgen.wildcard.domain.WildcardClassifyResponseParser

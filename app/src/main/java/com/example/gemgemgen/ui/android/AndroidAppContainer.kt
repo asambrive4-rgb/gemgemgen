@@ -5,19 +5,18 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.gemgemgen.analysis.android.AndroidAnalysisCustomDirectionRepository
-import com.example.gemgemgen.analysis.android.AndroidEncryptedGeminiApiKeyRepository
+import com.example.gemgemgen.core.credential.android.AndroidEncryptedGeminiApiKeyRepository
 import com.example.gemgemgen.analysis.android.AndroidEncryptedGrokAuthRepository
 import com.example.gemgemgen.analysis.android.AndroidGeminiAnalysisGateway
 import com.example.gemgemgen.analysis.android.AndroidGrokAnalysisGateway
-import com.example.gemgemgen.analysis.android.AndroidGrokBillingGateway
 import com.example.gemgemgen.analysis.android.AndroidGrokOAuthGateway
 import com.example.gemgemgen.analysis.android.RoutingAnalysisAiGateway
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationUseCase
 import com.example.gemgemgen.analysis.usecase.GenerateAnalysisTxtUseCase
-import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.core.credential.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
-import com.example.gemgemgen.analysis.usecase.ResolveAnalysisCredentialUseCase
+import com.example.gemgemgen.core.credential.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.analysis.usecase.ResolveAnalysisTargetUseCase
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
 import com.example.gemgemgen.automation.android.ActivePromptAutomationGatewayProvider
@@ -32,7 +31,6 @@ import com.example.gemgemgen.automation.android.DataStorePromptHistoryRepository
 import com.example.gemgemgen.automation.android.PromptSnippetStore
 import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
-import com.example.gemgemgen.automation.usecase.CheckAutomationStartUseCase
 import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotStore
 import com.example.gemgemgen.automation.usecase.PromptHistoryStore
@@ -91,8 +89,7 @@ class AndroidAppContainer(context: Context) {
     private val grokAuthManager by lazy {
         ManageGrokAuthUseCase(
             gateway = AndroidGrokOAuthGateway(),
-            repository = AndroidEncryptedGrokAuthRepository(appContext),
-            billingGateway = AndroidGrokBillingGateway()
+            repository = AndroidEncryptedGrokAuthRepository(appContext)
         )
     }
     private val analysisCredentialResolver by lazy {
@@ -122,17 +119,16 @@ class AndroidAppContainer(context: Context) {
 
     val automationViewModelFactory: ViewModelProvider.Factory = factory<AutomationViewModel> {
         val automation = AndroidAutomationRuntimeProvider.get(appContext)
-        val checkAutomationStart = CheckAutomationStartUseCase(environmentGateway)
         val manageRemoteAutomation = ManageRemoteAutomationUseCase(
             gateway = AndroidRemoteAutomationGateway(appContext),
             automationHistoryRecorder = recordAutomationStart,
             wildcardSetRepository = wildcardSetRepository
         )
         val executeAutomation = CoordinateAutomationExecutionUseCase(
-            checkAutomationStart = checkAutomationStart,
+            overlayPermissionGateway = environmentGateway,
             automationHistoryRecorder = recordAutomationStart,
             automation = automation,
-            manageRemoteAutomation = manageRemoteAutomation
+            remoteAutomationSenderGateway = manageRemoteAutomation
         )
         AutomationViewModel(
             checkEnvironmentStatus = environmentGateway,
@@ -144,7 +140,7 @@ class AndroidAppContainer(context: Context) {
                 selfAppCloser = AndroidSelfAppCloser(appContext),
                 memoryCleanupGateway = AndroidMemoryCleanupGateway(appContext),
                 geminiAccountSwitchGateway = AndroidGeminiAccountSwitcher(appContext),
-                manageRemoteAutomation = manageRemoteAutomation
+                remoteSenderGateway = manageRemoteAutomation
             ),
             executeAutomation = executeAutomation,
             wildcardFileRepository = wildcardFileRepository,

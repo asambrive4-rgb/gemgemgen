@@ -1,5 +1,5 @@
-// 역할: Android KeyStore 기반의 AES-GCM 암호화 및 복호화를 수행합니다.
-package com.example.gemgemgen.analysis.android
+// 역할: Android KeyStore 기반의 AES-GCM 보안 암호화 및 복호화를 수행합니다.
+package com.example.gemgemgen.core.credential.android
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -10,7 +10,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-internal class AndroidKeyStoreCipher(
+class AndroidKeyStoreCipher(
     private val keyAlias: String
 ) {
     @Volatile

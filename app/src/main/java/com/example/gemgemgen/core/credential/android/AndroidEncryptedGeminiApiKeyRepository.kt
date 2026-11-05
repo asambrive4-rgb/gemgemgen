@@ -1,5 +1,5 @@
 // 역할: Jetpack DataStore와 기기 보안 키체인을 활용하여 암호화된 Gemini API 키와 역할별 모델 설정을 로컬에 저장하고 불러옵니다.
-package com.example.gemgemgen.analysis.android
+package com.example.gemgemgen.core.credential.android
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -8,10 +8,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeyRecord
+import com.example.gemgemgen.core.credential.usecase.GeminiApiKeyRepository
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -20,17 +20,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 private val Context.geminiApiKeyDataStore: DataStore<Preferences> by preferencesDataStore(
     name = AndroidEncryptedGeminiApiKeyRepository.DATASTORE_NAME
 )
+
+private val credentialJson = Json { ignoreUnknownKeys = true }
 
 class AndroidEncryptedGeminiApiKeyRepository internal constructor(
     private val dataStore: DataStore<Preferences>,
@@ -55,9 +53,8 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
                     val raw = preferences[KEY_PREF_RECORDS]
                     if (!raw.isNullOrBlank()) {
                         cachedRecords = runCatching {
-                            analysisJson.parseToJsonElement(raw)
-                                .jsonArray
-                                .mapNotNull { element -> element.jsonObject.toStoredRecordOrNull() }
+                            credentialJson.decodeFromString<List<StoredGeminiApiKey>>(raw)
+                                .filter { it.isValid }
                         }.getOrDefault(emptyList())
                     }
                     for (role in AnalysisModelRole.entries) {
@@ -204,19 +201,7 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
 
     private fun writeRecords(records: List<StoredGeminiApiKey>) {
         cachedRecords = records
-        val jsonArray = buildJsonArray {
-            records.forEach { record ->
-                add(
-                    buildJsonObject {
-                        put("id", JsonPrimitive(record.id))
-                        put("label", JsonPrimitive(record.label))
-                        put("encryptedValue", JsonPrimitive(record.encryptedValue))
-                        put("preview", JsonPrimitive(record.preview))
-                        put("isActive", JsonPrimitive(record.isActive))
-                    }
-                )
-            }
-        }.toString()
+        val jsonArray = credentialJson.encodeToString(records)
         scope.launch {
             dataStore.edit { preferences ->
                 preferences[KEY_PREF_RECORDS] = jsonArray
@@ -224,33 +209,20 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
         }
     }
 
-    private fun JsonObject.toStoredRecordOrNull(): StoredGeminiApiKey? {
-        val id = this["id"]?.jsonPrimitive?.content.orEmpty()
-        val label = this["label"]?.jsonPrimitive?.content.orEmpty()
-        val encryptedValue = this["encryptedValue"]?.jsonPrimitive?.content.orEmpty()
-        val preview = this["preview"]?.jsonPrimitive?.content.orEmpty()
-        val isActive = this["isActive"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-        if (id.isBlank() || encryptedValue.isBlank()) return null
-        return StoredGeminiApiKey(
-            id = id,
-            label = label.ifBlank { "API 키" },
-            encryptedValue = encryptedValue,
-            preview = preview.ifBlank { preview(encryptedValue) },
-            isActive = isActive
-        )
-    }
-
+    @Serializable
     private data class StoredGeminiApiKey(
-        val id: String,
-        val label: String,
-        val encryptedValue: String,
-        val preview: String,
-        val isActive: Boolean
+        val id: String = "",
+        val label: String = "API 키",
+        val encryptedValue: String = "",
+        val preview: String = "",
+        val isActive: Boolean = false
     ) {
+        val isValid: Boolean get() = id.isNotBlank() && encryptedValue.isNotBlank()
+
         fun toRecord(): GeminiApiKeyRecord = GeminiApiKeyRecord(
             id = id,
-            label = label,
-            preview = preview,
+            label = label.ifBlank { "API 키" },
+            preview = preview.ifBlank { "****${encryptedValue.takeLast(4)}" },
             isActive = isActive
         )
     }

@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore와 JSON 직렬화를 사용해 다중 제미나이 계정 프로필 목록(수동 소진·사용 금지 플래그 포함), 대표 계정 선택 상태 및 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
+// 역할: Jetpack DataStore와 kotlinx.serialization을 사용해 다중 제미나이 계정 프로필 목록(수동 소진·사용 금지 플래그 포함), 대표 계정 선택 상태 및 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
 package com.example.gemgemgen.usage.android
 
 import android.content.Context
@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
 import com.example.gemgemgen.usage.domain.GeminiUsageState
 import com.example.gemgemgen.usage.usecase.MultiGeminiUsageLocalDataSource
@@ -19,20 +18,20 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.put
 
 private val Context.multiGeminiUsageDataStore: DataStore<Preferences> by preferencesDataStore(
     name = DataStoreMultiGeminiUsageDataSource.DATASTORE_NAME
 )
+
+private val usageJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+    encodeDefaults = true
+}
 
 class DataStoreMultiGeminiUsageDataSource(
     private val dataStore: DataStore<Preferences>
@@ -74,14 +73,20 @@ class DataStoreMultiGeminiUsageDataSource(
         val normalized = profiles
             .sortedBy { it.sortOrder }
             .mapIndexed { index, profile -> profile.copy(sortOrder = index) }
-        val jsonString = serializeProfilesJson(normalized)
-
         dataStore.edit { preferences ->
-            preferences[KEY_ACCOUNTS_JSON] = jsonString
-            if (selectedAccountId.isNullOrBlank()) {
-                preferences.remove(KEY_SELECTED_ACCOUNT_ID)
-            } else {
+            preferences[KEY_ACCOUNTS_JSON] = serializeProfilesJson(normalized)
+            if (selectedAccountId != null) {
                 preferences[KEY_SELECTED_ACCOUNT_ID] = selectedAccountId
+            } else {
+                val current = preferences[KEY_SELECTED_ACCOUNT_ID]
+                if (current == null || normalized.none { it.id == current }) {
+                    val fallback = normalized.firstOrNull()?.id
+                    if (fallback != null) {
+                        preferences[KEY_SELECTED_ACCOUNT_ID] = fallback
+                    } else {
+                        preferences.remove(KEY_SELECTED_ACCOUNT_ID)
+                    }
+                }
             }
         }
     }
@@ -90,10 +95,7 @@ class DataStoreMultiGeminiUsageDataSource(
         if (accountId.isBlank()) return
         dataStore.edit { preferences ->
             val currentMap = parseCachedUsagesJson(preferences[KEY_CACHED_USAGES_JSON]).toMutableMap()
-            currentMap[accountId] = state.copy(
-                fiveHourPercent = state.fiveHourPercent.coerceIn(0, 100),
-                weeklyPercent = state.weeklyPercent.coerceIn(0, 100)
-            )
+            currentMap[accountId] = state
             preferences[KEY_CACHED_USAGES_JSON] = serializeCachedUsagesJson(currentMap)
         }
     }
@@ -156,6 +158,33 @@ class DataStoreMultiGeminiUsageDataSource(
         return matchedId
     }
 
+    @Serializable
+    private data class CachedUsageDto(
+        @SerialName("five_hour_percent") val fiveHourPercent: Int,
+        @SerialName("five_hour_reset_text") val fiveHourResetText: String = "",
+        @SerialName("weekly_percent") val weeklyPercent: Int,
+        @SerialName("weekly_reset_text") val weeklyResetText: String = "",
+        @SerialName("updated_at") val updatedAt: Long = 0L
+    ) {
+        fun toDomain(): GeminiUsageState.Success = GeminiUsageState.Success(
+            fiveHourPercent = fiveHourPercent.coerceIn(0, 100),
+            fiveHourResetText = fiveHourResetText,
+            weeklyPercent = weeklyPercent.coerceIn(0, 100),
+            weeklyResetText = weeklyResetText,
+            updatedAt = updatedAt
+        )
+
+        companion object {
+            fun fromDomain(success: GeminiUsageState.Success): CachedUsageDto = CachedUsageDto(
+                fiveHourPercent = success.fiveHourPercent.coerceIn(0, 100),
+                fiveHourResetText = success.fiveHourResetText,
+                weeklyPercent = success.weeklyPercent.coerceIn(0, 100),
+                weeklyResetText = success.weeklyResetText,
+                updatedAt = success.updatedAt
+            )
+        }
+    }
+
     companion object {
         const val DATASTORE_NAME = "multi_gemini_usage_store"
 
@@ -163,77 +192,19 @@ class DataStoreMultiGeminiUsageDataSource(
         val KEY_CACHED_USAGES_JSON = stringPreferencesKey("multi_gemini_cached_usages_json")
         val KEY_SELECTED_ACCOUNT_ID = stringPreferencesKey("multi_gemini_selected_account_id")
 
-        private const val FIELD_ID = "id"
-        private const val FIELD_ALIAS = "alias"
-        private const val FIELD_EMAIL = "email"
-        private const val FIELD_SORT_ORDER = "sort_order"
-        private const val FIELD_WEBVIEW_PROFILE_NAME = "webview_profile_name"
-        private const val FIELD_CREATED_AT = "created_at"
-        private const val FIELD_GROUP = "group"
-        private const val FIELD_MANUAL_EXHAUSTED_UNTIL = "manual_exhausted_until"
-        private const val FIELD_IS_SUSPENDED = "is_suspended"
-
-        private const val FIELD_FIVE_HOUR_PERCENT = "five_hour_percent"
-        private const val FIELD_FIVE_HOUR_RESET_TEXT = "five_hour_reset_text"
-        private const val FIELD_WEEKLY_PERCENT = "weekly_percent"
-        private const val FIELD_WEEKLY_RESET_TEXT = "weekly_reset_text"
-        private const val FIELD_UPDATED_AT = "updated_at"
-
         fun serializeProfilesJson(profiles: List<GeminiAccountProfile>): String {
-            val array = buildJsonArray {
-                profiles.forEach { profile ->
-                    add(
-                        buildJsonObject {
-                            put(FIELD_ID, profile.id)
-                            put(FIELD_ALIAS, profile.alias)
-                            put(FIELD_EMAIL, profile.email)
-                            put(FIELD_SORT_ORDER, profile.sortOrder)
-                            put(FIELD_WEBVIEW_PROFILE_NAME, profile.webViewProfileName)
-                            put(FIELD_CREATED_AT, profile.createdAt)
-                            put(FIELD_GROUP, profile.group.name)
-                            put(FIELD_MANUAL_EXHAUSTED_UNTIL, profile.manualExhaustedUntilMillis)
-                            put(FIELD_IS_SUSPENDED, profile.isSuspended)
-                        }
-                    )
-                }
-            }
-            return array.toString()
+            return usageJson.encodeToString(profiles)
         }
 
         fun parseProfilesJson(jsonString: String?): List<GeminiAccountProfile> {
             if (jsonString.isNullOrBlank()) return emptyList()
             return runCatching {
-                val array = Json.parseToJsonElement(jsonString).jsonArray
-                array.mapIndexedNotNull { index, element ->
-                    val obj = element.jsonObject
-                    val id = obj[FIELD_ID]?.jsonPrimitive?.content?.trim().orEmpty()
-                    if (id.isEmpty()) return@mapIndexedNotNull null
-                    val alias = obj[FIELD_ALIAS]?.jsonPrimitive?.content?.trim().orEmpty()
-                    val email = obj[FIELD_EMAIL]?.jsonPrimitive?.content?.trim().orEmpty()
-                    val sortOrder = obj[FIELD_SORT_ORDER]?.jsonPrimitive?.intOrNull ?: index
-                    val webViewProfileName = obj[FIELD_WEBVIEW_PROFILE_NAME]
-                        ?.jsonPrimitive
-                        ?.content
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                        ?: GeminiAccountProfile.buildWebViewProfileName(id)
-                    val createdAt = obj[FIELD_CREATED_AT]?.jsonPrimitive?.longOrNull ?: 0L
-                    val groupStr = obj[FIELD_GROUP]?.jsonPrimitive?.content?.trim().orEmpty()
-                    val group: GeminiAccountGroup = runCatching { GeminiAccountGroup.valueOf(groupStr) }
-                        .getOrDefault(GeminiAccountGroup.MAIN)
-                    val manualExhaustedUntilMillis = obj[FIELD_MANUAL_EXHAUSTED_UNTIL]?.jsonPrimitive?.longOrNull ?: 0L
-                    val isSuspended = obj[FIELD_IS_SUSPENDED]?.jsonPrimitive?.booleanOrNull ?: false
-
-                    GeminiAccountProfile(
-                        id = id,
-                        alias = alias.ifEmpty { "계정 ${index + 1}" },
-                        email = email,
-                        sortOrder = sortOrder,
-                        webViewProfileName = webViewProfileName,
-                        createdAt = createdAt,
-                        group = group,
-                        manualExhaustedUntilMillis = manualExhaustedUntilMillis,
-                        isSuspended = isSuspended
+                val array = usageJson.decodeFromString<List<GeminiAccountProfile>>(jsonString)
+                array.mapIndexedNotNull { index, profile ->
+                    if (profile.id.isBlank()) return@mapIndexedNotNull null
+                    profile.copy(
+                        sortOrder = profile.sortOrder,
+                        alias = profile.alias.ifEmpty { "계정 ${index + 1}" }
                     )
                 }.sortedBy { it.sortOrder }
                     .mapIndexed { idx, profile -> profile.copy(sortOrder = idx) }
@@ -243,23 +214,10 @@ class DataStoreMultiGeminiUsageDataSource(
         fun serializeCachedUsagesJson(
             usagesByAccountId: Map<String, GeminiUsageState.Success>
         ): String {
-            val rootObject = buildJsonObject {
-                usagesByAccountId.forEach { (accountId, success) ->
-                    if (accountId.isNotBlank()) {
-                        put(
-                            accountId,
-                            buildJsonObject {
-                                put(FIELD_FIVE_HOUR_PERCENT, success.fiveHourPercent.coerceIn(0, 100))
-                                put(FIELD_FIVE_HOUR_RESET_TEXT, success.fiveHourResetText)
-                                put(FIELD_WEEKLY_PERCENT, success.weeklyPercent.coerceIn(0, 100))
-                                put(FIELD_WEEKLY_RESET_TEXT, success.weeklyResetText)
-                                put(FIELD_UPDATED_AT, success.updatedAt)
-                            }
-                        )
-                    }
-                }
-            }
-            return rootObject.toString()
+            val dtoMap = usagesByAccountId
+                .filterKeys { it.isNotBlank() }
+                .mapValues { CachedUsageDto.fromDomain(it.value) }
+            return usageJson.encodeToString(dtoMap)
         }
 
         fun parseCachedUsagesJson(
@@ -267,28 +225,9 @@ class DataStoreMultiGeminiUsageDataSource(
         ): Map<String, GeminiUsageState.Success> {
             if (jsonString.isNullOrBlank()) return emptyMap()
             return runCatching {
-                val rootObject = Json.parseToJsonElement(jsonString).jsonObject
-                val result = linkedMapOf<String, GeminiUsageState.Success>()
-                rootObject.forEach { (accountId, element) ->
-                    if (accountId.isBlank()) return@forEach
-                    val obj = element.jsonObject
-                    val fiveHourPercent = obj[FIELD_FIVE_HOUR_PERCENT]?.jsonPrimitive?.intOrNull
-                        ?: return@forEach
-                    val weeklyPercent = obj[FIELD_WEEKLY_PERCENT]?.jsonPrimitive?.intOrNull
-                        ?: return@forEach
-                    val fiveHourResetText = obj[FIELD_FIVE_HOUR_RESET_TEXT]?.jsonPrimitive?.content.orEmpty()
-                    val weeklyResetText = obj[FIELD_WEEKLY_RESET_TEXT]?.jsonPrimitive?.content.orEmpty()
-                    val updatedAt = obj[FIELD_UPDATED_AT]?.jsonPrimitive?.longOrNull ?: 0L
-
-                    result[accountId] = GeminiUsageState.Success(
-                        fiveHourPercent = fiveHourPercent.coerceIn(0, 100),
-                        fiveHourResetText = fiveHourResetText,
-                        weeklyPercent = weeklyPercent.coerceIn(0, 100),
-                        weeklyResetText = weeklyResetText,
-                        updatedAt = updatedAt
-                    )
-                }
-                result
+                usageJson.decodeFromString<Map<String, CachedUsageDto>>(jsonString)
+                    .filterKeys { it.isNotBlank() }
+                    .mapValues { it.value.toDomain() }
             }.getOrDefault(emptyMap())
         }
     }

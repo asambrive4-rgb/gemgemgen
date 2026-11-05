@@ -3,9 +3,10 @@ package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.automation.usecase.NewChatMode
+import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.RunVariationPromptUseCase
 import com.example.gemgemgen.automation.usecase.TargetAppLauncher
-import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.VariationStartDecision
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -72,9 +73,16 @@ class RunVariationPromptUseCaseTest {
         }
     }
 
-    private class RecordingVariationGateway : VariationPromptAutomationGateway {
+    private class RecordingVariationGateway : PromptAutomationGateway {
         var pastedPrompt: String? = null
         private var onDone: (() -> Unit)? = null
+
+        override fun sendPrompt(
+            prompt: String,
+            newChatMode: NewChatMode,
+            onStateChange: (AutomationRunState) -> Unit,
+            onDone: () -> Unit
+        ) = Unit
 
         override fun pastePromptOnly(
             prompt: String,

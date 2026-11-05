@@ -1,10 +1,10 @@
-// 역할: 프롬프트 실험(연금술) 도메인 정책(기본 프리셋 프롬프트 항목, 위치 태그 검증, 백그라운드 문구 치환, 다중 줄 붙여넣기 판별), 저장소 및 실행 인가 정책을 검증합니다.
+﻿// 역할: 프롬프트 실험(연금술) 도메인 정책(기본 프리셋 프롬프트 항목, 위치 태그 검증, 백그라운드 문구 치환, 다중 줄 붙여넣기 판별), 저장소 및 실행 인가 정책을 검증합니다.
 package com.example.gemgemgen.automation.domain
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.example.gemgemgen.automation.android.PromptExperimentStore
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import java.io.File
 import kotlinx.coroutines.CoroutineScope

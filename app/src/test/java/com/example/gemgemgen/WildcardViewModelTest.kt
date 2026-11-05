@@ -2,6 +2,11 @@
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.usecase.*
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeyRecord
+import com.example.gemgemgen.core.credential.usecase.AnalysisAiGateway
+import com.example.gemgemgen.core.credential.usecase.GeminiApiKeyRepository
+import com.example.gemgemgen.core.credential.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.core.credential.usecase.ResolveAnalysisCredentialUseCase
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.wildcard.domain.*

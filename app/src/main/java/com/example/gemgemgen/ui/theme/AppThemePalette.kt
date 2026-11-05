@@ -101,7 +101,17 @@ data class AppColors(
     val snippetBorder: Color = accent.copy(alpha = 0.55f),
     val snippetShadow: Color = accent.copy(alpha = 0.25f),
     val wildcardItemPrimary: Color = Color(0xFF7C3AED),
-    val wildcardItemBorder: Color = Color(0xFF7C3AED).copy(alpha = 0.45f)
+    val wildcardItemBorder: Color = Color(0xFF7C3AED).copy(alpha = 0.45f),
+    val error: Color = Color(0xFFD93025),
+    val onError: Color = Color.White,
+    val errorContainer: Color = Color(0xFFFDE8E8),
+    val onErrorContainer: Color = Color(0xFF9B1C1C),
+    val warning: Color = Color(0xFFD97706),
+    val onWarning: Color = Color.White,
+    val warningContainer: Color = Color(0xFFFEF3C7),
+    val onWarningContainer: Color = Color(0xFF92400E),
+    val searchHighlight: Color = Color(0x66FFEB3B),
+    val activeSearchHighlight: Color = Color(0xFFFF9800)
 )
 
 val TossSignatureColors = AppColors(
@@ -198,7 +208,17 @@ private fun createDarkAppColors(
     snippetPrimary: Color,
     snippetBorder: Color,
     wildcardItemPrimary: Color = Color(0xFFA78BFA),
-    wildcardItemBorder: Color = Color(0xFF5B21B6)
+    wildcardItemBorder: Color = Color(0xFF5B21B6),
+    error: Color = Color(0xFFF87171),
+    onError: Color = Color(0xFF450A0A),
+    errorContainer: Color = Color(0xFF3B1D1D),
+    onErrorContainer: Color = Color(0xFFFCA5A5),
+    warning: Color = Color(0xFFFBBF24),
+    onWarning: Color = Color(0xFF451A03),
+    warningContainer: Color = Color(0xFF332514),
+    onWarningContainer: Color = Color(0xFFFDE68A),
+    searchHighlight: Color = Color(0x66FBBF24),
+    activeSearchHighlight: Color = Color(0xFFF59E0B)
 ): AppColors = AppColors(
     canvas = Color(0xFF0D1117),
     card = Color(0xFF1C222D),
@@ -217,7 +237,17 @@ private fun createDarkAppColors(
     snippetBorder = snippetBorder,
     snippetShadow = Color(0x40000000),
     wildcardItemPrimary = wildcardItemPrimary,
-    wildcardItemBorder = wildcardItemBorder
+    wildcardItemBorder = wildcardItemBorder,
+    error = error,
+    onError = onError,
+    errorContainer = errorContainer,
+    onErrorContainer = onErrorContainer,
+    warning = warning,
+    onWarning = onWarning,
+    warningContainer = warningContainer,
+    onWarningContainer = onWarningContainer,
+    searchHighlight = searchHighlight,
+    activeSearchHighlight = activeSearchHighlight
 )
 
 val TossSignatureDarkColors = createDarkAppColors(

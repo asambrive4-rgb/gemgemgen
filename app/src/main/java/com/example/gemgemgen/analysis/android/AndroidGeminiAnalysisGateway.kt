@@ -1,14 +1,18 @@
-// 역할: Gemini AI 모델과 통신하여 프롬프트 분석 및 추천 요청을 수행합니다.
+﻿// 역할: Gemini AI 모델과 통신하여 프롬프트 분석 및 추천 요청을 수행합니다.
 package com.example.gemgemgen.analysis.android
 
-import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.usecase.AnalysisAiGateway
-import com.example.gemgemgen.analysis.usecase.AnalysisException
+import com.example.gemgemgen.core.credential.domain.AnalysisPromptPayload
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.usecase.AnalysisAiGateway
+import com.example.gemgemgen.core.credential.domain.AnalysisException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -22,7 +26,8 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class AndroidGeminiAnalysisGateway(
     private val maxRetries: Int = DEFAULT_MAX_RETRIES,
-    private val initialRetryDelayMillis: Long = DEFAULT_INITIAL_RETRY_DELAY_MILLIS
+    private val initialRetryDelayMillis: Long = DEFAULT_INITIAL_RETRY_DELAY_MILLIS,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : AnalysisAiGateway {
 
     override suspend fun analyze(
@@ -30,8 +35,8 @@ class AndroidGeminiAnalysisGateway(
         modelId: String,
         payload: AnalysisPromptPayload,
         provider: AnalysisProvider
-    ): String {
-        return generateContent(
+    ): String = withContext(ioDispatcher) {
+        generateContent(
             apiKey = apiKey,
             modelId = modelId,
             systemInstruction = payload.systemInstruction,
@@ -66,6 +71,8 @@ class AndroidGeminiAnalysisGateway(
                 }
                 delay(currentDelay)
                 currentDelay *= 2
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: AnalysisException) {
                 throw error
             } catch (error: Exception) {

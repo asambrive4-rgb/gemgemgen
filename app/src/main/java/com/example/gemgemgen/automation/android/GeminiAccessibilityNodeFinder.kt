@@ -8,10 +8,10 @@ internal class GeminiAccessibilityNodeFinder(
     rootProvider: () -> AccessibilityNodeInfo?,
     private val inputResourceId: String
 ) : BaseAccessibilityNodeFinder(rootProvider, GEMINI_ACCESSIBILITY_PACKAGES) {
-    private val inputViewIds = listOf(
-        "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_text",
+    private val inputViewIds = (listOf(
+        GeminiNodeDescriptors.Input.CHAT_INPUT_TEXT,
         inputResourceId
-    ).distinct()
+    ) + GeminiNodeDescriptors.Input.DEFAULT_INPUT_VIEW_IDS).distinct()
 
     fun findInputNode(): AccessibilityNodeInfo? =
         findInputNodeBy(viewIds = inputViewIds, keywords = INPUT_KEYWORDS)
@@ -109,10 +109,7 @@ internal class GeminiAccessibilityNodeFinder(
         const val NEW_CHAT_DESCRIPTION = "새 채팅"
         val INPUT_KEYWORDS = listOf("프롬프트", "메시지")
         val SEND_KEYWORDS = listOf("보내기", "전송")
-        val SEND_VIEW_IDS = listOf(
-            "com.google.android.googlequicksearchbox:id/assistant_robin_input_send_button",
-            "com.google.android.googlequicksearchbox:id/assistant_robin_chat_input_send_button"
-        )
+        val SEND_VIEW_IDS = GeminiNodeDescriptors.Send.DEFAULT_SEND_VIEW_IDS
 
         val GEMINI_ACCESSIBILITY_PACKAGES = setOf(
             AppDefaults.GEMINI_PACKAGE_NAME,

@@ -1,10 +1,10 @@
-// 역할: AI 프롬프트 분석 화면과 다이얼로그에서 발생하는 모든 사용자 인터랙션(다이나믹 프롬프트 복사, Grok 승인 코드 복사 포함)을 캡슐화한 인터페이스입니다.
+﻿// 역할: AI 프롬프트 분석 화면과 다이얼로그에서 발생하는 모든 사용자 인터랙션(다이나믹 프롬프트 복사, Grok 승인 코드 복사 포함)을 캡슐화한 인터페이스입니다.
 package com.example.gemgemgen.analysis.ui
 
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeySummary
 
 interface AnalysisScreenActions {
     fun onSourcePromptChange(value: String) {}

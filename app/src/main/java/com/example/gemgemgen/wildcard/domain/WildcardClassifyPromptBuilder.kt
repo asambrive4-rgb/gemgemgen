@@ -1,7 +1,7 @@
 // 역할: 와일드카드 단어들을 유사 의미별로 그룹화하도록 요청하는 AI 프롬프트를 조립합니다.
 package com.example.gemgemgen.wildcard.domain
 
-import com.example.gemgemgen.analysis.domain.AnalysisPromptPayload
+import com.example.gemgemgen.core.credential.domain.AnalysisPromptPayload
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject

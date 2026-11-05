@@ -222,8 +222,7 @@ internal class GeminiPromptAutomation(
     }
 
     private companion object {
-        const val INPUT_RESOURCE_ID =
-            "com.google.android.googlequicksearchbox:id/assistant_robin_input_collapsed_text_half_sheet"
+        const val INPUT_RESOURCE_ID = GeminiNodeDescriptors.Input.COLLAPSED_INPUT_HALF_SHEET
         const val NEW_CHAT_SETTLE_MS = 350L
     }
 }

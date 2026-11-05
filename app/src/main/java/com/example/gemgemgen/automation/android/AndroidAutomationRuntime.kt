@@ -10,8 +10,7 @@ import com.example.gemgemgen.automation.usecase.ManageImeUseCase
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.PromptAutomationGatewayProvider
 import com.example.gemgemgen.automation.usecase.TargetAppLauncher
-import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
-import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGatewayProvider
+// 미사용 import 정리
 import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
@@ -59,13 +58,9 @@ object AndroidAutomationRuntimeProvider {
     }
 }
 
-object ActivePromptAutomationGatewayProvider : PromptAutomationGatewayProvider, VariationPromptAutomationGatewayProvider {
+object ActivePromptAutomationGatewayProvider : PromptAutomationGatewayProvider {
     override fun current(targetApp: AutomationTargetApp): PromptAutomationGateway? {
         return GeminiAccessibilityService.activeService?.gatewayFor(targetApp)
-    }
-
-    override fun current(): VariationPromptAutomationGateway? {
-        return current(AutomationTargetApp.GEMINI)
     }
 }
 

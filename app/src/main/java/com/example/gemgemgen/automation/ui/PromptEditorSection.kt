@@ -1,4 +1,4 @@
-// 역할: 프롬프트 에디터의 2단 분리형 토스 카드(카드 1: 프롬프트 입력 워크스페이스 / 카드 2: 빠른 도구 모음), 무테두리 대상 앱 드롭다운 및 통일된 상용구·실험·검색 헤더 버튼, 실험·검색·추천 칩 바를 제공합니다.
+﻿// 역할: 프롬프트 에디터의 2단 분리형 토스 카드(카드 1: 프롬프트 입력 워크스페이스 / 카드 2: 빠른 도구 모음), 무테두리 대상 앱 드롭다운 및 통일된 상용구·실험·검색 헤더 버튼, 실험·검색·추천 칩 바를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -49,7 +49,7 @@ import com.example.gemgemgen.automation.domain.AutomationTargetApp
 import com.example.gemgemgen.automation.domain.PromptParagraphRange
 import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.core.AppDefaults
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.ui.AutomationModeSubBar
 import com.example.gemgemgen.remote.ui.CompactAutomationModeToggle
 import com.example.gemgemgen.ui.AppMultilineTextField

@@ -1,5 +1,5 @@
 // 역할: Gemini 및 Grok 프로바이더와 지원 모델 목록을 칩 형태로 선택(접근성 시맨틱 지원)하고 요약 라벨을 제공하는 공통 UI 컴포넌트입니다.
-package com.example.gemgemgen.analysis.ui
+package com.example.gemgemgen.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,12 +12,12 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_6_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_7_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_8_FLASH
-import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.MODEL_GEMINI_3_5_FLASH_LITE
+import com.example.gemgemgen.core.credential.domain.MODEL_GEMINI_3_6_FLASH
+import com.example.gemgemgen.core.credential.domain.MODEL_GEMINI_3_7_FLASH
+import com.example.gemgemgen.core.credential.domain.MODEL_GEMINI_3_8_FLASH
+import com.example.gemgemgen.core.credential.domain.MODEL_GROK_4_5
 import com.example.gemgemgen.ui.theme.NeuPillChip
 
 private data class ModelChipItem(

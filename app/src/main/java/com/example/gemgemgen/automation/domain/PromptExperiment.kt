@@ -2,23 +2,29 @@
 package com.example.gemgemgen.automation.domain
 
 import java.util.UUID
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /**
  * 실험 세트 내 개별 실험 프롬프트 항목.
  */
+@Serializable
 data class PromptExperimentItem(
     val id: String = UUID.randomUUID().toString(),
     val content: String,
+    @SerialName("created_at")
     val createdAtMillis: Long = System.currentTimeMillis()
 )
 
 /**
  * 여러 실험 프롬프트 항목을 묶어서 보관하는 프리셋(세트) 모델.
  */
+@Serializable
 data class PromptExperimentPreset(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val items: List<PromptExperimentItem> = emptyList(),
+    @SerialName("created_at")
     val createdAtMillis: Long = System.currentTimeMillis()
 )
 

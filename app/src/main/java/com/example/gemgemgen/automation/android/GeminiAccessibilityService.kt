@@ -1,4 +1,4 @@
-// 역할: 최근 앱 제어, 제스처 주입, 메모리 정리, 계정 자동 전환 및 생명주기 안전(onUnbind/WeakReference) 게이트웨이를 제공하는 접근성 인프라 서비스
+// 역할: 최근 앱 제어, 제스처 주입, 메모리 정리, 계정 자동 전환 및 안정적인 싱글톤 인프라 게이트웨이를 제공하는 접근성 인프라 서비스
 package com.example.gemgemgen.automation.android
 
 import android.accessibilityservice.AccessibilityService
@@ -24,7 +24,6 @@ import com.example.gemgemgen.automation.usecase.MemoryCleanupResult
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
 import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountResult
-import java.lang.ref.WeakReference
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -121,7 +120,8 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        tearDownService("접근성 서비스 연결이 해제되었습니다.")
+        // 접근성 서비스는 OS 프로세스가 바인딩 상태를 변경하더라도 앱 컴포넌트 간 통신(activeService)을 유지해야 하므로
+        // onUnbind에서 인스턴스를 조기 해제하지 않고 onDestroy에서 안전하게 자원을 정리합니다.
         return super.onUnbind(intent)
     }
 
@@ -470,7 +470,7 @@ class GeminiAccessibilityService : AccessibilityService() {
 
     private fun findCloseNodeInSubtree(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         if (node.isClickable && (
-                node.viewIdResourceName?.endsWith(":id/task_close") == true ||
+                node.viewIdResourceName?.endsWith(GeminiNodeDescriptors.SystemUi.TASK_CLOSE_SUFFIX) == true ||
                     node.contentDescription?.toString() == closeTaskDescription
             )
         ) {
@@ -547,23 +547,22 @@ class GeminiAccessibilityService : AccessibilityService() {
     }
 
     companion object {
-        private var serviceRef: WeakReference<GeminiAccessibilityService>? = null
-
-        val activeService: GeminiAccessibilityService?
-            get() = serviceRef?.get()
+        @Volatile
+        var activeService: GeminiAccessibilityService? = null
+            private set
 
         internal fun setInstance(service: GeminiAccessibilityService) {
-            serviceRef = WeakReference(service)
+            activeService = service
         }
 
         internal fun clearInstance(service: GeminiAccessibilityService) {
-            if (serviceRef?.get() === service) {
-                serviceRef = null
+            if (activeService === service) {
+                activeService = null
             }
         }
 
         internal fun clearForTesting() {
-            serviceRef = null
+            activeService = null
         }
 
         private const val GEMINI_TASK_TITLE = "Gemini"

@@ -1,19 +1,11 @@
-// 역할: 프롬프트 상용구 본문 검색(대소문자 무시, 스니펫 생성) 및 일괄 치환 유스케이스의 단위 테스트를 제공합니다.
+// 역할: 프롬프트 상용구 본문 검색 및 일괄 치환 순수 확장 함수의 동작을 검증합니다.
 package com.example.gemgemgen.automation.domain
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
 class PromptSnippetTextUseCaseTest {
-
-    private lateinit var useCase: PromptSnippetTextUseCase
-
-    @Before
-    fun setUp() {
-        useCase = PromptSnippetTextUseCase()
-    }
 
     @Test
     fun `findMatches finds snippets case-insensitively and counts occurrences`() {
@@ -23,7 +15,7 @@ class PromptSnippetTextUseCaseTest {
             PromptSnippet(id = "3", shortcut = "디테일", content = "super masterpiece finish")
         )
 
-        val results = useCase.findMatches(snippets, "masterpiece")
+        val results = snippets.findMatches("masterpiece")
 
         assertEquals(2, results.size)
         assertEquals("1", results[0].snippet.id)
@@ -38,9 +30,9 @@ class PromptSnippetTextUseCaseTest {
             PromptSnippet(id = "1", shortcut = "퀄리티", content = "high quality")
         )
 
-        assertTrue(useCase.findMatches(snippets, "").isEmpty())
-        assertTrue(useCase.findMatches(snippets, "   ").isEmpty())
-        assertTrue(useCase.findMatches(snippets, "unknown_word").isEmpty())
+        assertTrue(snippets.findMatches("").isEmpty())
+        assertTrue(snippets.findMatches("   ").isEmpty())
+        assertTrue(snippets.findMatches("unknown_word").isEmpty())
     }
 
     @Test
@@ -51,8 +43,7 @@ class PromptSnippetTextUseCaseTest {
             PromptSnippet(id = "3", shortcut = "디테일", content = "super masterpiece finish")
         )
 
-        val (updated, changedCount) = useCase.replaceContent(
-            snippets = snippets,
+        val (updated, changedCount) = snippets.replaceContent(
             searchText = "masterpiece",
             replacementText = "best quality"
         )
@@ -69,8 +60,7 @@ class PromptSnippetTextUseCaseTest {
             PromptSnippet(id = "1", shortcut = "태그", content = "masterpiece, 8k, best quality")
         )
 
-        val (updated, changedCount) = useCase.replaceContent(
-            snippets = snippets,
+        val (updated, changedCount) = snippets.replaceContent(
             searchText = ", 8k",
             replacementText = ""
         )
@@ -85,8 +75,7 @@ class PromptSnippetTextUseCaseTest {
             PromptSnippet(id = "1", shortcut = "태그", content = "masterpiece")
         )
 
-        val (updated, changedCount) = useCase.replaceContent(
-            snippets = snippets,
+        val (updated, changedCount) = snippets.replaceContent(
             searchText = "masterpiece",
             replacementText = "masterpiece"
         )
@@ -104,7 +93,7 @@ class PromptSnippetTextUseCaseTest {
         )
 
         // "masterpiece, " (trailing space 포함)는 쉼표 뒤 공백이 있는 1번만 일치해야 함
-        val results = useCase.findMatches(snippets, "masterpiece, ")
+        val results = snippets.findMatches("masterpiece, ")
 
         assertEquals(1, results.size)
         assertEquals("1", results[0].snippet.id)
@@ -118,8 +107,7 @@ class PromptSnippetTextUseCaseTest {
         )
 
         // 의도적인 공백 추가 ("masterpiece," -> "masterpiece, ")
-        val (updated, changedCount) = useCase.replaceContent(
-            snippets = snippets,
+        val (updated, changedCount) = snippets.replaceContent(
             searchText = "masterpiece,",
             replacementText = "masterpiece, "
         )
@@ -135,8 +123,7 @@ class PromptSnippetTextUseCaseTest {
         )
 
         // 다중 공백을 단일 공백으로 치환 ("  " -> " ")
-        val (updated, changedCount) = useCase.replaceContent(
-            snippets = snippets,
+        val (updated, changedCount) = snippets.replaceContent(
             searchText = "  ",
             replacementText = " "
         )
@@ -152,8 +139,7 @@ class PromptSnippetTextUseCaseTest {
         )
 
         // 앞뒤 공백 패딩이 포함된 검색어 (" masterpiece ")
-        val (updated, changedCount) = useCase.replaceContent(
-            snippets = snippets,
+        val (updated, changedCount) = snippets.replaceContent(
             searchText = " masterpiece ",
             replacementText = " - "
         )

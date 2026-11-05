@@ -4,8 +4,8 @@ package com.example.gemgemgen.analysis.ui
 import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.domain.AnalysisDirectionCatalog
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisStartBlockReason
@@ -16,7 +16,7 @@ import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_CATEGORY
 import com.example.gemgemgen.analysis.domain.DEFAULT_ANALYSIS_RESULT_FILE_NAME
 import com.example.gemgemgen.analysis.domain.MODEL_GEMINI_3_5_FLASH_LITE
 import com.example.gemgemgen.analysis.domain.MODEL_GROK_4_5
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeySummary
 
 data class AnalysisUiState(
     val sourcePrompt: String = "",
@@ -152,10 +152,12 @@ object AnalysisUiText {
             is AnalysisStartBlockReason.MissingMaskingCredential -> when (reason.provider) {
                 AnalysisProvider.GEMINI -> "자동 마스킹용 Gemini API 키를 등록하거나 활성화하세요."
                 AnalysisProvider.GROK -> "자동 마스킹용 Grok에 로그인하세요."
+                else -> "자동 마스킹용 인증 정보를 확인하세요."
             }
             is AnalysisStartBlockReason.MissingGenerationCredential -> when (reason.provider) {
                 AnalysisProvider.GEMINI -> "생성용 Gemini API 키를 등록하거나 활성화하세요."
                 AnalysisProvider.GROK -> "생성용 Grok에 로그인하세요."
+                else -> "생성용 인증 정보를 확인하세요."
             }
         }
     }

@@ -3,19 +3,15 @@ package com.example.gemgemgen.remote.android
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
+import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.remote.domain.RemoteAutomationRequest
 import com.example.gemgemgen.wildcard.domain.WildcardSet
-import com.example.gemgemgen.core.AppDefaults
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonClassDiscriminator
 
 internal sealed interface RemoteProtocolMessage {
     data class PairRequest(val senderId: String, val pairingCode: String) : RemoteProtocolMessage
@@ -74,231 +70,344 @@ internal sealed interface RemoteProtocolMessage {
     ) : RemoteProtocolMessage
 }
 
+@OptIn(ExperimentalSerializationApi::class)
+private val protocolJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+    encodeDefaults = true
+    explicitNulls = false
+}
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@JsonClassDiscriminator("type")
+private sealed interface ProtocolPacketDto {
+    fun toDomain(): RemoteProtocolMessage
+
+    @Serializable
+    @SerialName("pair")
+    data class PairReq(
+        val senderId: String = "",
+        val code: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.PairRequest(senderId = senderId, pairingCode = code)
+    }
+
+    @Serializable
+    @SerialName("pairResult")
+    data class PairRes(
+        val success: Boolean = false,
+        val receiverId: String = "",
+        val receiverName: String = "",
+        val token: String = "",
+        val message: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.PairResult(
+                success = success,
+                receiverId = receiverId,
+                receiverName = receiverName,
+                token = token,
+                message = message
+            )
+    }
+
+    @Serializable
+    @SerialName("run")
+    data class RunReq(
+        val senderId: String = "",
+        val token: String = "",
+        val requestId: String = "",
+        val prompt: String = "",
+        val repeatCount: String = "",
+        val targetApp: String = "",
+        val flowImageCount: Int = AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
+        val wildcards: List<WildcardDto> = emptyList()
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.RunRequest(
+                senderId = senderId,
+                token = token,
+                request = RemoteAutomationRequest(
+                    requestId = requestId,
+                    promptTemplate = prompt,
+                    repeatCountText = repeatCount,
+                    targetApp = AutomationTargetApp.fromStorageValue(targetApp),
+                    flowImageCount = flowImageCount,
+                    wildcards = wildcards.map { it.toDomain() }
+                )
+            )
+
+        companion object {
+            fun from(req: RemoteProtocolMessage.RunRequest): RunReq = RunReq(
+                senderId = req.senderId,
+                token = req.token,
+                requestId = req.request.requestId,
+                prompt = req.request.promptTemplate,
+                repeatCount = req.request.repeatCountText,
+                targetApp = req.request.targetApp.storageValue,
+                flowImageCount = req.request.flowImageCount,
+                wildcards = req.request.wildcards.map { WildcardDto.from(it) }
+            )
+        }
+    }
+
+    @Serializable
+    @SerialName("cancel")
+    data class CancelReq(
+        val senderId: String = "",
+        val token: String = "",
+        val requestId: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.CancelRequest(
+                senderId = senderId,
+                token = token,
+                requestId = requestId
+            )
+    }
+
+    @Serializable
+    @SerialName("updateRepeatCount")
+    data class UpdateRepeatCountReq(
+        val senderId: String = "",
+        val token: String = "",
+        val requestId: String = "",
+        val repeatCount: Int
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.UpdateRepeatCountRequest(
+                senderId = senderId,
+                token = token,
+                requestId = requestId,
+                repeatCount = repeatCount
+            )
+    }
+
+    @Serializable
+    @SerialName("disconnect")
+    data class DisconnectReq(
+        val senderId: String = "",
+        val token: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.DisconnectRequest(
+                senderId = senderId,
+                token = token
+            )
+    }
+
+    @Serializable
+    @SerialName("disconnectResult")
+    data class DisconnectRes(
+        val success: Boolean = false,
+        val message: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.DisconnectResult(
+                success = success,
+                message = message
+            )
+    }
+
+    @Serializable
+    @SerialName("state")
+    data class StateUpd(
+        val requestId: String = "",
+        val state: String = "idle",
+        val step: String = "",
+        val currentIndex: Int? = null,
+        val totalCount: Int? = null,
+        val message: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage {
+            val runState = when (state) {
+                "running" -> AutomationRunState.Running(
+                    step = step,
+                    currentIndex = currentIndex,
+                    totalCount = totalCount
+                )
+                "success" -> AutomationRunState.Success
+                "stopped" -> AutomationRunState.Stopped
+                "failure" -> AutomationRunState.Failure(message)
+                else -> AutomationRunState.Idle
+            }
+            return RemoteProtocolMessage.StateUpdate(requestId = requestId, state = runState)
+        }
+
+        companion object {
+            fun from(requestId: String, runState: AutomationRunState): StateUpd = when (runState) {
+                AutomationRunState.Idle -> StateUpd(requestId = requestId, state = "idle")
+                is AutomationRunState.Running -> StateUpd(
+                    requestId = requestId,
+                    state = "running",
+                    step = runState.step,
+                    currentIndex = runState.currentIndex,
+                    totalCount = runState.totalCount
+                )
+                AutomationRunState.Success -> StateUpd(requestId = requestId, state = "success")
+                AutomationRunState.Stopped -> StateUpd(requestId = requestId, state = "stopped")
+                is AutomationRunState.Failure -> StateUpd(
+                    requestId = requestId,
+                    state = "failure",
+                    message = runState.message
+                )
+            }
+        }
+    }
+
+    @Serializable
+    @SerialName("cleanMemory")
+    data class CleanMemReq(
+        val senderId: String = "",
+        val token: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.CleanMemoryRequest(
+                senderId = senderId,
+                token = token
+            )
+    }
+
+    @Serializable
+    @SerialName("cleanMemoryResult")
+    data class CleanMemRes(
+        val success: Boolean = false,
+        val message: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.CleanMemoryResult(
+                success = success,
+                message = message
+            )
+    }
+
+    @Serializable
+    @SerialName("switchAccount")
+    data class SwitchAccReq(
+        val senderId: String = "",
+        val token: String = "",
+        val email: String = "",
+        val alias: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.SwitchAccountRequest(
+                senderId = senderId,
+                token = token,
+                email = email,
+                alias = alias
+            )
+    }
+
+    @Serializable
+    @SerialName("switchAccountResult")
+    data class SwitchAccRes(
+        val success: Boolean = false,
+        val message: String = ""
+    ) : ProtocolPacketDto {
+        override fun toDomain(): RemoteProtocolMessage =
+            RemoteProtocolMessage.SwitchAccountResult(
+                success = success,
+                message = message
+            )
+    }
+
+    companion object {
+        fun fromDomain(message: RemoteProtocolMessage): ProtocolPacketDto = when (message) {
+            is RemoteProtocolMessage.PairRequest -> PairReq(
+                senderId = message.senderId,
+                code = message.pairingCode
+            )
+            is RemoteProtocolMessage.PairResult -> PairRes(
+                success = message.success,
+                receiverId = message.receiverId,
+                receiverName = message.receiverName,
+                token = message.token,
+                message = message.message
+            )
+            is RemoteProtocolMessage.RunRequest -> RunReq.from(message)
+            is RemoteProtocolMessage.CancelRequest -> CancelReq(
+                senderId = message.senderId,
+                token = message.token,
+                requestId = message.requestId
+            )
+            is RemoteProtocolMessage.UpdateRepeatCountRequest -> UpdateRepeatCountReq(
+                senderId = message.senderId,
+                token = message.token,
+                requestId = message.requestId,
+                repeatCount = message.repeatCount
+            )
+            is RemoteProtocolMessage.DisconnectRequest -> DisconnectReq(
+                senderId = message.senderId,
+                token = message.token
+            )
+            is RemoteProtocolMessage.DisconnectResult -> DisconnectRes(
+                success = message.success,
+                message = message.message
+            )
+            is RemoteProtocolMessage.StateUpdate -> StateUpd.from(
+                requestId = message.requestId,
+                runState = message.state
+            )
+            is RemoteProtocolMessage.CleanMemoryRequest -> CleanMemReq(
+                senderId = message.senderId,
+                token = message.token
+            )
+            is RemoteProtocolMessage.CleanMemoryResult -> CleanMemRes(
+                success = message.success,
+                message = message.message
+            )
+            is RemoteProtocolMessage.SwitchAccountRequest -> SwitchAccReq(
+                senderId = message.senderId,
+                token = message.token,
+                email = message.email,
+                alias = message.alias
+            )
+            is RemoteProtocolMessage.SwitchAccountResult -> SwitchAccRes(
+                success = message.success,
+                message = message.message
+            )
+        }
+    }
+}
+
+@Serializable
+private data class WildcardDto(
+    val token: String = "",
+    val fileName: String = "",
+    val items: List<String> = emptyList()
+) {
+    fun toDomain(): WildcardSet = WildcardSet(
+        token = token,
+        fileName = fileName,
+        items = items
+    )
+
+    companion object {
+        fun from(set: WildcardSet): WildcardDto = WildcardDto(
+            token = set.token,
+            fileName = set.fileName,
+            items = set.items
+        )
+    }
+}
+
 internal object RemoteAutomationProtocol {
     const val SERVICE_TYPE = "_gemgemgen._tcp."
     const val MAX_MESSAGE_CHARS = 1_000_000
     const val SOCKET_TIMEOUT_MS = 10_000
     const val STREAM_SOCKET_TIMEOUT_MS = 30_000
 
-    private val json = Json { ignoreUnknownKeys = true }
-
     fun encode(message: RemoteProtocolMessage): String {
-        return when (message) {
-            is RemoteProtocolMessage.PairRequest -> buildJsonObject {
-                put("type", "pair")
-                put("senderId", message.senderId)
-                put("code", message.pairingCode)
-            }
-            is RemoteProtocolMessage.PairResult -> buildJsonObject {
-                put("type", "pairResult")
-                put("success", message.success)
-                put("receiverId", message.receiverId)
-                put("receiverName", message.receiverName)
-                put("token", message.token)
-                put("message", message.message)
-            }
-            is RemoteProtocolMessage.RunRequest -> buildJsonObject {
-                put("type", "run")
-                put("senderId", message.senderId)
-                put("token", message.token)
-                put("requestId", message.request.requestId)
-                put("prompt", message.request.promptTemplate)
-                put("repeatCount", message.request.repeatCountText)
-                put("targetApp", message.request.targetApp.storageValue)
-                put("flowImageCount", message.request.flowImageCount)
-                if (message.request.wildcards.isNotEmpty()) {
-                    put("wildcards", buildJsonArray {
-                        message.request.wildcards.forEach { set ->
-                            add(buildJsonObject {
-                                put("token", set.token)
-                                put("fileName", set.fileName)
-                                put("items", buildJsonArray {
-                                    set.items.forEach { add(it) }
-                                })
-                            })
-                        }
-                    })
-                }
-            }
-            is RemoteProtocolMessage.CancelRequest -> buildJsonObject {
-                put("type", "cancel")
-                put("senderId", message.senderId)
-                put("token", message.token)
-                put("requestId", message.requestId)
-            }
-            is RemoteProtocolMessage.UpdateRepeatCountRequest -> buildJsonObject {
-                put("type", "updateRepeatCount")
-                put("senderId", message.senderId)
-                put("token", message.token)
-                put("requestId", message.requestId)
-                put("repeatCount", message.repeatCount)
-            }
-            is RemoteProtocolMessage.DisconnectRequest -> buildJsonObject {
-                put("type", "disconnect")
-                put("senderId", message.senderId)
-                put("token", message.token)
-            }
-            is RemoteProtocolMessage.DisconnectResult -> buildJsonObject {
-                put("type", "disconnectResult")
-                put("success", message.success)
-                put("message", message.message)
-            }
-            is RemoteProtocolMessage.StateUpdate -> buildJsonObject {
-                put("type", "state")
-                put("requestId", message.requestId)
-                putState(message.state)
-            }
-            is RemoteProtocolMessage.CleanMemoryRequest -> buildJsonObject {
-                put("type", "cleanMemory")
-                put("senderId", message.senderId)
-                put("token", message.token)
-            }
-            is RemoteProtocolMessage.CleanMemoryResult -> buildJsonObject {
-                put("type", "cleanMemoryResult")
-                put("success", message.success)
-                put("message", message.message)
-            }
-            is RemoteProtocolMessage.SwitchAccountRequest -> buildJsonObject {
-                put("type", "switchAccount")
-                put("senderId", message.senderId)
-                put("token", message.token)
-                put("email", message.email)
-                put("alias", message.alias)
-            }
-            is RemoteProtocolMessage.SwitchAccountResult -> buildJsonObject {
-                put("type", "switchAccountResult")
-                put("success", message.success)
-                put("message", message.message)
-            }
-        }.toString()
+        val dto = ProtocolPacketDto.fromDomain(message)
+        return protocolJson.encodeToString(dto)
     }
 
     fun decode(text: String): RemoteProtocolMessage? {
         if (text.length > MAX_MESSAGE_CHARS) return null
-        val value = runCatching { json.parseToJsonElement(text) as? JsonObject }.getOrNull()
-            ?: return null
-        return when (value.string("type")) {
-            "pair" -> RemoteProtocolMessage.PairRequest(
-                senderId = value.string("senderId"),
-                pairingCode = value.string("code")
-            )
-            "pairResult" -> RemoteProtocolMessage.PairResult(
-                success = value.boolean("success"),
-                receiverId = value.string("receiverId"),
-                receiverName = value.string("receiverName"),
-                token = value.string("token"),
-                message = value.string("message")
-            )
-            "run" -> {
-                val wildcards = runCatching {
-                    value["wildcards"]?.jsonArray?.mapNotNull { element ->
-                        val obj = element as? JsonObject ?: return@mapNotNull null
-                        WildcardSet(
-                            token = obj.string("token"),
-                            fileName = obj.string("fileName"),
-                            items = obj["items"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
-                        )
-                    }
-                }.getOrNull().orEmpty()
-                RemoteProtocolMessage.RunRequest(
-                    senderId = value.string("senderId"),
-                    token = value.string("token"),
-                    request = RemoteAutomationRequest(
-                        requestId = value.string("requestId"),
-                        promptTemplate = value.string("prompt"),
-                        repeatCountText = value.string("repeatCount"),
-                        targetApp = AutomationTargetApp.fromStorageValue(value.string("targetApp")),
-                        flowImageCount = value.intOrNull("flowImageCount") ?: AppDefaults.DEFAULT_FLOW_IMAGE_COUNT,
-                        wildcards = wildcards
-                    )
-                )
-            }
-            "cancel" -> RemoteProtocolMessage.CancelRequest(
-                senderId = value.string("senderId"),
-                token = value.string("token"),
-                requestId = value.string("requestId")
-            )
-            "updateRepeatCount" -> RemoteProtocolMessage.UpdateRepeatCountRequest(
-                senderId = value.string("senderId"),
-                token = value.string("token"),
-                requestId = value.string("requestId"),
-                repeatCount = value.intOrNull("repeatCount") ?: return null
-            )
-            "disconnect" -> RemoteProtocolMessage.DisconnectRequest(
-                senderId = value.string("senderId"),
-                token = value.string("token")
-            )
-            "disconnectResult" -> RemoteProtocolMessage.DisconnectResult(
-                success = value.boolean("success"),
-                message = value.string("message")
-            )
-            "state" -> RemoteProtocolMessage.StateUpdate(
-                requestId = value.string("requestId"),
-                state = value.toRunState()
-            )
-            "cleanMemory" -> RemoteProtocolMessage.CleanMemoryRequest(
-                senderId = value.string("senderId"),
-                token = value.string("token")
-            )
-            "cleanMemoryResult" -> RemoteProtocolMessage.CleanMemoryResult(
-                success = value.boolean("success"),
-                message = value.string("message")
-            )
-            "switchAccount" -> RemoteProtocolMessage.SwitchAccountRequest(
-                senderId = value.string("senderId"),
-                token = value.string("token"),
-                email = value.string("email"),
-                alias = value.string("alias")
-            )
-            "switchAccountResult" -> RemoteProtocolMessage.SwitchAccountResult(
-                success = value.boolean("success"),
-                message = value.string("message")
-            )
-            else -> null
-        }
-    }
-
-    private fun kotlinx.serialization.json.JsonObjectBuilder.putState(state: AutomationRunState) {
-        when (state) {
-            AutomationRunState.Idle -> put("state", "idle")
-            is AutomationRunState.Running -> {
-                put("state", "running")
-                put("step", state.step)
-                state.currentIndex?.let { put("currentIndex", it) }
-                state.totalCount?.let { put("totalCount", it) }
-            }
-            AutomationRunState.Success -> put("state", "success")
-            AutomationRunState.Stopped -> put("state", "stopped")
-            is AutomationRunState.Failure -> {
-                put("state", "failure")
-                put("message", state.message)
-            }
-        }
-    }
-
-    private fun JsonObject.toRunState(): AutomationRunState {
-        return when (string("state")) {
-            "running" -> AutomationRunState.Running(
-                step = string("step"),
-                currentIndex = intOrNull("currentIndex"),
-                totalCount = intOrNull("totalCount")
-            )
-            "success" -> AutomationRunState.Success
-            "stopped" -> AutomationRunState.Stopped
-            "failure" -> AutomationRunState.Failure(string("message"))
-            else -> AutomationRunState.Idle
-        }
-    }
-
-    private fun JsonObject.string(key: String): String {
-        return this[key]?.jsonPrimitive?.contentOrNull.orEmpty()
-    }
-
-    private fun JsonObject.boolean(key: String): Boolean {
-        return string(key).toBooleanStrictOrNull() ?: false
-    }
-
-    private fun JsonObject.intOrNull(key: String): Int? {
-        return this[key]?.jsonPrimitive?.intOrNull
+        return runCatching {
+            protocolJson.decodeFromString<ProtocolPacketDto>(text).toDomain()
+        }.getOrNull()
     }
 }

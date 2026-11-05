@@ -8,7 +8,7 @@ import com.example.gemgemgen.automation.domain.AutomationRetryWaitPolicy
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.usecase.NewChatMode
 import com.example.gemgemgen.automation.usecase.PromptAutomationGateway
-import com.example.gemgemgen.automation.usecase.VariationPromptAutomationGateway
+// 미사용 import 정리
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +26,7 @@ internal abstract class AccessibilityPromptAutomation(
     protected val mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     private val targetAppName: String,
     protected val copyToClipboard: ((String) -> Unit)? = null
-) : PromptAutomationGateway, VariationPromptAutomationGateway {
+) : PromptAutomationGateway {
     private var activeJob: Job? = null
 
     override fun sendPrompt(

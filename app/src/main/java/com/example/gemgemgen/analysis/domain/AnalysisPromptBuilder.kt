@@ -8,11 +8,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-data class AnalysisPromptPayload(
-    val systemInstruction: String,
-    val userPrompt: String,
-    val responseSchema: JsonObject
-)
+import com.example.gemgemgen.core.credential.domain.AnalysisPromptPayload
 
 object AnalysisPromptBuilder {
     internal val sharedVisualRules = """

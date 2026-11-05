@@ -15,15 +15,8 @@ internal data class GeminiAccountSwitchNodeLabels(
         AppDefaults.GOOGLE_QUICK_SEARCH_BOX_PACKAGE_NAME,
         AppDefaults.GEMINI_PACKAGE_NAME
     ),
-    val toolbarViewIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/assistant_robin_chat_compose_toolbar",
-        "com.google.android.googlequicksearchbox:id/assistant_robin_chat_header_container"
-    ),
-    val profileButtonViewIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_apd_internal_image_view",
-        "com.google.android.googlequicksearchbox:id/og_apd_ring_view",
-        "com.google.android.googlequicksearchbox:id/account_particle_disc"
-    ),
+    val toolbarViewIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_TOOLBAR_IDS,
+    val profileButtonViewIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_PROFILE_BUTTON_IDS,
     val profileButtonDescriptions: List<String> = listOf(
         "계정 및 설정",
         "Google 계정",
@@ -46,47 +39,21 @@ internal data class GeminiAccountSwitchNodeLabels(
         "Close navigation drawer",
         "탐색 메뉴 닫기"
     ),
-    val bentoMenuContainerIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_bento_menu_content_container",
-        "com.google.android.googlequicksearchbox:id/og_bento_container"
-    ),
-    val bentoCloseButtonIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_bento_toolbar_close_button"
-    ),
+    val bentoMenuContainerIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_BENTO_MENU_CONTAINER_IDS,
+    val bentoCloseButtonIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_BENTO_CLOSE_BUTTON_IDS,
     val bentoCloseButtonCandidates: List<String> = listOf(
         "닫기",
         "Close"
     ),
-    val accountHeaderContainerIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_bento_account_management_header_container",
-        "com.google.android.googlequicksearchbox:id/og_compact_header",
-        "com.google.android.googlequicksearchbox:id/og_bento_header_card_root"
-    ),
-    val accountHeaderChevronIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_compact_header_chevron_background",
-        "com.google.android.googlequicksearchbox:id/og_collapsed_chevron"
-    ),
-    val compactHeaderPrimaryTextIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_compact_header_primary_text"
-    ),
-    val compactHeaderSecondaryTextIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_compact_header_secondary_text"
-    ),
-    val accountsListContainerIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/accounts"
-    ),
-    val bentoScrollContainerIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_bento_scroll_container"
-    ),
-    val availableAccountRowIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_bento_available_account_root"
-    ),
-    val accountPrimaryInfoIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_primary_account_information"
-    ),
-    val accountSecondaryInfoIds: List<String> = listOf(
-        "com.google.android.googlequicksearchbox:id/og_secondary_account_information"
-    )
+    val accountHeaderContainerIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_ACCOUNT_HEADER_CONTAINER_IDS,
+    val accountHeaderChevronIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_ACCOUNT_HEADER_CHEVRON_IDS,
+    val compactHeaderPrimaryTextIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_COMPACT_HEADER_PRIMARY_TEXT_IDS,
+    val compactHeaderSecondaryTextIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_COMPACT_HEADER_SECONDARY_TEXT_IDS,
+    val accountsListContainerIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_ACCOUNTS_LIST_CONTAINER_IDS,
+    val bentoScrollContainerIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_BENTO_SCROLL_CONTAINER_IDS,
+    val availableAccountRowIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_AVAILABLE_ACCOUNT_ROW_IDS,
+    val accountPrimaryInfoIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_ACCOUNT_PRIMARY_INFO_IDS,
+    val accountSecondaryInfoIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_ACCOUNT_SECONDARY_INFO_IDS
 )
 
 internal data class GeminiSidebarProfileCandidate(
@@ -164,6 +131,7 @@ internal class GeminiAccountSwitchAutomation(
     private var lastSidebarTapAtMillis = 0L
     private var lastProfileTapAtMillis = 0L
     private var lastExpandTapAtMillis = 0L
+    private var profileTapAttemptCount = 0
     private var expandAttemptCount = 0
     private var scrollCount = 0
     private var returnBackCount = 0
@@ -194,6 +162,9 @@ internal class GeminiAccountSwitchAutomation(
         if (!active) return
         phase = nextPhase
         phaseStartedAtMillis = SystemClock.uptimeMillis()
+        if (nextPhase == Phase.OPEN_PROFILE_MENU) {
+            profileTapAttemptCount = 0
+        }
         if (nextPhase == Phase.CHECK_OR_EXPAND_ACCOUNTS) {
             expandAttemptCount = 0
         }
@@ -231,10 +202,17 @@ internal class GeminiAccountSwitchAutomation(
                     val now = SystemClock.uptimeMillis()
                     if (now - lastProfileTapAtMillis >= PROFILE_TAP_COOLDOWN_MS) {
                         lastProfileTapAtMillis = now
-                        val clicked = AccessibilityNodeTraversal.clickNodeOrParent(
-                            sidebarProfileNode,
-                            maxDepth = MAX_ANCESTOR_SEARCH_DEPTH
-                        )
+                        val currentAttempt = profileTapAttemptCount
+                        profileTapAttemptCount += 1
+
+                        val clicked = if (currentAttempt == 0) {
+                            AccessibilityNodeTraversal.clickNodeOrParent(
+                                sidebarProfileNode,
+                                maxDepth = MAX_ANCESTOR_SEARCH_DEPTH
+                            )
+                        } else {
+                            false
+                        }
                         if (!clicked) {
                             val tapPoint = findSidebarProfileTapPoint(sidebarProfileNode)
                             if (tapPoint != null) {
@@ -738,6 +716,7 @@ internal class GeminiAccountSwitchAutomation(
 
         val profileIndicators = listOf(
             "pro",
+            "plus",
             "google 계정",
             "google account",
             "signed in",
@@ -756,12 +735,11 @@ internal class GeminiAccountSwitchAutomation(
             }
         }
 
-        val bottomNode = clickableCandidates.maxByOrNull { it.nodeBounds()?.bottom ?: 0 }
+        val bottomNode = clickableCandidates
+            .filter { (it.nodeBounds()?.let { b -> b.right - b.left } ?: 0) >= 250 }
+            .maxByOrNull { it.nodeBounds()?.bottom ?: 0 }
         if (bottomNode != null) {
-            val b = bottomNode.nodeBounds()
-            if (b != null && (b.right - b.left) > 250) {
-                return bottomNode
-            }
+            return bottomNode
         }
 
         return null

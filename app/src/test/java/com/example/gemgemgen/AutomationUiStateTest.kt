@@ -1,4 +1,4 @@
-// 역할: 자동화 메인 화면 UI 상태의 기본값과 파생 상태 계산을 검증합니다.
+﻿// 역할: 자동화 메인 화면 UI 상태의 기본값과 파생 상태 계산을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*
@@ -15,7 +15,7 @@ import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 
 class AutomationUiStateTest {

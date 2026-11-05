@@ -1,5 +1,5 @@
-// 역할: 지원하는 AI 분석 서비스 제공자(Gemini, Grok 등)를 정의합니다.
-package com.example.gemgemgen.analysis.domain
+// 역할: 지원하는 AI 서비스 제공자(Gemini, Grok 등)와 기본 모델 판별 로직을 정의합니다.
+package com.example.gemgemgen.core.credential.domain
 
 enum class AnalysisProvider(val storageValue: String) {
     GEMINI("gemini"),

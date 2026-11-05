@@ -5,7 +5,6 @@ import com.example.gemgemgen.analysis.domain.AnalysisCategory
 import com.example.gemgemgen.analysis.domain.AnalysisCategoryRules
 import com.example.gemgemgen.analysis.domain.AnalysisEditPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
 import com.example.gemgemgen.analysis.domain.AnalysisPromptBuilder
 import com.example.gemgemgen.analysis.domain.AnalysisReport
 import com.example.gemgemgen.analysis.domain.AnalysisReportCache
@@ -13,11 +12,13 @@ import com.example.gemgemgen.analysis.domain.AnalysisResponseParser
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegment
 import com.example.gemgemgen.analysis.domain.AnalysisTargetSegmentPolicy
 import com.example.gemgemgen.core.AppDispatchers
+import com.example.gemgemgen.core.credential.domain.AnalysisException
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.usecase.AnalysisAiGateway
+import com.example.gemgemgen.core.credential.usecase.ResolveAnalysisCredentialUseCase
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-
-class AnalysisException(message: String) : RuntimeException(message)
 
 /** 분석 모델이 모호하다고 판단해 사용자에게 되묻는 질문을 돌려준 경우. */
 class AnalysisClarificationNeededException(val question: String) : RuntimeException(question)

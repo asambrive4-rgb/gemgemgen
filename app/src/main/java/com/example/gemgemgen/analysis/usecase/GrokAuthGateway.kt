@@ -1,4 +1,4 @@
-// 역할: Grok OAuth 기기 인증 및 세션 갱신을 처리하는 게이트웨이 인터페이스입니다.
+// 역할: Grok OAuth 기기 인증, 세션 갱신 및 사용량 쿼터 조회를 처리하는 게이트웨이 인터페이스입니다.
 package com.example.gemgemgen.analysis.usecase
 
 data class GrokDeviceLoginChallenge(
@@ -19,6 +19,10 @@ data class GrokAuthSession(
     val accountPreview: String
 )
 
+data class GrokQuotaInfo(
+    val remainingPercent: Int
+)
+
 interface GrokAuthGateway {
     suspend fun startDeviceLogin(): GrokDeviceLoginChallenge
 
@@ -29,4 +33,6 @@ interface GrokAuthGateway {
     suspend fun pollDeviceLogin(challenge: GrokDeviceLoginChallenge): GrokAuthSession?
 
     suspend fun refreshSession(session: GrokAuthSession): GrokAuthSession
+
+    suspend fun fetchQuota(accessToken: String): GrokQuotaInfo = GrokQuotaInfo(remainingPercent = 100)
 }

@@ -1,14 +1,7 @@
-// 역할: Gemini API 키 목록과 모델 역할을 영구 저장소에서 관리하는 저장소 인터페이스입니다.
-package com.example.gemgemgen.analysis.usecase
+// 역할: Gemini API 키 목록 및 모델 역할 설정을 영구 저장소에서 관리하는 저장소 인터페이스입니다.
+package com.example.gemgemgen.core.credential.usecase
 
-data class GeminiApiKeyRecord(
-    val id: String,
-    val label: String,
-    val preview: String,
-    val isActive: Boolean
-)
-
-typealias GeminiApiKeySummary = GeminiApiKeyRecord
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeyRecord
 
 interface GeminiApiKeyRepository {
     fun listKeys(): List<GeminiApiKeyRecord>
@@ -18,7 +11,7 @@ interface GeminiApiKeyRepository {
     fun activeKeyValue(): String?
     fun updateKeyLabel(id: String, newLabel: String)
 
-    /** 단계(마스킹/생성)별 프로바이더. role = masking | generation */
+    /** 단계(마스킹/생성/분류)별 프로바이더. role = masking | generation */
     fun getRoleProvider(role: String): String
     fun setRoleProvider(role: String, providerId: String)
     /** 단계별 모델 id */

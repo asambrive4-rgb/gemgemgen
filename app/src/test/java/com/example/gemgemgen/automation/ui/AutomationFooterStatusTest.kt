@@ -1,8 +1,8 @@
-// 역할: 화면 최하단 통합 안내 문구의 우선순위 결정 로직을 검증합니다.
+﻿// 역할: 화면 최하단 통합 안내 문구의 우선순위 결정 로직을 검증합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

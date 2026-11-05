@@ -1,4 +1,4 @@
-// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스(다이나믹 프롬프트 복사, Grok 승인 코드 복사, 사용자 추천 칩 추가·삭제 포함)를 직접 구현하여 UseCase 및 도메인 정책을 조율합니다.
+﻿// 역할: AI 프롬프트 분석 화면 상태를 관리하고 화면 액션 인터페이스(다이나믹 프롬프트 복사, Grok 승인 코드 복사, 사용자 추천 칩 추가·삭제 포함)를 직접 구현하여 UseCase 및 도메인 정책을 조율합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -11,8 +11,8 @@ import com.example.gemgemgen.analysis.domain.AnalysisDirectionInput
 import com.example.gemgemgen.analysis.domain.AnalysisDirectionCatalog
 import com.example.gemgemgen.analysis.domain.AnalysisGenerationCountPolicy
 import com.example.gemgemgen.analysis.domain.AnalysisMaskingPolicy
-import com.example.gemgemgen.analysis.domain.AnalysisModelRole
-import com.example.gemgemgen.analysis.domain.AnalysisProvider
+import com.example.gemgemgen.core.credential.domain.AnalysisModelRole
+import com.example.gemgemgen.core.credential.domain.AnalysisProvider
 import com.example.gemgemgen.analysis.domain.AnalysisReportCache
 import com.example.gemgemgen.analysis.domain.AnalysisResultPresentation
 import com.example.gemgemgen.analysis.domain.AnalysisSessionPolicy
@@ -31,11 +31,11 @@ import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationRequest
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationResult
 import com.example.gemgemgen.analysis.usecase.ExecuteAnalysisGenerationUseCase
 import com.example.gemgemgen.analysis.usecase.ManageCandidateHandoffUseCase
-import com.example.gemgemgen.analysis.usecase.ManageGeminiApiKeysUseCase
+import com.example.gemgemgen.core.credential.usecase.ManageGeminiApiKeysUseCase
 import com.example.gemgemgen.analysis.usecase.ManageGrokAuthUseCase
 import com.example.gemgemgen.analysis.usecase.RestorePromptResult
 import com.example.gemgemgen.analysis.usecase.SaveAnalysisWildcardFileUseCase
-import com.example.gemgemgen.analysis.usecase.GeminiApiKeySummary
+import com.example.gemgemgen.core.credential.domain.GeminiApiKeySummary
 import com.example.gemgemgen.core.AppDispatchers
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.core.PromptWorkspace

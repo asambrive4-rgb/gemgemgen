@@ -1,4 +1,4 @@
-// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함), 플로팅 오버레이 부착 감시 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
+﻿// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함), 플로팅 오버레이 부착 감시 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
@@ -30,7 +30,7 @@ import com.example.gemgemgen.analysis.ui.AnalysisScreenActions
 import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
 import com.example.gemgemgen.automation.ui.AutomationScreenActions
-import com.example.gemgemgen.automation.usecase.AutomationStartDecision
+import com.example.gemgemgen.automation.domain.AutomationStartDecision
 import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.ui.AutomationApp
 import com.example.gemgemgen.ui.MainTab
@@ -40,7 +40,7 @@ import com.example.gemgemgen.wildcard.domain.WildcardTextFile
 import com.example.gemgemgen.wildcard.ui.WildcardScreen
 import com.example.gemgemgen.wildcard.ui.WildcardScreenActions
 import com.example.gemgemgen.wildcard.ui.WildcardViewModel
-import com.example.gemgemgen.remote.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.AutomationMode
 
 @Composable
 fun AndroidAutomationHost(container: AndroidAppContainer) {

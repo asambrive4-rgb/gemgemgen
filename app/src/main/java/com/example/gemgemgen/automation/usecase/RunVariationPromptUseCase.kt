@@ -4,30 +4,16 @@ package com.example.gemgemgen.automation.usecase
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationTargetApp
 
-interface VariationPromptAutomationGateway {
-    fun pastePromptOnly(
-        prompt: String,
-        onStateChange: (AutomationRunState) -> Unit,
-        onDone: () -> Unit
-    )
-
-    fun cancelCurrentRun()
-}
-
-fun interface VariationPromptAutomationGatewayProvider {
-    fun current(): VariationPromptAutomationGateway?
-}
-
 sealed interface VariationStartDecision {
     data object Started : VariationStartDecision
     data class Rejected(val message: String) : VariationStartDecision
 }
 
 class RunVariationPromptUseCase(
-    private val gatewayProvider: VariationPromptAutomationGatewayProvider,
+    private val gatewayProvider: PromptAutomationGatewayProvider,
     private val targetAppLauncher: TargetAppLauncher
 ) {
-    private var activeGateway: VariationPromptAutomationGateway? = null
+    private var activeGateway: PromptAutomationGateway? = null
 
     fun start(
         prompt: String,
@@ -41,7 +27,7 @@ class RunVariationPromptUseCase(
             return reject("변주 자동화가 이미 실행 중입니다.", onStateChange)
         }
 
-        val gateway = gatewayProvider.current()
+        val gateway = gatewayProvider.current(AutomationTargetApp.GEMINI)
             ?: return reject("접근성 서비스를 먼저 켜주세요.", onStateChange)
 
         if (!targetAppLauncher.launch(AutomationTargetApp.GEMINI)) {

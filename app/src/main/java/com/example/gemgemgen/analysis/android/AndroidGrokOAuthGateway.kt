@@ -1,10 +1,12 @@
-// 역할: Grok 계정 연동을 위한 기기 인증 및 토큰 발급을 처리합니다.
+﻿// 역할: Grok 계정 연동을 위한 기기 인증, 토큰 발급 및 사용량 쿼터 조회를 처리합니다.
 package com.example.gemgemgen.analysis.android
 
-import com.example.gemgemgen.analysis.usecase.AnalysisException
+import com.example.gemgemgen.analysis.domain.GrokQuotaPolicy
+import com.example.gemgemgen.core.credential.domain.AnalysisException
 import com.example.gemgemgen.analysis.usecase.GrokAuthGateway
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession
 import com.example.gemgemgen.analysis.usecase.GrokDeviceLoginChallenge
+import com.example.gemgemgen.analysis.usecase.GrokQuotaInfo
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -234,6 +236,54 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
         return this[key]?.jsonPrimitive?.content
     }
 
+    override suspend fun fetchQuota(accessToken: String): GrokQuotaInfo {
+        return try {
+            val connection = (URL(BILLING_URL).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = BILLING_TIMEOUT_MS
+                readTimeout = BILLING_TIMEOUT_MS
+                setRequestProperty("Authorization", "Bearer $accessToken")
+                setRequestProperty("Accept", "application/json")
+            }
+            val (code, body) = executeHttpRequest(connection)
+
+            if (code !in 200..299) {
+                val detail = extractJsonErrorMessage(body)
+                throw AnalysisException(
+                    "Grok 크레딧 정보를 가져오지 못했습니다. ($code)${if (detail.isNotBlank()) ": $detail" else ""}"
+                )
+            }
+
+            val root = analysisJson.parseToJsonElement(body).jsonObject
+            val config = root["config"]?.jsonObject
+                ?: throw AnalysisException("Grok 크레딧 응답 형식이 올바르지 않습니다.")
+            val limit = config["monthlyLimit"]?.jsonObject?.valNumber()
+                ?: throw AnalysisException("Grok 크레딧 한도 정보가 없습니다.")
+            val used = config["used"]?.jsonObject?.valNumber()
+                ?: throw AnalysisException("Grok 크레딧 사용량 정보가 없습니다.")
+
+            GrokQuotaInfo(
+                remainingPercent = GrokQuotaPolicy.remainingPercent(used = used, limit = limit)
+            )
+        } catch (error: AnalysisException) {
+            throw error
+        } catch (error: Exception) {
+            throw AnalysisException(
+                formatAnalysisNetworkError(
+                    error = error,
+                    serviceName = "Grok 크레딧 조회",
+                    serverLabel = "Grok 서버",
+                    timeoutMillis = BILLING_TIMEOUT_MS
+                )
+            )
+        }
+    }
+
+    private fun kotlinx.serialization.json.JsonObject.valNumber(): Long? {
+        val raw = this["val"]?.jsonPrimitive?.content ?: return null
+        return raw.toLongOrNull() ?: raw.toDoubleOrNull()?.toLong()
+    }
+
     private companion object {
         // public Grok CLI client (progrok / Hermes / OpenClaw 계열, MIT)
         const val CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"
@@ -242,5 +292,7 @@ class AndroidGrokOAuthGateway : GrokAuthGateway {
         const val DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
         const val CONNECT_TIMEOUT_MS = 15_000
         const val READ_TIMEOUT_MS = 30_000
+        const val BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing"
+        const val BILLING_TIMEOUT_MS = 10_000
     }
 }
