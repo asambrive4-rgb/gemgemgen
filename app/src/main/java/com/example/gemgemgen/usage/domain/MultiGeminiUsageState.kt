@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정의 개별 사용량 항목과 전체 목록 상태, 5시간·주간 리셋 만료 자동 보정, 메인/서브 그룹별 분류·정렬, 소진 판별·사유(당분간 사용 금지 포함), 대표 계정 요약 규칙을 정의합니다.
+// 역할: 다중 제미나이 계정의 개별 사용량 항목과 전체 목록 상태, 5시간·주간 리셋 만료 자동 보정, 정렬 키 사전 계산(Decorate-Sort-Undecorate) 기반 메인/서브 그룹별 즉각 분류·정렬, 소진 판별·사유(당분간 사용 금지 포함), 대표 계정 요약 규칙을 정의합니다.
 package com.example.gemgemgen.usage.domain
 
 /**
@@ -234,6 +234,75 @@ data class GeminiAccountUsageEntry(
 }
 
 /**
+ * 즉시 사용 가능/확인 중 계정의 Decorate-Sort-Undecorate 최적화용 정렬 키 컨테이너.
+ * 정렬 비교 루프($O(N \log N)$) 내에서 반복되는 무거운 날짜 계산, 정규식 파싱, 퍼센트 보정을 배제하고,
+ * 사전에 1회만 계산된 프리미티브 값들을 빠르게 비교합니다.
+ */
+private class UsableAccountSortItem(
+    val entry: GeminiAccountUsageEntry,
+    val nextResetRemainingMillis: Long?,
+    val effectiveFiveHourPercent: Int,
+    val effectiveWeeklyPercent: Int,
+    val sortOrder: Int
+) : Comparable<UsableAccountSortItem> {
+    override fun compareTo(other: UsableAccountSortItem): Int {
+        val remA = this.nextResetRemainingMillis
+        val remB = other.nextResetRemainingMillis
+
+        val aHasTimer = remA != null
+        val bHasTimer = remB != null
+
+        return when {
+            // 1) 둘 다 타이머가 있는 경우: 다음 초기화까지 남은 시간이 짧은 순 (진정한 5시간 초기화 임박 순!)
+            aHasTimer && bHasTimer -> {
+                val remCmp = remA!!.compareTo(remB!!)
+                if (remCmp != 0) return remCmp
+
+                val fiveCmp = this.effectiveFiveHourPercent.compareTo(other.effectiveFiveHourPercent)
+                if (fiveCmp != 0) return fiveCmp
+
+                val weeklyCmp = this.effectiveWeeklyPercent.compareTo(other.effectiveWeeklyPercent)
+                if (weeklyCmp != 0) return weeklyCmp
+
+                this.sortOrder.compareTo(other.sortOrder)
+            }
+            // 2) 타이머가 진행 중/롤오버된 계정이 타이머가 없는 미시작 계정보다 앞 (곧 리셋될 쿼터 먼저 소진)
+            aHasTimer && !bHasTimer -> -1
+            !aHasTimer && bHasTimer -> 1
+            // 3) 둘 다 타이머가 없는 미시작 계정 ("5시간 주기"): 주간 누적 사용량 오름차순
+            else -> {
+                val weeklyCmp = this.effectiveWeeklyPercent.compareTo(other.effectiveWeeklyPercent)
+                if (weeklyCmp != 0) weeklyCmp else this.sortOrder.compareTo(other.sortOrder)
+            }
+        }
+    }
+}
+
+/**
+ * 할당량 소진 계정의 Decorate-Sort-Undecorate 최적화용 정렬 키 컨테이너.
+ */
+private class ExhaustedAccountSortItem(
+    val entry: GeminiAccountUsageEntry,
+    val usableRemainingMillis: Long,
+    val reasonOrdinal: Int,
+    val effectiveWeeklyPercent: Int,
+    val sortOrder: Int
+) : Comparable<ExhaustedAccountSortItem> {
+    override fun compareTo(other: ExhaustedAccountSortItem): Int {
+        val usableCmp = this.usableRemainingMillis.compareTo(other.usableRemainingMillis)
+        if (usableCmp != 0) return usableCmp
+
+        val reasonCmp = this.reasonOrdinal.compareTo(other.reasonOrdinal)
+        if (reasonCmp != 0) return reasonCmp
+
+        val weeklyCmp = this.effectiveWeeklyPercent.compareTo(other.effectiveWeeklyPercent)
+        if (weeklyCmp != 0) return weeklyCmp
+
+        return this.sortOrder.compareTo(other.sortOrder)
+    }
+}
+
+/**
  * 다중 계정(5개 이상) 제미나이 사용량 모니터링 전체 도메인 상태 모델.
  *
  * @property accounts 정렬 순서(sortOrder)대로 정렬된 계정별 사용량 목록
@@ -381,41 +450,26 @@ data class MultiGeminiUsageState(
         nowMillis: Long
     ): List<GeminiAccountUsageEntry> {
         val baseAccounts = if (group == null) accounts else accounts.filter { it.profile.group == group }
-        val usableAccounts = baseAccounts.filter { it.displayedSuccess != null && !it.isQuotaExhausted(nowMillis) }
-        val unconfirmedAccounts = baseAccounts.filter { it.displayedSuccess == null }
+        val usableDecorated = mutableListOf<UsableAccountSortItem>()
+        val unconfirmedAccounts = mutableListOf<GeminiAccountUsageEntry>()
 
-        val sortedUsable = usableAccounts.sortedWith { a, b ->
-            val remA = a.nextFiveHourResetRemainingMillis(nowMillis)
-            val remB = b.nextFiveHourResetRemainingMillis(nowMillis)
-
-            val aHasTimer = remA != null
-            val bHasTimer = remB != null
-
-            when {
-                // 1) 둘 다 타이머가 있는 경우: 다음 초기화까지 남은 시간이 짧은 순 (진정한 5시간 초기화 임박 순!)
-                aHasTimer && bHasTimer -> {
-                    val remCmp = remA!!.compareTo(remB!!)
-                    if (remCmp != 0) return@sortedWith remCmp
-
-                    val fiveCmp = a.effectiveFiveHourPercent(nowMillis).compareTo(b.effectiveFiveHourPercent(nowMillis))
-                    if (fiveCmp != 0) return@sortedWith fiveCmp
-
-                    val weeklyCmp = a.effectiveWeeklyPercent(nowMillis).compareTo(b.effectiveWeeklyPercent(nowMillis))
-                    if (weeklyCmp != 0) return@sortedWith weeklyCmp
-
-                    a.profile.sortOrder.compareTo(b.profile.sortOrder)
-                }
-                // 2) 타이머가 진행 중/롤오버된 계정이 타이머가 없는 미시작 계정보다 앞 (곧 리셋될 쿼터 먼저 소진)
-                aHasTimer && !bHasTimer -> -1
-                !aHasTimer && bHasTimer -> 1
-                // 3) 둘 다 타이머가 없는 미시작 계정 ("5시간 주기"): 주간 누적 사용량 오름차순
-                else -> {
-                    val weeklyCmp = a.effectiveWeeklyPercent(nowMillis).compareTo(b.effectiveWeeklyPercent(nowMillis))
-                    if (weeklyCmp != 0) weeklyCmp else a.profile.sortOrder.compareTo(b.profile.sortOrder)
-                }
+        for (entry in baseAccounts) {
+            if (entry.displayedSuccess == null) {
+                unconfirmedAccounts.add(entry)
+            } else if (!entry.isQuotaExhausted(nowMillis)) {
+                usableDecorated.add(
+                    UsableAccountSortItem(
+                        entry = entry,
+                        nextResetRemainingMillis = entry.nextFiveHourResetRemainingMillis(nowMillis),
+                        effectiveFiveHourPercent = entry.effectiveFiveHourPercent(nowMillis),
+                        effectiveWeeklyPercent = entry.effectiveWeeklyPercent(nowMillis),
+                        sortOrder = entry.profile.sortOrder
+                    )
+                )
             }
         }
 
+        val sortedUsable = usableDecorated.sorted().map { it.entry }
         val sortedUnconfirmed = unconfirmedAccounts.sortedBy { it.profile.sortOrder }
 
         return sortedUsable + sortedUnconfirmed
@@ -441,26 +495,22 @@ data class MultiGeminiUsageState(
         nowMillis: Long
     ): List<GeminiAccountUsageEntry> {
         val baseAccounts = if (group == null) accounts else accounts.filter { it.profile.group == group }
-        val exhausted = baseAccounts.filter { it.isQuotaExhausted(nowMillis) }
-        return exhausted.sortedWith { a, b ->
-            val reasonA = a.quotaExhaustionReason(nowMillis)
-            val reasonB = b.quotaExhaustionReason(nowMillis)
-            val usableA = a.remainingMillisUntilUsable(nowMillis)
-                ?: if (reasonA == GeminiQuotaExhaustionReason.SUSPENDED || reasonA == GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED) Long.MAX_VALUE else (5L * 3600_000L)
-            val usableB = b.remainingMillisUntilUsable(nowMillis)
-                ?: if (reasonB == GeminiQuotaExhaustionReason.SUSPENDED || reasonB == GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED) Long.MAX_VALUE else (5L * 3600_000L)
-
-            val usableCmp = usableA.compareTo(usableB)
-            if (usableCmp != 0) return@sortedWith usableCmp
-
-            val reasonCmp = (reasonA?.ordinal ?: 0).compareTo(reasonB?.ordinal ?: 0)
-            if (reasonCmp != 0) return@sortedWith reasonCmp
-
-            val weeklyCmp = a.effectiveWeeklyPercent(nowMillis).compareTo(b.effectiveWeeklyPercent(nowMillis))
-            if (weeklyCmp != 0) return@sortedWith weeklyCmp
-
-            a.profile.sortOrder.compareTo(b.profile.sortOrder)
-        }
+        return baseAccounts.mapNotNull { entry ->
+            val reason = entry.quotaExhaustionReason(nowMillis) ?: return@mapNotNull null
+            val usable = entry.remainingMillisUntilUsable(nowMillis)
+                ?: if (reason == GeminiQuotaExhaustionReason.SUSPENDED || reason == GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED) {
+                    Long.MAX_VALUE
+                } else {
+                    5L * 3600_000L
+                }
+            ExhaustedAccountSortItem(
+                entry = entry,
+                usableRemainingMillis = usable,
+                reasonOrdinal = reason.ordinal,
+                effectiveWeeklyPercent = entry.effectiveWeeklyPercent(nowMillis),
+                sortOrder = entry.profile.sortOrder
+            )
+        }.sorted().map { it.entry }
     }
 
     /**

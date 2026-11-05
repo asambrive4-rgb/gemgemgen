@@ -304,7 +304,10 @@ fun AccountIsolatedLoginContent(
                                         return@evaluateJavascript
                                     }
                                     val detected = GeminiUsageParser.extractAccountEmail(unquoted)
-                                    if (!detected.isNullOrBlank() && emailInput.isBlank()) {
+                                    if (!detected.isNullOrBlank() &&
+                                        emailInput.isBlank() &&
+                                        !GeminiAccountProfile.isAliasMismatchWithEmail(aliasInput, detected)
+                                    ) {
                                         emailInput = detected
                                     }
                                 }

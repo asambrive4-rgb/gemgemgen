@@ -1,4 +1,4 @@
-// 역할: 자동화 편의 설정(클립보드·사이드바·메모리 정리), 원격 연결, 화면 테마 및 시스템 환경 점검 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
+// 역할: 자동화 편의 설정(클립보드·사이드바·메모리 정리), 원격 연결·재시도, 화면 테마 및 표준 회색 알약 버튼 기반 시스템 환경 점검 상태를 확인하고 변경하는 설정 팝업을 표시합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,7 +30,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +45,7 @@ import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
 import com.example.gemgemgen.ui.theme.AppConfirmDialogContent
 import com.example.gemgemgen.ui.theme.AppDialogHostShell
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuPillButton
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.ui.theme.LocalAppThemeMode
@@ -90,7 +91,6 @@ internal fun SettingsDialogHost(
                     message = AutomationUiText.ACCESSIBILITY_PROMPT_MESSAGE,
                     confirmLabel = "이동",
                     dismissLabel = "취소",
-                    useFilledConfirmButton = true,
                     onConfirm = { actions.onConfirmAccessibilityPrompt() },
                     onDismiss = { actions.dismissAccessibilityPromptToSettings() }
                 )
@@ -323,12 +323,13 @@ private fun StatusSettingsDialogContent(
                 color = AppTheme.colors.textPrimary
             )
 
-            val isRemoteConnected = when (remoteStatus.mode) {
+            val mode = remoteStatus.mode
+            val isRemoteConnected = when (mode) {
                 AutomationMode.SENDER -> remoteStatus.isPaired && remoteStatus.discoveredDeviceName.isNotBlank()
                 AutomationMode.RECEIVER -> remoteStatus.isPaired
                 AutomationMode.NORMAL -> false
             }
-            val connectedDeviceName = when (remoteStatus.mode) {
+            val connectedDeviceName = when (mode) {
                 AutomationMode.SENDER -> remoteStatus.discoveredDeviceName.ifBlank { "S25 FE" }
                 AutomationMode.RECEIVER -> "태블릿"
                 AutomationMode.NORMAL -> ""
@@ -352,14 +353,38 @@ private fun StatusSettingsDialogContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
+                            val modeLabel = when (mode) {
+                                AutomationMode.SENDER -> "송신 모드 (컨트롤러)"
+                                AutomationMode.RECEIVER -> "수신 모드 (실행 기기)"
+                                AutomationMode.NORMAL -> "일반 모드 (단독 실행)"
+                            }
                             Text(
-                                text = if (isRemoteConnected) connectedDeviceName else "연결된 기기 없음",
+                                text = modeLabel,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = AppTheme.colors.textPrimary
                             )
+                            val subStatusText = when (mode) {
+                                AutomationMode.SENDER -> {
+                                    if (isRemoteConnected) {
+                                        "${connectedDeviceName} 연결됨"
+                                    } else {
+                                        remoteStatus.connectionMessage.ifBlank { "수신 기기를 찾는 중입니다." }
+                                    }
+                                }
+                                AutomationMode.RECEIVER -> {
+                                    if (isRemoteConnected) {
+                                        "송신 기기 연결됨"
+                                    } else if (remoteStatus.receiverPairingCode.isNotBlank()) {
+                                        "수신 대기 중 · 연결 번호 ${remoteStatus.receiverPairingCode}"
+                                    } else {
+                                        remoteStatus.message.ifBlank { "수신 대기 중" }
+                                    }
+                                }
+                                AutomationMode.NORMAL -> "원격 연결 안 됨 (일반 단독 모드)"
+                            }
                             Text(
-                                text = if (isRemoteConnected) "원격 연결됨" else "원격 연결 안 됨",
+                                text = subStatusText,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isRemoteConnected) AppTheme.colors.primary else AppTheme.colors.textSecondary
                             )
@@ -387,24 +412,96 @@ private fun StatusSettingsDialogContent(
                         )
                     }
 
-                    OutlinedButton(
-                        onClick = { actions.disconnectRemoteDevice() },
-                        enabled = isRemoteConnected && !isRemoteRunning && !uiState.isDisconnectingRemote,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = AppTheme.colors.primary,
-                            disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.38f)
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isRemoteConnected && !isRemoteRunning && !uiState.isDisconnectingRemote) {
-                                AppTheme.colors.primary.copy(alpha = 0.5f)
+                    when (mode) {
+                        AutomationMode.SENDER -> {
+                            if (isRemoteConnected) {
+                                OutlinedButton(
+                                    onClick = { actions.disconnectRemoteDevice() },
+                                    enabled = !isRemoteRunning && !uiState.isDisconnectingRemote,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = SettingsWarningRed,
+                                        disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.38f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (!isRemoteRunning && !uiState.isDisconnectingRemote) {
+                                            SettingsWarningRed.copy(alpha = 0.5f)
+                                        } else {
+                                            AppTheme.colors.cardBorder
+                                        }
+                                    )
+                                ) {
+                                    Text(if (uiState.isDisconnectingRemote) "연결 끊는 중…" else "원격 연결 끊기")
+                                }
                             } else {
-                                AppTheme.colors.cardBorder
+                                OutlinedButton(
+                                    onClick = { actions.retryRemoteConnection() },
+                                    enabled = !uiState.isRetryingRemote,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = AppTheme.colors.primary,
+                                        disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.38f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (!uiState.isRetryingRemote) {
+                                            AppTheme.colors.primary.copy(alpha = 0.5f)
+                                        } else {
+                                            AppTheme.colors.cardBorder
+                                        }
+                                    )
+                                ) {
+                                    Text(if (uiState.isRetryingRemote) "재검색 중…" else "기기 재검색 / 연결 재시도")
+                                }
                             }
-                        )
-                    ) {
-                        Text(if (uiState.isDisconnectingRemote) "연결 끊는 중…" else "연결 끊기")
+                        }
+                        AutomationMode.RECEIVER -> {
+                            if (isRemoteConnected) {
+                                OutlinedButton(
+                                    onClick = { actions.disconnectRemoteDevice() },
+                                    enabled = !uiState.isDisconnectingRemote,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = SettingsWarningRed,
+                                        disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.38f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (!uiState.isDisconnectingRemote) {
+                                            SettingsWarningRed.copy(alpha = 0.5f)
+                                        } else {
+                                            AppTheme.colors.cardBorder
+                                        }
+                                    )
+                                ) {
+                                    Text(if (uiState.isDisconnectingRemote) "연결 끊는 중…" else "원격 연결 끊기")
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = { actions.retryRemoteConnection() },
+                                    enabled = !uiState.isRetryingRemote,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = AppTheme.colors.primary,
+                                        disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.38f)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (!uiState.isRetryingRemote) {
+                                            AppTheme.colors.primary.copy(alpha = 0.5f)
+                                        } else {
+                                            AppTheme.colors.cardBorder
+                                        }
+                                    )
+                                ) {
+                                    Text(if (uiState.isRetryingRemote) "신호 갱신 중…" else "수신 재등록 / 신호 갱신")
+                                }
+                            }
+                        }
+                        AutomationMode.NORMAL -> {
+                            // 일반 모드에서는 추가 제어 버튼 불필요
+                        }
                     }
                 }
             }
@@ -598,9 +695,10 @@ private fun StatusSettingsDialogContent(
             ) {
                 Text("wildcard 폴더 선택")
             }
-            TextButton(
+            NeuPillButton(
                 onClick = { actions.onSelectSafWildcardFolder() },
-                colors = ButtonDefaults.textButtonColors(contentColor = AppTheme.colors.primary)
+                contentColor = AppTheme.colors.primary,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text("SAF로 허용된 다른 폴더 선택")
             }
@@ -629,9 +727,10 @@ private fun StatusSettingsDialogContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(
+            NeuPillButton(
                 onClick = { actions.hideSettings() },
-                colors = ButtonDefaults.textButtonColors(contentColor = AppTheme.colors.primary)
+                contentColor = AppTheme.colors.primary,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Text("닫기", fontWeight = FontWeight.SemiBold)
             }

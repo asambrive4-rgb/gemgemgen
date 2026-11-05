@@ -1,4 +1,4 @@
-// 역할: 토스 스타일의 무테두리(Borderless) 고대비 카드, 버튼, 인셋 베드, 칩, 드롭다운 메뉴(NeuDropdownMenu), 세그먼트 탭바 및 공통 모달·확인 다이얼로그 UI 요소를 제공합니다.
+// 역할: 토스 스타일의 무테두리(Borderless) 고대비 카드, 버튼, 인셋 베드, 칩, 회색 알약 버튼(NeuPillButton), 드롭다운 메뉴(NeuDropdownMenu), 세그먼트 탭바 및 공통 모달·확인 다이얼로그 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.animation.AnimatedContent
@@ -37,7 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -70,7 +69,6 @@ fun NeuCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(20.dp),
     backgroundColor: Color = AppTheme.colors.card,
-    @Suppress("UNUSED_PARAMETER") borderColor: Color = Color.Transparent,
     elevation: Dp = 2.dp,
     content: @Composable () -> Unit
 ) {
@@ -101,7 +99,6 @@ fun NeuInsetBed(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(14.dp),
     backgroundColor: Color = AppTheme.colors.insetBed,
-    @Suppress("UNUSED_PARAMETER") borderColor: Color = Color.Transparent,
     content: @Composable () -> Unit
 ) {
     Box(
@@ -168,7 +165,6 @@ fun NeuButton(
     isPrimary: Boolean = true,
     containerColor: Color? = null,
     contentColor: Color? = null,
-    @Suppress("UNUSED_PARAMETER") borderColor: Color? = null,
     elevation: Dp? = null,
     shape: Shape = RoundedCornerShape(14.dp),
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
@@ -295,7 +291,6 @@ fun AppConfirmDialogContent(
     message: String,
     confirmLabel: String,
     dismissLabel: String = "취소",
-    @Suppress("UNUSED_PARAMETER") useFilledConfirmButton: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -545,13 +540,14 @@ fun NeuConfigDialogContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = onDismiss) {
+                NeuPillButton(onClick = onDismiss) {
                     Text(dismissLabel)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                TextButton(
+                NeuPillButton(
                     onClick = onConfirm,
-                    enabled = confirmEnabled
+                    enabled = confirmEnabled,
+                    isHighlighted = true
                 ) {
                     Text(confirmLabel)
                 }
@@ -729,4 +725,49 @@ fun NeuDropdownMenuItem(
         enabled = enabled,
         modifier = modifier
     )
+}
+
+/**
+ * 자동화 화면 표준 회색 알약 버튼 (Pill Button).
+ * insetBed 배경과 10dp 라운딩의 토스 무테두리 도구/보조 버튼입니다.
+ */
+@Composable
+fun NeuPillButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    isHighlighted: Boolean = false,
+    containerColor: Color = if (isHighlighted) {
+        AppTheme.colors.primary.copy(alpha = 0.14f)
+    } else {
+        AppTheme.colors.insetBed
+    },
+    contentColor: Color = if (isHighlighted) {
+        AppTheme.colors.primary
+    } else {
+        AppTheme.colors.textPrimary
+    },
+    shape: Shape = RoundedCornerShape(10.dp),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 9.dp, vertical = 5.dp),
+    content: @Composable RowScope.() -> Unit
+) {
+    val resolvedBg = if (enabled) containerColor else containerColor.copy(alpha = 0.55f)
+    val resolvedFg = if (enabled) contentColor else AppTheme.colors.textSecondary.copy(alpha = 0.38f)
+
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = shape,
+        color = resolvedBg,
+        contentColor = resolvedFg,
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(contentPadding)
+        ) {
+            content()
+        }
+    }
 }

@@ -343,10 +343,6 @@ $userDirectiveText
         return obj("type" to "integer", "description" to description)
     }
 
-    private fun numberSchema(description: String): JsonObject {
-        return obj("type" to "number", "description" to description)
-    }
-
     private fun stringArraySchema(): JsonObject {
         return obj("type" to "array", "items" to obj("type" to "string"))
     }

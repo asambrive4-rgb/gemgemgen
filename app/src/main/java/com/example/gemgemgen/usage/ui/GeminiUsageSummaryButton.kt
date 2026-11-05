@@ -129,7 +129,7 @@ fun GeminiUsageSummaryButton(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Image(
                         imageVector = GeminiGradientLogo,
@@ -162,18 +162,6 @@ fun GeminiUsageSummaryButton(
                         }
                     }
 
-                    resetTimeText?.let { resetTime ->
-                        Text(
-                            text = resetTime,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AppTheme.colors.textPrimary.copy(alpha = 0.88f),
-                            fontSize = 12.5.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
                     if (isWarningOrCaution) {
                         GeminiUsageWarningBadge(
                             warningLevel = warningLevel,
@@ -182,22 +170,16 @@ fun GeminiUsageSummaryButton(
                     }
                 }
 
-                if (multiUsageState.accountCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(AppTheme.colors.insetBed)
-                            .padding(horizontal = 7.dp, vertical = 2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "${multiUsageState.accountCount}계정",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AppTheme.colors.textSecondary,
-                            fontSize = 10.sp
-                        )
-                    }
+                resetTimeText?.let { resetTime ->
+                    Text(
+                        text = resetTime,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppTheme.colors.textSecondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }

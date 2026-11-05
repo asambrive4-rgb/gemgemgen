@@ -1369,6 +1369,28 @@ class AnalysisFeatureTest {
 
         assertEquals("automation source", viewModel.sourcePromptTextFieldState.text.toString())
         assertEquals("automation source", viewModel.uiState.value.sourcePrompt)
+        assertEquals("자동화 프롬프트를 가져왔습니다.", viewModel.uiState.value.message)
+    }
+
+    @Test
+    fun importSourcePromptFromAutomation_prefersLiveCurrentPromptProvider() {
+        val workspace = PromptWorkspace()
+        var liveEditorText = "live editor text"
+        workspace.currentPromptProvider = { liveEditorText }
+        workspace.updateCurrentPrompt("stale flow text")
+
+        val viewModel = analysisViewModel(
+            aiGateway = FakeAnalysisAiGateway(),
+            keyRepository = FakeGeminiApiKeyRepository(activeKey = "secret"),
+            promptWorkspace = workspace
+        )
+
+        viewModel.importSourcePromptFromAutomation()
+
+        assertEquals("live editor text", viewModel.sourcePromptTextFieldState.text.toString())
+        assertEquals("live editor text", viewModel.uiState.value.sourcePrompt)
+        assertEquals("자동화 프롬프트를 가져왔습니다.", viewModel.uiState.value.message)
+        assertEquals("", viewModel.uiState.value.error)
     }
 
     @Test

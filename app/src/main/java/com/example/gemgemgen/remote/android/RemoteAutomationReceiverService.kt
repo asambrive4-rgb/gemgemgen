@@ -104,6 +104,19 @@ class RemoteAutomationReceiverService : Service() {
                 }
                 serverSocket?.localPort?.let(::reregisterService)
             }
+            ACTION_REREGISTER -> {
+                store.saveUserDisconnected(false)
+                val port = serverSocket?.localPort
+                if (port != null && port > 0) {
+                    reregisterService(port)
+                    RemoteAutomationStateHub.update {
+                        it.copy(
+                            isReceiverRunning = true,
+                            message = receiverReadyMessage()
+                        )
+                    }
+                }
+            }
         }
         return START_NOT_STICKY
     }
@@ -662,6 +675,7 @@ class RemoteAutomationReceiverService : Service() {
         private const val NOTIFICATION_ID = 4102
         private const val ACTION_STOP = "com.example.gemgemgen.remote.STOP_RECEIVER"
         const val ACTION_DISCONNECT = "com.example.gemgemgen.remote.DISCONNECT_RECEIVER"
+        const val ACTION_REREGISTER = "com.example.gemgemgen.remote.REREGISTER_RECEIVER"
 
         fun intent(context: Context): Intent {
             return Intent(context, RemoteAutomationReceiverService::class.java)

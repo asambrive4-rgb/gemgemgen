@@ -1,4 +1,4 @@
-// 역할: 프롬프트 입력창에서 단어 입력 시 상용구·연동 와일드카드 개별 항목·와일드카드 토큰 후보를 우선순위별로 자동완성 추천하고 치환합니다.
+// 역할: 프롬프트 입력창에서 단어 입력 시 상용구(다중 단축어 매칭 포함)·연동 와일드카드 개별 항목·와일드카드 토큰 후보를 우선순위별로 자동완성 추천하고 치환합니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.wildcard.domain.WildcardFileParser
@@ -20,6 +20,8 @@ object WildcardTokenAutocomplete {
         val displayText: String = token,
         /** 상용구 카테고리 또는 출처 와일드카드 파일명 (선택 사항, 미분류 시 빈 문자열) */
         val category: String = "",
+        /** 추가 단축어 목록 (상용구인 경우) */
+        val aliases: List<String> = emptyList(),
         /** 후보 타입 (와일드카드 변주 토큰 vs 상용구 vs 와일드카드 개별 항목) */
         val type: Type = Type.WILDCARD
     ) {
@@ -70,12 +72,17 @@ object WildcardTokenAutocomplete {
                 val trimmedShortcut = snippet.shortcut.trim()
                 val trimmedContent = snippet.content.trim()
                 val trimmedCategory = snippet.category.trim()
+                val cleanedAliases = snippet.additionalShortcuts
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.equals(trimmedShortcut, ignoreCase = true) }
+                    .distinctBy { it.lowercase() }
                 if (trimmedShortcut.isEmpty() || trimmedContent.isEmpty()) return@mapNotNull null
                 Candidate(
                     name = trimmedShortcut,
                     token = snippet.content,
                     displayText = trimmedShortcut,
                     category = trimmedCategory,
+                    aliases = cleanedAliases,
                     type = Candidate.Type.SNIPPET
                 )
             }
@@ -129,14 +136,19 @@ object WildcardTokenAutocomplete {
         val matchPriorityComparator = compareBy<Candidate> { candidate ->
             when (candidate.type) {
                 Candidate.Type.SNIPPET -> {
-                    if (candidate.name.startsWith(word, ignoreCase = true)) 0 else 1
+                    when {
+                        candidate.name.startsWith(word, ignoreCase = true) -> 0
+                        candidate.aliases.any { it.startsWith(word, ignoreCase = true) } -> 1
+                        else -> 2
+                    }
                 }
-                Candidate.Type.WILDCARD_ITEM -> 2
-                Candidate.Type.WILDCARD -> 3
+                Candidate.Type.WILDCARD_ITEM -> 3
+                Candidate.Type.WILDCARD -> 4
             }
         }.thenBy(String.CASE_INSENSITIVE_ORDER) { candidate ->
             if (candidate.type == Candidate.Type.SNIPPET &&
-                !candidate.name.startsWith(word, ignoreCase = true)
+                !candidate.name.startsWith(word, ignoreCase = true) &&
+                !candidate.aliases.any { it.startsWith(word, ignoreCase = true) }
             ) {
                 candidate.category
             } else {
@@ -150,6 +162,7 @@ object WildcardTokenAutocomplete {
                 when (candidate.type) {
                     Candidate.Type.SNIPPET -> {
                         candidate.name.startsWith(word, ignoreCase = true) ||
+                            candidate.aliases.any { it.startsWith(word, ignoreCase = true) } ||
                             (candidate.category.isNotBlank() &&
                                 candidate.category.startsWith(word, ignoreCase = true))
                     }
@@ -186,6 +199,11 @@ object WildcardTokenAutocomplete {
         val word = text.substring(range.first, range.last + 1)
         if (word.isEmpty()) return null
 
+        val isAliasPrefix = candidate.type == Candidate.Type.SNIPPET &&
+            candidate.aliases.any {
+                it.startsWith(word, ignoreCase = true) || it.equals(word, ignoreCase = true)
+            }
+
         val isCategoryPrefix = candidate.type == Candidate.Type.SNIPPET &&
             candidate.category.isNotBlank() &&
             (candidate.category.startsWith(word, ignoreCase = true) ||
@@ -195,6 +213,7 @@ object WildcardTokenAutocomplete {
             candidate.token.startsWith(word, ignoreCase = true) ||
             candidate.token.equals(word, ignoreCase = true) ||
             candidate.name.equals(word, ignoreCase = true) ||
+            isAliasPrefix ||
             isCategoryPrefix
         if (!isMatchingPrefix) return null
 

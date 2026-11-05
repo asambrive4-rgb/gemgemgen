@@ -1,4 +1,4 @@
-﻿// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 계정 그룹 이동, 수동 소진/복구 및 당분간 사용 금지, 대표 자동 위임, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
+// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 이메일/세션 교차 오염 방지, 비차단 인메모리 즉시 반응 및 비동기 DataStore 영속화 기반 계정 그룹 이동·수동 소진/복구·당분간 사용 금지·대표 자동 위임, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
 package com.example.gemgemgen.usage.usecase
 
 import com.example.gemgemgen.core.AppDispatchers
@@ -171,7 +171,7 @@ class MultiGeminiUsageRepository(
         group: GeminiAccountGroup = GeminiAccountGroup.MAIN,
         autoRefresh: Boolean = true
     ): GeminiAccountProfile {
-        val createdProfile = mutationMutex.withLock {
+        val (createdProfile, toPersist) = mutationMutex.withLock {
             val currentAccounts = _state.value.accounts
             val resolvedId = accountId?.trim()?.takeIf { it.isNotEmpty() }
                 ?: GeminiAccountProfile.generateAccountId()
@@ -193,8 +193,7 @@ class MultiGeminiUsageRepository(
                         selectedAccountId = selectedId
                     )
                 }
-                persistProfilesInternal(updatedList.map { it.profile }, selectedId)
-                return@withLock updatedProfile
+                return@withLock updatedProfile to (updatedList.map { it.profile } to selectedId)
             }
 
             val nextOrder = currentAccounts.size
@@ -224,9 +223,10 @@ class MultiGeminiUsageRepository(
                     selectedAccountId = selectedId
                 )
             }
-            persistProfilesInternal(updatedAccounts.map { it.profile }, selectedId)
-            newProfile
+            newProfile to (updatedAccounts.map { it.profile } to selectedId)
         }
+
+        persistProfilesAsync(toPersist.first, toPersist.second)
 
         if (autoRefresh) {
             refreshAccount(createdProfile.id)
@@ -262,22 +262,27 @@ class MultiGeminiUsageRepository(
         accountId: String,
         targetGroup: GeminiAccountGroup
     ): GeminiAccountProfile? {
-        return mutationMutex.withLock {
+        val (updatedProfile, toPersist) = mutationMutex.withLock {
             val currentAccounts = _state.value.accounts
             val index = currentAccounts.indexOfFirst { it.profile.id == accountId }
-            if (index < 0) return@withLock null
+            if (index < 0) return@withLock null to null
 
             val target = currentAccounts[index]
-            if (target.profile.group == targetGroup) return@withLock target.profile
+            if (target.profile.group == targetGroup) return@withLock target.profile to null
 
             val updatedProfile = target.profile.copy(group = targetGroup)
             val updatedAccounts = currentAccounts.toMutableList().apply {
                 set(index, target.copy(profile = updatedProfile))
             }
+            val selectedId = _state.value.selectedAccountId
             _state.update { it.copy(accounts = updatedAccounts) }
-            persistProfilesInternal(updatedAccounts.map { it.profile }, _state.value.selectedAccountId)
-            updatedProfile
+            updatedProfile to (updatedAccounts.map { it.profile } to selectedId)
         }
+
+        if (toPersist != null) {
+            persistProfilesAsync(toPersist.first, toPersist.second)
+        }
+        return updatedProfile
     }
 
     /**
@@ -297,14 +302,14 @@ class MultiGeminiUsageRepository(
         accountId: String,
         isExhausted: Boolean
     ): GeminiAccountProfile? {
-        return mutationMutex.withLock {
+        val (updatedProfile, toPersist) = mutationMutex.withLock {
             val currentAccounts = _state.value.accounts
             val index = currentAccounts.indexOfFirst { it.profile.id == accountId }
-            if (index < 0) return@withLock null
+            if (index < 0) return@withLock null to null
 
             val target = currentAccounts[index]
             val now = nowProvider()
-            if (target.profile.isManuallyExhausted(now) == isExhausted) return@withLock target.profile
+            if (target.profile.isManuallyExhausted(now) == isExhausted) return@withLock target.profile to null
 
             // 다음 5시간 주기 도래 시각(롤오버 반영). 단서가 없는 신규 계정은 내린 시점 + 5시간
             val nextResetAt = now + (target.nextFiveHourResetRemainingMillis(now)
@@ -320,7 +325,7 @@ class MultiGeminiUsageRepository(
             var nextSelectedId = _state.value.selectedAccountId
             if (isExhausted && nextSelectedId == accountId) {
                 val tempState = _state.value.copy(accounts = updatedAccounts)
-                nextSelectedId = tempState.availableAccountsSorted().firstOrNull()?.profile?.id
+                nextSelectedId = tempState.availableAccountsSorted(now).firstOrNull()?.profile?.id
                     ?: nextSelectedId
             }
 
@@ -330,9 +335,13 @@ class MultiGeminiUsageRepository(
                     selectedAccountId = nextSelectedId
                 )
             }
-            persistProfilesInternal(updatedAccounts.map { it.profile }, nextSelectedId)
-            updatedProfile
+            updatedProfile to (updatedAccounts.map { it.profile } to nextSelectedId)
         }
+
+        if (toPersist != null) {
+            persistProfilesAsync(toPersist.first, toPersist.second)
+        }
+        return updatedProfile
     }
 
     /**
@@ -353,13 +362,13 @@ class MultiGeminiUsageRepository(
         accountId: String,
         isSuspended: Boolean
     ): GeminiAccountProfile? {
-        return mutationMutex.withLock {
+        val (updatedProfile, toPersist) = mutationMutex.withLock {
             val currentAccounts = _state.value.accounts
             val index = currentAccounts.indexOfFirst { it.profile.id == accountId }
-            if (index < 0) return@withLock null
+            if (index < 0) return@withLock null to null
 
             val target = currentAccounts[index]
-            if (target.profile.isSuspended == isSuspended) return@withLock target.profile
+            if (target.profile.isSuspended == isSuspended) return@withLock target.profile to null
 
             val updatedProfile = target.profile.copy(isSuspended = isSuspended)
             val updatedAccounts = currentAccounts.toMutableList().apply {
@@ -368,8 +377,9 @@ class MultiGeminiUsageRepository(
 
             var nextSelectedId = _state.value.selectedAccountId
             if (isSuspended && nextSelectedId == accountId) {
+                val now = nowProvider()
                 val tempState = _state.value.copy(accounts = updatedAccounts)
-                nextSelectedId = tempState.availableAccountsSorted().firstOrNull()?.profile?.id
+                nextSelectedId = tempState.availableAccountsSorted(now).firstOrNull()?.profile?.id
                     ?: nextSelectedId
             }
 
@@ -379,9 +389,13 @@ class MultiGeminiUsageRepository(
                     selectedAccountId = nextSelectedId
                 )
             }
-            persistProfilesInternal(updatedAccounts.map { it.profile }, nextSelectedId)
-            updatedProfile
+            updatedProfile to (updatedAccounts.map { it.profile } to nextSelectedId)
         }
+
+        if (toPersist != null) {
+            persistProfilesAsync(toPersist.first, toPersist.second)
+        }
+        return updatedProfile
     }
 
     /**
@@ -401,23 +415,28 @@ class MultiGeminiUsageRepository(
         alias: String,
         email: String = ""
     ): GeminiAccountProfile? {
-        return mutationMutex.withLock {
+        val (updatedProfile, toPersist) = mutationMutex.withLock {
             val currentAccounts = _state.value.accounts
             val index = currentAccounts.indexOfFirst { it.profile.id == accountId }
-            if (index < 0) return@withLock null
+            if (index < 0) return@withLock null to null
 
             val target = currentAccounts[index]
             val updatedProfile = target.profile.copy(
                 alias = alias.trim().ifEmpty { target.profile.alias },
-                email = email.trim().ifEmpty { target.profile.email }
+                email = email.trim()
             )
             val updatedAccounts = currentAccounts.toMutableList().apply {
                 set(index, target.copy(profile = updatedProfile))
             }
+            val selectedId = _state.value.selectedAccountId
             _state.update { it.copy(accounts = updatedAccounts) }
-            persistProfilesInternal(updatedAccounts.map { it.profile }, _state.value.selectedAccountId)
-            updatedProfile
+            updatedProfile to (updatedAccounts.map { it.profile } to selectedId)
         }
+
+        if (toPersist != null) {
+            persistProfilesAsync(toPersist.first, toPersist.second)
+        }
+        return updatedProfile
     }
 
     fun triggerUpdateAccountProfile(accountId: String, alias: String, email: String = "") {
@@ -430,10 +449,10 @@ class MultiGeminiUsageRepository(
      * 계정을 삭제하고 연결된 로컬 캐시 및 독립 WebView 세션을 정리합니다.
      */
     suspend fun removeAccount(accountId: String): Boolean {
-        val removedProfile = mutationMutex.withLock {
+        val (removedProfile, toPersist) = mutationMutex.withLock {
             val currentAccounts = _state.value.accounts
             val targetEntry = currentAccounts.firstOrNull { it.profile.id == accountId }
-                ?: return@withLock null
+                ?: return@withLock null to null
 
             val remaining = currentAccounts
                 .filterNot { it.profile.id == accountId }
@@ -452,17 +471,21 @@ class MultiGeminiUsageRepository(
                 )
             }
 
+            targetEntry.profile to (remaining.map { it.profile } to nextSelectedId)
+        }
+        if (removedProfile == null) return false
+
+        scope.launch(dispatchers.io) {
             runCatching {
-                withContext(dispatchers.io) {
-                    localDataSource.removeAccountData(accountId)
+                localDataSource.removeAccountData(accountId)
+                if (toPersist != null) {
                     localDataSource.saveProfiles(
-                        profiles = remaining.map { it.profile },
-                        selectedAccountId = nextSelectedId
+                        profiles = toPersist.first,
+                        selectedAccountId = toPersist.second
                     )
                 }
             }
-            targetEntry.profile
-        } ?: return false
+        }
 
         runCatching {
             remoteDataSource.clearAccountSession(removedProfile)
@@ -480,11 +503,14 @@ class MultiGeminiUsageRepository(
      * 메인 화면 요약 버튼에 표시할 대표 계정을 변경합니다.
      */
     suspend fun selectRepresentativeAccount(accountId: String) {
-        mutationMutex.withLock {
-            if (_state.value.accounts.none { it.profile.id == accountId }) return@withLock
+        val valid = mutationMutex.withLock {
+            if (_state.value.accounts.none { it.profile.id == accountId }) return@withLock false
             _state.update { it.copy(selectedAccountId = accountId) }
-            runCatching {
-                withContext(dispatchers.io) {
+            true
+        }
+        if (valid) {
+            scope.launch(dispatchers.io) {
+                runCatching {
                     localDataSource.saveSelectedAccountId(accountId)
                 }
             }
@@ -539,11 +565,12 @@ class MultiGeminiUsageRepository(
 
             try {
                 val fetchResult = remoteDataSource.fetchUsage(initialEntry.profile)
-                val fetchedState = fetchResult.usageState
                 val detectedEmail = fetchResult.detectedEmail?.trim().orEmpty()
 
                 var updatedProfileToPersist: List<GeminiAccountProfile>? = null
                 var selectedIdToPersist: String? = null
+                var conflictingSessionProfile: GeminiAccountProfile? = null
+                var resolvedState: GeminiUsageState = fetchResult.usageState
 
                 mutationMutex.withLock {
                     val current = _state.value
@@ -551,48 +578,63 @@ class MultiGeminiUsageRepository(
                         return@withLock
                     }
 
+                    val allProfiles = current.accounts.map { it.profile }
+                    var profileChanged = false
                     val updatedAccounts = current.accounts.map { entry ->
                         if (entry.profile.id != accountId) return@map entry
 
-                        val nextProfile = if (detectedEmail.isNotEmpty() && entry.profile.email != detectedEmail) {
+                        // 프로필에 지정된 이메일과 WebView 세션의 이메일이 다르면 다른 계정 세션으로 오염된 상태이므로
+                        // 잘못된 사용량 반영 및 이메일 덮어쓰기를 차단하고 재로그인(AuthRequired) 상태로 전환합니다.
+                        if (entry.profile.isConflictingDetectedEmail(detectedEmail)) {
+                            conflictingSessionProfile = entry.profile
+                            resolvedState = GeminiUsageState.AuthRequired
+                            return@map entry.copy(
+                                usageState = GeminiUsageState.AuthRequired,
+                                isRefreshing = false
+                            )
+                        }
+
+                        val nextProfile = if (entry.profile.canAcceptDetectedEmail(detectedEmail, allProfiles)) {
+                            profileChanged = true
                             entry.profile.copy(email = detectedEmail)
                         } else {
                             entry.profile
                         }
 
-                        val nextCached = if (fetchedState is GeminiUsageState.Success) {
-                            fetchedState
+                        val nextCached = if (resolvedState is GeminiUsageState.Success) {
+                            resolvedState as GeminiUsageState.Success
                         } else {
                             entry.cachedSuccess
                         }
 
                         entry.copy(
                             profile = nextProfile,
-                            usageState = fetchedState,
+                            usageState = resolvedState,
                             cachedSuccess = nextCached,
                             isRefreshing = false
                         )
                     }
 
                     _state.value = current.copy(accounts = updatedAccounts)
-                    if (detectedEmail.isNotEmpty()) {
+                    if (profileChanged) {
                         updatedProfileToPersist = updatedAccounts.map { it.profile }
                         selectedIdToPersist = current.selectedAccountId
                     }
                 }
 
-                if (fetchedState is GeminiUsageState.Success) {
-                    runCatching {
-                        withContext(dispatchers.io) {
-                            localDataSource.saveAccountSuccess(accountId, fetchedState)
-                        }
-                    }
-                }
-                updatedProfileToPersist?.let { profiles ->
-                    persistProfilesInternal(profiles, selectedIdToPersist)
+                conflictingSessionProfile?.let { pollutedProfile ->
+                    runCatching { remoteDataSource.clearAccountSession(pollutedProfile) }
                 }
 
-                fetchedState
+                val finalSuccess = resolvedState as? GeminiUsageState.Success
+                if (finalSuccess != null) {
+                    saveAccountSuccessAsync(accountId, finalSuccess)
+                }
+                updatedProfileToPersist?.let { profiles ->
+                    persistProfilesAsync(profiles, selectedIdToPersist)
+                }
+
+                resolvedState
             } catch (cancelled: CancellationException) {
                 clearAccountRefreshingFlag(accountId)
                 throw cancelled
@@ -677,8 +719,12 @@ class MultiGeminiUsageRepository(
 
                 for (entry in orderedEntries) {
                     val accountId = entry.profile.id
+                    val latestEntry = _state.value.accounts.firstOrNull { it.profile.id == accountId }
+                    if (latestEntry?.profile?.isSuspended == true) {
+                        latestEntry.displayedSuccess?.let { results[accountId] = it }
+                        continue
+                    }
                     if (skipFreshWithinMillis > 0L) {
-                        val latestEntry = _state.value.accounts.firstOrNull { it.profile.id == accountId }
                         val latestSuccess = latestEntry?.usageState as? GeminiUsageState.Success
                         val now = nowProvider()
                         if (latestSuccess != null &&
@@ -739,12 +785,23 @@ class MultiGeminiUsageRepository(
         }
     }
 
-    private suspend fun persistProfilesInternal(
+    private fun saveAccountSuccessAsync(
+        accountId: String,
+        state: GeminiUsageState.Success
+    ) {
+        scope.launch(dispatchers.io) {
+            runCatching {
+                localDataSource.saveAccountSuccess(accountId, state)
+            }
+        }
+    }
+
+    private fun persistProfilesAsync(
         profiles: List<GeminiAccountProfile>,
         selectedAccountId: String?
     ) {
-        runCatching {
-            withContext(dispatchers.io) {
+        scope.launch(dispatchers.io) {
+            runCatching {
                 localDataSource.saveProfiles(
                     profiles = profiles,
                     selectedAccountId = selectedAccountId

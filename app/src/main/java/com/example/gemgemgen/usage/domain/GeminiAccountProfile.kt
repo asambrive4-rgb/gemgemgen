@@ -1,4 +1,4 @@
-// 역할: 다중 계정(5개 이상) 제미나이 사용량 모니터링을 위한 개별 Google 계정 프로필 메타데이터(메인/서브 그룹, 수동 사용불가 내림, 당분간 사용 금지 포함)와 독립 세션 식별자 모델을 정의합니다.
+// 역할: 다중 계정(5개 이상) 제미나이 사용량 모니터링을 위한 개별 Google 계정 프로필 메타데이터(메인/서브 그룹, 수동 사용불가 내림, 당분간 사용 금지, 이메일 오염 방지 규칙 포함)와 독립 세션 식별자 모델을 정의합니다.
 package com.example.gemgemgen.usage.domain
 
 import java.util.UUID
@@ -38,6 +38,38 @@ data class GeminiAccountProfile(
     fun isManuallyExhausted(nowMillis: Long): Boolean = nowMillis < manualExhaustedUntilMillis
 
     /**
+     * WebView DOM에서 자동 감지된 이메일([detectedEmail])이 현재 계정의 설정된 이메일과 충돌(불일치)하는지 확인합니다.
+     * - 현재 계정에 이메일이 지정되어 있는데 감지된 이메일이 다른 계정이면 true를 반환합니다.
+     */
+    fun isConflictingDetectedEmail(detectedEmail: String): Boolean {
+        val normCurrent = email.trim().lowercase()
+        val normDetected = detectedEmail.trim().lowercase()
+        if (normCurrent.isEmpty() || normDetected.isEmpty()) return false
+        return normCurrent != normDetected
+    }
+
+    /**
+     * 자동 감지된 이메일([detectedEmail])을 현재 프로필의 빈 이메일 필드에 안전하게 채울 수 있는지 판별합니다.
+     * - 현재 프로필의 이메일이 비어 있어야 하며,
+     * - 다른 계정이 이미 사용 중인 이메일이 아니어야 하며,
+     * - 별칭에 영문/숫자 식별자(예: "jjjoa31", "asam50")가 포함된 경우 감지된 이메일 로컬 파트와도 모순되지 않아야 합니다.
+     */
+    fun canAcceptDetectedEmail(
+        detectedEmail: String,
+        allProfiles: List<GeminiAccountProfile>
+    ): Boolean {
+        val normDetected = detectedEmail.trim().lowercase()
+        if (normDetected.isEmpty() || email.isNotBlank()) return false
+
+        val usedByOtherAccount = allProfiles.any { other ->
+            other.id != id && other.email.trim().equals(normDetected, ignoreCase = true)
+        }
+        if (usedByOtherAccount) return false
+
+        return !isAliasMismatchWithEmail(alias = alias, email = normDetected)
+    }
+
+    /**
      * 요약 버튼 및 카드 헤더에 표시할 대표 라벨.
      * 별칭이 비어 있으면 이메일 로컬 파트 또는 기본 라벨을 반환합니다.
      */
@@ -51,10 +83,35 @@ data class GeminiAccountProfile(
         }
 
     companion object {
-        /** 다중 계정 모니터링 최소 권장 지원 계정 수 (5개 이상 무제한 등록 가능) */
-        const val MIN_MULTI_ACCOUNT_CAPACITY = 5
-
         private val UNSAFE_PROFILE_CHAR_REGEX = Regex("""[^a-zA-Z0-9_]""")
+        private val ASCII_IDENTIFIER_REGEX = Regex("""^[a-z0-9._-]+$""")
+        private val TRAILING_DIGITS_REGEX = Regex("""(\d+)$""")
+
+        /**
+         * 별칭이 영문+숫자 계정 약어(예: "jjjoa31", "asam50") 형태일 때,
+         * 이메일 로컬 파트(예: "asambrive50", "jjjoajjjoajjjoa31")와 명백히 다른 계정인지 검사합니다.
+         */
+        fun isAliasMismatchWithEmail(alias: String, email: String): Boolean {
+            val normAlias = alias.trim().lowercase()
+            val localPart = email.trim().lowercase().substringBefore("@")
+            if (normAlias.length < 3 || localPart.isEmpty()) return false
+            if (!ASCII_IDENTIFIER_REGEX.matches(normAlias)) return false
+
+            val aliasPrefix = normAlias.takeWhile { it.isLetter() }
+            val localPrefix = localPart.takeWhile { it.isLetter() }
+            if (aliasPrefix.length >= 3 && localPrefix.length >= 3) {
+                if (!localPrefix.startsWith(aliasPrefix) && !aliasPrefix.startsWith(localPrefix)) {
+                    return true
+                }
+            }
+
+            val aliasDigits = TRAILING_DIGITS_REGEX.find(normAlias)?.value
+            val localDigits = TRAILING_DIGITS_REGEX.find(localPart)?.value
+            if (!aliasDigits.isNullOrEmpty() && !localDigits.isNullOrEmpty() && aliasDigits != localDigits) {
+                return true
+            }
+            return false
+        }
 
         /**
          * 계정 ID를 기반으로 Android WebView 독립 프로필/세션 저장소에 사용할 안전한 프로필 이름을 생성합니다.

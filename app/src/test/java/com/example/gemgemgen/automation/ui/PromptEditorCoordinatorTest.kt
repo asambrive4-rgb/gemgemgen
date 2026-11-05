@@ -1,6 +1,7 @@
 // 역할: 프롬프트 에디터 코디네이터의 입력 동기화, 문구 찾기(검색), 커서 보존 및 네비게이션 동작을 검증하는 단위 테스트입니다.
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.ui.text.TextRange
 import com.example.gemgemgen.core.ClipboardGateway
 import kotlinx.coroutines.CoroutineScope
@@ -152,5 +153,21 @@ class PromptEditorCoordinatorTest {
 
         // 2) 반면 Compose 화면 전체 리컴포지션 방지 최적화로 인해 editorUiState.promptTemplate는 갱신되지 않고 유지됨
         assertEquals("initial prompt", coordinator.editorUiState.value.promptTemplate)
+    }
+
+    @Test
+    fun cancelParagraphSelection_syncsLatestTextFieldStateToPromptWorkspace() {
+        var latestSyncedPrompt = ""
+        val coordinator = createCoordinator("initial prompt") { latestSyncedPrompt = it }
+        assertEquals("initial prompt", latestSyncedPrompt)
+
+        // UI에서 debounce 전 textFieldState만 직접 변경된 상태
+        coordinator.textFieldState.setTextAndPlaceCursorAtEnd("freshly typed prompt")
+
+        // 탭 전환 등으로 문단 선택 모드 취소 시, 최신 텍스트 필드 내용이 즉시 동기화되어 이전 텍스트로 덮어쓰지 않아야 함
+        coordinator.cancelParagraphSelection()
+
+        assertEquals("freshly typed prompt", latestSyncedPrompt)
+        assertEquals("freshly typed prompt", coordinator.currentPromptTemplateText())
     }
 }

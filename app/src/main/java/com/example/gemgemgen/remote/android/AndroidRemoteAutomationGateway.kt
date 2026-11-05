@@ -1,9 +1,7 @@
-// 역할: 네트워크 소켓과 NSD 탐색을 통해 원격 수신 기기와 통신(자동화, 메모리 정리, Gemini 계정 전환)하고 진행 상태를 상태 허브로 전파합니다.
+// 역할: RemoteServiceDiscovery 탐색 및 소켓 통신을 통해 원격 수신 기기와 통신·재시도하고 진행 상태를 상태 허브로 전파합니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
-import android.net.nsd.NsdManager
-import android.net.nsd.NsdServiceInfo
 import androidx.core.content.ContextCompat
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.isTerminal
@@ -90,6 +88,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                 appContext.stopService(RemoteAutomationReceiverService.intent(appContext))
             }
             AutomationMode.SENDER -> {
+                store.saveUserDisconnected(false)
                 appContext.stopService(RemoteAutomationReceiverService.intent(appContext))
                 discovery.start()
             }
@@ -190,6 +189,36 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
             }
             AutomationMode.NORMAL -> {
                 RemoteActionResult.Failure("연결된 기기가 없습니다.")
+            }
+        }
+    }
+
+    override suspend fun retryConnection(): RemoteActionResult = withContext(Dispatchers.IO) {
+        val currentStatus = status.value
+        when (currentStatus.mode) {
+            AutomationMode.SENDER -> {
+                store.saveUserDisconnected(false)
+                discovery.stop()
+                endpoint = null
+                RemoteAutomationStateHub.update {
+                    it.copy(
+                        isPaired = false,
+                        discoveredDeviceName = "",
+                        connectionMessage = "S25 FE를 다시 찾는 중입니다."
+                    )
+                }
+                discovery.start()
+                RemoteActionResult.Success
+            }
+            AutomationMode.RECEIVER -> {
+                store.saveUserDisconnected(false)
+                val intent = RemoteAutomationReceiverService.intent(appContext)
+                    .setAction(RemoteAutomationReceiverService.ACTION_REREGISTER)
+                appContext.startService(intent)
+                RemoteActionResult.Success
+            }
+            AutomationMode.NORMAL -> {
+                RemoteActionResult.Failure("원격 모드가 아닙니다.")
             }
         }
     }
@@ -506,96 +535,3 @@ internal data class RemoteEndpoint(
     val isPaired: Boolean = true
 )
 
-private class RemoteServiceDiscovery(
-    context: Context,
-    private val onResolved: (RemoteEndpoint) -> Unit,
-    private val onLost: (String) -> Unit,
-    private val onError: (String) -> Unit
-) {
-    private val nsdManager = context.getSystemService(NsdManager::class.java)
-    private var listener: NsdManager.DiscoveryListener? = null
-    private val resolvingNames = mutableSetOf<String>()
-
-    fun start() {
-        if (listener != null) return
-        val created = object : NsdManager.DiscoveryListener {
-            override fun onDiscoveryStarted(serviceType: String) = Unit
-
-            override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-                if (serviceInfo.serviceType != RemoteAutomationProtocol.SERVICE_TYPE) return
-                synchronized(resolvingNames) {
-                    if (!resolvingNames.add(serviceInfo.serviceName)) return
-                }
-                @Suppress("DEPRECATION")
-                nsdManager.resolveService(
-                    serviceInfo,
-                    object : NsdManager.ResolveListener {
-                        override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                            synchronized(resolvingNames) { resolvingNames.remove(serviceInfo.serviceName) }
-                        }
-
-                        override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
-                            synchronized(resolvingNames) { resolvingNames.remove(serviceInfo.serviceName) }
-                            val receiverId = serviceInfo.attributes[ATTRIBUTE_RECEIVER_ID]
-                                ?.toString(Charsets.UTF_8)
-                                .orEmpty()
-                            val isPairedAttr = serviceInfo.attributes[ATTRIBUTE_IS_PAIRED]
-                                ?.toString(Charsets.UTF_8)
-                            val isReceiverPaired = isPairedAttr?.toBooleanStrictOrNull() ?: true
-                            @Suppress("DEPRECATION")
-                            val address = serviceInfo.host ?: return
-                            if (receiverId.isBlank() || serviceInfo.port <= 0) return
-                            onResolved(
-                                RemoteEndpoint(
-                                    receiverId = receiverId,
-                                    name = serviceInfo.serviceName,
-                                    address = address,
-                                    port = serviceInfo.port,
-                                    isPaired = isReceiverPaired
-                                )
-                            )
-                        }
-                    }
-                )
-            }
-
-            override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                onLost(serviceInfo.serviceName)
-            }
-
-            override fun onDiscoveryStopped(serviceType: String) = Unit
-
-            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                listener = null
-                onError("같은 Wi-Fi의 수신 기기를 검색하지 못했습니다. ($errorCode)")
-            }
-
-            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {
-                listener = null
-            }
-        }
-        listener = created
-        runCatching {
-            nsdManager.discoverServices(
-                RemoteAutomationProtocol.SERVICE_TYPE,
-                NsdManager.PROTOCOL_DNS_SD,
-                created
-            )
-        }.onFailure {
-            listener = null
-            onError("같은 Wi-Fi의 수신 기기를 검색하지 못했습니다.")
-        }
-    }
-
-    fun stop() {
-        val current = listener ?: return
-        listener = null
-        runCatching { nsdManager.stopServiceDiscovery(current) }
-        synchronized(resolvingNames) { resolvingNames.clear() }
-    }
-
-    companion object {
-        const val ATTRIBUTE_RECEIVER_ID = "receiverId"
-        const val ATTRIBUTE_IS_PAIRED = "isPaired"
-    }
-}

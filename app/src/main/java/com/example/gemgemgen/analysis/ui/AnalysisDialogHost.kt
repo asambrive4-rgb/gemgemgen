@@ -1,4 +1,4 @@
-// 역할: 분석 화면의 API 키 관리, 인증, 알림 다이얼로그를 뉴모피즘 디자인과 단일 호스트로 통합 표시합니다.
+// 역할: 분석 화면의 API 키 관리(표준 회색 알약 버튼 기반 수정·삭제), 인증, 알림 다이얼로그를 뉴모피즘 디자인과 단일 호스트로 통합 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +41,7 @@ import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuConfigDialogContent
 import com.example.gemgemgen.ui.theme.NeuInsetBed
+import com.example.gemgemgen.ui.theme.NeuPillButton
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 
 sealed interface AnalysisDialogType {
@@ -122,7 +122,6 @@ internal fun AnalysisDialogHost(
                 message = "원문, 카테고리, 마스킹, 생성 결과와 변주 조건이 모두 지워집니다. " +
                     "자동화 프롬프트와 계정 설정은 유지됩니다.",
                 confirmLabel = "비우기",
-                useFilledConfirmButton = true,
                 onConfirm = actions::confirmResetSession,
                 onDismiss = actions::dismissResetSession
             )
@@ -133,7 +132,6 @@ internal fun AnalysisDialogHost(
                 message = "${targetDialog.fileName} 파일을 덮어쓸까요? 다른 이름을 입력하려면 취소하고 파일명을 바꿔주세요.",
                 confirmLabel = "덮어쓰기",
                 dismissLabel = "다른 파일명 입력",
-                useFilledConfirmButton = true,
                 onConfirm = actions::onConfirmOverwrite,
                 onDismiss = actions::dismissOverwrite
             )
@@ -303,10 +301,8 @@ private fun KeyManagementContent(
                                         )
                                     }
                                 }
-                                NeuButton(
+                                NeuPillButton(
                                     onClick = { actions.startEditingApiKey(key) },
-                                    isPrimary = false,
-                                    shape = RoundedCornerShape(8.dp),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Text(
@@ -315,13 +311,13 @@ private fun KeyManagementContent(
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
-                                TextButton(
+                                NeuPillButton(
                                     onClick = { actions.deleteApiKey(key.id) },
+                                    contentColor = MaterialTheme.colorScheme.error,
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
                                         text = "삭제",
-                                        color = MaterialTheme.colorScheme.error,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -496,8 +492,7 @@ private fun GrokLoginContent(
                 NeuInsetBed(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    backgroundColor = AppTheme.colors.insetBed,
-                    borderColor = AppTheme.colors.insetBorder
+                    backgroundColor = AppTheme.colors.insetBed
                 ) {
                     Row(
                         modifier = Modifier

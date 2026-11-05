@@ -1,4 +1,4 @@
-// 역할: 원격 통신 네트워크 채널 연결, 자동화 요청, 메모리 정리 및 Gemini 계정 전환 송수신 인터페이스를 정의합니다.
+// 역할: 원격 통신 네트워크 채널 연결·재시도, 자동화 요청, 메모리 정리 및 Gemini 계정 전환 송수신 인터페이스를 정의합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.remote.domain.AutomationMode
@@ -13,6 +13,7 @@ interface RemoteAutomationGateway {
     fun selectMode(mode: AutomationMode)
     suspend fun pair(pairingCode: String): RemoteActionResult
     suspend fun disconnect(): RemoteActionResult
+    suspend fun retryConnection(): RemoteActionResult = RemoteActionResult.Success
     suspend fun send(request: RemoteAutomationRequest)
     fun forceStop(requestId: String?)
     fun updateRepeatCount(requestId: String, repeatCount: Int)

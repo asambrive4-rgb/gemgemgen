@@ -2,6 +2,7 @@
 package com.example.gemgemgen.analysis.domain
 
 import com.example.gemgemgen.analysis.ui.AnalysisUiState
+import com.example.gemgemgen.analysis.ui.canResetSession
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -258,6 +259,47 @@ class AnalysisSessionPolicyTest {
         assertTrue(
             AnalysisSessionPolicy.canResetSession(
                 AnalysisUiState(status = AnalysisStatus.GENERATING)
+            )
+        )
+    }
+
+    @Test
+    fun canResetSession_withPureDomainParameters_evaluatesCorrectly() {
+        // 기본값만 있는 경우 리셋 불가
+        assertFalse(
+            AnalysisSessionPolicy.canResetSession(
+                sourcePrompt = "",
+                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
+                hasTargetSegment = false,
+                hasGeneratedCandidates = false,
+                hasSelectedDirections = false,
+                customHint = "",
+                txtCount = AnalysisTxtCountPolicy.DEFAULT_COUNT,
+                resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
+                hasSelectedCandidate = false,
+                hasAppliedCandidateToAutomation = false,
+                hasPendingOverwriteFile = false,
+                hasErrorOrMessage = false,
+                isBusy = false
+            )
+        )
+
+        // 원문이 있는 경우 리셋 가능
+        assertTrue(
+            AnalysisSessionPolicy.canResetSession(
+                sourcePrompt = "some prompt",
+                selectedCategory = DEFAULT_ANALYSIS_CATEGORY,
+                hasTargetSegment = false,
+                hasGeneratedCandidates = false,
+                hasSelectedDirections = false,
+                customHint = "",
+                txtCount = AnalysisTxtCountPolicy.DEFAULT_COUNT,
+                resultFileName = DEFAULT_ANALYSIS_RESULT_FILE_NAME,
+                hasSelectedCandidate = false,
+                hasAppliedCandidateToAutomation = false,
+                hasPendingOverwriteFile = false,
+                hasErrorOrMessage = false,
+                isBusy = false
             )
         )
     }

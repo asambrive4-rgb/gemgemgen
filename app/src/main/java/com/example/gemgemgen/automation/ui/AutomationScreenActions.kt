@@ -26,6 +26,7 @@ interface AutomationScreenActions {
     fun onAutomationModeSelected(mode: AutomationMode) {}
     fun pairRemoteDevice(pairingCode: String) {}
     fun disconnectRemoteDevice() {}
+    fun retryRemoteConnection() {}
 
     // 인스트럭션 설정
     fun insertTopInstruction() {}
@@ -63,8 +64,14 @@ interface AutomationScreenActions {
     // 상용구 (Prompt Snippet) 및 카테고리 관리
     fun showPromptSnippetDialog() {}
     fun dismissPromptSnippetDialog() {}
-    fun addPromptSnippet(shortcut: String, content: String, category: String = "") {}
-    fun updatePromptSnippet(id: String, shortcut: String, content: String, category: String = "") {}
+    fun addPromptSnippet(shortcut: String, additionalShortcuts: List<String> = emptyList(), content: String, category: String = "") {}
+    fun addPromptSnippet(shortcut: String, content: String, category: String = "") {
+        addPromptSnippet(shortcut, emptyList(), content, category)
+    }
+    fun updatePromptSnippet(id: String, shortcut: String, additionalShortcuts: List<String> = emptyList(), content: String, category: String = "") {}
+    fun updatePromptSnippet(id: String, shortcut: String, content: String, category: String = "") {
+        updatePromptSnippet(id, shortcut, emptyList(), content, category)
+    }
     fun deletePromptSnippet(id: String) {}
     fun batchReplacePromptSnippets(searchText: String, replacementText: String) {}
     fun addPromptSnippetCategory(category: String) {}

@@ -1,4 +1,4 @@
-// 역할: 토스 스타일(Clean & Borderless) 단계별 카드와 모델 선택 드롭다운(NeuDropdownMenu), 공통 인셋 베드(NeuInsetBed) 레이아웃으로 AI 프롬프트 분석·변주 설정(1줄 통합 헤더, 풀폭 원문·인라인 마스킹·2줄 그리드 카테고리, 방향·힌트, 추천 후보·TXT 결과 및 플로팅 액션 독)을 표시합니다.
+// 역할: 토스 스타일(Clean & Borderless) 단계별 카드와 모델 선택 드롭다운(NeuDropdownMenu), 표준 회색 알약 버튼(10dp 라운딩) 및 공통 인셋 베드(NeuInsetBed) 레이아웃으로 AI 프롬프트 분석·변주 설정(1줄 통합 헤더, 풀폭 원문·인라인 마스킹·2줄 그리드 카테고리, 방향·힌트, 추천 후보·TXT 결과 및 플로팅 액션 독)을 표시합니다.
 package com.example.gemgemgen.analysis.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -485,7 +485,7 @@ private fun CompactRolePillButton(
     Row(
         modifier = modifier
             .defaultMinSize(minHeight = 36.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(bgColor)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -536,7 +536,7 @@ private fun TossMiniBadgeButton(
     Box(
         modifier = modifier
             .defaultMinSize(minHeight = 36.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(bgColor)
             .clickable(onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
@@ -843,7 +843,7 @@ private fun TossDirectionChip(
     Box(
         modifier = modifier
             .defaultMinSize(minHeight = 32.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(bgColor)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),

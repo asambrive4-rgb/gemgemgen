@@ -1,11 +1,11 @@
 // 역할: Gemini 구글 계정 전환 접근성 노드 라벨, 사이드바 프로필 탐색 규칙 및 계정 식별자 매칭 규칙을 검증합니다.
 package com.example.gemgemgen
 
-import com.example.gemgemgen.automation.android.GeminiAccountMatcher
-import com.example.gemgemgen.automation.android.GeminiAccountNodeCandidate
 import com.example.gemgemgen.automation.android.GeminiAccountSwitchNodeLabels
 import com.example.gemgemgen.automation.android.GeminiSidebarProfileCandidate
 import com.example.gemgemgen.automation.android.GeminiSidebarProfileMatcher
+import com.example.gemgemgen.automation.domain.GeminiAccountMatcher
+import com.example.gemgemgen.automation.domain.GeminiAccountNodeCandidate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

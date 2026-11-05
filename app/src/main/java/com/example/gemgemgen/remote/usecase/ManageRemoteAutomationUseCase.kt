@@ -1,4 +1,4 @@
-// 역할: 원격 기기 페어링, 연결 해제, 자동화 요청 송신, 메모리 정리, Gemini 계정 전환 및 강제 중지를 조율합니다.
+// 역할: 원격 기기 페어링, 연결 해제, 연결 재시도, 자동화 요청 송신, 메모리 정리, Gemini 계정 전환 및 강제 중지를 조율합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -47,6 +47,10 @@ class ManageRemoteAutomationUseCase(
             return RemoteActionResult.Failure("원격 자동화를 중지한 뒤 연결을 끊어주세요.")
         }
         return gateway.disconnect()
+    }
+
+    suspend fun retryConnection(): RemoteActionResult {
+        return gateway.retryConnection()
     }
 
     suspend fun cleanMemory(): RemoteActionResult {

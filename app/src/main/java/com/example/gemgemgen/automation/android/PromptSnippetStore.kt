@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore와 JSON을 활용하여 프롬프트 상용구 목록과 카테고리 목록을 로컬에 영구 저장하고 Flow 및 동기 조회를 제공합니다.
+// 역할: Jetpack DataStore와 JSON을 활용하여 프롬프트 상용구(다중 단축어 포함) 목록과 카테고리 목록을 로컬에 영구 저장하고 Flow 및 동기 조회를 제공합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -133,9 +133,15 @@ class PromptSnippetStore(
                 val content = obj[KEY_CONTENT]?.jsonPrimitive?.content ?: return@mapNotNull null
                 val category = obj[KEY_CATEGORY]?.jsonPrimitive?.content?.trim().orEmpty()
                 val createdAt = obj[KEY_CREATED_AT]?.jsonPrimitive?.longOrNull ?: 0L
+                val additionalShortcuts = runCatching {
+                    obj[KEY_ADDITIONAL_SHORTCUTS]?.jsonArray?.mapNotNull { item ->
+                        item.jsonPrimitive.content.trim().takeIf { it.isNotEmpty() }
+                    }
+                }.getOrNull().orEmpty()
                 PromptSnippet(
                     id = id,
                     shortcut = shortcut,
+                    additionalShortcuts = additionalShortcuts,
                     content = content,
                     category = category,
                     createdAtMillis = createdAt
@@ -151,6 +157,17 @@ class PromptSnippetStore(
                     buildJsonObject {
                         put(KEY_ID, item.id)
                         put(KEY_SHORTCUT, item.shortcut)
+                        put(
+                            KEY_ADDITIONAL_SHORTCUTS,
+                            buildJsonArray {
+                                item.additionalShortcuts.forEach { alias ->
+                                    val trimmed = alias.trim()
+                                    if (trimmed.isNotEmpty()) {
+                                        add(JsonPrimitive(trimmed))
+                                    }
+                                }
+                            }
+                        )
                         put(KEY_CONTENT, item.content)
                         put(KEY_CATEGORY, item.category.trim())
                         put(KEY_CREATED_AT, item.createdAtMillis)
@@ -189,6 +206,7 @@ class PromptSnippetStore(
 
         private const val KEY_ID = "id"
         private const val KEY_SHORTCUT = "shortcut"
+        private const val KEY_ADDITIONAL_SHORTCUTS = "additional_shortcuts"
         private const val KEY_CONTENT = "content"
         private const val KEY_CATEGORY = "category"
         private const val KEY_CREATED_AT = "created_at"

@@ -20,6 +20,16 @@ class PromptWorkspace {
     val handoffEvents: SharedFlow<PromptHandoffEvent> = _handoffEvents.asSharedFlow()
 
     var segmentReplacer: ((expectedSegment: String, replacement: String, preferredStartIndex: Int) -> Int?)? = null
+    var currentPromptProvider: (() -> String)? = null
+
+    fun resolveCurrentPrompt(): String {
+        val dynamicPrompt = currentPromptProvider?.invoke()
+        if (!dynamicPrompt.isNullOrBlank()) {
+            _currentPrompt.value = dynamicPrompt
+            return dynamicPrompt
+        }
+        return _currentPrompt.value
+    }
 
     fun updateCurrentPrompt(prompt: String) {
         _currentPrompt.value = prompt

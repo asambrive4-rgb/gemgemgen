@@ -1,4 +1,4 @@
-// 역할: 에디터 헤더용 컴팩트 자동화 모드(일반/송신/수신) 3단 토글, 헤더 하단 원격 연결 서브 바, 수신 모드 하단 고정 상태 바 및 3D 조약돌 스타일 기기 연결 다이얼로그를 표시합니다.
+// 역할: 에디터 헤더용 컴팩트 자동화 모드(일반/송신/수신) 3단 토글, 헤더 하단 원격 연결 서브 바, 수신 모드 하단 고정 상태 바 및 토스 스타일 무테두리 클린 카드 기반의 기기 연결 다이얼로그를 표시합니다.
 package com.example.gemgemgen.remote.ui
 
 import androidx.compose.foundation.background
@@ -73,8 +73,7 @@ fun CompactAutomationModeToggle(
                 contentDescription = "자동화 동작 모드 선택: 현재 ${modeDisplayLabel(selectedMode)}"
             },
         shape = containerShape,
-        backgroundColor = AppTheme.colors.insetBed,
-        borderColor = AppTheme.colors.insetBorder
+        backgroundColor = AppTheme.colors.insetBed
     ) {
         Row(
             modifier = Modifier

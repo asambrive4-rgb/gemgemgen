@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore를 통해 자동화 설정(클립보드 복사, 사이드바 열림 모드, 인스트럭션, 변주 프롬프트, 자동 메모리 정리 및 누적 횟수)을 영구 저장하고 Flow로 제공합니다.
+// 역할: Jetpack DataStore를 통해 자동화 설정(클립보드 복사, 사이드바 열림 모드, 인스트럭션, 변주 프롬프트, 자동 메모리 정리 및 누적 횟수)을 영구 저장하고 AutomationSettingsRepository 인터페이스를 구현합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.SystemInstructionPrompt
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
+import com.example.gemgemgen.automation.usecase.AutomationSettingsRepository
 import com.example.gemgemgen.core.AppDefaults
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
@@ -34,10 +35,10 @@ private val Context.automationDataStore: DataStore<Preferences> by preferencesDa
  */
 class AutomationSettingsStore(
     private val dataStore: DataStore<Preferences>
-) {
+) : AutomationSettingsRepository {
     constructor(context: Context) : this(context.applicationContext.automationDataStore)
 
-    val copyPromptOnStart: Flow<Boolean> = dataStore.data
+    override val copyPromptOnStart: Flow<Boolean> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -49,13 +50,13 @@ class AutomationSettingsStore(
             preferences[KEY_COPY_PROMPT_ON_START] ?: DEFAULT_COPY_PROMPT_ON_START
         }
 
-    suspend fun setCopyPromptOnStart(enabled: Boolean) {
+    override suspend fun setCopyPromptOnStart(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_COPY_PROMPT_ON_START] = enabled
         }
     }
 
-    val geminiSidebarOpenMode: Flow<Boolean> = dataStore.data
+    override val geminiSidebarOpenMode: Flow<Boolean> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -67,13 +68,13 @@ class AutomationSettingsStore(
             preferences[KEY_GEMINI_SIDEBAR_OPEN_MODE] ?: DEFAULT_GEMINI_SIDEBAR_OPEN_MODE
         }
 
-    suspend fun setGeminiSidebarOpenMode(enabled: Boolean) {
+    override suspend fun setGeminiSidebarOpenMode(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_GEMINI_SIDEBAR_OPEN_MODE] = enabled
         }
     }
 
-    val autoMemoryCleanupEnabled: Flow<Boolean> = dataStore.data
+    override val autoMemoryCleanupEnabled: Flow<Boolean> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -85,13 +86,13 @@ class AutomationSettingsStore(
             preferences[KEY_AUTO_MEMORY_CLEANUP_ENABLED] ?: DEFAULT_AUTO_MEMORY_CLEANUP_ENABLED
         }
 
-    suspend fun setAutoMemoryCleanupEnabled(enabled: Boolean) {
+    override suspend fun setAutoMemoryCleanupEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[KEY_AUTO_MEMORY_CLEANUP_ENABLED] = enabled
         }
     }
 
-    val autoMemoryCleanupThreshold: Flow<Int> = dataStore.data
+    override val autoMemoryCleanupThreshold: Flow<Int> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -104,14 +105,14 @@ class AutomationSettingsStore(
                 .coerceIn(1, 999)
         }
 
-    suspend fun setAutoMemoryCleanupThreshold(threshold: Int) {
+    override suspend fun setAutoMemoryCleanupThreshold(threshold: Int) {
         val coerced = threshold.coerceIn(1, 999)
         dataStore.edit { preferences ->
             preferences[KEY_AUTO_MEMORY_CLEANUP_THRESHOLD] = coerced
         }
     }
 
-    val geminiGenerationCountSinceCleanup: Flow<Int> = dataStore.data
+    override val geminiGenerationCountSinceCleanup: Flow<Int> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -123,14 +124,14 @@ class AutomationSettingsStore(
             (preferences[KEY_GEMINI_GENERATION_COUNT_SINCE_CLEANUP] ?: 0).coerceAtLeast(0)
         }
 
-    suspend fun setGeminiGenerationCountSinceCleanup(count: Int) {
+    override suspend fun setGeminiGenerationCountSinceCleanup(count: Int) {
         val coerced = count.coerceAtLeast(0)
         dataStore.edit { preferences ->
             preferences[KEY_GEMINI_GENERATION_COUNT_SINCE_CLEANUP] = coerced
         }
     }
 
-    val promptInstructionConfig: Flow<PromptInstructionConfig> = dataStore.data
+    override val promptInstructionConfig: Flow<PromptInstructionConfig> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -147,7 +148,7 @@ class AutomationSettingsStore(
             )
         }
 
-    suspend fun setPromptInstructionConfig(config: PromptInstructionConfig) {
+    override suspend fun setPromptInstructionConfig(config: PromptInstructionConfig) {
         dataStore.edit { preferences ->
             preferences[KEY_TOP_INSTRUCTION] = config.topInstruction
             if (config.bottomInstruction != null) {
@@ -158,7 +159,7 @@ class AutomationSettingsStore(
         }
     }
 
-    val variationPromptConfig: Flow<VariationPromptConfig> = dataStore.data
+    override val variationPromptConfig: Flow<VariationPromptConfig> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -171,7 +172,7 @@ class AutomationSettingsStore(
             VariationPromptConfig(prompt = prompt)
         }
 
-    suspend fun setVariationPromptConfig(config: VariationPromptConfig) {
+    override suspend fun setVariationPromptConfig(config: VariationPromptConfig) {
         dataStore.edit { preferences ->
             preferences[KEY_VARIATION_PROMPT] = config.prompt
         }

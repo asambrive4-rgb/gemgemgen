@@ -1,4 +1,4 @@
-// 역할: 상용구 본문에서 특정 텍스트를 대소문자 구분 없이 검색하고 일치 결과를 확인한 뒤 안전하게 일괄 치환하는 3D 뉴모피즘 UI 화면을 제공합니다.
+// 역할: 상용구 본문에서 특정 텍스트를 대소문자 구분 없이 검색하고 일치 결과를 확인한 뒤 표준 회색 알약 버튼 기반으로 안전하게 일괄 치환하는 토스 스타일 UI 화면을 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -25,13 +25,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FindReplace
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +54,7 @@ import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
+import com.example.gemgemgen.ui.theme.NeuPillButton
 import com.example.gemgemgen.ui.theme.appTextFieldColors
 
 @Composable
@@ -314,7 +313,7 @@ fun PromptSnippetFindReplaceView(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TextButton(
+                        NeuPillButton(
                             onClick = { isConfirmingReplace = false },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                             modifier = Modifier.height(30.dp)
@@ -322,7 +321,7 @@ fun PromptSnippetFindReplaceView(
                             Text("취소", fontSize = 12.sp, color = AppTheme.colors.textSecondary)
                         }
 
-                        TextButton(
+                        NeuPillButton(
                             onClick = {
                                 val query = searchInput
                                 val repl = replacementInput
@@ -334,12 +333,8 @@ fun PromptSnippetFindReplaceView(
                                     "${promptCount}개 상용구를 성공적으로 변경했습니다."
                                 }
                             },
+                            contentColor = if (isDeleteMode) MaterialTheme.colorScheme.error else AppTheme.colors.primary,
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                            colors = if (isDeleteMode) {
-                                ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                            } else {
-                                ButtonDefaults.textButtonColors(contentColor = AppTheme.colors.primary)
-                            },
                             modifier = Modifier.height(30.dp)
                         ) {
                             Text(

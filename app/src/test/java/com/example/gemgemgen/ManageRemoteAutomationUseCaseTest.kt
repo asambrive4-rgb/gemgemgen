@@ -164,6 +164,17 @@ class ManageRemoteAutomationUseCaseTest {
         assertEquals(true, gateway.disconnectCalled)
     }
 
+    @Test
+    fun retryConnection_delegatesToGateway() = runBlocking {
+        val gateway = FakeRemoteAutomationGateway()
+        val useCase = ManageRemoteAutomationUseCase(gateway)
+
+        val result = useCase.retryConnection()
+
+        assertEquals(RemoteActionResult.Success, result)
+        assertEquals(true, gateway.retryConnectionCalled)
+    }
+
     private class FakeRemoteAutomationGateway(
         initialStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
         private val holdSend: Boolean = false
@@ -174,6 +185,7 @@ class ManageRemoteAutomationUseCaseTest {
         var sentRequest: RemoteAutomationRequest? = null
         var forceStoppedRequestId: String? = null
         var disconnectCalled = false
+        var retryConnectionCalled = false
 
         override fun selectMode(mode: AutomationMode) {
             status.value = status.value.copy(mode = mode)
@@ -186,6 +198,11 @@ class ManageRemoteAutomationUseCaseTest {
 
         override suspend fun disconnect(): RemoteActionResult {
             disconnectCalled = true
+            return RemoteActionResult.Success
+        }
+
+        override suspend fun retryConnection(): RemoteActionResult {
+            retryConnectionCalled = true
             return RemoteActionResult.Success
         }
 

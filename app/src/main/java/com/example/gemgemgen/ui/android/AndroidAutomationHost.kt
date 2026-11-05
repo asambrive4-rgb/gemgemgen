@@ -1,4 +1,4 @@
-﻿// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함) 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
+// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함) 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
@@ -34,8 +34,6 @@ import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.ui.AutomationApp
 import com.example.gemgemgen.ui.MainTab
-import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
-import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAccessPolicy
 import com.example.gemgemgen.wildcard.domain.WildcardFolderAction
 import com.example.gemgemgen.wildcard.domain.WildcardTextFile
@@ -52,8 +50,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val windowInfo = LocalWindowInfo.current
     val platformNavigator = remember(context) { AndroidHostPlatformNavigator(context) }
-    val wildcardFolderRepository = remember(context) { AndroidWildcardFolderRepository(context.applicationContext) }
-    val wildcardDirectStorage = remember { AndroidWildcardDirectStorage() }
+    val wildcardFolderRepository = container.wildcardFolderRepository
+    val wildcardDirectStorage = container.wildcardDirectStorage
     val clearInputFocus = remember(focusManager) {
         { focusManager.clearFocus(force = true) }
     }
@@ -158,6 +156,7 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
 
     fun selectMainTab(tab: MainTab) {
         if (tab != MainTab.AUTOMATION) {
+            automationViewModel.promptEditor.syncPromptTemplateFromTextField()
             automationViewModel.promptEditor.cancelParagraphSelection()
         }
         if (selectedTab != tab) {

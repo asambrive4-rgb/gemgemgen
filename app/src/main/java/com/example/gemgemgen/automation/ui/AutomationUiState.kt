@@ -34,6 +34,7 @@ data class AutomationUiState(
     val showSettings: Boolean = false,
     val showAccessibilityPrompt: Boolean = false,
     val isDisconnectingRemote: Boolean = false,
+    val isRetryingRemote: Boolean = false,
     val remoteDisconnectMessage: String = "",
     val maintenanceState: MaintenanceState = MaintenanceState(),
     /** 프롬프트 실험(연금술) 모드 활성화 여부 */

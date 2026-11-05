@@ -1,10 +1,12 @@
-// 역할: Gemini 앱에서 사이드바 또는 상단 메뉴를 통해 Google 프로필(OneGoogle Bento)을 열어 대상 구글 계정으로 자동 전환합니다.
+// 역할: Gemini 앱에서 사이드바 또는 상단 메뉴를 통해 Google 프로필(OneGoogle Bento)을 열어 대상 구글 계정으로 지연 없이 빠르게 자동 전환합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.gemgemgen.automation.domain.AutomationRetryWaitPolicy
+import com.example.gemgemgen.automation.domain.GeminiAccountMatcher
+import com.example.gemgemgen.automation.domain.GeminiAccountNodeCandidate
 import com.example.gemgemgen.automation.usecase.SwitchGeminiAccountResult
 import com.example.gemgemgen.core.AppDefaults
 
@@ -86,89 +88,6 @@ internal data class GeminiAccountSwitchNodeLabels(
         "com.google.android.googlequicksearchbox:id/og_secondary_account_information"
     )
 )
-
-internal data class GeminiAccountNodeCandidate(
-    val primaryText: String,
-    val secondaryText: String,
-    val contentDescription: String = ""
-)
-
-internal object GeminiAccountMatcher {
-    const val EXACT_MATCH_THRESHOLD = 900
-    private val EMAIL_REGEX = Regex("[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}")
-
-    fun extractEmail(candidate: GeminiAccountNodeCandidate): String {
-        val secondary = candidate.secondaryText.trim()
-        if (secondary.contains("@")) return secondary
-        EMAIL_REGEX.find(secondary)?.value?.let { return it }
-        EMAIL_REGEX.find(candidate.contentDescription)?.value?.let { return it }
-        EMAIL_REGEX.find(candidate.primaryText)?.value?.let { return it }
-        return secondary
-    }
-
-    /**
-     * 후보 계정이 사용자가 지정한 [targetEmail] 또는 [targetAlias]와 얼마나 일치하는지 점수를 계산합니다.
-     * - 900점 이상: 이메일 전체 일치, 이메일 로컬 파트(@ 앞부분) 정확 일치, 또는 이메일 미지정 시 표시 이름 정확 일치
-     * - 1~899점: 이메일 미지정 시 별칭 부분 일치 (유사 계정 중 가장 짧은 이메일 로컬 파트를 우선 선택)
-     * - 0점 이하: 불일치
-     */
-    fun scoreCandidate(
-        candidate: GeminiAccountNodeCandidate,
-        targetEmail: String,
-        targetAlias: String
-    ): Int {
-        val rawEmail = extractEmail(candidate).trim().lowercase()
-        val localPart = rawEmail.substringBefore("@")
-        val displayName = candidate.primaryText.trim().lowercase()
-        val description = candidate.contentDescription.trim().lowercase()
-
-        val normTargetEmail = targetEmail.trim().lowercase()
-        val normTargetLocal = normTargetEmail.substringBefore("@")
-        val normTargetAlias = targetAlias.trim().lowercase()
-
-        if (normTargetEmail.isNotBlank()) {
-            if (rawEmail.isNotBlank() && rawEmail == normTargetEmail) {
-                return 1000
-            }
-            if (normTargetLocal.isNotBlank() && localPart.isNotBlank() && localPart == normTargetLocal) {
-                return 950
-            }
-            if (!normTargetEmail.contains("@") && displayName.isNotBlank() && displayName == normTargetEmail) {
-                return 900
-            }
-            return 0
-        }
-
-        if (normTargetAlias.isBlank()) return 0
-
-        if (rawEmail.isNotBlank() && rawEmail == normTargetAlias) {
-            return 1000
-        }
-        val aliasLocalQuery = normTargetAlias.substringBefore("@")
-        if (aliasLocalQuery.isNotBlank() && localPart.isNotBlank() && localPart == aliasLocalQuery) {
-            return 950
-        }
-        if (displayName.isNotBlank() && displayName == normTargetAlias) {
-            return 900
-        }
-        if (aliasLocalQuery.isNotBlank() && localPart.isNotBlank() && localPart.contains(aliasLocalQuery)) {
-            return (700 - localPart.length).coerceAtLeast(1)
-        }
-        if (displayName.isNotBlank() && displayName.contains(normTargetAlias)) {
-            return (500 - displayName.length).coerceAtLeast(1)
-        }
-        if (description.isNotBlank() && description.contains(normTargetAlias)) {
-            return 100
-        }
-        return 0
-    }
-
-    fun isExactMatch(
-        candidate: GeminiAccountNodeCandidate,
-        targetEmail: String,
-        targetAlias: String
-    ): Boolean = scoreCandidate(candidate, targetEmail, targetAlias) >= EXACT_MATCH_THRESHOLD
-}
 
 internal data class GeminiSidebarProfileCandidate(
     val className: String = "",
@@ -403,10 +322,21 @@ internal class GeminiAccountSwitchAutomation(
                     val now = SystemClock.uptimeMillis()
                     if (now - lastProfileTapAtMillis >= PROFILE_TAP_COOLDOWN_MS) {
                         lastProfileTapAtMillis = now
-                        AccessibilityNodeTraversal.clickNodeOrParent(
+                        val clicked = AccessibilityNodeTraversal.clickNodeOrParent(
                             explicitProfileNode,
                             maxDepth = MAX_ANCESTOR_SEARCH_DEPTH
                         )
+                        if (clicked) {
+                            handler.postDelayed(
+                                {
+                                    if (active && phase == Phase.OPEN_PROFILE_MENU) {
+                                        checkPhase()
+                                    }
+                                },
+                                POST_TAP_SETTLE_MS
+                            )
+                            return
+                        }
                     }
                     retryOrFail("Google 프로필 메뉴를 열지 못했습니다.") { checkPhase() }
                     return
@@ -882,13 +812,6 @@ internal class GeminiAccountSwitchAutomation(
         return tapX to tapY
     }
 
-    private fun findCloseSidebarNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        return nodes.firstOrNull { node ->
-            val desc = node.contentDescription?.toString()?.trim().orEmpty()
-            labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }
-        }
-    }
-
     private fun extractCurrentHeaderCandidate(nodes: List<AccessibilityNodeInfo>): GeminiAccountNodeCandidate? {
         val primaryNode = nodes.firstOrNull {
             it.viewIdResourceName != null && labels.compactHeaderPrimaryTextIds.contains(it.viewIdResourceName)
@@ -1020,16 +943,16 @@ internal class GeminiAccountSwitchAutomation(
         const val MIN_PROFILE_BUTTON_WIDTH_PX = 40
         const val MIN_VISIBLE_ROW_HEIGHT_PX = 24
         const val SIDEBAR_TAP_COOLDOWN_MS = 600L
-        const val POST_SIDEBAR_OPEN_SETTLE_MS = 450L
+        const val POST_SIDEBAR_OPEN_SETTLE_MS = 200L
         const val PROFILE_TAP_COOLDOWN_MS = 600L
         const val EXPAND_TAP_COOLDOWN_MS = 650L
-        const val POST_TAP_SETTLE_MS = 500L
-        const val POST_EXPAND_SETTLE_MS = 480L
-        const val POST_SCROLL_SETTLE_MS = 400L
-        const val POST_CLOSE_SETTLE_MS = 280L
-        const val POST_RETURN_SETTLE_MS = 320L
-        const val MIN_SWITCH_SETTLE_MS = 700L
+        const val POST_TAP_SETTLE_MS = 200L
+        const val POST_EXPAND_SETTLE_MS = 200L
+        const val POST_SCROLL_SETTLE_MS = 200L
+        const val POST_CLOSE_SETTLE_MS = 150L
+        const val POST_RETURN_SETTLE_MS = 150L
+        const val MIN_SWITCH_SETTLE_MS = 300L
         const val MAX_SWITCH_SETTLE_MS = 2200L
-        const val SWITCH_POLL_INTERVAL_MS = 250L
+        const val SWITCH_POLL_INTERVAL_MS = 120L
     }
 }

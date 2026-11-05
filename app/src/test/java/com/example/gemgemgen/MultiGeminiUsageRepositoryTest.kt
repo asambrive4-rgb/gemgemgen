@@ -1,4 +1,4 @@
-﻿// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 수동 소진/복구 및 당분간 사용 금지, 대표 자동 위임, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션 격리를 검증합니다.
+// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 수동 소진/복구 및 당분간 사용 금지, 대표 자동 위임, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션/이메일 오염 방지 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -474,7 +474,8 @@ class MultiGeminiUsageRepositoryTest {
             GeminiAccountProfile(id = "main_1", alias = "메인1", sortOrder = 0, group = GeminiAccountGroup.MAIN),
             GeminiAccountProfile(id = "main_2", alias = "메인2(최신)", sortOrder = 1, group = GeminiAccountGroup.MAIN),
             GeminiAccountProfile(id = "sub_1", alias = "서브1", sortOrder = 2, group = GeminiAccountGroup.SUB),
-            GeminiAccountProfile(id = "sub_2", alias = "서브2", sortOrder = 3, group = GeminiAccountGroup.SUB)
+            GeminiAccountProfile(id = "sub_2", alias = "서브2", sortOrder = 3, group = GeminiAccountGroup.SUB),
+            GeminiAccountProfile(id = "sub_3", alias = "서브3(금지)", sortOrder = 4, group = GeminiAccountGroup.SUB, isSuspended = true)
         )
         // main_2는 5초 전에 이미 새로고침됨 (45초 이내이므로 스킵 대상)
         val cachedMap = mapOf(
@@ -667,6 +668,116 @@ class MultiGeminiUsageRepositoryTest {
         assertNotNull(recovered)
         assertFalse(recovered!!.isSuspended)
         assertFalse(repository.state.value.accounts.first { it.profile.id == "acc_1" }.isQuotaExhausted())
+    }
+
+    @Test
+    fun refreshAccount_whenDetectedEmailConflictsWithConfiguredEmail_preservesEmailAndMarksAuthRequired() = runBlocking {
+        val clearedProfiles = mutableListOf<String>()
+        val fakeRemote = object : MultiProfileGeminiUsageRemoteDataSource {
+            override suspend fun fetchUsage(profile: GeminiAccountProfile): GeminiUsageFetchResult {
+                return GeminiUsageFetchResult(
+                    usageState = GeminiUsageState.Success(
+                        fiveHourPercent = 94,
+                        fiveHourResetText = "2시간 후",
+                        weeklyPercent = 10,
+                        weeklyResetText = "1일 후",
+                        updatedAt = 1000L
+                    ),
+                    // 계정 B(jjjoa31) 조회 중 계정 A(asambrive50) 세션이 잘못 읽힌 상황 재현
+                    detectedEmail = "asambrive50@gmail.com"
+                )
+            }
+
+            override suspend fun clearAccountSession(profile: GeminiAccountProfile) {
+                clearedProfiles.add(profile.webViewProfileName)
+            }
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource()
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        repository.addAccount(
+            alias = "asam50",
+            email = "asambrive50@gmail.com",
+            accountId = "acc_a",
+            autoRefresh = false
+        )
+        repository.addAccount(
+            alias = "jjjoa31",
+            email = "jjjoajjjoajjjoa31@gmail.com",
+            accountId = "acc_b",
+            autoRefresh = false
+        )
+
+        val stateAfterRefresh = repository.refreshAccount("acc_b")
+        assertEquals(GeminiUsageState.AuthRequired, stateAfterRefresh)
+
+        val entryB = repository.state.value.accounts.first { it.profile.id == "acc_b" }
+        // 계정 B의 이메일이 계정 A의 이메일로 덮어써지지 않고 원래대로 유지되어야 함
+        assertEquals("jjjoajjjoajjjoa31@gmail.com", entryB.profile.email)
+        assertEquals(GeminiUsageState.AuthRequired, entryB.usageState)
+        assertNull(entryB.cachedSuccess)
+        assertTrue(clearedProfiles.contains(entryB.profile.webViewProfileName))
+    }
+
+    @Test
+    fun refreshAccount_whenEmailBlank_rejectsDuplicateOrAliasMismatchedEmailAndAcceptsMatchingEmail() = runBlocking {
+        var nextDetectedEmail = "asambrive50@gmail.com"
+        val fakeRemote = MultiProfileGeminiUsageRemoteDataSource {
+            GeminiUsageFetchResult(
+                usageState = GeminiUsageState.Success(
+                    fiveHourPercent = 20,
+                    fiveHourResetText = "1시간 후",
+                    weeklyPercent = 30,
+                    weeklyResetText = "3일 후",
+                    updatedAt = 2000L
+                ),
+                detectedEmail = nextDetectedEmail
+            )
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource()
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        repository.addAccount(
+            alias = "asam50",
+            email = "asambrive50@gmail.com",
+            accountId = "acc_a",
+            autoRefresh = false
+        )
+        repository.addAccount(
+            alias = "jjjoa31",
+            email = "",
+            accountId = "acc_b",
+            autoRefresh = false
+        )
+
+        // 1) 다른 계정(acc_a)이 이미 쓰거나 별칭(jjjoa31)과 맞지 않는 이메일은 채우지 않음
+        repository.refreshAccount("acc_b")
+        assertEquals("", repository.state.value.accounts.first { it.profile.id == "acc_b" }.profile.email)
+
+        // 2) 다른 계정이 쓰지 않더라도 별칭(jjjoa31)과 숫자/접두사가 충돌하는 이메일(jjjoajjjoajjjoa32@gmail.com)은 채우지 않음
+        nextDetectedEmail = "jjjoajjjoajjjoa32@gmail.com"
+        repository.refreshAccount("acc_b")
+        assertEquals("", repository.state.value.accounts.first { it.profile.id == "acc_b" }.profile.email)
+
+        // 3) 별칭(jjjoa31)과 부합하는 고유 이메일은 안전하게 자동 보충함
+        nextDetectedEmail = "jjjoajjjoajjjoa31@gmail.com"
+        repository.refreshAccount("acc_b")
+        assertEquals(
+            "jjjoajjjoajjjoa31@gmail.com",
+            repository.state.value.accounts.first { it.profile.id == "acc_b" }.profile.email
+        )
     }
 
     private class InMemoryMultiUsageLocalDataSource(

@@ -1,4 +1,4 @@
-// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(토스 침전 바닥형 부유 카드, 대표 계정 6dp 풀높이 플러시 액센트 바, 테마별 원형 체크마크 인디케이터, 8dp 게이지 바, 우측 상단 계정 전환 버튼 유지, 소진 Dim UI)를 제공합니다.
+// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(토스 침전 바닥형 부유 카드, 대표 계정 6dp 풀높이 플러시 액센트 바, 테마별 원형 체크마크 인디케이터, 8dp 게이지 바, 우측 상단 계정 전환 버튼 유지, 표준 회색 알약 버튼 기반 확인 UI, 소진 Dim UI)를 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -38,14 +38,12 @@ import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +66,7 @@ import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.ui.theme.NeuDropdownMenu
 import com.example.gemgemgen.ui.theme.NeuDropdownMenuDivider
 import com.example.gemgemgen.ui.theme.NeuInsetBed
+import com.example.gemgemgen.ui.theme.NeuPillButton
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
 import com.example.gemgemgen.usage.domain.GeminiQuotaExhaustionReason
@@ -524,22 +523,20 @@ fun GeminiAccountRowCard(
                             modifier = Modifier.weight(1f)
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(
+                            NeuPillButton(
                                 onClick = { isConfirmingDelete = false },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                 modifier = Modifier.height(30.dp)
                             ) {
                                 Text("취소", fontSize = 11.sp, color = AppTheme.colors.textSecondary)
                             }
-                            TextButton(
+                            NeuPillButton(
                                 onClick = {
                                     isConfirmingDelete = false
                                     onDeleteAccount()
                                 },
+                                contentColor = MaterialTheme.colorScheme.error,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error
-                                ),
                                 modifier = Modifier.height(30.dp)
                             ) {
                                 Text("계정 삭제", fontSize = 11.sp, fontWeight = FontWeight.Bold)

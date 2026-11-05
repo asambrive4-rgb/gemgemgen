@@ -1,4 +1,4 @@
-﻿// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량, 프롬프트 실험 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
+// 역할: 앱 전반에서 필요한 저장소(다중 계정 제미나이 사용량, 프롬프트 실험 저장소 포함), 유스케이스, 게이트웨이 인스턴스를 주입하는 의존성 컨테이너입니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.Context
@@ -47,6 +47,7 @@ import com.example.gemgemgen.remote.usecase.ManageRemoteAutomationUseCase
 import com.example.gemgemgen.usage.android.DataStoreMultiGeminiUsageDataSource
 import com.example.gemgemgen.usage.android.MultiProfileGeminiUsageFetcher
 import com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository
+import com.example.gemgemgen.wildcard.android.AndroidWildcardDirectStorage
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFolderRepository
 import com.example.gemgemgen.wildcard.ui.WildcardViewModel
@@ -103,7 +104,8 @@ class AndroidAppContainer(context: Context) {
     private val environmentGateway by lazy { AndroidEnvironmentGateway(appContext) }
     private val wildcardFileRepository by lazy { AndroidWildcardFileRepository(appContext) }
     private val wildcardSetRepository: WildcardSetRepository by lazy { WildcardSetRepository { wildcardFileRepository.loadWildcardSets() } }
-    private val wildcardFolderRepository by lazy { AndroidWildcardFolderRepository(appContext) }
+    internal val wildcardFolderRepository by lazy { AndroidWildcardFolderRepository(appContext) }
+    internal val wildcardDirectStorage by lazy { AndroidWildcardDirectStorage() }
 
     val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
     val promptWorkspace = PromptWorkspace()
@@ -176,7 +178,8 @@ class AndroidAppContainer(context: Context) {
                 repository = wildcardFileRepository
             ),
             analysisKeyManager = analysisKeyManager,
-            saveWildcardFolder = wildcardFolderRepository
+            saveWildcardFolder = wildcardFolderRepository,
+            linkedFilesRepository = wildcardFolderRepository
         )
     }
 

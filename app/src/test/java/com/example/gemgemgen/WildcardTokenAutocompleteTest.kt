@@ -424,4 +424,52 @@ class WildcardTokenAutocompleteTest {
         assertEquals("1girl, 포니테일", result?.newText)
         assertEquals(11, result?.cursorAfter)
     }
+
+    @Test
+    fun suggestAndApplyToken_withAdditionalShortcuts_matchesBothMainAndAliases() {
+        val snippet = com.example.gemgemgen.automation.domain.PromptSnippet(
+            shortcut = "ABC",
+            additionalShortcuts = listOf("가나다"),
+            content = "8k masterpiece"
+        )
+        val candidates = WildcardTokenAutocomplete.candidatesFromSnippets(listOf(snippet))
+
+        // 1. 'A'를 입력했을 때 메인 'ABC' 칩 노출 및 치환
+        val suggestByA = WildcardTokenAutocomplete.suggestCandidates(
+            text = "A",
+            cursor = 1,
+            candidates = candidates
+        )
+        assertEquals(1, suggestByA.size)
+        assertEquals("ABC", suggestByA[0].displayText)
+
+        val appliedA = WildcardTokenAutocomplete.applyToken(
+            text = "A",
+            selectionStart = 1,
+            selectionEnd = 1,
+            candidate = suggestByA[0],
+            candidates = candidates
+        )
+        org.junit.Assert.assertNotNull(appliedA)
+        assertEquals("8k masterpiece", appliedA?.newText)
+
+        // 2. '가'를 입력했을 때도 메인 'ABC' 칩 노출 및 치환 (사용자 요구 동작)
+        val suggestByGa = WildcardTokenAutocomplete.suggestCandidates(
+            text = "가",
+            cursor = 1,
+            candidates = candidates
+        )
+        assertEquals(1, suggestByGa.size)
+        assertEquals("ABC", suggestByGa[0].displayText)
+
+        val appliedGa = WildcardTokenAutocomplete.applyToken(
+            text = "가",
+            selectionStart = 1,
+            selectionEnd = 1,
+            candidate = suggestByGa[0],
+            candidates = candidates
+        )
+        org.junit.Assert.assertNotNull(appliedGa)
+        assertEquals("8k masterpiece", appliedGa?.newText)
+    }
 }

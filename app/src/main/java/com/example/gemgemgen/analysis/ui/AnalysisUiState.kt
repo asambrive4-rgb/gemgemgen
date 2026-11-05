@@ -161,3 +161,26 @@ object AnalysisUiText {
     }
 }
 
+fun AnalysisSessionPolicy.canResetSession(
+    state: AnalysisUiState,
+    sourcePrompt: String = state.sourcePrompt
+): Boolean {
+    val hasErrorOrMessage = state.error.isNotEmpty() || state.message.isNotEmpty() || state.warning.isNotEmpty()
+    return canResetSession(
+        sourcePrompt = sourcePrompt,
+        selectedCategory = state.selectedCategory,
+        hasTargetSegment = state.targetSegment != null,
+        hasGeneratedCandidates = state.generatedCandidates.isNotEmpty(),
+        hasSelectedDirections = state.selectedDirectionIds.isNotEmpty(),
+        customHint = state.customHint,
+        txtCount = state.txtCount,
+        resultFileName = state.resultFileName,
+        hasSelectedCandidate = state.selectedCandidateIndex != null,
+        hasAppliedCandidateToAutomation = state.hasAppliedCandidateToAutomation,
+        hasPendingOverwriteFile = state.pendingOverwriteFileName != null,
+        hasErrorOrMessage = hasErrorOrMessage,
+        isBusy = state.isBusy
+    )
+}
+
+

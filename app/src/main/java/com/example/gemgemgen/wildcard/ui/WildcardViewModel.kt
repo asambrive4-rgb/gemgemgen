@@ -31,7 +31,7 @@ class WildcardViewModel(
     analysisKeyManager: ManageGeminiApiKeysUseCase,
     coroutineScope: CoroutineScope? = null,
     private val saveWildcardFolder: WildcardFolderRepository,
-    private val linkedFilesRepository: WildcardLinkedFilesRepository? = saveWildcardFolder as? WildcardLinkedFilesRepository
+    private val linkedFilesRepository: WildcardLinkedFilesRepository? = null
 ) : ViewModel(), WildcardScreenActions {
     private val scope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(WildcardUiState())

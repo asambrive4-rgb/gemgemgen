@@ -128,12 +128,19 @@ class AnalysisViewModel(
      * 비어 있으면 원문은 유지하고 안내만 표시한다.
      */
     override fun importSourcePromptFromAutomation() {
-        val text = promptWorkspace?.currentPrompt?.value.orEmpty()
+        val text = promptWorkspace?.resolveCurrentPrompt() ?: promptWorkspace?.currentPrompt?.value.orEmpty()
         if (text.isBlank()) {
             showError("자동화에 입력된 텍스트가 없습니다.")
             return
         }
         applySourcePromptEdit(value = text, forceStateSync = true)
+        _uiState.update {
+            it.copy(
+                message = "자동화 프롬프트를 가져왔습니다.",
+                error = "",
+                status = if (it.status == AnalysisStatus.ERROR) AnalysisStatus.IDLE else it.status
+            )
+        }
     }
 
     private fun applySourcePromptEdit(

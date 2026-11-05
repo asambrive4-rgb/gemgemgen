@@ -20,6 +20,7 @@ import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.domain.isTerminal
 import com.example.gemgemgen.automation.usecase.AppMaintenanceUseCase
 import com.example.gemgemgen.automation.usecase.AutomationRunRequest
+import com.example.gemgemgen.automation.usecase.AutomationSettingsRepository
 import com.example.gemgemgen.automation.usecase.AutomationStartDecision
 import com.example.gemgemgen.automation.usecase.CoordinateAutomationExecutionUseCase
 import com.example.gemgemgen.automation.usecase.ExecuteAutomationLoopUseCase
@@ -88,7 +89,7 @@ class AutomationViewModel(
     private val promptSnippetRepository: PromptSnippetRepository? = null,
     private val promptExperimentRepository: PromptExperimentRepository? = null,
     private val runVariationPrompt: RunVariationPromptUseCase? = null,
-    private val automationSettingsStore: com.example.gemgemgen.automation.android.AutomationSettingsStore? = null,
+    private val automationSettingsStore: AutomationSettingsRepository? = null,
     private val multiGeminiUsageRepository: MultiGeminiUsageRepository? = null,
     private val wildcardLinkedFilesRepository: WildcardLinkedFilesRepository? = null,
     coroutineScope: CoroutineScope? = null
@@ -122,7 +123,6 @@ class AutomationViewModel(
         _automationBarUiState.asStateFlow()
 
     init {
-        refreshAutocompleteCandidates()
         wildcardLinkedFilesRepository?.let { repo ->
             scope.launch {
                 repo.observeLinkedFileNames().collect {
@@ -203,6 +203,7 @@ class AutomationViewModel(
         loadInitialState()
         promptWorkspace?.let { workspace ->
             workspace.segmentReplacer = promptEditor::replacePromptTemplateSegment
+            workspace.currentPromptProvider = promptEditor::currentPromptTemplateText
             scope.launch {
                 workspace.handoffEvents.collect { event ->
                     when (event) {
@@ -600,15 +601,26 @@ class AutomationViewModel(
         _uiState.update { it.copy(showPromptSnippetDialog = false) }
     }
 
-    override fun addPromptSnippet(shortcut: String, content: String, category: String) {
+    override fun addPromptSnippet(
+        shortcut: String,
+        additionalShortcuts: List<String>,
+        content: String,
+        category: String
+    ) {
         scope.launch {
             withContext(dispatchers.io) {
                 val trimmedCategory = category.trim()
+                val cleanedShortcut = shortcut.trim()
+                val cleanedAdditional = additionalShortcuts
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.equals(cleanedShortcut, ignoreCase = true) }
+                    .distinctBy { it.lowercase() }
                 val current = promptSnippetRepository?.load().orEmpty().toMutableList()
-                current.removeAll { it.shortcut.equals(shortcut.trim(), ignoreCase = true) }
+                current.removeAll { it.shortcut.equals(cleanedShortcut, ignoreCase = true) }
                 current.add(
                     PromptSnippet(
-                        shortcut = shortcut.trim(),
+                        shortcut = cleanedShortcut,
+                        additionalShortcuts = cleanedAdditional,
                         content = content.trim(),
                         category = trimmedCategory
                     )
@@ -637,15 +649,27 @@ class AutomationViewModel(
         }
     }
 
-    override fun updatePromptSnippet(id: String, shortcut: String, content: String, category: String) {
+    override fun updatePromptSnippet(
+        id: String,
+        shortcut: String,
+        additionalShortcuts: List<String>,
+        content: String,
+        category: String
+    ) {
         scope.launch {
             withContext(dispatchers.io) {
                 val trimmedCategory = category.trim()
+                val cleanedShortcut = shortcut.trim()
+                val cleanedAdditional = additionalShortcuts
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.equals(cleanedShortcut, ignoreCase = true) }
+                    .distinctBy { it.lowercase() }
                 val current = promptSnippetRepository?.load().orEmpty().toMutableList()
                 val index = current.indexOfFirst { it.id == id }
                 if (index != -1) {
                     current[index] = current[index].copy(
-                        shortcut = shortcut.trim(),
+                        shortcut = cleanedShortcut,
+                        additionalShortcuts = cleanedAdditional,
                         content = content.trim(),
                         category = trimmedCategory
                     )
@@ -1371,6 +1395,19 @@ class AutomationViewModel(
         }
     }
 
+    override fun retryRemoteConnection() {
+        if (_uiState.value.isRetryingRemote) return
+        scope.launch {
+            _uiState.update {
+                it.copy(isRetryingRemote = true, remoteDisconnectMessage = "")
+            }
+            manageRemoteAutomation.retryConnection()
+            _uiState.update {
+                it.copy(isRetryingRemote = false)
+            }
+        }
+    }
+
     private fun loadInitialState() {
         scope.launch {
             val (initialState, report, candidatesAndSnippets) = withContext(dispatchers.io) {
@@ -1584,5 +1621,6 @@ class AutomationViewModel(
     override fun onCleared() {
         super.onCleared()
         promptWorkspace?.segmentReplacer = null
+        promptWorkspace?.currentPromptProvider = null
     }
 }

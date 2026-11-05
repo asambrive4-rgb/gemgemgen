@@ -332,6 +332,7 @@ class PromptEditorCoordinator(
     }
 
     override fun cancelParagraphSelection() {
+        syncEditorTextFromCurrent()
         publishEditorSession(promptEditorSession.cancelSelection())
     }
 

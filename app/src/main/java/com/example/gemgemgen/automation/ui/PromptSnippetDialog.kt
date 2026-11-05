@@ -1,4 +1,4 @@
-// 역할: 토스 침전 바닥형 3단계 표면 위계(NeuInsetBed + NeuCard)와 상단 툴바 액션 기반 단일 모달 호스트(Single Dialog Host)로 상용구 목록 조회·카테고리 필터링, 상용구 추가/수정, 독립된 카테고리 관리(추가·이름 변경·순서 변경·안전 삭제), 본문 아코디언 토글 및 찾아 바꾸기 화면 전환을 제공하는 다이얼로그입니다.
+// 역할: 토스 침전 바닥형 표면 위계와 상단 툴바 액션 기반 단일 모달 호스트(Single Dialog Host)로 상용구(다중 단축어 포함) 목록 조회·필터링, 아코디언 토글 및 등록 폼·카테고리 관리·찾아 바꾸기 서브 스테이지 전환을 제공하는 다이얼로그입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -11,7 +11,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,46 +33,31 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.input.InputTransformation
-import androidx.compose.foundation.text.input.TextFieldLineLimits
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Input
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -81,19 +65,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
-import com.example.gemgemgen.automation.domain.PromptExperimentPolicy
 import com.example.gemgemgen.automation.domain.PromptSnippet
 import com.example.gemgemgen.core.ClipboardGateway
 import com.example.gemgemgen.core.android.rememberClipboardGateway
-import com.example.gemgemgen.ui.rememberSyncedTextFieldState
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuCard
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.NeuModalDialogFrame
+import com.example.gemgemgen.ui.theme.NeuPillButton
 import com.example.gemgemgen.ui.theme.NeuPillChip
-import com.example.gemgemgen.ui.theme.appTextFieldColors
 import kotlinx.coroutines.delay
 
 /**
@@ -124,8 +105,8 @@ fun PromptSnippetDialog(
     categories: List<String> = emptyList(),
     currentPromptText: String = "",
     isSelectionPrompt: Boolean = false,
-    onAddSnippet: (shortcut: String, content: String, category: String) -> Unit,
-    onUpdateSnippet: (id: String, shortcut: String, content: String, category: String) -> Unit = { _, _, _, _ -> },
+    onAddSnippet: (shortcut: String, additionalShortcuts: List<String>, content: String, category: String) -> Unit,
+    onUpdateSnippet: (id: String, shortcut: String, additionalShortcuts: List<String>, content: String, category: String) -> Unit = { _, _, _, _, _ -> },
     onDeleteSnippet: (id: String) -> Unit,
     onBatchReplaceSnippets: (searchText: String, replacementText: String) -> Unit = { _, _ -> },
     onAddCategory: (category: String) -> Unit = {},
@@ -180,6 +161,7 @@ fun PromptSnippetDialog(
 
     // 폼 입력 상태
     var shortcutInput by remember { mutableStateOf("") }
+    var additionalShortcutsInput by remember { mutableStateOf<List<String>>(emptyList()) }
     var categoryInput by remember { mutableStateOf("") }
     var contentInput by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
@@ -187,6 +169,7 @@ fun PromptSnippetDialog(
     // 수정 모드로 폼 열기 핸들러
     val openEditFormStage: (PromptSnippet) -> Unit = { snippet ->
         shortcutInput = snippet.shortcut
+        additionalShortcutsInput = snippet.additionalShortcuts
         categoryInput = snippet.category
         contentInput = snippet.content
         errorMessage = ""
@@ -196,6 +179,7 @@ fun PromptSnippetDialog(
     // 신규 등록 모드로 폼 열기 핸들러 (현재 필터가 특정 카테고리면 기본 선택값으로 채워줌)
     val openNewFormStage: () -> Unit = {
         shortcutInput = ""
+        additionalShortcutsInput = emptyList()
         categoryInput = (selectedFilter as? SnippetCategoryFilter.Named)?.category.orEmpty()
         contentInput = ""
         errorMessage = ""
@@ -205,6 +189,7 @@ fun PromptSnippetDialog(
     // 보관함 목록으로 복귀 핸들러
     val backToVault: () -> Unit = {
         shortcutInput = ""
+        additionalShortcutsInput = emptyList()
         categoryInput = ""
         contentInput = ""
         errorMessage = ""
@@ -271,21 +256,30 @@ fun PromptSnippetDialog(
                         )
                     }
                     is PromptSnippetStage.Form -> {
+                        val otherShortcuts = remember(snippets, stage.editingSnippet) {
+                            snippets
+                                .filter { it.id != stage.editingSnippet?.id }
+                                .flatMap { it.allShortcuts }
+                                .map { it.lowercase() }
+                        }
                         SnippetFormContent(
                             editingSnippet = stage.editingSnippet,
                             shortcutInput = shortcutInput,
+                            additionalShortcutsInput = additionalShortcutsInput,
                             categoryInput = categoryInput,
                             contentInput = contentInput,
                             availableCategories = effectiveCategories,
                             errorMessage = errorMessage,
                             currentPromptText = currentPromptText,
                             isSelectionPrompt = isSelectionPrompt,
-                            existingShortcuts = snippets
-                                .filter { it.id != stage.editingSnippet?.id }
-                                .map { it.shortcut.lowercase() },
+                            existingShortcuts = otherShortcuts,
                             clipboardGateway = clipboardGateway,
                             onShortcutChange = {
                                 shortcutInput = it.filterNot { char -> char.isWhitespace() }
+                                errorMessage = ""
+                            },
+                            onAdditionalShortcutsChange = {
+                                additionalShortcutsInput = it
                                 errorMessage = ""
                             },
                             onCategoryChange = {
@@ -299,21 +293,34 @@ fun PromptSnippetDialog(
                             onCancel = backToVault,
                             onSave = {
                                 val shortcut = shortcutInput.trim()
+                                val cleanedAdditional = additionalShortcutsInput
+                                    .map { it.trim() }
+                                    .filter { it.isNotEmpty() }
                                 val category = categoryInput.trim()
                                 val content = contentInput.trim()
+                                val otherShortcutsSet = otherShortcuts.toSet()
+
                                 when {
-                                    shortcut.isEmpty() -> errorMessage = "단축어를 입력해 주세요."
-                                    content.isEmpty() -> errorMessage = "프롬프트 문구를 입력해 주세요."
-                                    snippets.any {
-                                        it.id != stage.editingSnippet?.id && it.shortcut.equals(shortcut, ignoreCase = true)
-                                    } -> {
-                                        errorMessage = "이미 사용 중인 단축어입니다."
+                                    shortcut.isEmpty() -> errorMessage = "메인 단축어를 입력해 주세요."
+                                    otherShortcutsSet.contains(shortcut.lowercase()) -> {
+                                        errorMessage = "'$shortcut'은(는) 이미 사용 중인 단축어입니다."
                                     }
+                                    cleanedAdditional.any { it.equals(shortcut, ignoreCase = true) } -> {
+                                        errorMessage = "추가 단축어가 메인 단축어와 중복됩니다."
+                                    }
+                                    cleanedAdditional.groupBy { it.lowercase() }.any { it.value.size > 1 } -> {
+                                        errorMessage = "추가 단축어 목록에 중복된 단어가 있습니다."
+                                    }
+                                    cleanedAdditional.any { otherShortcutsSet.contains(it.lowercase()) } -> {
+                                        val dup = cleanedAdditional.first { otherShortcutsSet.contains(it.lowercase()) }
+                                        errorMessage = "'$dup'은(는) 이미 다른 상용구에서 사용 중인 단축어입니다."
+                                    }
+                                    content.isEmpty() -> errorMessage = "프롬프트 문구를 입력해 주세요."
                                     else -> {
                                         if (stage.editingSnippet != null) {
-                                            onUpdateSnippet(stage.editingSnippet.id, shortcut, content, category)
+                                            onUpdateSnippet(stage.editingSnippet.id, shortcut, cleanedAdditional, content, category)
                                         } else {
-                                            onAddSnippet(shortcut, content, category)
+                                            onAddSnippet(shortcut, cleanedAdditional, content, category)
                                         }
                                         backToVault()
                                     }
@@ -785,6 +792,7 @@ private fun SnippetSectionHeader(
 /**
  * 상용구 카드 아이템 (토스 스타일 부유 카드, 좌측 5dp 포인트 액센트 바, 카테고리 보조 뱃지 + 단축어 뱃지, 본문 아코디언 토글, 원터치 복사, 2단계 삭제 확인)
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SnippetCardItem(
     snippet: PromptSnippet,
@@ -844,9 +852,9 @@ private fun SnippetCardItem(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         if (snippet.category.isNotBlank()) {
@@ -878,6 +886,24 @@ private fun SnippetCardItem(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
+                        }
+
+                        snippet.additionalShortcuts.forEach { alias ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = AppTheme.colors.insetBed
+                            ) {
+                                Text(
+                                    text = "+ $alias",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AppTheme.colors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
                         }
                     }
 
@@ -1023,7 +1049,7 @@ private fun SnippetDeleteConfirmBar(
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(
+                    NeuPillButton(
                         onClick = onCancel,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                     ) {
@@ -1034,11 +1060,9 @@ private fun SnippetDeleteConfirmBar(
                         )
                     }
 
-                    TextButton(
+                    NeuPillButton(
                         onClick = onConfirmDelete,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
+                        contentColor = MaterialTheme.colorScheme.error,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
@@ -1111,855 +1135,3 @@ private fun EmptySnippetVaultView(
         }
     }
 }
-
-// ==========================================================================
-// 4. Form Components (Form, Mode Banner, Category Quick Chips, Content Toolbar)
-// ==========================================================================
-
-@Composable
-private fun SnippetFormHeaderBanner(
-    isEditMode: Boolean,
-    editingShortcut: String?,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = if (isEditMode) AppTheme.colors.accent.copy(alpha = 0.12f) else AppTheme.colors.primary.copy(alpha = 0.08f),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = if (isEditMode) Icons.Default.Edit else Icons.Default.Add,
-                contentDescription = null,
-                tint = if (isEditMode) AppTheme.colors.accent else AppTheme.colors.primary,
-                modifier = Modifier.size(16.dp)
-            )
-            Text(
-                text = if (isEditMode) {
-                    "기존 상용구 '${editingShortcut.orEmpty()}'의 내용을 수정합니다."
-                } else {
-                    "단축어나 카테고리를 입력창에 치면 아래 프롬프트로 자동 대치됩니다."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = AppTheme.colors.textPrimary
-            )
-        }
-    }
-}
-
-@Composable
-private fun SnippetFormContentToolbar(
-    currentPromptText: String,
-    isSelectionPrompt: Boolean,
-    clipboardGateway: ClipboardGateway,
-    onContentChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (currentPromptText.isNotBlank()) {
-            Surface(
-                onClick = { onContentChange(currentPromptText) },
-                shape = RoundedCornerShape(6.dp),
-                color = AppTheme.colors.primary.copy(alpha = 0.1f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Input,
-                        contentDescription = null,
-                        tint = AppTheme.colors.primary,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Text(
-                        text = if (isSelectionPrompt) "선택 문구" else "현재 프롬프트",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AppTheme.colors.primary
-                    )
-                }
-            }
-        }
-
-        Surface(
-            onClick = {
-                val clip = clipboardGateway.readText()
-                if (clip.isNotBlank()) {
-                    onContentChange(clip)
-                }
-            },
-            shape = RoundedCornerShape(6.dp),
-            color = AppTheme.colors.accent.copy(alpha = 0.1f)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ContentPaste,
-                    contentDescription = null,
-                    tint = AppTheme.colors.accent,
-                    modifier = Modifier.size(12.dp)
-                )
-                Text(
-                    text = "붙여넣기",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AppTheme.colors.accent
-                )
-            }
-        }
-    }
-}
-
-/**
- * 상용구 등록 / 수정 폼 컨텐츠
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SnippetFormContent(
-    editingSnippet: PromptSnippet?,
-    shortcutInput: String,
-    categoryInput: String,
-    contentInput: String,
-    availableCategories: List<String>,
-    errorMessage: String,
-    currentPromptText: String,
-    isSelectionPrompt: Boolean = false,
-    existingShortcuts: List<String>,
-    clipboardGateway: ClipboardGateway,
-    onShortcutChange: (String) -> Unit,
-    onCategoryChange: (String) -> Unit,
-    onContentChange: (String) -> Unit,
-    onCancel: () -> Unit,
-    onSave: () -> Unit
-) {
-    val isEditMode = editingSnippet != null
-    val shortcutState = rememberSyncedTextFieldState(
-        value = shortcutInput,
-        onValueChange = onShortcutChange,
-        resetKey = editingSnippet?.id
-    )
-    val categoryState = rememberSyncedTextFieldState(
-        value = categoryInput,
-        onValueChange = onCategoryChange,
-        resetKey = editingSnippet?.id
-    )
-    val contentState = rememberSyncedTextFieldState(
-        value = contentInput,
-        onValueChange = onContentChange,
-        resetKey = editingSnippet?.id
-    )
-    val currentShortcut = shortcutState.text.toString()
-    val currentCategory = categoryState.text.toString().trim()
-    val isShortcutDuplicate = currentShortcut.isNotBlank() && existingShortcuts.contains(currentShortcut.lowercase())
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // 모드 안내 배너
-        SnippetFormHeaderBanner(
-            isEditMode = isEditMode,
-            editingShortcut = editingSnippet?.shortcut
-        )
-
-        // 1. 카테고리 입력 (선택 사항) + 기존 카테고리 원터치 재사용 칩
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "카테고리 (선택)",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textPrimary
-                )
-                if (currentCategory.isNotEmpty()) {
-                    Surface(
-                        onClick = { onCategoryChange("") },
-                        shape = RoundedCornerShape(6.dp),
-                        color = AppTheme.colors.insetBed
-                    ) {
-                        Text(
-                            text = "미분류로 비우기",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = AppTheme.colors.textSecondary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                state = categoryState,
-                label = { Text("카테고리명 (예: 스타일, 조명 · 비워두면 미분류)") },
-                lineLimits = TextFieldLineLimits.SingleLine,
-                inputTransformation = InputTransformation {
-                    val noSpaces = asCharSequence().filterNot { it.isWhitespace() }.toString()
-                    if (asCharSequence().toString() != noSpaces) {
-                        replace(0, length, noSpaces)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = appTextFieldColors()
-            )
-
-            if (availableCategories.isNotEmpty()) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    availableCategories.forEach { cat ->
-                        val isSelected = currentCategory.equals(cat, ignoreCase = true)
-                        NeuPillChip(
-                            text = cat,
-                            selected = isSelected,
-                            onClick = {
-                                if (isSelected) {
-                                    onCategoryChange("")
-                                } else {
-                                    onCategoryChange(cat)
-                                }
-                            },
-                            height = 28.dp,
-                            textStyle = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-            }
-        }
-
-        // 2. 단축어 입력
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "단축어",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.textPrimary
-            )
-            OutlinedTextField(
-                state = shortcutState,
-                label = { Text("호출 단축어 (예: 고화질)") },
-                lineLimits = TextFieldLineLimits.SingleLine,
-                inputTransformation = InputTransformation {
-                    val noSpaces = asCharSequence().filterNot { it.isWhitespace() }.toString()
-                    if (asCharSequence().toString() != noSpaces) {
-                        replace(0, length, noSpaces)
-                    }
-                },
-                isError = isShortcutDuplicate,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = appTextFieldColors()
-            )
-            if (isShortcutDuplicate) {
-                Text(
-                    text = "이미 등록된 단축어입니다. 다른 단축어를 입력해 주세요.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 11.sp
-                )
-            }
-        }
-
-        // 3. 치환될 프롬프트 문구 입력 & 툴바
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "치환될 프롬프트 본문",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textPrimary
-                )
-
-                SnippetFormContentToolbar(
-                    currentPromptText = currentPromptText,
-                    isSelectionPrompt = isSelectionPrompt,
-                    clipboardGateway = clipboardGateway,
-                    onContentChange = onContentChange
-                )
-            }
-
-            OutlinedTextField(
-                state = contentState,
-                placeholder = {
-                    Text(
-                        text = "단축어를 치면 입력창에 들어갈 실제 문구를 입력하세요.",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontSize = 12.sp
-                    )
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 90.dp, max = 150.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = appTextFieldColors(),
-                lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 6)
-            )
-        }
-
-        // 에러 메시지
-        if (errorMessage.isNotBlank()) {
-            Text(
-                text = errorMessage,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-                fontSize = 11.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 4. 하단 액션 버튼 (취소 / 저장)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            NeuButton(
-                onClick = onCancel,
-                modifier = Modifier.weight(1f),
-                isPrimary = false
-            ) {
-                Text(if (isEditMode) "수정 취소" else "목록으로")
-            }
-
-            NeuButton(
-                onClick = onSave,
-                modifier = Modifier.weight(1.3f),
-                isPrimary = true
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(if (isEditMode) "수정사항 저장" else "상용구 등록")
-                }
-            }
-        }
-    }
-}
-
-// ==========================================================================
-// 5. Category Management Stage (독립된 카테고리 관리 화면)
-// ==========================================================================
-
-@Composable
-private fun SnippetManageCategoriesContent(
-    categories: List<String>,
-    snippets: List<PromptSnippet>,
-    onAddCategory: (String) -> Unit,
-    onRenameCategory: (oldCategory: String, newCategory: String) -> Unit,
-    onDeleteCategory: (String) -> Unit,
-    onMoveCategory: (String, Int) -> Unit,
-    onReorderCategories: (Int, Int) -> Unit,
-    onBack: () -> Unit
-) {
-    var newCategoryName by remember { mutableStateOf("") }
-    var editingTarget by remember { mutableStateOf<String?>(null) }
-    var editingName by remember { mutableStateOf("") }
-    var confirmingDeleteCategory by remember { mutableStateOf<String?>(null) }
-
-    var localCategories by remember { mutableStateOf(categories) }
-    var draggingCategory by remember { mutableStateOf<String?>(null) }
-    var initialDragIndex by remember { mutableStateOf<Int?>(null) }
-    var dragAccumulatedY by remember { mutableStateOf(0f) }
-
-    LaunchedEffect(categories) {
-        if (draggingCategory == null) {
-            localCategories = categories
-        }
-    }
-
-    val density = LocalDensity.current
-    val rowHeightPx = with(density) { 56.dp.toPx() }
-
-    fun handleDragStart(category: String) {
-        val index = localCategories.indexOfFirst { it.equals(category, ignoreCase = true) }
-        if (index == -1) return
-        draggingCategory = category
-        initialDragIndex = index
-        dragAccumulatedY = 0f
-    }
-
-    fun handleDrag(deltaY: Float) {
-        val currentCat = draggingCategory ?: return
-        var curIndex = localCategories.indexOfFirst { it.equals(currentCat, ignoreCase = true) }
-        if (curIndex == -1) return
-        dragAccumulatedY += deltaY
-
-        val threshold = rowHeightPx * 0.5f
-        while (dragAccumulatedY > threshold && curIndex < localCategories.lastIndex) {
-            val target = curIndex + 1
-            localCategories = PromptExperimentPolicy.moveElementTo(localCategories, curIndex, target)
-            curIndex = target
-            dragAccumulatedY -= rowHeightPx
-        }
-        while (dragAccumulatedY < -threshold && curIndex > 0) {
-            val target = curIndex - 1
-            localCategories = PromptExperimentPolicy.moveElementTo(localCategories, curIndex, target)
-            curIndex = target
-            dragAccumulatedY += rowHeightPx
-        }
-    }
-
-    fun handleDragEnd() {
-        val currentCat = draggingCategory
-        val from = initialDragIndex
-        val to = if (currentCat != null) {
-            localCategories.indexOfFirst { it.equals(currentCat, ignoreCase = true) }
-        } else {
-            -1
-        }
-        if (from != null && to != -1 && from != to) {
-            onReorderCategories(from, to)
-        }
-        draggingCategory = null
-        initialDragIndex = null
-        dragAccumulatedY = 0f
-    }
-
-    fun handleDragCancel() {
-        localCategories = categories
-        draggingCategory = null
-        initialDragIndex = null
-        dragAccumulatedY = 0f
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        // 상단 헤더 & 목록으로 돌아가기 버튼
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(
-                    text = "🏷️ 카테고리 관리",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textPrimary
-                )
-                Text(
-                    text = "순서 변경 · 이름 일괄 변경 · 삭제 시 상용구는 미분류로 보존",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontSize = 11.sp,
-                    color = AppTheme.colors.textSecondary
-                )
-            }
-
-            NeuButton(
-                onClick = onBack,
-                isPrimary = false,
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                modifier = Modifier.height(34.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "보관함",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        // 새 카테고리 추가 또는 이름 수정 폼
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val inputValue = if (editingTarget != null) editingName else newCategoryName
-            OutlinedTextField(
-                value = inputValue,
-                onValueChange = { raw ->
-                    val filtered = raw.filterNot { it.isWhitespace() }
-                    if (editingTarget != null) {
-                        editingName = filtered
-                    } else {
-                        newCategoryName = filtered
-                    }
-                },
-                placeholder = {
-                    Text(
-                        text = if (editingTarget != null) {
-                            "'${editingTarget}'의 새 이름 입력..."
-                        } else {
-                            "새 카테고리 이름 (예: 스타일, 카메라, 조명)"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        fontSize = 12.sp
-                    )
-                },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium,
-                shape = RoundedCornerShape(10.dp),
-                colors = appTextFieldColors(),
-                modifier = Modifier.weight(1f)
-            )
-
-            if (editingTarget != null) {
-                NeuButton(
-                    onClick = {
-                        val target = editingTarget ?: return@NeuButton
-                        val trimmed = editingName.trim()
-                        if (trimmed.isNotEmpty()) {
-                            onRenameCategory(target, trimmed)
-                        }
-                        editingTarget = null
-                        editingName = ""
-                    },
-                    isPrimary = true,
-                    enabled = editingName.isNotBlank(),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.height(44.dp)
-                ) {
-                    Text("변경", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                }
-                NeuButton(
-                    onClick = {
-                        editingTarget = null
-                        editingName = ""
-                    },
-                    isPrimary = false,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                    modifier = Modifier.height(44.dp)
-                ) {
-                    Text("취소", style = MaterialTheme.typography.labelMedium)
-                }
-            } else {
-                NeuButton(
-                    onClick = {
-                        val trimmed = newCategoryName.trim()
-                        if (trimmed.isNotEmpty()) {
-                            onAddCategory(trimmed)
-                            newCategoryName = ""
-                        }
-                    },
-                    isPrimary = true,
-                    enabled = newCategoryName.isNotBlank(),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                    modifier = Modifier.height(44.dp)
-                ) {
-                    Text("+ 추가", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // 카테고리 목록
-        if (localCategories.isEmpty()) {
-            NeuInsetBed(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                backgroundColor = AppTheme.colors.insetBed
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp, horizontal = 14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = "등록된 카테고리가 없습니다",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = AppTheme.colors.textPrimary
-                    )
-                    Text(
-                        text = "위 입력창에서 카테고리를 미리 만들어 두거나 상용구 등록 시 추가할 수 있습니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontSize = 11.sp,
-                        textAlign = TextAlign.Center,
-                        color = AppTheme.colors.textSecondary
-                    )
-                }
-            }
-        } else {
-            NeuInsetBed(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp, max = 320.dp),
-                shape = RoundedCornerShape(14.dp),
-                backgroundColor = AppTheme.colors.insetBed
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(
-                            state = rememberScrollState(),
-                            enabled = draggingCategory == null
-                        )
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    localCategories.forEachIndexed { index, category ->
-                        key(category.lowercase()) {
-                            val isDragging = draggingCategory?.equals(category, ignoreCase = true) == true
-                            val isEditingThis = editingTarget?.equals(category, ignoreCase = true) == true
-                            val isConfirmingDelete = confirmingDeleteCategory?.equals(category, ignoreCase = true) == true
-                            val count = snippets.count { it.category.trim().equals(category, ignoreCase = true) }
-                            val number = index + 1
-
-                            val currentOnDragStart by rememberUpdatedState { handleDragStart(category) }
-                            val currentOnDrag by rememberUpdatedState { deltaY: Float -> handleDrag(deltaY) }
-                            val currentOnDragEnd by rememberUpdatedState { handleDragEnd() }
-                            val currentOnDragCancel by rememberUpdatedState { handleDragCancel() }
-
-                            NeuCard(
-                                shape = RoundedCornerShape(12.dp),
-                                backgroundColor = when {
-                                    isDragging -> AppTheme.colors.accent.copy(alpha = 0.14f)
-                                    isEditingThis -> AppTheme.colors.primary.copy(alpha = 0.1f)
-                                    else -> AppTheme.colors.card
-                                },
-                                borderColor = when {
-                                    isDragging -> AppTheme.colors.accent
-                                    isEditingThis -> AppTheme.colors.primary
-                                    else -> AppTheme.colors.cardBorder
-                                },
-                                elevation = if (isDragging) 8.dp else 2.dp,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .zIndex(if (isDragging) 1f else 0f)
-                                    .graphicsLayer {
-                                        translationY = if (isDragging) dragAccumulatedY else 0f
-                                        if (isDragging) {
-                                            scaleX = 1.02f
-                                            scaleY = 1.02f
-                                        }
-                                    }
-                                    .clip(RoundedCornerShape(12.dp))
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.weight(1f),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            // 좌측: 3단 가로줄 드래그 핸들 (롱프레스)
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(34.dp)
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .pointerInput(category.lowercase()) {
-                                                        detectDragGesturesAfterLongPress(
-                                                            onDragStart = { currentOnDragStart() },
-                                                            onDrag = { change, dragAmount ->
-                                                                change.consume()
-                                                                currentOnDrag(dragAmount.y)
-                                                            },
-                                                            onDragEnd = { currentOnDragEnd() },
-                                                            onDragCancel = { currentOnDragCancel() }
-                                                        )
-                                                    },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Menu,
-                                                    contentDescription = "$category 순서 드래그 변경",
-                                                    tint = if (isDragging) AppTheme.colors.accent else AppTheme.colors.textSecondary,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-
-                                            Column {
-                                                Text(
-                                                    text = "$number. $category",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = AppTheme.colors.textPrimary
-                                                )
-                                                Text(
-                                                    text = "소속 상용구 ${count}개",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontSize = 11.sp,
-                                                    color = AppTheme.colors.textSecondary
-                                                )
-                                            }
-                                        }
-
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(0.dp)
-                                        ) {
-                                            IconButton(
-                                                onClick = { onMoveCategory(category, -1) },
-                                                enabled = index > 0,
-                                                modifier = Modifier.size(30.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.KeyboardArrowUp,
-                                                    contentDescription = "위로 이동",
-                                                    tint = if (index > 0) AppTheme.colors.textSecondary else AppTheme.colors.textSecondary.copy(alpha = 0.3f),
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-                                            IconButton(
-                                                onClick = { onMoveCategory(category, 1) },
-                                                enabled = index < localCategories.lastIndex,
-                                                modifier = Modifier.size(30.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                                    contentDescription = "아래로 이동",
-                                                    tint = if (index < localCategories.lastIndex) AppTheme.colors.textSecondary else AppTheme.colors.textSecondary.copy(alpha = 0.3f),
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-                                            IconButton(
-                                                onClick = {
-                                                    editingTarget = category
-                                                    editingName = category
-                                                },
-                                                modifier = Modifier.size(32.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Edit,
-                                                    contentDescription = "카테고리 이름 수정",
-                                                    tint = AppTheme.colors.accent,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                            IconButton(
-                                                onClick = {
-                                                    confirmingDeleteCategory = if (isConfirmingDelete) null else category
-                                                },
-                                                modifier = Modifier.size(32.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.DeleteOutline,
-                                                    contentDescription = "카테고리 삭제",
-                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
-                                                    modifier = Modifier.size(17.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    AnimatedVisibility(
-                                        visible = isConfirmingDelete,
-                                        enter = fadeIn(tween(140)) + expandVertically(tween(140)),
-                                        exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
-                                    ) {
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 2.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Text(
-                                                    text = if (count > 0) {
-                                                        "삭제할까요? (상용구 ${count}개는 '미분류'로 유지됩니다)"
-                                                    } else {
-                                                        "'$category' 카테고리를 삭제할까요?"
-                                                    },
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.error,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                    TextButton(
-                                                        onClick = { confirmingDeleteCategory = null },
-                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = "취소",
-                                                            fontSize = 11.sp,
-                                                            color = AppTheme.colors.textSecondary
-                                                        )
-                                                    }
-                                                    TextButton(
-                                                        onClick = {
-                                                            confirmingDeleteCategory = null
-                                                            if (editingTarget?.equals(category, ignoreCase = true) == true) {
-                                                                editingTarget = null
-                                                                editingName = ""
-                                                            }
-                                                            onDeleteCategory(category)
-                                                        },
-                                                        colors = ButtonDefaults.textButtonColors(
-                                                            contentColor = MaterialTheme.colorScheme.error
-                                                        ),
-                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = "삭제",
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Bold
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-

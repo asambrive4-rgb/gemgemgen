@@ -70,5 +70,29 @@ class PromptSnippetTest {
         assertEquals("초고화질", afterCandidates[0].name)
         assertEquals("masterpiece, 8k resolution", afterCandidates[0].token)
     }
+
+    @Test
+    fun allShortcuts_combinesMainAndAdditionalDeduplicated() {
+        val snippet = PromptSnippet(
+            shortcut = "ABC",
+            additionalShortcuts = listOf("가나다", "abc", "DEF", "  "),
+            content = "test content"
+        )
+        assertEquals(listOf("ABC", "가나다", "DEF"), snippet.allShortcuts)
+    }
+
+    @Test
+    fun candidatesFromSnippets_includesAliases() {
+        val snippet = PromptSnippet(
+            shortcut = "ABC",
+            additionalShortcuts = listOf("가나다"),
+            content = "8k masterpiece"
+        )
+        val candidates = WildcardTokenAutocomplete.candidatesFromSnippets(listOf(snippet))
+        assertEquals(1, candidates.size)
+        assertEquals("ABC", candidates[0].name)
+        assertEquals("ABC", candidates[0].displayText)
+        assertEquals(listOf("가나다"), candidates[0].aliases)
+    }
 }
 

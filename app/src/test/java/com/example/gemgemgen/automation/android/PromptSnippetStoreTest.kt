@@ -55,6 +55,7 @@ class PromptSnippetStoreTest {
         val snippet = PromptSnippet(
             id = "snip-001",
             shortcut = "품질",
+            additionalShortcuts = listOf("퀄리티", "고화질"),
             content = "masterpiece, best quality, ultra-detailed",
             category = "스타일",
             createdAtMillis = 1700000000000L
@@ -66,6 +67,7 @@ class PromptSnippetStoreTest {
         val item = loaded[0]
         assertEquals("snip-001", item.id)
         assertEquals("품질", item.shortcut)
+        assertEquals(listOf("퀄리티", "고화질"), item.additionalShortcuts)
         assertEquals("masterpiece, best quality, ultra-detailed", item.content)
         assertEquals("스타일", item.category)
         assertEquals(1700000000000L, item.createdAtMillis)
