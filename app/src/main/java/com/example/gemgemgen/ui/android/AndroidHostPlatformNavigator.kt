@@ -1,4 +1,4 @@
-// 역할: 안드로이드 시스템 설정 화면, 외부 브라우저(Firefox 우선) 및 외부 앱으로의 화면 이동을 처리합니다.
+// 역할: 안드로이드 시스템 설정 화면, 외부 브라우저(Firefox 우선), 오버레이 부착 실패 안내 및 외부 앱으로의 화면 이동을 처리합니다.
 package com.example.gemgemgen.ui.android
 
 import android.content.ActivityNotFoundException
@@ -45,6 +45,35 @@ class AndroidHostPlatformNavigator(private val context: Context) {
             context.startActivity(intent)
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(context, "오버레이 설정을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 플로팅 오버레이 부착 실패 시 자동화 안전 취소 안내 및 권한 설정 유도 */
+    fun notifyOverlayAttachFailed(throwable: Throwable? = null) {
+        val hasOverlayPermission = Settings.canDrawOverlays(context)
+        if (!hasOverlayPermission) {
+            Toast.makeText(
+                context,
+                "플로팅 제어 바를 띄울 수 없어 자동화가 안전하게 취소되었습니다. '다른 앱 위에 표시' 권한을 허용해 주세요.",
+                Toast.LENGTH_LONG
+            ).show()
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            )
+            try {
+                context.startActivity(intent)
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "오버레이 설정을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            val detail = throwable?.localizedMessage?.takeIf { it.isNotBlank() }
+            val message = if (detail != null) {
+                "플로팅 제어 바를 표시할 수 없어 자동화가 안전하게 취소되었습니다: $detail"
+            } else {
+                "플로팅 제어 바를 표시할 수 없어 자동화가 안전하게 취소되었습니다."
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
 

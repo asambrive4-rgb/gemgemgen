@@ -1,7 +1,8 @@
-// 역할: 비동기로 위치를 복원·저장하고 화면 위 플로팅 자동화 제어 바의 윈도우와 표시 시점을 제어합니다.
+// 역할: 비동기로 위치를 복원·저장하고 화면 위 플로팅 제어 바의 표시·부착 실패 예외 감지 및 안전 취소를 제어합니다.
 package com.example.gemgemgen.automation.android
 
 import android.graphics.PixelFormat
+import android.util.Log
 import android.view.Choreographer
 import android.view.Gravity
 import android.view.WindowManager
@@ -74,7 +75,8 @@ internal class FloatingAutomationBarController(
         themeMode: AppThemeMode = AppThemeMode.DEFAULT,
         onCancelAutomation: () -> Unit,
         onRepeatCountChange: (String) -> Unit,
-        onAutomationFinished: () -> Unit
+        onAutomationFinished: () -> Unit,
+        onAttachFailed: ((Throwable) -> Unit)? = null
     ) {
         if (isAttached || isAttachScheduled) return
 
@@ -113,12 +115,19 @@ internal class FloatingAutomationBarController(
                 if (!isAttachScheduled) return@postFrameCallback
                 isAttachScheduled = false
                 if (!isAttached && overlayView === view) {
-                    lifecycleOwner.start()
                     try {
-                        windowManager.addView(view, params)
+                        lifecycleOwner.start()
+                        val wm = windowManager ?: throw IllegalStateException("WindowManager service is not available")
+                        wm.addView(view, params)
                         isAttached = true
-                    } catch (_: Exception) {
-                        // 오버레이 윈도우 추가 실패 방어
+                    } catch (e: Exception) {
+                        Log.e("FloatingBarController", "오버레이 윈도우 추가 실패", e)
+                        hide()
+                        if (onAttachFailed != null) {
+                            onAttachFailed(e)
+                        } else {
+                            onCancelAutomation()
+                        }
                     }
                 }
             }

@@ -1,4 +1,4 @@
-// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함) 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
+// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함), 플로팅 오버레이 부착 감시 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
@@ -178,15 +178,25 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         when (automationViewModel.runAutomation()) {
             AutomationStartDecision.Started -> {
                 if (!automationViewModel.uiState.value.isRunning) return
-                floatingBarController?.showOrUpdate(
+                val controller = floatingBarController
+                if (controller == null) {
+                    automationViewModel.cancelAutomation()
+                    platformNavigator.notifyOverlayAttachFailed()
+                    return
+                }
+                controller.showOrUpdate(
                     uiStateFlow = automationViewModel.automationBarUiState,
                     palette = container.themePaletteStore.currentPalette.value,
                     themeMode = container.themePaletteStore.currentMode.value,
                     onCancelAutomation = automationViewModel::cancelAutomation,
                     onRepeatCountChange = automationViewModel::onRepeatCountChange,
                     onAutomationFinished = {
-                        floatingBarController?.hide()
+                        controller.hide()
                         bringMainActivityToFront()
+                    },
+                    onAttachFailed = { throwable ->
+                        automationViewModel.cancelAutomation()
+                        platformNavigator.notifyOverlayAttachFailed(throwable)
                     }
                 )
             }
