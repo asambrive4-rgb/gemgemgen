@@ -212,8 +212,7 @@ internal class GeminiAccountSwitchAutomation(
 
         when (phase) {
             Phase.LAUNCH_GEMINI -> {
-                val nodes = allNodes().toList()
-                if (isGeminiForeground() || isGeminiScreenVisible(nodes)) {
+                if (isGeminiForeground() || isGeminiScreenVisible(allNodes())) {
                     enter(Phase.OPEN_PROFILE_MENU)
                 } else {
                     retryOrFail("Gemini 화면을 열지 못했습니다.") { checkPhase() }
@@ -221,14 +220,13 @@ internal class GeminiAccountSwitchAutomation(
             }
 
             Phase.OPEN_PROFILE_MENU -> {
-                val nodes = allNodes().toList()
-                if (isBentoMenuVisible(nodes)) {
+                if (isBentoMenuVisible(allNodes())) {
                     enter(Phase.CHECK_OR_EXPAND_ACCOUNTS)
                     return
                 }
 
                 // 1순위: 사이드바가 이미 열려 있는 상태라면 사이드바 하단 프로필 카드 클릭
-                val sidebarProfileNode = findSidebarProfileNode(nodes)
+                val sidebarProfileNode = findSidebarProfileNode(allNodes())
                 if (sidebarProfileNode != null) {
                     val now = SystemClock.uptimeMillis()
                     if (now - lastProfileTapAtMillis >= PROFILE_TAP_COOLDOWN_MS) {
@@ -264,7 +262,7 @@ internal class GeminiAccountSwitchAutomation(
                 }
 
                 // 2순위: 사이드바가 닫혀 있는 상태라면 좌측 상단 '사이드바 열기' 클릭
-                val openSidebarNode = findOpenSidebarNode(nodes)
+                val openSidebarNode = findOpenSidebarNode(allNodes())
                 if (openSidebarNode != null) {
                     val now = SystemClock.uptimeMillis()
                     if (now - lastSidebarTapAtMillis >= SIDEBAR_TAP_COOLDOWN_MS) {
@@ -300,7 +298,7 @@ internal class GeminiAccountSwitchAutomation(
                 }
 
                 // 3순위 (Fallback): 툴바 좌측 상단 햄버거 영역 좌표 탭
-                val toolbarSidebarTapPoint = findToolbarSidebarTapPoint(nodes)
+                val toolbarSidebarTapPoint = findToolbarSidebarTapPoint(allNodes())
                 if (toolbarSidebarTapPoint != null) {
                     val now = SystemClock.uptimeMillis()
                     if (now - lastSidebarTapAtMillis >= SIDEBAR_TAP_COOLDOWN_MS) {
@@ -317,7 +315,7 @@ internal class GeminiAccountSwitchAutomation(
                 }
 
                 // 4순위 (Fallback): 새 채팅 홈 화면 등에서 우측 상단 프로필 버튼이 직접 노출된 경우
-                val explicitProfileNode = findExplicitProfileButtonNode(nodes)
+                val explicitProfileNode = findExplicitProfileButtonNode(allNodes())
                 if (explicitProfileNode != null) {
                     val now = SystemClock.uptimeMillis()
                     if (now - lastProfileTapAtMillis >= PROFILE_TAP_COOLDOWN_MS) {
@@ -342,7 +340,7 @@ internal class GeminiAccountSwitchAutomation(
                     return
                 }
 
-                val tapPoint = findToolbarProfileTapPoint(nodes)
+                val tapPoint = findToolbarProfileTapPoint(allNodes())
                 if (tapPoint != null) {
                     val now = SystemClock.uptimeMillis()
                     if (now - lastProfileTapAtMillis >= PROFILE_TAP_COOLDOWN_MS) {
@@ -362,8 +360,7 @@ internal class GeminiAccountSwitchAutomation(
             }
 
             Phase.CHECK_OR_EXPAND_ACCOUNTS -> {
-                val nodes = allNodes().toList()
-                val headerCandidate = extractCurrentHeaderCandidate(nodes)
+                val headerCandidate = extractCurrentHeaderCandidate(allNodes())
                 if (headerCandidate != null &&
                     GeminiAccountMatcher.isExactMatch(headerCandidate, targetEmail, targetAlias)
                 ) {
@@ -371,14 +368,13 @@ internal class GeminiAccountSwitchAutomation(
                     return
                 }
 
-                val accountRows = findAvailableAccountRows(nodes)
-                if (accountRows.isNotEmpty() || isAccountListExpanded(nodes)) {
+                if (isAccountListExpanded(allNodes())) {
                     enter(Phase.SELECT_TARGET_ACCOUNT)
                     return
                 }
 
-                val headerContainer = findAccountHeaderContainerNode(nodes)
-                val expandTapPoint = findExpandHeaderTapPoint(nodes, headerContainer)
+                val headerContainer = findAccountHeaderContainerNode(allNodes())
+                val expandTapPoint = findExpandHeaderTapPoint(allNodes(), headerContainer)
                 if (headerContainer != null || expandTapPoint != null) {
                     val now = SystemClock.uptimeMillis()
                     if (now - lastExpandTapAtMillis >= EXPAND_TAP_COOLDOWN_MS) {
@@ -420,8 +416,7 @@ internal class GeminiAccountSwitchAutomation(
             }
 
             Phase.SELECT_TARGET_ACCOUNT -> {
-                val nodes = allNodes().toList()
-                val headerCandidate = extractCurrentHeaderCandidate(nodes)
+                val headerCandidate = extractCurrentHeaderCandidate(allNodes())
                 if (headerCandidate != null &&
                     GeminiAccountMatcher.isExactMatch(headerCandidate, targetEmail, targetAlias)
                 ) {
@@ -429,7 +424,7 @@ internal class GeminiAccountSwitchAutomation(
                     return
                 }
 
-                val scoredRows = findAvailableAccountRows(nodes)
+                val scoredRows = findAvailableAccountRows(allNodes())
                     .map { (rowNode, candidate) ->
                         Triple(
                             rowNode,
@@ -451,7 +446,7 @@ internal class GeminiAccountSwitchAutomation(
                     }
                 }
 
-                val scrollableNode = findBentoScrollableNode(nodes)
+                val scrollableNode = findBentoScrollableNode(allNodes())
                 if (scrollableNode != null && scrollCount < MAX_ACCOUNT_LIST_SCROLLS) {
                     val scrolled = scrollableNode.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) ||
                         scrollableNode.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
@@ -495,9 +490,8 @@ internal class GeminiAccountSwitchAutomation(
             }
 
             Phase.WAIT_SWITCH_COMPLETE -> {
-                val nodes = allNodes().toList()
                 val elapsed = SystemClock.uptimeMillis() - phaseStartedAtMillis
-                if (!isBentoMenuVisible(nodes) && elapsed >= MIN_SWITCH_SETTLE_MS) {
+                if (!isBentoMenuVisible(allNodes()) && elapsed >= MIN_SWITCH_SETTLE_MS) {
                     completeAndReturn()
                 } else if (elapsed >= MAX_SWITCH_SETTLE_MS) {
                     completeAndReturn()
@@ -514,12 +508,11 @@ internal class GeminiAccountSwitchAutomation(
             }
 
             Phase.CLOSE_MENU_AND_FINISH -> {
-                val nodes = allNodes().toList()
-                if (!isBentoMenuVisible(nodes)) {
+                if (!isBentoMenuVisible(allNodes())) {
                     completeAndReturn()
                     return
                 }
-                val closeBtn = findBentoCloseButtonNode(nodes)
+                val closeBtn = findBentoCloseButtonNode(allNodes())
                 val closed = if (closeBtn != null) {
                     AccessibilityNodeTraversal.clickNodeOrParent(closeBtn, maxDepth = MAX_ANCESTOR_SEARCH_DEPTH)
                 } else {
@@ -602,14 +595,14 @@ internal class GeminiAccountSwitchAutomation(
         return labels.geminiPackageNames.any { it.equals(pkg, ignoreCase = true) }
     }
 
-    private fun isGeminiScreenVisible(nodes: List<AccessibilityNodeInfo>): Boolean {
+    private fun isGeminiScreenVisible(nodes: Sequence<AccessibilityNodeInfo>): Boolean {
         return nodes.any { node ->
             val pkg = node.packageName?.toString()
             pkg != null && labels.geminiPackageNames.any { it.equals(pkg, ignoreCase = true) }
         }
     }
 
-    private fun isBentoMenuVisible(nodes: List<AccessibilityNodeInfo>): Boolean {
+    private fun isBentoMenuVisible(nodes: Sequence<AccessibilityNodeInfo>): Boolean {
         return nodes.any { node ->
             val id = node.viewIdResourceName ?: return@any false
             labels.bentoMenuContainerIds.contains(id) ||
@@ -621,39 +614,44 @@ internal class GeminiAccountSwitchAutomation(
         }
     }
 
-    private fun isAccountListExpanded(nodes: List<AccessibilityNodeInfo>): Boolean {
-        if (nodes.any { node ->
-                val id = node.viewIdResourceName ?: return@any false
-                labels.accountsListContainerIds.contains(id) || labels.availableAccountRowIds.contains(id)
+    private fun isAccountListExpanded(nodes: Sequence<AccessibilityNodeInfo>): Boolean {
+        var compactHeaderDesc: String? = null
+        for (node in nodes) {
+            val id = node.viewIdResourceName
+            if (id != null) {
+                if (labels.accountsListContainerIds.contains(id) || labels.availableAccountRowIds.contains(id)) {
+                    return true
+                }
+                if (compactHeaderDesc == null && id in labels.accountHeaderContainerIds) {
+                    compactHeaderDesc = node.contentDescription?.toString().orEmpty()
+                }
             }
-        ) {
-            return true
         }
-        val compactHeader = nodes.firstOrNull { it.viewIdResourceName in labels.accountHeaderContainerIds }
-        val desc = compactHeader?.contentDescription?.toString().orEmpty()
+        val desc = compactHeaderDesc.orEmpty()
         return desc.contains("계정 목록을 펼쳤습니다") || desc.contains("계정 목록을 접습니다")
     }
 
-    private fun findExplicitProfileButtonNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+    private fun findExplicitProfileButtonNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        var descMatch: AccessibilityNodeInfo? = null
         for (node in nodes) {
             val viewId = node.viewIdResourceName
             if (viewId != null && labels.profileButtonViewIds.contains(viewId)) {
                 return node
             }
-        }
-        for (node in nodes) {
-            val desc = node.contentDescription?.toString()?.trim().orEmpty()
-            if (desc.isNotBlank() &&
-                labels.profileButtonDescriptions.any { desc.contains(it, ignoreCase = true) } &&
-                node.viewIdResourceName !in labels.accountHeaderContainerIds
-            ) {
-                return node
+            if (descMatch == null) {
+                val desc = node.contentDescription?.toString()?.trim().orEmpty()
+                if (desc.isNotBlank() &&
+                    labels.profileButtonDescriptions.any { desc.contains(it, ignoreCase = true) } &&
+                    node.viewIdResourceName !in labels.accountHeaderContainerIds
+                ) {
+                    descMatch = node
+                }
             }
         }
-        return null
+        return descMatch
     }
 
-    private fun findToolbarProfileTapPoint(nodes: List<AccessibilityNodeInfo>): Pair<Float, Float>? {
+    private fun findToolbarProfileTapPoint(nodes: Sequence<AccessibilityNodeInfo>): Pair<Float, Float>? {
         val toolbarNode = nodes.firstOrNull { node ->
             node.viewIdResourceName != null && labels.toolbarViewIds.contains(node.viewIdResourceName)
         } ?: return null
@@ -678,8 +676,7 @@ internal class GeminiAccountSwitchAutomation(
         }
 
         // 2순위: 툴바 내부 우측 끝 액션 컨테이너의 오른쪽 정사각형 영역 중심 좌표 산출
-        val toolbarSubNodes = AccessibilityNodeTraversal.lazyTraverse(toolbarNode).toList()
-        val rightContainerBounds = toolbarSubNodes
+        val rightContainerBounds = AccessibilityNodeTraversal.lazyTraverse(toolbarNode)
             .mapNotNull { it.nodeBounds() }
             .filter { bounds ->
                 val height = bounds.bottom - bounds.top
@@ -706,16 +703,31 @@ internal class GeminiAccountSwitchAutomation(
         return tapX to tapY
     }
 
-    private fun findSidebarProfileNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        val isSidebarOpen = nodes.any { node ->
-            val desc = node.contentDescription?.toString()?.trim().orEmpty()
-            labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }
+    private fun findSidebarProfileNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        var isSidebarOpen = false
+        var radioButtonNode: AccessibilityNodeInfo? = null
+        val clickableCandidates = mutableListOf<AccessibilityNodeInfo>()
+
+        for (node in nodes) {
+            if (!isSidebarOpen) {
+                val desc = node.contentDescription?.toString()?.trim().orEmpty()
+                if (labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }) {
+                    isSidebarOpen = true
+                }
+            }
+            if (radioButtonNode == null && node.className?.contains("RadioButton", ignoreCase = true) == true) {
+                radioButtonNode = node
+            }
+            val isClickableOrCheckable = node.isClickable || node.isCheckable
+            if (isClickableOrCheckable) {
+                val b = node.nodeBounds()
+                if (b != null && (b.bottom - b.top) in 50..300) {
+                    clickableCandidates.add(node)
+                }
+            }
         }
         if (!isSidebarOpen) return null
 
-        val radioButtonNode = nodes.firstOrNull { node ->
-            node.className?.contains("RadioButton", ignoreCase = true) == true
-        }
         if (radioButtonNode != null) {
             val parent = radioButtonNode.parent
             if (parent != null && (parent.isClickable || parent.isCheckable)) {
@@ -733,15 +745,8 @@ internal class GeminiAccountSwitchAutomation(
             targetAlias.lowercase()
         ).filter { it.isNotBlank() }
 
-        val clickableCandidates = nodes.filter { node ->
-            val isClickableOrCheckable = node.isClickable || node.isCheckable
-            val b = node.nodeBounds()
-            isClickableOrCheckable && b != null && (b.bottom - b.top) in 50..300
-        }
-
         for (node in clickableCandidates) {
-            val subNodes = AccessibilityNodeTraversal.lazyTraverse(node).toList()
-            val hasIndicator = subNodes.any { child ->
+            val hasIndicator = AccessibilityNodeTraversal.lazyTraverse(node).any { child ->
                 val text = child.text?.toString()?.lowercase().orEmpty()
                 val desc = child.contentDescription?.toString()?.lowercase().orEmpty()
                 profileIndicators.any { ind -> text.contains(ind) || desc.contains(ind) }
@@ -769,38 +774,34 @@ internal class GeminiAccountSwitchAutomation(
         return Pair(tapX, tapY)
     }
 
-    private fun findOpenSidebarNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+    private fun findOpenSidebarNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        var toolbarNode: AccessibilityNodeInfo? = null
         for (node in nodes) {
             val desc = node.contentDescription?.toString()?.trim().orEmpty()
             if (desc.isNotBlank() && labels.openSidebarCandidates.any { desc.equals(it, ignoreCase = true) }) {
                 return node
             }
-        }
-        for (node in nodes) {
             val text = node.text?.toString()?.trim().orEmpty()
             if (text.isNotBlank() && labels.openSidebarCandidates.any { text.equals(it, ignoreCase = true) }) {
                 return node
             }
-        }
-        val toolbarNode = nodes.firstOrNull { node ->
-            node.viewIdResourceName != null && labels.toolbarViewIds.contains(node.viewIdResourceName)
+            if (toolbarNode == null && node.viewIdResourceName != null && labels.toolbarViewIds.contains(node.viewIdResourceName)) {
+                toolbarNode = node
+            }
         }
         if (toolbarNode != null) {
             val toolbarBounds = toolbarNode.nodeBounds()
             if (toolbarBounds != null) {
-                val leftNodes = AccessibilityNodeTraversal.lazyTraverse(toolbarNode)
-                    .filter { node ->
-                        val b = node.nodeBounds()
-                        b != null && b.left < toolbarBounds.left + 250 && (node.isClickable || node.isFocusable)
-                    }
-                    .toList()
-                leftNodes.firstOrNull()?.let { return it }
+                return AccessibilityNodeTraversal.lazyTraverse(toolbarNode).firstOrNull { node ->
+                    val b = node.nodeBounds()
+                    b != null && b.left < toolbarBounds.left + 250 && (node.isClickable || node.isFocusable)
+                }
             }
         }
         return null
     }
 
-    private fun findToolbarSidebarTapPoint(nodes: List<AccessibilityNodeInfo>): Pair<Float, Float>? {
+    private fun findToolbarSidebarTapPoint(nodes: Sequence<AccessibilityNodeInfo>): Pair<Float, Float>? {
         val toolbarNode = nodes.firstOrNull { node ->
             node.viewIdResourceName != null && labels.toolbarViewIds.contains(node.viewIdResourceName)
         } ?: return null
@@ -812,15 +813,25 @@ internal class GeminiAccountSwitchAutomation(
         return tapX to tapY
     }
 
-    private fun extractCurrentHeaderCandidate(nodes: List<AccessibilityNodeInfo>): GeminiAccountNodeCandidate? {
-        val primaryNode = nodes.firstOrNull {
-            it.viewIdResourceName != null && labels.compactHeaderPrimaryTextIds.contains(it.viewIdResourceName)
-        }
-        val secondaryNode = nodes.firstOrNull {
-            it.viewIdResourceName != null && labels.compactHeaderSecondaryTextIds.contains(it.viewIdResourceName)
-        }
-        val headerNode = nodes.firstOrNull {
-            it.viewIdResourceName != null && labels.accountHeaderContainerIds.contains(it.viewIdResourceName)
+    private fun extractCurrentHeaderCandidate(nodes: Sequence<AccessibilityNodeInfo>): GeminiAccountNodeCandidate? {
+        var primaryNode: AccessibilityNodeInfo? = null
+        var secondaryNode: AccessibilityNodeInfo? = null
+        var headerNode: AccessibilityNodeInfo? = null
+
+        for (node in nodes) {
+            val id = node.viewIdResourceName ?: continue
+            if (primaryNode == null && labels.compactHeaderPrimaryTextIds.contains(id)) {
+                primaryNode = node
+            }
+            if (secondaryNode == null && labels.compactHeaderSecondaryTextIds.contains(id)) {
+                secondaryNode = node
+            }
+            if (headerNode == null && labels.accountHeaderContainerIds.contains(id)) {
+                headerNode = node
+            }
+            if (primaryNode != null && secondaryNode != null && headerNode != null) {
+                break
+            }
         }
         if (primaryNode == null && secondaryNode == null && headerNode == null) return null
 
@@ -831,25 +842,33 @@ internal class GeminiAccountSwitchAutomation(
         )
     }
 
-    private fun findAccountHeaderContainerNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        for (id in labels.accountHeaderContainerIds) {
-            nodes.firstOrNull { it.viewIdResourceName == id }?.let { return it }
+    private fun findAccountHeaderContainerNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        return nodes.firstOrNull { node ->
+            node.viewIdResourceName != null && labels.accountHeaderContainerIds.contains(node.viewIdResourceName)
         }
-        return null
     }
 
     private fun findExpandHeaderTapPoint(
-        nodes: List<AccessibilityNodeInfo>,
+        nodes: Sequence<AccessibilityNodeInfo>,
         headerContainer: AccessibilityNodeInfo?
     ): Pair<Float, Float>? {
-        for (id in labels.accountHeaderChevronIds) {
-            val chevronBounds = nodes.firstOrNull { it.viewIdResourceName == id }?.nodeBounds()
-            if (chevronBounds != null) {
-                return chevronBounds.centerX.toFloat() to chevronBounds.centerY.toFloat()
+        var chevronBounds: NodeBounds? = null
+        var secondaryTextBounds: NodeBounds? = null
+
+        for (node in nodes) {
+            val id = node.viewIdResourceName ?: continue
+            if (chevronBounds == null && labels.accountHeaderChevronIds.contains(id)) {
+                chevronBounds = node.nodeBounds()
+                if (chevronBounds != null) {
+                    return chevronBounds.centerX.toFloat() to chevronBounds.centerY.toFloat()
+                }
+            }
+            if (secondaryTextBounds == null && labels.compactHeaderSecondaryTextIds.contains(id)) {
+                secondaryTextBounds = node.nodeBounds()
             }
         }
-        val headerBounds = headerContainer?.nodeBounds()
-            ?: nodes.firstOrNull { it.viewIdResourceName in labels.compactHeaderSecondaryTextIds }?.nodeBounds()
+
+        val headerBounds = headerContainer?.nodeBounds() ?: secondaryTextBounds
         if (headerBounds != null) {
             return headerBounds.centerX.toFloat() to headerBounds.centerY.toFloat()
         }
@@ -857,30 +876,37 @@ internal class GeminiAccountSwitchAutomation(
     }
 
     private fun findAvailableAccountRows(
-        nodes: List<AccessibilityNodeInfo>
+        nodes: Sequence<AccessibilityNodeInfo>
     ): List<Pair<AccessibilityNodeInfo, GeminiAccountNodeCandidate>> {
         val rowNodes = nodes.filter { node ->
             node.viewIdResourceName != null && labels.availableAccountRowIds.contains(node.viewIdResourceName)
-        }
+        }.toList()
         return rowNodes.map { rowNode ->
-            val subNodes = AccessibilityNodeTraversal.lazyTraverse(rowNode).toList()
-            val primaryText = subNodes.firstOrNull {
-                it.viewIdResourceName != null && labels.accountPrimaryInfoIds.contains(it.viewIdResourceName)
-            }?.text?.toString().orEmpty()
-            val secondaryText = subNodes.firstOrNull {
-                it.viewIdResourceName != null && labels.accountSecondaryInfoIds.contains(it.viewIdResourceName)
-            }?.text?.toString().orEmpty()
-            val fallbackTexts = if (primaryText.isBlank() && secondaryText.isBlank()) {
-                subNodes.mapNotNull { it.text?.toString()?.trim()?.takeIf(String::isNotBlank) }
-            } else {
-                emptyList()
+            var primaryText: String? = null
+            var secondaryText: String? = null
+            val fallbackTexts = mutableListOf<String>()
+
+            for (child in AccessibilityNodeTraversal.lazyTraverse(rowNode)) {
+                val id = child.viewIdResourceName
+                if (id != null) {
+                    if (primaryText == null && labels.accountPrimaryInfoIds.contains(id)) {
+                        primaryText = child.text?.toString()
+                    }
+                    if (secondaryText == null && labels.accountSecondaryInfoIds.contains(id)) {
+                        secondaryText = child.text?.toString()
+                    }
+                }
+                val t = child.text?.toString()?.trim()
+                if (!t.isNullOrBlank()) {
+                    fallbackTexts.add(t)
+                }
             }
-            val resolvedSecondary = secondaryText.ifBlank {
-                fallbackTexts.firstOrNull { it.contains("@") }.orEmpty()
-            }
-            val resolvedPrimary = primaryText.ifBlank {
-                fallbackTexts.firstOrNull { !it.contains("@") }.orEmpty()
-            }
+
+            val resolvedSecondary = secondaryText?.ifBlank { null }
+                ?: fallbackTexts.firstOrNull { it.contains("@") }.orEmpty()
+            val resolvedPrimary = primaryText?.ifBlank { null }
+                ?: fallbackTexts.firstOrNull { !it.contains("@") }.orEmpty()
+
             rowNode to GeminiAccountNodeCandidate(
                 primaryText = resolvedPrimary,
                 secondaryText = resolvedSecondary,
@@ -889,24 +915,38 @@ internal class GeminiAccountSwitchAutomation(
         }
     }
 
-    private fun findBentoScrollableNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        for (id in labels.bentoScrollContainerIds) {
-            nodes.firstOrNull { it.viewIdResourceName == id && it.isScrollable }?.let { return it }
+    private fun findBentoScrollableNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        var generalScrollable: AccessibilityNodeInfo? = null
+        for (node in nodes) {
+            if (!node.isScrollable) continue
+            val id = node.viewIdResourceName
+            if (id != null) {
+                if (labels.bentoScrollContainerIds.contains(id) || labels.accountsListContainerIds.contains(id)) {
+                    return node
+                }
+            }
+            if (generalScrollable == null) {
+                generalScrollable = node
+            }
         }
-        for (id in labels.accountsListContainerIds) {
-            nodes.firstOrNull { it.viewIdResourceName == id && it.isScrollable }?.let { return it }
-        }
-        return nodes.firstOrNull { it.isScrollable }
+        return generalScrollable
     }
 
-    private fun findBentoCloseButtonNode(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        for (id in labels.bentoCloseButtonIds) {
-            nodes.firstOrNull { it.viewIdResourceName == id }?.let { return it }
+    private fun findBentoCloseButtonNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        var fallbackClose: AccessibilityNodeInfo? = null
+        for (node in nodes) {
+            val id = node.viewIdResourceName
+            if (id != null && labels.bentoCloseButtonIds.contains(id)) {
+                return node
+            }
+            if (fallbackClose == null) {
+                val desc = node.contentDescription?.toString()?.trim().orEmpty()
+                if (labels.bentoCloseButtonCandidates.any { desc.equals(it, ignoreCase = true) }) {
+                    fallbackClose = node
+                }
+            }
         }
-        return nodes.firstOrNull { node ->
-            val desc = node.contentDescription?.toString()?.trim().orEmpty()
-            labels.bentoCloseButtonCandidates.any { desc.equals(it, ignoreCase = true) }
-        }
+        return fallbackClose
     }
 
     private fun retryOrFail(failureMessage: String, retry: () -> Unit) {
