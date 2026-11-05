@@ -147,7 +147,8 @@ internal class FloatingAutomationBarController(
 
     private fun createLayoutParams(): WindowManager.LayoutParams {
         val defaultPosition = positionStore.defaultPosition()
-        val position = currentPosition ?: defaultPosition
+        val rawPosition = currentPosition ?: defaultPosition
+        val position = FloatingBarPosition(clampX(rawPosition.x), clampY(rawPosition.y))
         currentPosition = position
 
         return WindowManager.LayoutParams(
@@ -202,7 +203,7 @@ internal class FloatingAutomationBarController(
     }
 
     private fun clampX(value: Int): Int {
-        val screenWidth = appContext.resources.displayMetrics.widthPixels
+        val screenWidth = positionStore.screenWidthPx()
         val barWidth = positionStore.barWidthPx()
         val minX = min(0, screenWidth - barWidth)
         val maxX = max(0, screenWidth - barWidth)
@@ -210,7 +211,7 @@ internal class FloatingAutomationBarController(
     }
 
     private fun clampY(value: Int): Int {
-        val screenHeight = appContext.resources.displayMetrics.heightPixels
+        val screenHeight = positionStore.screenHeightPx()
         val minVisibleHeight = positionStore.minVisibleHeightPx()
         return min(max(value, 0), max(screenHeight - minVisibleHeight, 0))
     }
