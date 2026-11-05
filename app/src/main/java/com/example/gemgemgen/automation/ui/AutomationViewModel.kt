@@ -1620,6 +1620,7 @@ class AutomationViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        manageRemoteAutomation.close()
         promptWorkspace?.segmentReplacer = null
         promptWorkspace?.currentPromptProvider = null
     }

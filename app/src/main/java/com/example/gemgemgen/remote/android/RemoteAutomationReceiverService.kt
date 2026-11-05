@@ -1,4 +1,4 @@
-// 역할: 포그라운드 서비스로 상주하며 원격 송신 기기의 최상위 명령(자동화 선점 실행, 취소, 메모리 정리, 계정 전환)을 수신·조율합니다.
+// 역할: 포그라운드 서비스로 상주하며 NSD 수신 등록 및 원격 송신 기기의 최상위 명령(자동화 선점 실행, 취소, 메모리 정리, 계정 전환)을 수신·조율합니다.
 package com.example.gemgemgen.remote.android
 
 import android.app.KeyguardManager
@@ -41,6 +41,7 @@ import java.security.SecureRandom
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -59,7 +60,10 @@ class RemoteAutomationReceiverService : Service() {
     private lateinit var executeRemoteAutomation: ExecuteRemoteAutomationUseCase
     private lateinit var environmentGateway: AndroidEnvironmentGateway
     private var serverSocket: ServerSocket? = null
+    private val nsdLock = Any()
     private var registrationListener: NsdManager.RegistrationListener? = null
+    private var isRegistering = false
+    private var pendingRegisterPort: Int? = null
     private val sessionMutex = Mutex()
     @Volatile private var activeSession: ReceiverSession? = null
     private val pairingCode = "%04d".format(SecureRandom().nextInt(10_000))
@@ -313,19 +317,47 @@ class RemoteAutomationReceiverService : Service() {
             job.start()
             job
         }
+        val disconnectJob = serviceScope.launch(Dispatchers.IO) {
+            try {
+                val input = socket.getInputStream()
+                while (true) {
+                    val byte = input.read()
+                    if (byte == -1) break
+                }
+            } catch (_: Exception) {
+            } finally {
+                states.close()
+            }
+        }
         try {
             while (true) {
-                val state = states.receive()
+                val result = states.receiveCatching()
+                if (result.isClosed) {
+                    break
+                }
+                val state = result.getOrNull() ?: break
                 if (activeSession?.requestId == requestId) {
                     RemoteAutomationStateHub.update {
                         it.copy(automationState = state, message = stateMessage(state))
                     }
                 }
-                writeState(writer, requestId, state)
+                val writeOk = writeState(writer, requestId, state)
+                if (!writeOk) {
+                    RemoteAutomationStateHub.update {
+                        it.copy(message = "송신 기기와의 연결이 끊겨 자동화를 중단했습니다.")
+                    }
+                    break
+                }
                 if (state.isTerminal()) break
             }
         } finally {
+            disconnectJob.cancel()
             executionJob.cancel()
+            withContext(NonCancellable) {
+                withContext(Dispatchers.Main.immediate) {
+                    executeRemoteAutomation.cancelAndAwait()
+                }
+            }
             states.close()
             sessionMutex.withLock {
                 if (activeSession?.requestId == requestId) {
@@ -562,16 +594,28 @@ class RemoteAutomationReceiverService : Service() {
         writer: PrintWriter,
         requestId: String,
         state: AutomationRunState
-    ) {
+    ): Boolean {
         writer.println(
             RemoteAutomationProtocol.encode(
                 RemoteProtocolMessage.StateUpdate(requestId, state)
             )
         )
+        return !writer.checkError()
     }
 
     private fun registerService(port: Int) {
+        synchronized(nsdLock) {
+            registerServiceLocked(port)
+        }
+    }
+
+    private fun registerServiceLocked(port: Int) {
         val nsdManager = getSystemService(NsdManager::class.java)
+        if (registrationListener != null || isRegistering) {
+            pendingRegisterPort = port
+            unregisterServiceLocked()
+            return
+        }
         val isPaired = store.pairedSender() != null && !store.isUserDisconnected()
         val serviceInfo = NsdServiceInfo().apply {
             serviceName = "GemGemGen ${deviceName()}".take(55)
@@ -580,37 +624,98 @@ class RemoteAutomationReceiverService : Service() {
             setAttribute("receiverId", store.installationId())
             setAttribute("isPaired", isPaired.toString())
         }
+        isRegistering = true
         val listener = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(serviceInfo: NsdServiceInfo) {
-                RemoteAutomationStateHub.update {
-                    it.copy(message = receiverReadyMessage(serviceInfo.serviceName))
+                val nextPort = synchronized(nsdLock) {
+                    isRegistering = false
+                    val pending = pendingRegisterPort
+                    if (pending != null) {
+                        pendingRegisterPort = null
+                        unregisterServiceLocked()
+                    }
+                    pending
+                }
+                if (nextPort == null) {
+                    RemoteAutomationStateHub.update {
+                        it.copy(message = receiverReadyMessage(serviceInfo.serviceName))
+                    }
                 }
             }
 
             override fun onRegistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
-                RemoteAutomationStateHub.update {
-                    it.copy(message = "Wi-Fi 수신 서비스를 알리지 못했습니다. ($errorCode)")
+                val nextPort = synchronized(nsdLock) {
+                    isRegistering = false
+                    registrationListener = null
+                    val pending = pendingRegisterPort
+                    pendingRegisterPort = null
+                    pending
+                }
+                if (nextPort != null) {
+                    registerService(nextPort)
+                } else {
+                    RemoteAutomationStateHub.update {
+                        it.copy(message = "Wi-Fi 수신 서비스를 알리지 못했습니다. ($errorCode)")
+                    }
                 }
             }
 
-            override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) = Unit
-            override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) = Unit
+            override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) {
+                val nextPort = synchronized(nsdLock) {
+                    registrationListener = null
+                    isRegistering = false
+                    val pending = pendingRegisterPort
+                    pendingRegisterPort = null
+                    pending
+                }
+                if (nextPort != null) {
+                    registerService(nextPort)
+                }
+            }
+
+            override fun onUnregistrationFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                val nextPort = synchronized(nsdLock) {
+                    registrationListener = null
+                    isRegistering = false
+                    val pending = pendingRegisterPort
+                    pendingRegisterPort = null
+                    pending
+                }
+                if (nextPort != null) {
+                    registerService(nextPort)
+                }
+            }
         }
         registrationListener = listener
-        nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
+        runCatching {
+            nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
+        }.onFailure { error ->
+            isRegistering = false
+            registrationListener = null
+            RemoteAutomationStateHub.update {
+                it.copy(message = "Wi-Fi 수신 서비스 등록 실패: ${error.message ?: "알 수 없는 오류"}")
+            }
+        }
     }
 
     private fun unregisterService() {
+        synchronized(nsdLock) {
+            pendingRegisterPort = null
+            unregisterServiceLocked()
+        }
+    }
+
+    private fun unregisterServiceLocked() {
         val listener = registrationListener ?: return
-        registrationListener = null
         runCatching {
             getSystemService(NsdManager::class.java).unregisterService(listener)
         }
     }
 
     private fun reregisterService(port: Int) {
-        unregisterService()
-        registerService(port)
+        synchronized(nsdLock) {
+            registerServiceLocked(port)
+        }
     }
 
     private fun receiverReadyMessage(registeredName: String = deviceName()): String {

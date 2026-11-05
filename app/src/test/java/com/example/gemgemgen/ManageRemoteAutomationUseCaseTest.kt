@@ -175,6 +175,16 @@ class ManageRemoteAutomationUseCaseTest {
         assertEquals(true, gateway.retryConnectionCalled)
     }
 
+    @Test
+    fun close_delegatesToGateway() {
+        val gateway = FakeRemoteAutomationGateway()
+        val useCase = ManageRemoteAutomationUseCase(gateway)
+
+        useCase.close()
+
+        assertEquals(true, gateway.closeCalled)
+    }
+
     private class FakeRemoteAutomationGateway(
         initialStatus: RemoteAutomationStatus = RemoteAutomationStatus(),
         private val holdSend: Boolean = false
@@ -186,6 +196,7 @@ class ManageRemoteAutomationUseCaseTest {
         var forceStoppedRequestId: String? = null
         var disconnectCalled = false
         var retryConnectionCalled = false
+        var closeCalled = false
 
         override fun selectMode(mode: AutomationMode) {
             status.value = status.value.copy(mode = mode)
@@ -220,5 +231,9 @@ class ManageRemoteAutomationUseCaseTest {
         }
 
         override suspend fun cleanMemory(): RemoteActionResult = RemoteActionResult.Success
+
+        override fun close() {
+            closeCalled = true
+        }
     }
 }

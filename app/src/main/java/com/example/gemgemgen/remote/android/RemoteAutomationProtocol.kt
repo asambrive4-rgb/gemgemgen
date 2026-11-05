@@ -78,6 +78,7 @@ internal object RemoteAutomationProtocol {
     const val SERVICE_TYPE = "_gemgemgen._tcp."
     const val MAX_MESSAGE_CHARS = 1_000_000
     const val SOCKET_TIMEOUT_MS = 10_000
+    const val STREAM_SOCKET_TIMEOUT_MS = 30_000
 
     private val json = Json { ignoreUnknownKeys = true }
 

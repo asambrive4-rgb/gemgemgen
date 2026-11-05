@@ -1,4 +1,4 @@
-// 역할: RemoteServiceDiscovery 탐색 및 소켓 통신을 통해 원격 수신 기기와 통신·재시도하고 진행 상태를 상태 허브로 전파합니다.
+// 역할: RemoteServiceDiscovery 탐색 및 소켓 통신을 통해 원격 수신 기기와 통신·재시도하고, 생명주기 종료 시 자원을 회수하며 진행 상태를 상태 허브로 전파합니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
@@ -16,6 +16,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -236,7 +237,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
 
         beginRequest(request.requestId)
         try {
-            val socket = openSocket(target, timeoutMillis = 0)
+            val socket = openSocket(target, timeoutMillis = RemoteAutomationProtocol.STREAM_SOCKET_TIMEOUT_MS)
             if (!attachSocket(request.requestId, socket)) {
                 socket.close()
                 return@withContext
@@ -518,11 +519,24 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         timeoutMillis: Int = RemoteAutomationProtocol.SOCKET_TIMEOUT_MS
     ): Socket {
         return Socket().apply {
+            keepAlive = true
             connect(
                 InetSocketAddress(target.address, target.port),
                 RemoteAutomationProtocol.SOCKET_TIMEOUT_MS
             )
             soTimeout = timeoutMillis
+        }
+    }
+
+    override fun close() {
+        discovery.stop()
+        endpoint = null
+        scope.cancel()
+        synchronized(activeRequestLock) {
+            val socket = activeSocket
+            activeSocket = null
+            socket?.let { runCatching { it.close() } }
+            activeRequestId = null
         }
     }
 }

@@ -1,4 +1,4 @@
-// 역할: 원격 기기 페어링, 연결 해제, 연결 재시도, 자동화 요청 송신, 메모리 정리, Gemini 계정 전환 및 강제 중지를 조율합니다.
+// 역할: 원격 기기 페어링, 연결 해제, 자원 회수, 자동화 요청 송신, 메모리 정리, Gemini 계정 전환 및 강제 중지를 조율합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -23,7 +23,7 @@ class ManageRemoteAutomationUseCase(
     private val promptGenerator: PromptGenerator = PromptGenerator(),
     private val dispatchers: AppDispatchers = AppDispatchers(),
     private val requestIdProvider: () -> String = { UUID.randomUUID().toString() }
-) {
+) : AutoCloseable {
     private val activeRequestId = AtomicReference<String?>(null)
 
     val status: StateFlow<RemoteAutomationStatus>
@@ -124,6 +124,10 @@ class ManageRemoteAutomationUseCase(
     fun updateRepeatCount(repeatCount: Int) {
         val requestId = activeRequestId.get() ?: return
         gateway.updateRepeatCount(requestId, repeatCount.coerceIn(1, 999))
+    }
+
+    override fun close() {
+        gateway.close()
     }
 
     companion object {
