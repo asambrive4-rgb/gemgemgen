@@ -11,10 +11,11 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.analysis.domain.AnalysisDirection
 import com.example.gemgemgen.analysis.usecase.AnalysisCustomDirectionRepository
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -28,32 +29,44 @@ private val Context.customDirectionDataStore: DataStore<Preferences> by preferen
 )
 
 class AndroidAnalysisCustomDirectionRepository internal constructor(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : AnalysisCustomDirectionRepository {
     constructor(context: Context) : this(context.applicationContext.customDirectionDataStore)
 
-    override fun load(): List<AnalysisDirection> {
-        val raw = runBlocking {
+    @Volatile
+    private var cachedDirections: List<AnalysisDirection> = emptyList()
+
+    init {
+        scope.launch {
             dataStore.data
                 .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[KEY_DIRECTIONS] }
-                .first()
-        } ?: return emptyList()
-        return runCatching {
-            analysisJson.parseToJsonElement(raw).jsonArray.map { element ->
-                val item = element.jsonObject
-                AnalysisDirection(
-                    id = item.getValue("id").jsonPrimitive.content,
-                    title = item.getValue("title").jsonPrimitive.content,
-                    hint = item.getValue("hint").jsonPrimitive.content
-                )
-            }
-        }.getOrDefault(emptyList())
+                .collect { preferences ->
+                    val raw = preferences[KEY_DIRECTIONS]
+                    if (!raw.isNullOrBlank()) {
+                        cachedDirections = runCatching {
+                            analysisJson.parseToJsonElement(raw).jsonArray.map { element ->
+                                val item = element.jsonObject
+                                AnalysisDirection(
+                                    id = item.getValue("id").jsonPrimitive.content,
+                                    title = item.getValue("title").jsonPrimitive.content,
+                                    hint = item.getValue("hint").jsonPrimitive.content
+                                )
+                            }
+                        }.getOrDefault(emptyList())
+                    }
+                }
+        }
+    }
+
+    override fun load(): List<AnalysisDirection> {
+        return cachedDirections
     }
 
     override fun save(directions: List<AnalysisDirection>) {
+        cachedDirections = directions
         val payload = JsonArray(directions.map { it.toJson() }).toString()
-        runBlocking {
+        scope.launch {
             dataStore.edit { it[KEY_DIRECTIONS] = payload }
         }
     }

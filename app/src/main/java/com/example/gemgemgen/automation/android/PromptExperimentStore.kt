@@ -13,11 +13,13 @@ import com.example.gemgemgen.automation.domain.PromptExperimentPolicy
 import com.example.gemgemgen.automation.domain.PromptExperimentPreset
 import com.example.gemgemgen.automation.usecase.PromptExperimentRepository
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -32,7 +34,8 @@ private val Context.promptExperimentDataStore: DataStore<Preferences> by prefere
 )
 
 class PromptExperimentStore(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : PromptExperimentRepository {
     constructor(context: Context) : this(context.applicationContext.promptExperimentDataStore)
 
@@ -56,17 +59,29 @@ class PromptExperimentStore(
             }
         }
 
-    override fun loadPresets(): List<PromptExperimentPreset> {
-        cachedPresets?.let { return it }
-        return runBlocking {
-            presets.first()
+    init {
+        scope.launch {
+            presets.collect {
+                // updates cachedPresets
+            }
         }
+        scope.launch {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .collect { preferences ->
+                    cachedActivePresetId = preferences[KEY_ACTIVE_PRESET_ID]
+                }
+        }
+    }
+
+    override fun loadPresets(): List<PromptExperimentPreset> {
+        return cachedPresets ?: listOf(PromptExperimentPolicy.defaultPreset())
     }
 
     override fun savePresets(presets: List<PromptExperimentPreset>) {
         val normalized = presets.ifEmpty { listOf(PromptExperimentPolicy.defaultPreset()) }
         cachedPresets = normalized
-        runBlocking {
+        scope.launch {
             savePresetsAsync(normalized)
         }
     }
@@ -81,19 +96,12 @@ class PromptExperimentStore(
     }
 
     override fun loadActivePresetId(): String? {
-        cachedActivePresetId?.let { return it }
-        return runBlocking {
-            dataStore.data
-                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[KEY_ACTIVE_PRESET_ID] }
-                .first()
-                .also { cachedActivePresetId = it }
-        }
+        return cachedActivePresetId
     }
 
     override fun saveActivePresetId(presetId: String?) {
         cachedActivePresetId = presetId
-        runBlocking {
+        scope.launch {
             dataStore.edit { preferences ->
                 if (presetId.isNullOrBlank()) {
                     preferences.remove(KEY_ACTIVE_PRESET_ID)

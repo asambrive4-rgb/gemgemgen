@@ -11,10 +11,11 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.analysis.usecase.GrokAuthRepository
 import com.example.gemgemgen.analysis.usecase.GrokAuthSession
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -27,27 +28,43 @@ private val Context.grokAuthDataStore: DataStore<Preferences> by preferencesData
 
 class AndroidEncryptedGrokAuthRepository internal constructor(
     private val dataStore: DataStore<Preferences>,
-    private val cipher: AndroidKeyStoreCipher = AndroidKeyStoreCipher(KEY_ALIAS)
+    private val cipher: AndroidKeyStoreCipher = AndroidKeyStoreCipher(KEY_ALIAS),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : GrokAuthRepository {
     constructor(context: Context) : this(
         context.applicationContext.grokAuthDataStore,
         AndroidKeyStoreCipher(KEY_ALIAS)
     )
 
-    override fun loadSession(): GrokAuthSession? {
-        val encrypted = runBlocking {
+    @Volatile
+    private var cachedSession: GrokAuthSession? = null
+
+    init {
+        scope.launch {
             dataStore.data
                 .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[KEY_SESSION] }
-                .first()
-        } ?: return null
-        val plain = cipher.decrypt(encrypted) ?: return null
-        return runCatching {
-            analysisJson.parseToJsonElement(plain).jsonObject.toSessionOrNull()
-        }.getOrNull()
+                .collect { preferences ->
+                    val encrypted = preferences[KEY_SESSION]
+                    if (!encrypted.isNullOrBlank()) {
+                        val plain = cipher.decrypt(encrypted)
+                        if (!plain.isNullOrBlank()) {
+                            cachedSession = runCatching {
+                                analysisJson.parseToJsonElement(plain).jsonObject.toSessionOrNull()
+                            }.getOrNull()
+                        }
+                    } else {
+                        cachedSession = null
+                    }
+                }
+        }
+    }
+
+    override fun loadSession(): GrokAuthSession? {
+        return cachedSession
     }
 
     override fun saveSession(session: GrokAuthSession) {
+        cachedSession = session
         val payload = buildJsonObject {
             put("accessToken", JsonPrimitive(session.accessToken))
             put("refreshToken", JsonPrimitive(session.refreshToken.orEmpty()))
@@ -58,15 +75,17 @@ class AndroidEncryptedGrokAuthRepository internal constructor(
             put("tokenEndpoint", JsonPrimitive(session.tokenEndpoint.orEmpty()))
             put("accountPreview", JsonPrimitive(session.accountPreview))
         }.toString()
-        runBlocking {
+        scope.launch {
+            val encrypted = cipher.encrypt(payload)
             dataStore.edit { preferences ->
-                preferences[KEY_SESSION] = cipher.encrypt(payload)
+                preferences[KEY_SESSION] = encrypted
             }
         }
     }
 
     override fun clearSession() {
-        runBlocking {
+        cachedSession = null
+        scope.launch {
             dataStore.edit { preferences ->
                 preferences.remove(KEY_SESSION)
             }

@@ -11,11 +11,13 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.automation.domain.PromptHistoryItem
 import com.example.gemgemgen.automation.usecase.PromptHistoryRepository
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.jsonArray
@@ -26,24 +28,37 @@ private val Context.promptHistoryDataStore: DataStore<Preferences> by preference
 )
 
 class DataStorePromptHistoryRepository(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : PromptHistoryRepository {
     constructor(context: Context) : this(context.applicationContext.promptHistoryDataStore)
+
+    @Volatile
+    private var cachedItems: List<PromptHistoryItem> = emptyList()
 
     val historyFlow: Flow<List<PromptHistoryItem>> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
         .map { preferences ->
-            parseHistoryItems(preferences[KEY_HISTORY_ITEMS])
+            parseHistoryItems(preferences[KEY_HISTORY_ITEMS]).also {
+                cachedItems = it
+            }
         }
 
-    override fun load(): List<PromptHistoryItem> {
-        return runBlocking {
-            historyFlow.first()
+    init {
+        scope.launch {
+            historyFlow.collect {
+                // Flow emission updates cachedItems
+            }
         }
     }
 
+    override fun load(): List<PromptHistoryItem> {
+        return cachedItems
+    }
+
     override fun save(items: List<PromptHistoryItem>) {
-        runBlocking {
+        cachedItems = items
+        scope.launch {
             saveAsync(items)
         }
     }

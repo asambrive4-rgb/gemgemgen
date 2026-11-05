@@ -12,20 +12,28 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.automation.usecase.AnimationScaleBackupStore
 import com.example.gemgemgen.automation.usecase.AnimationScales
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 
 private val Context.animationScaleBackupDataStore: DataStore<Preferences> by preferencesDataStore(
     name = DataStoreAnimationScaleBackupStore.DATASTORE_NAME
 )
 
 class DataStoreAnimationScaleBackupStore(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : AnimationScaleBackupStore {
     constructor(context: Context) : this(context.applicationContext.animationScaleBackupDataStore)
+
+    @Volatile
+    private var cachedScales: AnimationScales? = null
+    @Volatile
+    private var hasBackup: Boolean = false
 
     val scalesFlow: Flow<AnimationScales?> = dataStore.data
         .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
@@ -41,14 +49,23 @@ class DataStoreAnimationScaleBackupStore(
             }
         }
 
-    override fun load(): AnimationScales? {
-        return runBlocking {
-            scalesFlow.first()
+    init {
+        scope.launch {
+            scalesFlow.collect { scales ->
+                cachedScales = scales
+                hasBackup = scales != null
+            }
         }
     }
 
+    override fun load(): AnimationScales? {
+        return cachedScales
+    }
+
     override fun save(scales: AnimationScales) {
-        runBlocking {
+        cachedScales = scales
+        hasBackup = true
+        scope.launch {
             saveAsync(scales)
         }
     }
@@ -63,7 +80,9 @@ class DataStoreAnimationScaleBackupStore(
     }
 
     override fun clear() {
-        runBlocking {
+        cachedScales = null
+        hasBackup = false
+        scope.launch {
             clearAsync()
         }
     }

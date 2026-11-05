@@ -16,9 +16,13 @@ import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.usecase.AutomationSettingsRepository
 import com.example.gemgemgen.core.AppDefaults
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 private val Context.automationDataStore: DataStore<Preferences> by preferencesDataStore(
     name = AutomationSettingsStore.DATASTORE_NAME
@@ -37,6 +41,16 @@ class AutomationSettingsStore(
     private val dataStore: DataStore<Preferences>
 ) : AutomationSettingsRepository {
     constructor(context: Context) : this(context.applicationContext.automationDataStore)
+
+    @Volatile
+    var isCopyPromptOnStartCached: Boolean = DEFAULT_COPY_PROMPT_ON_START
+        private set
+
+    init {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            copyPromptOnStart.collect { isCopyPromptOnStartCached = it }
+        }
+    }
 
     override val copyPromptOnStart: Flow<Boolean> = dataStore.data
         .catch { exception ->

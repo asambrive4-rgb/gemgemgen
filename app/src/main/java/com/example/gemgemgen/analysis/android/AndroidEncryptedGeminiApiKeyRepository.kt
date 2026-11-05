@@ -14,10 +14,12 @@ import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRecord
 import com.example.gemgemgen.analysis.usecase.GeminiApiKeyRepository
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -32,14 +34,47 @@ private val Context.geminiApiKeyDataStore: DataStore<Preferences> by preferences
 
 class AndroidEncryptedGeminiApiKeyRepository internal constructor(
     private val dataStore: DataStore<Preferences>,
-    private val cipher: AndroidKeyStoreCipher = AndroidKeyStoreCipher(KEY_ALIAS)
+    private val cipher: AndroidKeyStoreCipher = AndroidKeyStoreCipher(KEY_ALIAS),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : GeminiApiKeyRepository {
     constructor(context: Context) : this(
         context.applicationContext.geminiApiKeyDataStore,
         AndroidKeyStoreCipher(KEY_ALIAS)
     )
 
-    private var cachedRecords: List<StoredGeminiApiKey>? = null
+    @Volatile
+    private var cachedRecords: List<StoredGeminiApiKey> = emptyList()
+    private val cachedRoleProviders = ConcurrentHashMap<String, String>()
+    private val cachedRoleModels = ConcurrentHashMap<String, String>()
+
+    init {
+        scope.launch {
+            dataStore.data
+                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                .collect { preferences ->
+                    val raw = preferences[KEY_PREF_RECORDS]
+                    if (!raw.isNullOrBlank()) {
+                        cachedRecords = runCatching {
+                            analysisJson.parseToJsonElement(raw)
+                                .jsonArray
+                                .mapNotNull { element -> element.jsonObject.toStoredRecordOrNull() }
+                        }.getOrDefault(emptyList())
+                    }
+                    for (role in AnalysisModelRole.entries) {
+                        val providerKey = stringPreferencesKey(roleProviderKey(role.storageValue))
+                        val storedProvider = preferences[providerKey]
+                        if (!storedProvider.isNullOrBlank()) {
+                            cachedRoleProviders[role.storageValue] = AnalysisProvider.fromStorage(storedProvider).storageValue
+                        }
+                        val modelKey = stringPreferencesKey(roleModelKey(role.storageValue))
+                        val storedModel = preferences[modelKey]
+                        if (!storedModel.isNullOrBlank()) {
+                            cachedRoleModels[role.storageValue] = storedModel
+                        }
+                    }
+                }
+        }
+    }
 
     override fun listKeys(): List<GeminiApiKeyRecord> {
         return readRecords().map { it.toRecord() }
@@ -92,13 +127,7 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
 
     override fun getRoleProvider(role: String): String {
         val analysisRole = AnalysisModelRole.fromStorage(role)
-        val key = stringPreferencesKey(roleProviderKey(analysisRole.storageValue))
-        val stored = runBlocking {
-            dataStore.data
-                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[key] }
-                .first()
-        }
+        val stored = cachedRoleProviders[analysisRole.storageValue]
         if (!stored.isNullOrBlank()) {
             return AnalysisProvider.fromStorage(stored).storageValue
         }
@@ -110,14 +139,17 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
         val provider = AnalysisProvider.fromStorage(providerId)
         val providerPrefKey = stringPreferencesKey(roleProviderKey(analysisRole.storageValue))
         val modelPrefKey = stringPreferencesKey(roleModelKey(analysisRole.storageValue))
-        runBlocking {
+        cachedRoleProviders[analysisRole.storageValue] = provider.storageValue
+        scope.launch {
             dataStore.edit { preferences ->
                 preferences[providerPrefKey] = provider.storageValue
                 val currentModel = preferences[modelPrefKey]
                 if (currentModel.isNullOrBlank() ||
                     !AnalysisProvider.isModelForProvider(currentModel, provider)
                 ) {
-                    preferences[modelPrefKey] = defaultModelFor(analysisRole, provider)
+                    val defaultModel = defaultModelFor(analysisRole, provider)
+                    preferences[modelPrefKey] = defaultModel
+                    cachedRoleModels[analysisRole.storageValue] = defaultModel
                 }
             }
         }
@@ -126,13 +158,7 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
     override fun getRoleModel(role: String): String {
         val analysisRole = AnalysisModelRole.fromStorage(role)
         val provider = AnalysisProvider.fromStorage(getRoleProvider(role))
-        val key = stringPreferencesKey(roleModelKey(analysisRole.storageValue))
-        val stored = runBlocking {
-            dataStore.data
-                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[key] }
-                .first()
-        }
+        val stored = cachedRoleModels[analysisRole.storageValue]
         if (!stored.isNullOrBlank() &&
             AnalysisProvider.isModelForProvider(stored, provider)
         ) {
@@ -150,7 +176,8 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
             defaultModelFor(analysisRole, provider)
         }
         val key = stringPreferencesKey(roleModelKey(analysisRole.storageValue))
-        runBlocking {
+        cachedRoleModels[analysisRole.storageValue] = normalized
+        scope.launch {
             dataStore.edit { preferences ->
                 preferences[key] = normalized
             }
@@ -172,18 +199,7 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
     private fun roleModelKey(role: String): String = "${KEY_ROLE_MODEL_PREFIX}$role"
 
     private fun readRecords(): List<StoredGeminiApiKey> {
-        cachedRecords?.let { return it }
-        val raw = runBlocking {
-            dataStore.data
-                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[KEY_PREF_RECORDS] }
-                .first()
-        } ?: return emptyList()
-        return runCatching {
-            analysisJson.parseToJsonElement(raw)
-                .jsonArray
-                .mapNotNull { element -> element.jsonObject.toStoredRecordOrNull() }
-        }.getOrDefault(emptyList()).also { cachedRecords = it }
+        return cachedRecords
     }
 
     private fun writeRecords(records: List<StoredGeminiApiKey>) {
@@ -201,7 +217,7 @@ class AndroidEncryptedGeminiApiKeyRepository internal constructor(
                 )
             }
         }.toString()
-        runBlocking {
+        scope.launch {
             dataStore.edit { preferences ->
                 preferences[KEY_PREF_RECORDS] = jsonArray
             }

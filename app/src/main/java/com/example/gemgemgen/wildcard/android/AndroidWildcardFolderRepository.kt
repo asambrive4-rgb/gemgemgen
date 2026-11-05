@@ -15,21 +15,33 @@ import com.example.gemgemgen.wildcard.usecase.FolderSelectionResult
 import com.example.gemgemgen.wildcard.usecase.WildcardFolderRepository
 import com.example.gemgemgen.wildcard.usecase.WildcardLinkedFilesRepository
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 
 private val Context.wildcardFolderDataStore: DataStore<Preferences> by preferencesDataStore(
     name = AndroidWildcardFolderRepository.DATASTORE_NAME
 )
 
 class AndroidWildcardFolderRepository(
-    private val context: Context
+    private val context: Context,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : WildcardFolderRepository, WildcardLinkedFilesRepository {
     @Volatile
     private var cachedLinkedFiles: Set<String>? = null
+
+    init {
+        scope.launch {
+            observeLinkedFileNames().collect { files ->
+                cachedLinkedFiles = files
+            }
+        }
+        initCachedFolderUri(context)
+    }
 
     override fun save(folderUri: String): FolderSelectionResult {
         val normalized = folderUri.trim()
@@ -67,17 +79,7 @@ class AndroidWildcardFolderRepository(
     }
 
     override fun getLinkedFileNames(): Set<String> {
-        cachedLinkedFiles?.let { return it }
-        val files = runCatching {
-            runBlocking {
-                context.applicationContext.wildcardFolderDataStore.data
-                    .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                    .map { it[KEY_LINKED_FILES].orEmpty() }
-                    .first()
-            }
-        }.getOrDefault(emptySet())
-        cachedLinkedFiles = files
-        return files
+        return cachedLinkedFiles ?: emptySet()
     }
 
     override suspend fun saveLinkedFileNames(fileNames: Set<String>) {
@@ -92,8 +94,31 @@ class AndroidWildcardFolderRepository(
         val KEY_FOLDER_URI = stringPreferencesKey("folder_uri")
         val KEY_LINKED_FILES = stringSetPreferencesKey("linked_autocomplete_files")
 
+        @Volatile
+        private var cachedFolderUri: Uri? = null
+        @Volatile
+        private var isObserverStarted: Boolean = false
+        private val globalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        internal fun initCachedFolderUri(context: Context) {
+            if (isObserverStarted) return
+            synchronized(this) {
+                if (isObserverStarted) return
+                isObserverStarted = true
+                globalScope.launch {
+                    context.applicationContext.wildcardFolderDataStore.data
+                        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+                        .collect { preferences ->
+                            cachedFolderUri = preferences[KEY_FOLDER_URI]?.let(Uri::parse)
+                        }
+                }
+            }
+        }
+
         fun saveFolderUri(context: Context, uri: Uri) {
-            runBlocking {
+            cachedFolderUri = uri
+            initCachedFolderUri(context)
+            globalScope.launch {
                 context.applicationContext.wildcardFolderDataStore.edit { preferences ->
                     preferences[KEY_FOLDER_URI] = uri.toString()
                 }
@@ -101,13 +126,8 @@ class AndroidWildcardFolderRepository(
         }
 
         fun getFolderUri(context: Context): Uri? {
-            val raw = runBlocking {
-                context.applicationContext.wildcardFolderDataStore.data
-                    .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                    .map { it[KEY_FOLDER_URI] }
-                    .first()
-            }
-            return raw?.let(Uri::parse)
+            initCachedFolderUri(context)
+            return cachedFolderUri
         }
     }
 }

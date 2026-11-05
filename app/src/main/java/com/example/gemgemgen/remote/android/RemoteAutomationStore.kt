@@ -12,32 +12,62 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.remote.domain.AutomationMode
 import java.io.IOException
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 
 private val Context.remoteAutomationDataStore: DataStore<Preferences> by preferencesDataStore(
     name = RemoteAutomationStore.DATASTORE_NAME
 )
 
 internal class RemoteAutomationStore(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
     constructor(context: Context) : this(context.applicationContext.remoteAutomationDataStore)
 
-    fun mode(): AutomationMode {
-        val raw = runBlocking {
+    @Volatile
+    private var cachedMode: AutomationMode = AutomationMode.NORMAL
+    @Volatile
+    private var cachedInstallationId: String? = null
+    @Volatile
+    private var cachedPairedSender: PairedSender? = null
+    @Volatile
+    private var cachedPairedReceiver: PairedReceiver? = null
+    @Volatile
+    private var cachedUserDisconnected: Boolean = false
+
+    init {
+        scope.launch {
             dataStore.data
                 .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[KEY_MODE] }
-                .first()
+                .collect { prefs ->
+                    cachedMode = AutomationMode.fromStorageValue(prefs[KEY_MODE])
+                    val savedInstId = prefs[KEY_INSTALLATION_ID]
+                    if (!savedInstId.isNullOrBlank()) {
+                        cachedInstallationId = savedInstId
+                    }
+                    val senderId = prefs[KEY_PAIRED_SENDER_ID].orEmpty()
+                    val senderToken = prefs[KEY_PAIRED_SENDER_TOKEN].orEmpty()
+                    cachedPairedSender = if (senderId.isBlank() || senderToken.isBlank()) null else PairedSender(senderId, senderToken)
+
+                    val receiverId = prefs[KEY_PAIRED_RECEIVER_ID].orEmpty()
+                    val receiverName = prefs[KEY_PAIRED_RECEIVER_NAME].orEmpty()
+                    val receiverToken = prefs[KEY_PAIRED_RECEIVER_TOKEN].orEmpty()
+                    cachedPairedReceiver = if (receiverId.isBlank() || receiverToken.isBlank()) null else PairedReceiver(receiverId, receiverName, receiverToken)
+
+                    cachedUserDisconnected = prefs[KEY_USER_DISCONNECTED] ?: false
+                }
         }
-        return AutomationMode.fromStorageValue(raw)
     }
 
+    fun mode(): AutomationMode = cachedMode
+
     fun saveMode(mode: AutomationMode) {
-        runBlocking {
+        cachedMode = mode
+        scope.launch {
             dataStore.edit { preferences ->
                 preferences[KEY_MODE] = mode.storageValue
             }
@@ -45,34 +75,27 @@ internal class RemoteAutomationStore(
     }
 
     fun installationId(): String {
-        val saved = runBlocking {
-            dataStore.data
-                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[KEY_INSTALLATION_ID] }
-                .first()
-        }
-        if (!saved.isNullOrBlank()) return saved
+        cachedInstallationId?.let { return it }
         val generated = UUID.randomUUID().toString()
-        runBlocking {
+        cachedInstallationId = generated
+        scope.launch {
             dataStore.edit { preferences ->
-                preferences[KEY_INSTALLATION_ID] = generated
+                val current = preferences[KEY_INSTALLATION_ID]
+                if (current.isNullOrBlank()) {
+                    preferences[KEY_INSTALLATION_ID] = generated
+                } else {
+                    cachedInstallationId = current
+                }
             }
         }
         return generated
     }
 
-    fun pairedSender(): PairedSender? {
-        val (senderId, token) = runBlocking {
-            dataStore.data
-                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { Pair(it[KEY_PAIRED_SENDER_ID].orEmpty(), it[KEY_PAIRED_SENDER_TOKEN].orEmpty()) }
-                .first()
-        }
-        return if (senderId.isBlank() || token.isBlank()) null else PairedSender(senderId, token)
-    }
+    fun pairedSender(): PairedSender? = cachedPairedSender
 
     fun savePairedSender(senderId: String, token: String) {
-        runBlocking {
+        cachedPairedSender = PairedSender(senderId, token)
+        scope.launch {
             dataStore.edit { preferences ->
                 preferences[KEY_PAIRED_SENDER_ID] = senderId
                 preferences[KEY_PAIRED_SENDER_TOKEN] = token
@@ -80,28 +103,11 @@ internal class RemoteAutomationStore(
         }
     }
 
-    fun pairedReceiver(): PairedReceiver? {
-        val (receiverId, receiverName, token) = runBlocking {
-            dataStore.data
-                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map {
-                    Triple(
-                        it[KEY_PAIRED_RECEIVER_ID].orEmpty(),
-                        it[KEY_PAIRED_RECEIVER_NAME].orEmpty(),
-                        it[KEY_PAIRED_RECEIVER_TOKEN].orEmpty()
-                    )
-                }
-                .first()
-        }
-        return if (receiverId.isBlank() || token.isBlank()) {
-            null
-        } else {
-            PairedReceiver(receiverId, receiverName, token)
-        }
-    }
+    fun pairedReceiver(): PairedReceiver? = cachedPairedReceiver
 
     fun savePairedReceiver(receiverId: String, receiverName: String, token: String) {
-        runBlocking {
+        cachedPairedReceiver = PairedReceiver(receiverId, receiverName, token)
+        scope.launch {
             dataStore.edit { preferences ->
                 preferences[KEY_PAIRED_RECEIVER_ID] = receiverId
                 preferences[KEY_PAIRED_RECEIVER_NAME] = receiverName
@@ -110,17 +116,11 @@ internal class RemoteAutomationStore(
         }
     }
 
-    fun isUserDisconnected(): Boolean {
-        return runBlocking {
-            dataStore.data
-                .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-                .map { it[KEY_USER_DISCONNECTED] ?: false }
-                .first()
-        }
-    }
+    fun isUserDisconnected(): Boolean = cachedUserDisconnected
 
     fun saveUserDisconnected(disconnected: Boolean) {
-        runBlocking {
+        cachedUserDisconnected = disconnected
+        scope.launch {
             dataStore.edit { preferences ->
                 preferences[KEY_USER_DISCONNECTED] = disconnected
             }

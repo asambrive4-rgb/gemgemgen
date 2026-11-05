@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore와 JSON을 활용하여 프롬프트 상용구(다중 단축어 포함) 목록과 카테고리 목록을 로컬에 영구 저장하고 Flow 및 동기 조회를 제공합니다.
+// 역할: Jetpack DataStore와 JSON을 활용하여 프롬프트 상용구(스니펫) 목록과 카테고리 목록을 로컬에 영구 저장합니다.
 package com.example.gemgemgen.automation.android
 
 import android.content.Context
@@ -11,11 +11,13 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.gemgemgen.automation.domain.PromptSnippet
 import com.example.gemgemgen.automation.usecase.PromptSnippetRepository
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -31,7 +33,8 @@ private val Context.promptSnippetDataStore: DataStore<Preferences> by preference
 )
 
 class PromptSnippetStore(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : PromptSnippetRepository {
     constructor(context: Context) : this(context.applicationContext.promptSnippetDataStore)
 
@@ -69,16 +72,26 @@ class PromptSnippetStore(
             }
         }
 
-    override fun load(): List<PromptSnippet> {
-        cachedSnippets?.let { return it }
-        return runBlocking {
-            snippets.first()
+    init {
+        scope.launch {
+            snippets.collect {
+                // updates cachedSnippets
+            }
         }
+        scope.launch {
+            categories.collect {
+                // updates cachedCategories
+            }
+        }
+    }
+
+    override fun load(): List<PromptSnippet> {
+        return cachedSnippets ?: emptyList()
     }
 
     override fun save(snippets: List<PromptSnippet>) {
         cachedSnippets = snippets.toList()
-        runBlocking {
+        scope.launch {
             saveAsync(snippets)
         }
     }
@@ -92,16 +105,13 @@ class PromptSnippetStore(
     }
 
     override fun loadCategories(): List<String> {
-        cachedCategories?.let { return it }
-        return runBlocking {
-            categories.first()
-        }
+        return cachedCategories ?: emptyList()
     }
 
     override fun saveCategories(categories: List<String>) {
         val sanitized = sanitizeCategories(categories)
         cachedCategories = sanitized
-        runBlocking {
+        scope.launch {
             saveCategoriesAsync(sanitized)
         }
     }
@@ -212,4 +222,3 @@ class PromptSnippetStore(
         private const val KEY_CREATED_AT = "created_at"
     }
 }
-

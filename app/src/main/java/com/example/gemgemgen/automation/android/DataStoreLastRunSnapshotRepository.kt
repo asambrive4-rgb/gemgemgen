@@ -14,18 +14,21 @@ import com.example.gemgemgen.automation.usecase.LastRunSnapshot
 import com.example.gemgemgen.automation.usecase.LastRunSnapshotRepository
 import com.example.gemgemgen.core.AppDefaults
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 
 private val Context.lastRunSnapshotDataStore: DataStore<Preferences> by preferencesDataStore(
     name = DataStoreLastRunSnapshotRepository.DATASTORE_NAME
 )
 
 class DataStoreLastRunSnapshotRepository(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) : LastRunSnapshotRepository {
     constructor(context: Context) : this(context.applicationContext.lastRunSnapshotDataStore)
 
@@ -48,17 +51,22 @@ class DataStoreLastRunSnapshotRepository(
             }
         }
 
-    override fun load(): LastRunSnapshot? {
-        if (isLoaded) return cachedSnapshot
-        return runBlocking {
-            snapshotFlow.first()
+    init {
+        scope.launch {
+            snapshotFlow.collect {
+                // Flow emission updates cachedSnapshot
+            }
         }
+    }
+
+    override fun load(): LastRunSnapshot? {
+        return cachedSnapshot
     }
 
     override fun save(snapshot: LastRunSnapshot) {
         cachedSnapshot = snapshot
         isLoaded = true
-        runBlocking {
+        scope.launch {
             saveAsync(snapshot)
         }
     }

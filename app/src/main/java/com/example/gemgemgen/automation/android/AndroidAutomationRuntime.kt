@@ -16,8 +16,6 @@ import com.example.gemgemgen.core.AppDefaults
 import com.example.gemgemgen.wildcard.android.AndroidWildcardFileRepository
 import com.example.gemgemgen.wildcard.usecase.WildcardSetRepository
 import com.example.gemgemgen.wildcard.usecase.loadWildcardSets
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
 internal object ProcessAutomationHolder {
     @Volatile
@@ -55,7 +53,7 @@ object AndroidAutomationRuntimeProvider {
                     backupStore = DataStoreAnimationScaleBackupStore(appContext)
                 ),
                 clipboardGateway = com.example.gemgemgen.core.android.AndroidClipboardGateway(appContext),
-                isCopyPromptOnStartEnabled = { runBlocking { settingsStore.copyPromptOnStart.first() } }
+                isCopyPromptOnStartEnabled = { settingsStore.isCopyPromptOnStartCached }
             )
         }
     }
