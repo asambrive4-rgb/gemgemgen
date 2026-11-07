@@ -1,4 +1,4 @@
-﻿// 역할: RemoteServiceDiscovery 탐색 및 소켓 통신을 통해 원격 수신 기기와 통신·재시도하고, 생명주기 종료 시 자원을 회수하며 진행 상태를 상태 허브로 전파합니다.
+// 역할: RemoteServiceDiscovery 탐색 및 소켓 통신을 통해 원격 수신 기기를 발견 즉시 자동 연결하고, 새로고침 및 생명주기 종료 시 자원을 회수하며 진행 상태를 상태 허브로 전파합니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
@@ -41,22 +41,12 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
     override val status = RemoteAutomationStateHub.status
 
     init {
-        val initialMode = store.mode()
-        if (initialMode == AutomationMode.NORMAL) {
-            RemoteAutomationStateHub.update {
-                it.copy(
-                    mode = AutomationMode.NORMAL,
-                    isReceiverRunning = false,
-                    receiverPairingCode = "",
-                    discoveredDeviceName = "",
-                    isPaired = false,
-                    connectionMessage = "",
-                    message = "",
-                    automationState = AutomationRunState.Idle
-                )
+        scope.launch {
+            store.modeFlow.collect { savedMode ->
+                if (RemoteAutomationStateHub.status.value.mode != savedMode) {
+                    selectMode(savedMode)
+                }
             }
-        } else {
-            selectMode(initialMode)
         }
     }
 
@@ -66,7 +56,6 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
             it.copy(
                 mode = mode,
                 isReceiverRunning = false,
-                receiverPairingCode = "",
                 discoveredDeviceName = "",
                 isPaired = false,
                 connectionMessage = when (mode) {
@@ -104,56 +93,18 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         }
     }
 
-    override suspend fun pair(pairingCode: String): RemoteActionResult = withContext(Dispatchers.IO) {
-        val target = endpoint
-            ?: return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
-        val result = decodeOnce<RemoteProtocolMessage.PairResult>(
-            target = target,
-            request = RemoteProtocolMessage.PairRequest(
-                senderId = store.installationId(),
-                pairingCode = pairingCode
-            )
-        )
-
-        if (result?.success == true && result.token.isNotBlank()) {
-            store.savePairedReceiver(
-                receiverId = result.receiverId,
-                receiverName = result.receiverName,
-                token = result.token
-            )
-            store.saveUserDisconnected(false)
-            RemoteAutomationStateHub.update {
-                it.copy(
-                    discoveredDeviceName = result.receiverName,
-                    isPaired = true,
-                    connectionMessage = "${result.receiverName} 연결됨"
-                )
-            }
-            RemoteActionResult.Success
-        } else {
-            val message = result?.message?.takeIf(String::isNotBlank)
-                ?: "S25 FE에 연결하지 못했습니다."
-            RemoteAutomationStateHub.update {
-                it.copy(isPaired = false, connectionMessage = message)
-            }
-            RemoteActionResult.Failure(message)
-        }
-    }
-
     override suspend fun disconnect(): RemoteActionResult = withContext(Dispatchers.IO) {
         val currentStatus = status.value
         when (currentStatus.mode) {
             AutomationMode.SENDER -> {
                 val target = endpoint
-                val paired = store.pairedReceiver()
-                if (target == null || paired == null || !currentStatus.isPaired) {
+                if (target == null || !currentStatus.isPaired) {
                     return@withContext RemoteActionResult.Failure("연결된 기기가 없습니다.")
                 }
                 val result = decodeOnce<RemoteProtocolMessage.DisconnectResult>(
                     target = target,
                     request = RemoteProtocolMessage.DisconnectRequest(
-                        senderId = store.installationId(),
-                        token = paired.token
+                        senderId = store.installationId()
                     )
                 )
 
@@ -198,6 +149,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         val currentStatus = status.value
         when (currentStatus.mode) {
             AutomationMode.SENDER -> {
+                abortActiveRequestForRefresh()
                 store.saveUserDisconnected(false)
                 discovery.stop()
                 endpoint = null
@@ -205,6 +157,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                     it.copy(
                         isPaired = false,
                         discoveredDeviceName = "",
+                        automationState = AutomationRunState.Idle,
                         connectionMessage = "S25 FE를 다시 찾는 중입니다."
                     )
                 }
@@ -228,8 +181,7 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         request: RemoteAutomationRequest
     ) = withContext(Dispatchers.IO) {
         val target = endpoint
-        val paired = store.pairedReceiver()
-        if (target == null || paired == null || paired.receiverId != target.receiverId) {
+        if (target == null || !status.value.isPaired) {
             val failure = AutomationRunState.Failure("연결된 수신 기기를 찾지 못했습니다.")
             RemoteAutomationStateHub.update { it.copy(automationState = failure) }
             return@withContext
@@ -249,7 +201,6 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                     RemoteAutomationProtocol.encode(
                         RemoteProtocolMessage.RunRequest(
                             senderId = store.installationId(),
-                            token = paired.token,
                             request = request
                         )
                     )
@@ -310,13 +261,11 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         }
         val cancelRequestId = stoppedRequest ?: return
         val target = endpoint ?: return
-        val paired = store.pairedReceiver() ?: return
         scope.launch(Dispatchers.IO) {
             requestOnce(
                 target = target,
                 request = RemoteProtocolMessage.CancelRequest(
                     senderId = store.installationId(),
-                    token = paired.token,
                     requestId = cancelRequestId
                 ),
                 readResponse = false
@@ -327,13 +276,11 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
     override fun updateRepeatCount(requestId: String, repeatCount: Int) {
         if (!isCurrentRequest(requestId)) return
         val target = endpoint ?: return
-        val paired = store.pairedReceiver() ?: return
         scope.launch(Dispatchers.IO) {
             requestOnce(
                 target = target,
                 request = RemoteProtocolMessage.UpdateRepeatCountRequest(
                     senderId = store.installationId(),
-                    token = paired.token,
                     requestId = requestId,
                     repeatCount = repeatCount
                 ),
@@ -344,21 +291,20 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
 
     override suspend fun cleanMemory(): RemoteActionResult = withContext(Dispatchers.IO) {
         val target = endpoint
-            ?: return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
-        val paired = store.pairedReceiver()
-            ?: return@withContext RemoteActionResult.Failure("수신 기기와 먼저 페어링해주세요.")
+        if (target == null || !status.value.isPaired) {
+            return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
+        }
 
         requestOnce(
             target = target,
             request = RemoteProtocolMessage.CleanMemoryRequest(
-                senderId = store.installationId(),
-                token = paired.token
+                senderId = store.installationId()
             ),
             timeoutMillis = 15_000
         ).fold(
             onSuccess = { responseLine ->
                 val line = responseLine
-                ?: return@withContext RemoteActionResult.Failure("수신 기기 응답이 없습니다.")
+                    ?: return@withContext RemoteActionResult.Failure("수신 기기 응답이 없습니다.")
                 val message = RemoteAutomationProtocol.decode(line) as? RemoteProtocolMessage.CleanMemoryResult
                     ?: return@withContext RemoteActionResult.Failure("수신 기기 응답 형식이 올바르지 않습니다.")
                 if (message.success) {
@@ -378,15 +324,14 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
         alias: String
     ): RemoteActionResult = withContext(Dispatchers.IO) {
         val target = endpoint
-            ?: return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
-        val paired = store.pairedReceiver()
-            ?: return@withContext RemoteActionResult.Failure("수신 기기와 먼저 페어링해주세요.")
+        if (target == null || !status.value.isPaired) {
+            return@withContext RemoteActionResult.Failure("연결할 수신 기기를 찾지 못했습니다.")
+        }
 
         requestOnce(
             target = target,
             request = RemoteProtocolMessage.SwitchAccountRequest(
                 senderId = store.installationId(),
-                token = paired.token,
                 email = email,
                 alias = alias
             ),
@@ -407,6 +352,16 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
                 RemoteActionResult.Failure("수신 기기 통신 실패: ${error.message ?: "알 수 없는 오류"}")
             }
         )
+    }
+
+    private fun abortActiveRequestForRefresh() {
+        val socketToClose = synchronized(activeRequestLock) {
+            activeRequestId = null
+            val socket = activeSocket
+            activeSocket = null
+            socket
+        }
+        socketToClose?.let { runCatching { it.close() } }
     }
 
     private fun requestOnce(
@@ -476,22 +431,17 @@ class AndroidRemoteAutomationGateway(context: Context) : RemoteAutomationGateway
 
     private fun onServiceResolved(resolved: RemoteEndpoint) {
         if (resolved.receiverId == store.installationId()) return
-        val paired = store.pairedReceiver()
         endpoint = resolved
         val isUserDisconnected = store.isUserDisconnected()
-        val isPaired = !isUserDisconnected && paired?.receiverId == resolved.receiverId && resolved.isPaired
+        val isPaired = !isUserDisconnected && resolved.isPaired
         RemoteAutomationStateHub.update {
             it.copy(
                 discoveredDeviceName = resolved.name,
                 isPaired = isPaired,
-                connectionMessage = if (isPaired) {
-                    "${resolved.name} 연결됨"
-                } else if (!resolved.isPaired && paired?.receiverId == resolved.receiverId) {
-                    "${resolved.name} 연결이 해제되었습니다."
-                } else if (isUserDisconnected && paired?.receiverId == resolved.receiverId) {
-                    "${resolved.name} 발견됨 · 다시 연결하려면 연결 버튼을 눌러주세요."
-                } else {
-                    "${resolved.name} 발견됨 · 4자리 번호로 연결해주세요."
+                connectionMessage = when {
+                    isPaired -> "${resolved.name} 연결됨"
+                    !resolved.isPaired -> "${resolved.name} 연결이 해제되었습니다."
+                    else -> "${resolved.name} 발견됨 · 설정에서 연결 새로고침을 눌러주세요."
                 }
             )
         }
@@ -548,4 +498,3 @@ internal data class RemoteEndpoint(
     val port: Int,
     val isPaired: Boolean = true
 )
-

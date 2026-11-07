@@ -42,16 +42,6 @@ class AutomationSettingsStore(
 ) : AutomationSettingsRepository {
     constructor(context: Context) : this(context.applicationContext.automationDataStore)
 
-    @Volatile
-    var isCopyPromptOnStartCached: Boolean = DEFAULT_COPY_PROMPT_ON_START
-        private set
-
-    init {
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            copyPromptOnStart.collect { isCopyPromptOnStartCached = it }
-        }
-    }
-
     override val copyPromptOnStart: Flow<Boolean> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
@@ -63,6 +53,16 @@ class AutomationSettingsStore(
         .map { preferences ->
             preferences[KEY_COPY_PROMPT_ON_START] ?: DEFAULT_COPY_PROMPT_ON_START
         }
+
+    @Volatile
+    var isCopyPromptOnStartCached: Boolean = DEFAULT_COPY_PROMPT_ON_START
+        private set
+
+    init {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            copyPromptOnStart.collect { isCopyPromptOnStartCached = it }
+        }
+    }
 
     override suspend fun setCopyPromptOnStart(enabled: Boolean) {
         dataStore.edit { preferences ->

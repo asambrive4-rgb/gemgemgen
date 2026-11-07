@@ -8,6 +8,7 @@ object AppDefaults {
     const val FLOW_PACKAGE_NAME = "com.google.android.apps.labs.whisk"
     /** 공식 Firefox 앱. Grok OAuth 로그인 URL 열 때 우선 사용. */
     const val FIREFOX_PACKAGE_NAME = "org.mozilla.firefox"
+    const val WILDCARD_SUBDIRECTORY = "wildcard"
     const val WILDCARD_DIRECTORY = "Documents/wildcard"
     val WILDCARD_DIRECTORY_CANDIDATES: List<String> = listOf(
         WILDCARD_DIRECTORY,

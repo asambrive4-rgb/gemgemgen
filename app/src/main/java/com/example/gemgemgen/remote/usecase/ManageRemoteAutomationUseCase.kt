@@ -1,4 +1,4 @@
-// 역할: 원격 기기 페어링, 연결 해제, 자원 회수, 자동화 요청 송신, 메모리 정리, Gemini 계정 전환 및 강제 중지를 조율하며 RemoteAutomationSenderGateway를 구현합니다.
+// 역할: 원격 기기 자동 연결, 연결 해제, 연결 새로고침(오류 상태 초기화), 자원 회수, 자동화 요청 송신, 메모리 정리, Gemini 계정 전환 및 강제 중지를 조율하며 RemoteAutomationSenderGateway를 구현합니다.
 package com.example.gemgemgen.remote.usecase
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -34,14 +34,6 @@ class ManageRemoteAutomationUseCase(
         gateway.selectMode(mode)
     }
 
-    suspend fun pair(pairingCode: String): RemoteActionResult {
-        val normalizedCode = pairingCode.filter(Char::isDigit).take(PAIRING_CODE_LENGTH)
-        if (normalizedCode.length != PAIRING_CODE_LENGTH) {
-            return RemoteActionResult.Failure("S25 FE에 표시된 4자리 번호를 입력해주세요.")
-        }
-        return gateway.pair(normalizedCode)
-    }
-
     suspend fun disconnect(): RemoteActionResult {
         val currentStatus = status.value
         if (currentStatus.automationState is AutomationRunState.Running) {
@@ -51,6 +43,10 @@ class ManageRemoteAutomationUseCase(
     }
 
     suspend fun retryConnection(): RemoteActionResult {
+        val requestId = activeRequestId.getAndSet(null)
+        if (requestId != null) {
+            gateway.forceStop(requestId)
+        }
         return gateway.retryConnection()
     }
 
@@ -129,9 +125,5 @@ class ManageRemoteAutomationUseCase(
 
     override fun close() {
         gateway.close()
-    }
-
-    companion object {
-        const val PAIRING_CODE_LENGTH = 4
     }
 }

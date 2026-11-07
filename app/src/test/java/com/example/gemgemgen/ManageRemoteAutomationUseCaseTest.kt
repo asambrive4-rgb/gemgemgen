@@ -1,4 +1,4 @@
-﻿// 역할: 원격 자동화 서비스 제어 및 상태 관리 유스케이스를 검증합니다.
+// 역할: 원격 자동화 서비스 제어, 무인증 연결 및 새로고침(오류 탈출) 상태 관리 유스케이스를 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -23,19 +23,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ManageRemoteAutomationUseCaseTest {
-    @Test
-    fun pair_requiresFourDigitCode() = runBlocking {
-        val gateway = FakeRemoteAutomationGateway()
-        val useCase = ManageRemoteAutomationUseCase(gateway)
-
-        assertEquals(
-            RemoteActionResult.Failure("S25 FE에 표시된 4자리 번호를 입력해주세요."),
-            useCase.pair("12")
-        )
-        assertEquals(RemoteActionResult.Success, useCase.pair("12-34"))
-        assertEquals("1234", gateway.pairedCode)
-    }
-
     @Test
     fun start_buildsSharedRemoteRequestAndDelegatesTransport() = runBlocking {
         val gateway = FakeRemoteAutomationGateway(
@@ -126,6 +113,32 @@ class ManageRemoteAutomationUseCaseTest {
     }
 
     @Test
+    fun retryConnection_whileRunning_forceStopsActiveRequestAndRetries() = runBlocking {
+        val gateway = FakeRemoteAutomationGateway(
+            initialStatus = RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            ),
+            holdSend = true
+        )
+        val useCase = ManageRemoteAutomationUseCase(gateway) { "stuck-request-1" }
+        val startJob = launch {
+            useCase.start(
+                AutomationRunRequest("prompt", "3", AutomationTargetApp.GEMINI)
+            )
+        }
+        gateway.sendStarted.await()
+
+        val result = useCase.retryConnection()
+
+        assertEquals(RemoteActionResult.Success, result)
+        assertEquals("stuck-request-1", gateway.forceStoppedRequestId)
+        assertEquals(true, gateway.retryConnectionCalled)
+        startJob.cancelAndJoin()
+    }
+
+    @Test
     fun disconnect_whenAutomationIsRunning_returnsFailureWithoutCallingGateway() = runBlocking {
         val gateway = FakeRemoteAutomationGateway(
             RemoteAutomationStatus(
@@ -191,7 +204,6 @@ class ManageRemoteAutomationUseCaseTest {
     ) : RemoteAutomationGateway {
         override val status = MutableStateFlow(initialStatus)
         val sendStarted = CompletableDeferred<Unit>()
-        var pairedCode = ""
         var sentRequest: RemoteAutomationRequest? = null
         var forceStoppedRequestId: String? = null
         var disconnectCalled = false
@@ -200,11 +212,6 @@ class ManageRemoteAutomationUseCaseTest {
 
         override fun selectMode(mode: AutomationMode) {
             status.value = status.value.copy(mode = mode)
-        }
-
-        override suspend fun pair(pairingCode: String): RemoteActionResult {
-            pairedCode = pairingCode
-            return RemoteActionResult.Success
         }
 
         override suspend fun disconnect(): RemoteActionResult {

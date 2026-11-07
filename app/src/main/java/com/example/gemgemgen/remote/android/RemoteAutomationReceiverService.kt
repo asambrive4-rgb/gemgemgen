@@ -1,4 +1,4 @@
-﻿// 역할: 포그라운드 서비스로 상주하며 NSD 수신 등록 및 원격 송신 기기의 최상위 명령(자동화 선점 실행, 취소, 메모리 정리, 계정 전환)을 수신·조율합니다.
+// 역할: 포그라운드 서비스로 상주하며 NSD 수신 등록 및 동일 와이파이 내 원격 송신 기기의 명령(자동화 선점 실행, 취소, 메모리 정리, 계정 전환, 새로고침 복구)을 무인증으로 수신·조율합니다.
 package com.example.gemgemgen.remote.android
 
 import android.app.KeyguardManager
@@ -37,8 +37,6 @@ import java.io.InputStreamReader
 import java.io.PrintWriter
 import java.net.ServerSocket
 import java.net.Socket
-import java.security.SecureRandom
-import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -66,26 +64,23 @@ class RemoteAutomationReceiverService : Service() {
     private var pendingRegisterPort: Int? = null
     private val sessionMutex = Mutex()
     @Volatile private var activeSession: ReceiverSession? = null
-    private val pairingCode = "%04d".format(SecureRandom().nextInt(10_000))
 
     override fun onCreate() {
         super.onCreate()
         store = RemoteAutomationStore(this)
         executeRemoteAutomation = ExecuteRemoteAutomationUseCase(
-
             automation = AndroidAutomationRuntimeProvider.get(this)
         )
         environmentGateway = AndroidEnvironmentGateway(this)
 
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
-        val isPaired = store.pairedSender() != null && !store.isUserDisconnected()
+        val isReady = !store.isUserDisconnected()
         RemoteAutomationStateHub.update {
             it.copy(
                 mode = AutomationMode.RECEIVER,
                 isReceiverRunning = true,
-                receiverPairingCode = pairingCode,
-                isPaired = isPaired,
+                isPaired = isReady,
                 message = receiverReadyMessage()
             )
         }
@@ -110,12 +105,40 @@ class RemoteAutomationReceiverService : Service() {
             }
             ACTION_REREGISTER -> {
                 store.saveUserDisconnected(false)
-                val port = serverSocket?.localPort
-                if (port != null && port > 0) {
-                    reregisterService(port)
+                serviceScope.launch {
+                    sessionMutex.withLock {
+                        val session = activeSession
+                        activeSession = null
+                        session?.executionJob?.cancelAndJoin()
+                        withContext(Dispatchers.Main.immediate) {
+                            executeRemoteAutomation.cancelAndAwait()
+                        }
+                    }
+                    val port = serverSocket?.localPort
+                    if (port != null && port > 0) {
+                        reregisterService(port)
+                    } else {
+                        startServer()
+                    }
                     RemoteAutomationStateHub.update {
                         it.copy(
                             isReceiverRunning = true,
+                            isPaired = true,
+                            automationState = AutomationRunState.Idle,
+                            message = receiverReadyMessage()
+                        )
+                    }
+                }
+            }
+            else -> {
+                val port = serverSocket?.localPort
+                if (port != null && port > 0) {
+                    val isReady = !store.isUserDisconnected()
+                    RemoteAutomationStateHub.update {
+                        it.copy(
+                            mode = AutomationMode.RECEIVER,
+                            isReceiverRunning = true,
+                            isPaired = isReady,
                             message = receiverReadyMessage()
                         )
                     }
@@ -137,7 +160,7 @@ class RemoteAutomationReceiverService : Service() {
             it.copy(
                 mode = store.mode(),
                 isReceiverRunning = false,
-                receiverPairingCode = "",
+                isPaired = false,
                 automationState = AutomationRunState.Idle,
                 message = if (store.mode() == AutomationMode.RECEIVER) {
                     "수신 대기가 중단되었습니다."
@@ -161,7 +184,9 @@ class RemoteAutomationReceiverService : Service() {
                 }
                 while (!server.isClosed) {
                     val socket = server.accept()
-                    serviceScope.launch(Dispatchers.IO) { handleClient(socket) }
+                    serviceScope.launch(Dispatchers.IO) {
+                        runCatching { handleClient(socket) }
+                    }
                 }
             } catch (_: CancellationException) {
                 return@launch
@@ -176,78 +201,42 @@ class RemoteAutomationReceiverService : Service() {
     }
 
     private suspend fun handleClient(socket: Socket) {
-        socket.use {
-            socket.soTimeout = RemoteAutomationProtocol.SOCKET_TIMEOUT_MS
-            if (!isLocalAddress(socket)) return
-            val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
-            val writer = PrintWriter(socket.getOutputStream(), true)
-            val line = reader.readLine() ?: return
-            when (val message = RemoteAutomationProtocol.decode(line)) {
-                is RemoteProtocolMessage.PairRequest -> handlePair(message, writer)
-                is RemoteProtocolMessage.DisconnectRequest -> handleDisconnect(message, writer)
-                is RemoteProtocolMessage.RunRequest -> handleRun(message, writer, socket)
-                is RemoteProtocolMessage.CancelRequest -> handleCancel(message)
-                is RemoteProtocolMessage.UpdateRepeatCountRequest -> handleUpdateRepeatCount(message)
-                is RemoteProtocolMessage.CleanMemoryRequest -> handleCleanMemory(message, writer)
-                is RemoteProtocolMessage.SwitchAccountRequest -> handleSwitchAccount(message, writer)
-                else -> Unit
+        runCatching {
+            socket.use {
+                socket.soTimeout = RemoteAutomationProtocol.SOCKET_TIMEOUT_MS
+                if (!isLocalAddress(socket)) return
+                val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
+                val writer = PrintWriter(socket.getOutputStream(), true)
+                val line = reader.readLine() ?: return
+                when (val message = RemoteAutomationProtocol.decode(line)) {
+                    is RemoteProtocolMessage.DisconnectRequest -> handleDisconnect(writer)
+                    is RemoteProtocolMessage.RunRequest -> handleRun(message, writer, socket)
+                    is RemoteProtocolMessage.CancelRequest -> handleCancel()
+                    is RemoteProtocolMessage.UpdateRepeatCountRequest -> handleUpdateRepeatCount(message)
+                    is RemoteProtocolMessage.CleanMemoryRequest -> handleCleanMemory(writer)
+                    is RemoteProtocolMessage.SwitchAccountRequest -> handleSwitchAccount(message, writer)
+                    else -> Unit
+                }
+            }
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+        }
+    }
+
+    private fun markConnectedFromSender() {
+        val wasDisconnected = store.isUserDisconnected()
+        if (wasDisconnected) {
+            store.saveUserDisconnected(false)
+            serverSocket?.localPort?.let(::reregisterService)
+        }
+        if (!RemoteAutomationStateHub.status.value.isPaired) {
+            RemoteAutomationStateHub.update {
+                it.copy(isPaired = true, message = receiverReadyMessage())
             }
         }
     }
 
-    private fun handlePair(message: RemoteProtocolMessage.PairRequest, writer: PrintWriter) {
-        if (message.pairingCode != pairingCode || message.senderId.isBlank()) {
-            writer.println(
-                RemoteAutomationProtocol.encode(
-                    RemoteProtocolMessage.PairResult(
-                        success = false,
-                        message = "연결 번호가 일치하지 않습니다."
-                    )
-                )
-            )
-            return
-        }
-
-        val existing = store.pairedSender()
-        val token = if (existing?.senderId == message.senderId) {
-            existing.token
-        } else {
-            UUID.randomUUID().toString() + UUID.randomUUID().toString()
-        }
-        store.savePairedSender(message.senderId, token)
-        store.saveUserDisconnected(false)
-        val receiverName = deviceName()
-        writer.println(
-            RemoteAutomationProtocol.encode(
-                RemoteProtocolMessage.PairResult(
-                    success = true,
-                    receiverId = store.installationId(),
-                    receiverName = receiverName,
-                    token = token
-                )
-            )
-        )
-        RemoteAutomationStateHub.update {
-            it.copy(isPaired = true, message = "태블릿 연결됨")
-        }
-        serverSocket?.localPort?.let(::reregisterService)
-    }
-
-    private fun handleDisconnect(
-        message: RemoteProtocolMessage.DisconnectRequest,
-        writer: PrintWriter
-    ) {
-        if (!isAuthenticated(message.senderId, message.token)) {
-            writer.println(
-                RemoteAutomationProtocol.encode(
-                    RemoteProtocolMessage.DisconnectResult(
-                        success = false,
-                        message = "등록되지 않은 송신 기기입니다."
-                    )
-                )
-            )
-            return
-        }
+    private fun handleDisconnect(writer: PrintWriter) {
         store.saveUserDisconnected(true)
         RemoteAutomationStateHub.update {
             it.copy(isPaired = false, message = "송신 기기와의 연결이 끊어졌습니다.")
@@ -265,14 +254,7 @@ class RemoteAutomationReceiverService : Service() {
         writer: PrintWriter,
         socket: Socket
     ) {
-        if (!isAuthenticated(message.senderId, message.token)) {
-            writeState(
-                writer,
-                message.request.requestId,
-                AutomationRunState.Failure("등록되지 않은 송신 기기입니다.")
-            )
-            return
-        }
+        markConnectedFromSender()
         val requestId = message.request.requestId
         socket.soTimeout = 0
         val states = Channel<AutomationRunState>(Channel.UNLIMITED)
@@ -285,6 +267,7 @@ class RemoteAutomationReceiverService : Service() {
 
             RemoteAutomationStateHub.update {
                 it.copy(
+                    isPaired = true,
                     automationState = AutomationRunState.Running("새 요청을 수락하는 중"),
                     message = "새 요청을 수락하는 중"
                 )
@@ -367,8 +350,8 @@ class RemoteAutomationReceiverService : Service() {
         }
     }
 
-    private suspend fun handleCancel(message: RemoteProtocolMessage.CancelRequest) {
-        if (!isAuthenticated(message.senderId, message.token)) return
+    private suspend fun handleCancel() {
+        markConnectedFromSender()
         sessionMutex.withLock {
             val session = activeSession
             activeSession = null
@@ -386,7 +369,7 @@ class RemoteAutomationReceiverService : Service() {
     }
 
     private suspend fun handleUpdateRepeatCount(message: RemoteProtocolMessage.UpdateRepeatCountRequest) {
-        if (!isAuthenticated(message.senderId, message.token)) return
+        markConnectedFromSender()
         if (activeSession?.requestId != message.requestId) return
         withContext(Dispatchers.Main.immediate) {
             executeRemoteAutomation.updateRepeatCount(message.repeatCount)
@@ -394,21 +377,9 @@ class RemoteAutomationReceiverService : Service() {
     }
 
     private suspend fun handleCleanMemory(
-        message: RemoteProtocolMessage.CleanMemoryRequest,
         writer: PrintWriter
     ) {
-        if (!isAuthenticated(message.senderId, message.token)) {
-            writer.println(
-                RemoteAutomationProtocol.encode(
-                    RemoteProtocolMessage.CleanMemoryResult(
-                        success = false,
-                        message = "등록되지 않은 송신 기기입니다."
-                    )
-                )
-            )
-            return
-        }
-
+        markConnectedFromSender()
         sessionMutex.withLock {
             val session = activeSession
             activeSession = null
@@ -471,18 +442,7 @@ class RemoteAutomationReceiverService : Service() {
         message: RemoteProtocolMessage.SwitchAccountRequest,
         writer: PrintWriter
     ) {
-        if (!isAuthenticated(message.senderId, message.token)) {
-            writer.println(
-                RemoteAutomationProtocol.encode(
-                    RemoteProtocolMessage.SwitchAccountResult(
-                        success = false,
-                        message = "등록되지 않은 송신 기기입니다."
-                    )
-                )
-            )
-            return
-        }
-
+        markConnectedFromSender()
         sessionMutex.withLock {
             val session = activeSession
             activeSession = null
@@ -585,11 +545,6 @@ class RemoteAutomationReceiverService : Service() {
         return address.isSiteLocalAddress || address.isLinkLocalAddress || address.isLoopbackAddress
     }
 
-    private fun isAuthenticated(senderId: String, token: String): Boolean {
-        val paired = store.pairedSender() ?: return false
-        return paired.senderId == senderId && paired.token == token
-    }
-
     private fun writeState(
         writer: PrintWriter,
         requestId: String,
@@ -616,13 +571,13 @@ class RemoteAutomationReceiverService : Service() {
             unregisterServiceLocked()
             return
         }
-        val isPaired = store.pairedSender() != null && !store.isUserDisconnected()
+        val isReady = !store.isUserDisconnected()
         val serviceInfo = NsdServiceInfo().apply {
             serviceName = "GemGemGen ${deviceName()}".take(55)
             serviceType = RemoteAutomationProtocol.SERVICE_TYPE
             this.port = port
             setAttribute("receiverId", store.installationId())
-            setAttribute("isPaired", isPaired.toString())
+            setAttribute("isPaired", isReady.toString())
         }
         isRegistering = true
         val listener = object : NsdManager.RegistrationListener {
@@ -719,10 +674,10 @@ class RemoteAutomationReceiverService : Service() {
     }
 
     private fun receiverReadyMessage(registeredName: String = deviceName()): String {
-        return if (store.pairedSender() == null || store.isUserDisconnected()) {
-            "$registeredName 수신 대기 중 · 연결 번호 $pairingCode"
+        return if (store.isUserDisconnected()) {
+            "$registeredName 연결 해제됨 · 설정에서 연결 새로고침을 눌러주세요."
         } else {
-            "$registeredName 수신 대기 중 · 태블릿 연결됨"
+            "$registeredName 수신 대기 중 · 자동 연결 활성화됨"
         }
     }
 

@@ -1,4 +1,4 @@
-﻿// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 실험(연금술) 관리 모달 연동, 상용구·카테고리 관리 및 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
+// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 실험(연금술) 관리 모달 연동, 상용구·카테고리 관리 및 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -11,20 +11,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
-import com.example.gemgemgen.remote.ui.AutomationModePairDialog
 import com.example.gemgemgen.remote.ui.AutomationReceiverBottomBar
 import com.example.gemgemgen.remote.ui.resolveConnectionText
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
@@ -48,7 +42,6 @@ internal fun AutomationScreen(
     modifier: Modifier = Modifier
 ) {
     val isKeyboardVisible = rememberIsImeVisible()
-    var showPairDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -76,7 +69,6 @@ internal fun AutomationScreen(
                         uiState = uiState,
                         promptTemplateState = promptTemplateState,
                         actions = actions,
-                        onRequestPair = { showPairDialog = true },
                         showPromptActions = !isKeyboardVisible,
                         showWildcardSuggestions = !isKeyboardVisible
                     )
@@ -153,19 +145,6 @@ internal fun AutomationScreen(
                         }
                     }
                 }
-            }
-
-            if (showPairDialog) {
-                AutomationModePairDialog(
-                    targetDeviceName = uiState.remoteAutomationStatus.discoveredDeviceName.ifBlank { "S25 FE" },
-                    onConfirm = { code ->
-                        actions.pairRemoteDevice(code)
-                        showPairDialog = false
-                    },
-                    onDismiss = {
-                        showPairDialog = false
-                    }
-                )
             }
 
             if (uiState.showInstructionConfigDialog) {

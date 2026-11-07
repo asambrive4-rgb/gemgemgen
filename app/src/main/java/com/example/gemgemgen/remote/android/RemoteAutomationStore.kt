@@ -1,4 +1,4 @@
-﻿// 역할: Jetpack DataStore를 통해 원격 자동화 수신 기록 및 세션 연결 정보를 로컬에 보관하는 저장소입니다.
+// 역할: Jetpack DataStore를 통해 원격 자동화 동작 모드 및 기기 설치 식별자 정보를 로컬에 보관하는 저장소입니다.
 package com.example.gemgemgen.remote.android
 
 import android.content.Context
@@ -15,7 +15,9 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 private val Context.remoteAutomationDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -33,10 +35,6 @@ internal class RemoteAutomationStore(
     @Volatile
     private var cachedInstallationId: String? = null
     @Volatile
-    private var cachedPairedSender: PairedSender? = null
-    @Volatile
-    private var cachedPairedReceiver: PairedReceiver? = null
-    @Volatile
     private var cachedUserDisconnected: Boolean = false
 
     init {
@@ -49,19 +47,14 @@ internal class RemoteAutomationStore(
                     if (!savedInstId.isNullOrBlank()) {
                         cachedInstallationId = savedInstId
                     }
-                    val senderId = prefs[KEY_PAIRED_SENDER_ID].orEmpty()
-                    val senderToken = prefs[KEY_PAIRED_SENDER_TOKEN].orEmpty()
-                    cachedPairedSender = if (senderId.isBlank() || senderToken.isBlank()) null else PairedSender(senderId, senderToken)
-
-                    val receiverId = prefs[KEY_PAIRED_RECEIVER_ID].orEmpty()
-                    val receiverName = prefs[KEY_PAIRED_RECEIVER_NAME].orEmpty()
-                    val receiverToken = prefs[KEY_PAIRED_RECEIVER_TOKEN].orEmpty()
-                    cachedPairedReceiver = if (receiverId.isBlank() || receiverToken.isBlank()) null else PairedReceiver(receiverId, receiverName, receiverToken)
-
                     cachedUserDisconnected = prefs[KEY_USER_DISCONNECTED] ?: false
                 }
         }
     }
+
+    val modeFlow: Flow<AutomationMode> = dataStore.data
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { AutomationMode.fromStorageValue(it[KEY_MODE]) }
 
     fun mode(): AutomationMode = cachedMode
 
@@ -91,31 +84,6 @@ internal class RemoteAutomationStore(
         return generated
     }
 
-    fun pairedSender(): PairedSender? = cachedPairedSender
-
-    fun savePairedSender(senderId: String, token: String) {
-        cachedPairedSender = PairedSender(senderId, token)
-        scope.launch {
-            dataStore.edit { preferences ->
-                preferences[KEY_PAIRED_SENDER_ID] = senderId
-                preferences[KEY_PAIRED_SENDER_TOKEN] = token
-            }
-        }
-    }
-
-    fun pairedReceiver(): PairedReceiver? = cachedPairedReceiver
-
-    fun savePairedReceiver(receiverId: String, receiverName: String, token: String) {
-        cachedPairedReceiver = PairedReceiver(receiverId, receiverName, token)
-        scope.launch {
-            dataStore.edit { preferences ->
-                preferences[KEY_PAIRED_RECEIVER_ID] = receiverId
-                preferences[KEY_PAIRED_RECEIVER_NAME] = receiverName
-                preferences[KEY_PAIRED_RECEIVER_TOKEN] = token
-            }
-        }
-    }
-
     fun isUserDisconnected(): Boolean = cachedUserDisconnected
 
     fun saveUserDisconnected(disconnected: Boolean) {
@@ -127,22 +95,10 @@ internal class RemoteAutomationStore(
         }
     }
 
-    data class PairedSender(val senderId: String, val token: String)
-    data class PairedReceiver(
-        val receiverId: String,
-        val receiverName: String,
-        val token: String
-    )
-
     companion object {
         const val DATASTORE_NAME = "remote_automation"
         val KEY_MODE = stringPreferencesKey("mode")
         val KEY_INSTALLATION_ID = stringPreferencesKey("installation_id")
-        val KEY_PAIRED_SENDER_ID = stringPreferencesKey("paired_sender_id")
-        val KEY_PAIRED_SENDER_TOKEN = stringPreferencesKey("paired_sender_token")
-        val KEY_PAIRED_RECEIVER_ID = stringPreferencesKey("paired_receiver_id")
-        val KEY_PAIRED_RECEIVER_NAME = stringPreferencesKey("paired_receiver_name")
-        val KEY_PAIRED_RECEIVER_TOKEN = stringPreferencesKey("paired_receiver_token")
         val KEY_USER_DISCONNECTED = booleanPreferencesKey("user_disconnected")
     }
 }

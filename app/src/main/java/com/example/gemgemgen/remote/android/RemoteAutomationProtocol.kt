@@ -1,4 +1,4 @@
-// 역할: 원격 기기 간 주고받는 메시지 형식(페어링, 실행, 메모리 정리, Gemini 계정 전환 포함)과 패킷 프로토콜을 정의합니다.
+// 역할: 원격 기기 간 주고받는 무인증 메시지 형식(실행, 취소, 횟수 변경, 메모리 정리, Gemini 계정 전환 포함)과 패킷 프로토콜을 정의합니다.
 package com.example.gemgemgen.remote.android
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -14,33 +14,21 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonClassDiscriminator
 
 internal sealed interface RemoteProtocolMessage {
-    data class PairRequest(val senderId: String, val pairingCode: String) : RemoteProtocolMessage
-    data class PairResult(
-        val success: Boolean,
-        val receiverId: String = "",
-        val receiverName: String = "",
-        val token: String = "",
-        val message: String = ""
-    ) : RemoteProtocolMessage
     data class RunRequest(
         val senderId: String,
-        val token: String,
         val request: RemoteAutomationRequest
     ) : RemoteProtocolMessage
     data class CancelRequest(
         val senderId: String,
-        val token: String,
         val requestId: String
     ) : RemoteProtocolMessage
     data class UpdateRepeatCountRequest(
         val senderId: String,
-        val token: String,
         val requestId: String,
         val repeatCount: Int
     ) : RemoteProtocolMessage
     data class DisconnectRequest(
-        val senderId: String,
-        val token: String
+        val senderId: String
     ) : RemoteProtocolMessage
     data class DisconnectResult(
         val success: Boolean,
@@ -51,8 +39,7 @@ internal sealed interface RemoteProtocolMessage {
         val state: AutomationRunState
     ) : RemoteProtocolMessage
     data class CleanMemoryRequest(
-        val senderId: String,
-        val token: String
+        val senderId: String
     ) : RemoteProtocolMessage
     data class CleanMemoryResult(
         val success: Boolean,
@@ -60,7 +47,6 @@ internal sealed interface RemoteProtocolMessage {
     ) : RemoteProtocolMessage
     data class SwitchAccountRequest(
         val senderId: String,
-        val token: String,
         val email: String,
         val alias: String
     ) : RemoteProtocolMessage
@@ -85,39 +71,9 @@ private sealed interface ProtocolPacketDto {
     fun toDomain(): RemoteProtocolMessage
 
     @Serializable
-    @SerialName("pair")
-    data class PairReq(
-        val senderId: String = "",
-        val code: String = ""
-    ) : ProtocolPacketDto {
-        override fun toDomain(): RemoteProtocolMessage =
-            RemoteProtocolMessage.PairRequest(senderId = senderId, pairingCode = code)
-    }
-
-    @Serializable
-    @SerialName("pairResult")
-    data class PairRes(
-        val success: Boolean = false,
-        val receiverId: String = "",
-        val receiverName: String = "",
-        val token: String = "",
-        val message: String = ""
-    ) : ProtocolPacketDto {
-        override fun toDomain(): RemoteProtocolMessage =
-            RemoteProtocolMessage.PairResult(
-                success = success,
-                receiverId = receiverId,
-                receiverName = receiverName,
-                token = token,
-                message = message
-            )
-    }
-
-    @Serializable
     @SerialName("run")
     data class RunReq(
         val senderId: String = "",
-        val token: String = "",
         val requestId: String = "",
         val prompt: String = "",
         val repeatCount: String = "",
@@ -128,7 +84,6 @@ private sealed interface ProtocolPacketDto {
         override fun toDomain(): RemoteProtocolMessage =
             RemoteProtocolMessage.RunRequest(
                 senderId = senderId,
-                token = token,
                 request = RemoteAutomationRequest(
                     requestId = requestId,
                     promptTemplate = prompt,
@@ -142,7 +97,6 @@ private sealed interface ProtocolPacketDto {
         companion object {
             fun from(req: RemoteProtocolMessage.RunRequest): RunReq = RunReq(
                 senderId = req.senderId,
-                token = req.token,
                 requestId = req.request.requestId,
                 prompt = req.request.promptTemplate,
                 repeatCount = req.request.repeatCountText,
@@ -157,13 +111,11 @@ private sealed interface ProtocolPacketDto {
     @SerialName("cancel")
     data class CancelReq(
         val senderId: String = "",
-        val token: String = "",
         val requestId: String = ""
     ) : ProtocolPacketDto {
         override fun toDomain(): RemoteProtocolMessage =
             RemoteProtocolMessage.CancelRequest(
                 senderId = senderId,
-                token = token,
                 requestId = requestId
             )
     }
@@ -172,14 +124,12 @@ private sealed interface ProtocolPacketDto {
     @SerialName("updateRepeatCount")
     data class UpdateRepeatCountReq(
         val senderId: String = "",
-        val token: String = "",
         val requestId: String = "",
         val repeatCount: Int
     ) : ProtocolPacketDto {
         override fun toDomain(): RemoteProtocolMessage =
             RemoteProtocolMessage.UpdateRepeatCountRequest(
                 senderId = senderId,
-                token = token,
                 requestId = requestId,
                 repeatCount = repeatCount
             )
@@ -188,13 +138,11 @@ private sealed interface ProtocolPacketDto {
     @Serializable
     @SerialName("disconnect")
     data class DisconnectReq(
-        val senderId: String = "",
-        val token: String = ""
+        val senderId: String = ""
     ) : ProtocolPacketDto {
         override fun toDomain(): RemoteProtocolMessage =
             RemoteProtocolMessage.DisconnectRequest(
-                senderId = senderId,
-                token = token
+                senderId = senderId
             )
     }
 
@@ -260,13 +208,11 @@ private sealed interface ProtocolPacketDto {
     @Serializable
     @SerialName("cleanMemory")
     data class CleanMemReq(
-        val senderId: String = "",
-        val token: String = ""
+        val senderId: String = ""
     ) : ProtocolPacketDto {
         override fun toDomain(): RemoteProtocolMessage =
             RemoteProtocolMessage.CleanMemoryRequest(
-                senderId = senderId,
-                token = token
+                senderId = senderId
             )
     }
 
@@ -287,14 +233,12 @@ private sealed interface ProtocolPacketDto {
     @SerialName("switchAccount")
     data class SwitchAccReq(
         val senderId: String = "",
-        val token: String = "",
         val email: String = "",
         val alias: String = ""
     ) : ProtocolPacketDto {
         override fun toDomain(): RemoteProtocolMessage =
             RemoteProtocolMessage.SwitchAccountRequest(
                 senderId = senderId,
-                token = token,
                 email = email,
                 alias = alias
             )
@@ -315,32 +259,18 @@ private sealed interface ProtocolPacketDto {
 
     companion object {
         fun fromDomain(message: RemoteProtocolMessage): ProtocolPacketDto = when (message) {
-            is RemoteProtocolMessage.PairRequest -> PairReq(
-                senderId = message.senderId,
-                code = message.pairingCode
-            )
-            is RemoteProtocolMessage.PairResult -> PairRes(
-                success = message.success,
-                receiverId = message.receiverId,
-                receiverName = message.receiverName,
-                token = message.token,
-                message = message.message
-            )
             is RemoteProtocolMessage.RunRequest -> RunReq.from(message)
             is RemoteProtocolMessage.CancelRequest -> CancelReq(
                 senderId = message.senderId,
-                token = message.token,
                 requestId = message.requestId
             )
             is RemoteProtocolMessage.UpdateRepeatCountRequest -> UpdateRepeatCountReq(
                 senderId = message.senderId,
-                token = message.token,
                 requestId = message.requestId,
                 repeatCount = message.repeatCount
             )
             is RemoteProtocolMessage.DisconnectRequest -> DisconnectReq(
-                senderId = message.senderId,
-                token = message.token
+                senderId = message.senderId
             )
             is RemoteProtocolMessage.DisconnectResult -> DisconnectRes(
                 success = message.success,
@@ -351,8 +281,7 @@ private sealed interface ProtocolPacketDto {
                 runState = message.state
             )
             is RemoteProtocolMessage.CleanMemoryRequest -> CleanMemReq(
-                senderId = message.senderId,
-                token = message.token
+                senderId = message.senderId
             )
             is RemoteProtocolMessage.CleanMemoryResult -> CleanMemRes(
                 success = message.success,
@@ -360,7 +289,6 @@ private sealed interface ProtocolPacketDto {
             )
             is RemoteProtocolMessage.SwitchAccountRequest -> SwitchAccReq(
                 senderId = message.senderId,
-                token = message.token,
                 email = message.email,
                 alias = message.alias
             )

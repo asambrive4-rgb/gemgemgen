@@ -1,4 +1,4 @@
-// 역할: 기기 저장소의 와일드카드 텍스트 파일들을 읽고 쓰는 파일 입출력을 처리하며, SAF 및 DirectStorage 단기 캐시(TTL)를 관리합니다.
+// 역할: Scoped Storage(앱 전용 외부 문서), SAF 및 All-Files 직접 접근 방식을 지원하여 와일드카드 파일 입출력 및 단기 캐시(TTL)를 관리합니다.
 package com.example.gemgemgen.wildcard.android
 
 import android.content.Context
@@ -47,17 +47,22 @@ object AndroidWildcardFolderAccessChecker {
 class AndroidWildcardFileRepository(
     private val context: Context
 ) : WildcardFileRepository {
-    private val directStorage = AndroidWildcardDirectStorage()
+    private val directStorage = AndroidWildcardDirectStorage(context)
+
+    private fun shouldUseDirectStorage(): Boolean {
+        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) return true
+        return AndroidWildcardFolderRepository.getFolderUri(context) == null
+    }
 
     override fun listFiles(): List<WildcardTextFile> {
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
+        if (shouldUseDirectStorage()) {
             return directStorage.listFiles()
         }
         return listSafFiles()
     }
 
     override fun readFile(file: WildcardTextFile): String {
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
+        if (shouldUseDirectStorage()) {
             return directStorage.readFile(file)
         }
         val uri = documentUriFor(file)
@@ -68,7 +73,7 @@ class AndroidWildcardFileRepository(
 
     override fun createFile(fileName: String): WildcardTextFile {
         validateWildcardFileName(fileName)
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
+        if (shouldUseDirectStorage()) {
             return directStorage.createFile(fileName)
         }
         val folderUri = currentFolderUri()
@@ -92,7 +97,7 @@ class AndroidWildcardFileRepository(
     }
 
     override fun writeFile(file: WildcardTextFile, text: String) {
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
+        if (shouldUseDirectStorage()) {
             directStorage.writeFile(file, text)
             return
         }
@@ -109,7 +114,7 @@ class AndroidWildcardFileRepository(
     }
 
     override fun deleteFile(file: WildcardTextFile) {
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
+        if (shouldUseDirectStorage()) {
             directStorage.deleteFile(file)
             return
         }
@@ -121,7 +126,7 @@ class AndroidWildcardFileRepository(
 
     override fun renameFile(file: WildcardTextFile, newName: String): WildcardTextFile {
         validateWildcardFileName(newName)
-        if (AndroidWildcardDirectStorage.hasAllFilesAccess()) {
+        if (shouldUseDirectStorage()) {
             return directStorage.renameFile(file, newName)
         }
         val uri = documentUriFor(file)
@@ -224,10 +229,13 @@ internal fun validateWildcardFileName(fileName: String) {
 }
 
 /**
- * Direct shared-storage adapter used after the user grants all-files access.
- * SAF remains the default path when this permission is not granted.
+ * Scoped Storage 및 Direct shared-storage 어댑터.
+ * Android 10+ 앱 전용 외부 문서(Scoped Storage)를 기본 지원하며,
+ * 전체 파일 접근 권한(MANAGE_EXTERNAL_STORAGE)이 허용된 경우 공용 공유 저장소 후보도 함께 탐색합니다.
  */
-internal class AndroidWildcardDirectStorage {
+internal class AndroidWildcardDirectStorage(
+    private val context: Context
+) {
     fun listFiles(): List<WildcardTextFile> {
         val now = System.currentTimeMillis()
         val cached = cachedFiles
@@ -332,6 +340,44 @@ internal class AndroidWildcardDirectStorage {
         return diskFile
     }
 
+    private fun candidateFolders(): List<File> {
+        val candidates = mutableListOf<File>()
+
+        // 1. Scoped Storage 표준: 앱 전용 외부 문서 디렉토리 (권한 없이도 Android 10+ 상시 안전하게 읽기/쓰기 보장)
+        context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)?.let { docDir ->
+            candidates += File(docDir, AppDefaults.WILDCARD_SUBDIRECTORY)
+        }
+        context.getExternalFilesDir(null)?.let { filesDir ->
+            candidates += File(filesDir, AppDefaults.WILDCARD_SUBDIRECTORY)
+        }
+
+        // 2. 전체 파일 접근 권한(MANAGE_EXTERNAL_STORAGE) 보유 시 공용 공유 저장소 후보 지원 (기존 사용자 하위 호환)
+        if (hasAllFilesAccess()) {
+            @Suppress("DEPRECATION")
+            runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS) }
+                .getOrNull()?.let { publicDocs ->
+                    candidates += File(publicDocs, AppDefaults.WILDCARD_SUBDIRECTORY)
+                }
+            @Suppress("DEPRECATION")
+            runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) }
+                .getOrNull()?.let { publicDownloads ->
+                    candidates += File(publicDownloads, AppDefaults.WILDCARD_SUBDIRECTORY)
+                }
+            @Suppress("DEPRECATION")
+            runCatching { Environment.getExternalStorageDirectory() }
+                .getOrNull()?.let { externalRoot ->
+                    candidates += AppDefaults.WILDCARD_DIRECTORY_CANDIDATES.map { relativePath ->
+                        File(externalRoot, relativePath)
+                    }
+                }
+        }
+
+        // 3. 최후의 내부 저장소 안전 Fallback
+        candidates += File(context.filesDir, AppDefaults.WILDCARD_SUBDIRECTORY)
+
+        return candidates.distinct()
+    }
+
     private fun directFolder(): File {
         val now = System.currentTimeMillis()
         cachedFolder?.let { cached ->
@@ -339,11 +385,7 @@ internal class AndroidWildcardDirectStorage {
                 return cached
             }
         }
-        @Suppress("DEPRECATION")
-        val externalRoot = Environment.getExternalStorageDirectory()
-        val candidates = AppDefaults.WILDCARD_DIRECTORY_CANDIDATES.map { relativePath ->
-            File(externalRoot, relativePath)
-        }
+        val candidates = candidateFolders()
         val matched = candidates.firstOrNull { candidate ->
             candidate.isDirectory && candidate.listFiles { f ->
                 f.isFile && f.name.endsWith(".txt", ignoreCase = true)

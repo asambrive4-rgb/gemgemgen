@@ -726,8 +726,7 @@ class AutomationViewModelTest {
             override fun selectMode(mode: AutomationMode) {
                 currentStatus.value = currentStatus.value.copy(mode = mode)
             }
-            override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
-            override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
+                override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
             override suspend fun send(
                 request: com.example.gemgemgen.remote.domain.RemoteAutomationRequest
             ) = Unit
@@ -1165,7 +1164,7 @@ class AutomationViewModelTest {
             RemoteAutomationStatus(
                 mode = AutomationMode.SENDER,
                 discoveredDeviceName = "S25 FE",
-                isPaired = false
+                isPaired = true
             )
         )
         val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
@@ -1175,10 +1174,33 @@ class AutomationViewModelTest {
         )
         viewModel.onAutomationModeSelected(AutomationMode.SENDER)
 
-        // 시작 버튼을 누르지 않은 상태에서 페어링 시도 실패
-        viewModel.pairRemoteDevice("1234")
+        // 시작 버튼을 누르지 않은 상태에서 외부 실패 상태 수신
+        remoteGateway.status.value = remoteGateway.status.value.copy(
+            automationState = AutomationRunState.Failure("일시적 연결 오류")
+        )
 
         assertEquals(0, soundAlert.playCount)
+    }
+
+    @Test
+    fun retryRemoteConnection_resetsStuckRunningStateAndShowsRefreshFeedback() {
+        val remoteGateway = FakeRemoteGateway(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true,
+                automationState = AutomationRunState.Running("응답 대기 중 멈춤")
+            )
+        )
+        val remoteUseCase = ManageRemoteAutomationUseCase(remoteGateway)
+        val viewModel = viewModel(manageRemoteAutomation = remoteUseCase)
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+
+        viewModel.retryRemoteConnection()
+
+        assertEquals(false, viewModel.uiState.value.isRunning)
+        assertEquals(AutomationRunState.Idle, viewModel.uiState.value.automationState)
+        assertEquals("연결을 새로고침했습니다.", viewModel.uiState.value.remoteDisconnectMessage)
     }
 
     @Test
@@ -1816,8 +1838,6 @@ class AutomationViewModelTest {
             status.value = status.value.copy(mode = mode)
         }
 
-        override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
-
         var disconnectResult: RemoteActionResult = RemoteActionResult.Success
         var disconnectCallCount = 0
 
@@ -1923,7 +1943,11 @@ class AutomationViewModelTest {
             scope = testScope,
             produceFile = { tempFile }
         )
-        val themeStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(dataStore, testScope)
+        val themeStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(
+            dataStore = dataStore,
+            coroutineScope = testScope,
+            sharingStarted = kotlinx.coroutines.flow.SharingStarted.Eagerly
+        )
         val viewModel = viewModel(themePaletteStore = themeStore)
         val actions: AutomationScreenActions = viewModel
 
@@ -2024,8 +2048,7 @@ class AutomationViewModelTest {
             override fun selectMode(mode: AutomationMode) {
                 status.value = status.value.copy(mode = mode)
             }
-            override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
-            override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
+                override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
             override suspend fun send(request: RemoteAutomationRequest) {
                 callOrder += "remoteSend"
                 val count = RepeatCountParser.parse(request.repeatCountText)

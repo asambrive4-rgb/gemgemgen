@@ -1,4 +1,4 @@
-// 역할: 안드로이드 시스템에서 대상 앱 설치, 접근성, 오버레이, 폴더 접근 등 환경 상태를 부수효과 없이 조회합니다.
+// 역할: 안드로이드 시스템에서 대상 앱 설치, 접근성, 오버레이, Scoped Storage/SAF 와일드카드 폴더 접근 등 환경 상태를 실측하고 리포트를 생성합니다.
 package com.example.gemgemgen.environment.android
 
 import android.Manifest
@@ -27,13 +27,14 @@ class AndroidEnvironmentGateway(
     context: Context
 ) : EnvironmentGateway, OverlayPermissionGateway {
     private val appContext = context.applicationContext
-    private val wildcardDirectStorage = AndroidWildcardDirectStorage()
+    private val wildcardDirectStorage = AndroidWildcardDirectStorage(appContext)
 
     override fun check(): EnvironmentReport {
         val wildcardFolderUri = AndroidWildcardFolderRepository.getFolderUri(appContext)
         val hasAllFilesAccess = AndroidWildcardDirectStorage.hasAllFilesAccess()
-        val directFolder = if (hasAllFilesAccess) {
-            runCatching { wildcardDirectStorage.folderFile() }.getOrNull()
+        val shouldUseDirect = hasAllFilesAccess || wildcardFolderUri == null
+        val directFolder = if (shouldUseDirect) {
+            runCatching { wildcardDirectStorage.ensureFolder() }.getOrNull()
         } else {
             null
         }
@@ -59,25 +60,25 @@ class AndroidEnvironmentGateway(
                 isFlowInstalled = isPackageInstalled(AppDefaults.FLOW_PACKAGE_NAME),
                 isAccessibilityServiceEnabled = isAccessibilityServiceEnabled(),
                 hasWriteSecureSettingsPermission = hasWriteSecureSettingsPermission(),
-                isWildcardDirectoryAccessible = if (hasAllFilesAccess) {
+                isWildcardDirectoryAccessible = if (shouldUseDirect) {
                     directFolder != null && directFolder.isDirectory && directFolder.canRead()
                 } else {
-                    wildcardFolderUri != null && AndroidWildcardFolderAccessChecker.canReadFolder(appContext, wildcardFolderUri)
+                    AndroidWildcardFolderAccessChecker.canReadFolder(appContext, wildcardFolderUri)
                 },
-                isWildcardDirectoryWritable = if (hasAllFilesAccess) {
+                isWildcardDirectoryWritable = if (shouldUseDirect) {
                     directFolder != null && directFolder.isDirectory && directFolder.canWrite()
                 } else {
-                    wildcardFolderUri != null && AndroidWildcardFolderAccessChecker.canWriteFolder(appContext, wildcardFolderUri)
+                    AndroidWildcardFolderAccessChecker.canWriteFolder(appContext, wildcardFolderUri)
                 },
                 hasOverlayPermission = hasOverlay,
                 hasNotificationPermission = hasNotification,
                 hasAllFilesAccess = hasAllFilesAccess
             ),
             setupInfo = EnvironmentSetupInfo(
-                wildcardDirectoryPath = if (hasAllFilesAccess) {
+                wildcardDirectoryPath = if (shouldUseDirect) {
                     directFolder?.absolutePath ?: wildcardDirectStorage.folderPath()
                 } else {
-                    wildcardFolderUri?.toString().orEmpty()
+                    wildcardFolderUri.toString()
                 },
                 nullKeyboardTargetImeId = targetImeId,
                 adbGrantCommand =

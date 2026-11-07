@@ -307,7 +307,6 @@ class CoordinateAutomationExecutionUseCaseTest {
             status.value = status.value.copy(mode = mode)
         }
 
-        override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
         override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
 
         override suspend fun send(request: RemoteAutomationRequest) {

@@ -1356,22 +1356,6 @@ class AutomationViewModel(
         manageRemoteAutomation.selectMode(mode)
     }
 
-    override fun pairRemoteDevice(pairingCode: String) {
-        if (_uiState.value.automationMode != AutomationMode.SENDER) return
-        scope.launch {
-            val result = manageRemoteAutomation.pair(pairingCode)
-            if (result is RemoteActionResult.Failure) {
-                _uiState.update { state ->
-                    state.copy(
-                        remoteAutomationStatus = state.remoteAutomationStatus.copy(
-                            connectionMessage = result.message
-                        )
-                    )
-                }
-            }
-        }
-    }
-
     override fun disconnectRemoteDevice() {
         if (_uiState.value.isDisconnectingRemote) return
         if (_uiState.value.remoteAutomationStatus.automationState is AutomationRunState.Running) {
@@ -1397,13 +1381,30 @@ class AutomationViewModel(
 
     override fun retryRemoteConnection() {
         if (_uiState.value.isRetryingRemote) return
+        isRemoteRunActive = false
+        isPreStartCleanupInProgress = false
+        automationPreparationJob?.cancel()
+        automationPreparationJob = null
+        handleAutomationState(
+            AutomationRunState.Idle,
+            additionalUpdate = {
+                it.copy(
+                    isMemoryCleanupScheduled = false,
+                    maintenanceState = MaintenanceState()
+                )
+            }
+        )
         scope.launch {
             _uiState.update {
                 it.copy(isRetryingRemote = true, remoteDisconnectMessage = "")
             }
-            manageRemoteAutomation.retryConnection()
+            val result = manageRemoteAutomation.retryConnection()
+            val feedbackMessage = when (result) {
+                is RemoteActionResult.Success -> "연결을 새로고침했습니다."
+                is RemoteActionResult.Failure -> result.message
+            }
             _uiState.update {
-                it.copy(isRetryingRemote = false)
+                it.copy(isRetryingRemote = false, remoteDisconnectMessage = feedbackMessage)
             }
         }
     }

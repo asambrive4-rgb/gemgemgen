@@ -537,7 +537,6 @@ class AppMaintenanceUseCaseTest {
         override val status: StateFlow<RemoteAutomationStatus> = _status
 
         override fun selectMode(mode: AutomationMode) = Unit
-        override suspend fun pair(pairingCode: String): RemoteActionResult = RemoteActionResult.Success
         override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
         override suspend fun send(request: RemoteAutomationRequest) = Unit
         override fun updateRepeatCount(requestId: String, repeatCount: Int) = Unit

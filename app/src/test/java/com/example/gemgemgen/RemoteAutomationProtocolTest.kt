@@ -1,4 +1,4 @@
-// 역할: 원격 기기 간 통신 패킷(실행, 메모리 정리, 계정 전환 등) 직렬화 및 역직렬화 프로토콜을 검증합니다.
+// 역할: 원격 기기 간 무인증 통신 패킷(실행, 취소, 횟수 변경, 메모리 정리, 계정 전환 등) 직렬화 및 역직렬화 프로토콜을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -14,7 +14,6 @@ class RemoteAutomationProtocolTest {
     fun runRequest_roundTripsFlowImageCount() {
         val message = RemoteProtocolMessage.RunRequest(
             senderId = "tablet",
-            token = "token",
             request = RemoteAutomationRequest(
                 requestId = "request-flow",
                 promptTemplate = "flow prompt",
@@ -32,7 +31,6 @@ class RemoteAutomationProtocolTest {
     fun runRequest_roundTripsMultilinePrompt() {
         val message = RemoteProtocolMessage.RunRequest(
             senderId = "tablet",
-            token = "token",
             request = RemoteAutomationRequest(
                 requestId = "request-1",
                 promptTemplate = "첫 줄\n두 번째 줄 __hair__",
@@ -48,7 +46,6 @@ class RemoteAutomationProtocolTest {
     fun runRequest_roundTripsWithWildcards() {
         val message = RemoteProtocolMessage.RunRequest(
             senderId = "tablet",
-            token = "token",
             request = RemoteAutomationRequest(
                 requestId = "request-2",
                 promptTemplate = "a photo of __color__ __flower__",
@@ -90,8 +87,7 @@ class RemoteAutomationProtocolTest {
     @Test
     fun disconnectRequest_roundTrips() {
         val message = RemoteProtocolMessage.DisconnectRequest(
-            senderId = "tablet-id",
-            token = "sample-token-123"
+            senderId = "tablet-id"
         )
         assertEquals(message, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(message)))
     }
@@ -101,7 +97,7 @@ class RemoteAutomationProtocolTest {
         val success = RemoteProtocolMessage.DisconnectResult(success = true)
         val failure = RemoteProtocolMessage.DisconnectResult(
             success = false,
-            message = "등록되지 않은 송신 기기입니다."
+            message = "연결을 끊지 못했습니다."
         )
         assertEquals(success, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(success)))
         assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))
@@ -110,8 +106,7 @@ class RemoteAutomationProtocolTest {
     @Test
     fun cleanMemoryRequest_roundTrips() {
         val message = RemoteProtocolMessage.CleanMemoryRequest(
-            senderId = "tablet-id",
-            token = "sample-token-123"
+            senderId = "tablet-id"
         )
         assertEquals(message, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(message)))
     }
@@ -134,7 +129,6 @@ class RemoteAutomationProtocolTest {
     fun switchAccountRequest_roundTripsEmailAndAlias() {
         val message = RemoteProtocolMessage.SwitchAccountRequest(
             senderId = "tablet-id",
-            token = "sample-token-123",
             email = "jjoajjoajjoa31@gmail.com",
             alias = "계정 2"
         )
@@ -155,4 +149,3 @@ class RemoteAutomationProtocolTest {
         assertEquals(failure, RemoteAutomationProtocol.decode(RemoteAutomationProtocol.encode(failure)))
     }
 }
-

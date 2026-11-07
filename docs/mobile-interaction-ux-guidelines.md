@@ -20,7 +20,7 @@
 
 ### 원칙 3: 모바일 친화적 원터치 자동완성 칩 (Inline Autocomplete & Chip Bar)
 - 모바일 가상 키보드로 긴 파일명이나 특수 기호(`__와일드카드__`)를 일일이 타이핑하는 고비용 입력을 지양합니다.
-- 커서 위치의 토큰을 실시간 감지하여, 에디터 바로 위에 가로 스크롤 가능한 3D 조약돌 칩 바를 노출하고 **원터치 탭 1회로 본문에 즉시 삽입**할 수 있도록 구현합니다.
+- 커서 위치의 토큰을 실시간 감지하여, 에디터 바로 아래에 가로 스크롤 가능한 3D 조약돌 칩 바를 노출하고 **원터치 탭 1회로 본문에 즉시 삽입**할 수 있도록 구현합니다.
 
 ---
 
@@ -126,7 +126,7 @@ Surface(
 토큰을 입력하기 위해 다이얼로그를 따로 열어 목록을 찾아서 복사해오게 하거나, 자동완성이 텍스트 필드를 가려 타이핑 흐름을 끊음.
 
 #### ✅ 권장 패턴 (Recommended: Contextual Chip Bar)
-에디터의 텍스트와 커서 위치(`selection.max`)를 관찰하여 후보군을 계산하고, 에디터 상단 트랙에 가로 스크롤 조약돌 칩으로 자연스럽게 제안.
+에디터의 텍스트와 커서 위치(`selection.max`)를 관찰하여 후보군을 계산하고, 에디터 하단 트랙에 가로 스크롤 조약돌 칩으로 자연스럽게 제안.
 - 적용 파일: [`AutomationScreen.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/automation/ui/AutomationScreen.kt), [`PromptSection.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/automation/ui/PromptSection.kt), [`ResolveWildcardAutocompleteUseCase.kt`](file:///c:/Users/joajo/AndroidStudioProjects/gemgemgen/app/src/main/java/com/example/gemgemgen/automation/usecase/ResolveWildcardAutocompleteUseCase.kt)
 ```kotlin
 // GOOD: 커서 위치와 선택 상태를 실시간 추적하여 자동완성 토큰 목록 도출 (유스케이스 분리)

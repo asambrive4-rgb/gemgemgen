@@ -102,9 +102,9 @@ class AndroidAppContainer(context: Context) {
     private val wildcardFileRepository by lazy { AndroidWildcardFileRepository(appContext) }
     private val wildcardSetRepository: WildcardSetRepository by lazy { WildcardSetRepository { wildcardFileRepository.loadWildcardSets() } }
     internal val wildcardFolderRepository by lazy { AndroidWildcardFolderRepository(appContext) }
-    internal val wildcardDirectStorage by lazy { AndroidWildcardDirectStorage() }
+    internal val wildcardDirectStorage by lazy { AndroidWildcardDirectStorage(appContext) }
 
-    val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext)
+    val themePaletteStore = com.example.gemgemgen.ui.theme.ThemePaletteStore(appContext, appScope)
     val promptWorkspace = PromptWorkspace()
     val promptSnippetRepository by lazy { PromptSnippetStore(appContext) }
     val promptExperimentRepository by lazy { com.example.gemgemgen.automation.android.PromptExperimentStore(appContext) }

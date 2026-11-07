@@ -1,4 +1,4 @@
-// 역할: Jetpack DataStore를 통해 사용자가 선택한 테마 색상 및 모드 설정을 비동기로 로컬에 저장하고 Flow/StateFlow로 제공합니다.
+// 역할: Jetpack DataStore를 통해 사용자가 선택한 테마 색상 및 모드 설정을 비동기로 로컬에 저장하고 선언적 StateFlow로 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import android.content.Context
@@ -13,11 +13,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 private val Context.themeDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -26,9 +26,14 @@ private val Context.themeDataStore: DataStore<Preferences> by preferencesDataSto
 
 class ThemePaletteStore(
     private val dataStore: DataStore<Preferences>,
-    coroutineScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    coroutineScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    sharingStarted: SharingStarted = SharingStarted.WhileSubscribed(5_000)
 ) {
-    constructor(context: Context) : this(context.applicationContext.themeDataStore)
+    constructor(
+        context: Context,
+        coroutineScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        sharingStarted: SharingStarted = SharingStarted.WhileSubscribed(5_000)
+    ) : this(context.applicationContext.themeDataStore, coroutineScope, sharingStarted)
 
     private val scope = coroutineScope
 
@@ -46,31 +51,25 @@ class ThemePaletteStore(
             AppThemeMode.fromId(id)
         }
 
-    private val _currentPalette = MutableStateFlow(AppThemePalette.DEFAULT)
-    val currentPalette: StateFlow<AppThemePalette> = _currentPalette.asStateFlow()
+    val currentPalette: StateFlow<AppThemePalette> = paletteFlow
+        .stateIn(
+            scope = scope,
+            started = sharingStarted,
+            initialValue = AppThemePalette.DEFAULT
+        )
 
-    private val _currentMode = MutableStateFlow(AppThemeMode.DEFAULT)
-    val currentMode: StateFlow<AppThemeMode> = _currentMode.asStateFlow()
-
-    init {
-        scope.launch {
-            paletteFlow.collect { palette ->
-                _currentPalette.value = palette
-            }
-        }
-        scope.launch {
-            modeFlow.collect { mode ->
-                _currentMode.value = mode
-            }
-        }
-    }
+    val currentMode: StateFlow<AppThemeMode> = modeFlow
+        .stateIn(
+            scope = scope,
+            started = sharingStarted,
+            initialValue = AppThemeMode.DEFAULT
+        )
 
     fun loadPalette(): AppThemePalette = currentPalette.value
 
     fun loadMode(): AppThemeMode = currentMode.value
 
     fun setPalette(palette: AppThemePalette) {
-        _currentPalette.value = palette
         scope.launch {
             dataStore.edit { preferences ->
                 preferences[KEY_THEME_PALETTE] = palette.id
@@ -79,7 +78,6 @@ class ThemePaletteStore(
     }
 
     fun setThemeMode(mode: AppThemeMode) {
-        _currentMode.value = mode
         scope.launch {
             dataStore.edit { preferences ->
                 preferences[KEY_THEME_MODE] = mode.id
