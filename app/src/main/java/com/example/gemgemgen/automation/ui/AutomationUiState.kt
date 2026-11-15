@@ -1,4 +1,4 @@
-﻿// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 상용구·카테고리 목록, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
+﻿// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 송신 기기 대기 계정 전환 상태·일시 알림(Snackbar), 상용구·카테고리 목록, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
@@ -18,6 +18,8 @@ import com.example.gemgemgen.environment.domain.EnvironmentSetupInfo
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
+import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
+import com.example.gemgemgen.usage.domain.GeminiQuotaExhaustionReason
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 
 data class AutomationUiState(
@@ -69,6 +71,10 @@ data class AutomationUiState(
     val multiGeminiUsageState: MultiGeminiUsageState = MultiGeminiUsageState(),
     /** 다중 계정 사용량 수직 목록 모달 다이얼로그 표시 여부 */
     val showMultiGeminiUsageDialog: Boolean = false,
+    /** 송신(SENDER) 모드에서 수신 기기 선행(예약) 생성을 시작한 뒤 송신 기기가 나중에 따라 전환할 수 있는 대기 계정 정보 */
+    val pendingSenderAccountSwitch: PendingSenderAccountSwitch? = null,
+    /** 화면 또는 모달 내부에 한 번 표시할 스낵바 안내 메시지 */
+    val snackbarMessage: AutomationSnackbarMessage? = null,
     /**
      * =========================================================================================
      * [주의: 사용자 명시적 요구 기능 - 임의 삭제 절대 금지]
@@ -191,6 +197,43 @@ data class AutomationUiState(
             isMaintenanceBusy = isMaintenanceBusy
         )
 
+    fun reserveAccountBlockReason(
+        exhaustionReason: GeminiQuotaExhaustionReason?,
+        isStartInProgress: Boolean = false
+    ): String? = AutomationExecutionPolicy.reservePreGenerationUnavailableReason(
+        mode = automationMode,
+        targetApp = selectedTargetApp,
+        remoteAutomationStatus = remoteAutomationStatus,
+        promptTemplate = promptTemplate,
+        isRunning = isRunning,
+        isVariationRunning = isVariationRunning,
+        isMaintenanceBusy = isMaintenanceBusy,
+        isStartInProgress = isStartInProgress,
+        isExperimentMode = isExperimentMode,
+        selectedExperimentItem = selectedExperimentItem,
+        exhaustionReason = exhaustionReason
+    )
+
+    fun reserveAccountBlockReason(
+        entry: GeminiAccountUsageEntry,
+        nowMillis: Long,
+        isStartInProgress: Boolean = false
+    ): String? = reserveAccountBlockReason(
+        exhaustionReason = entry.quotaExhaustionReason(nowMillis),
+        isStartInProgress = isStartInProgress
+    )
+
+    val senderLocalSwitchUnavailableReason: String?
+        get() = AutomationExecutionPolicy.senderLocalSwitchUnavailableReason(
+            mode = automationMode,
+            environmentStatus = environmentStatus,
+            isVariationRunning = isVariationRunning,
+            isMaintenanceBusy = isMaintenanceBusy
+        )
+
+    val canSwitchPendingSenderAccount: Boolean
+        get() = pendingSenderAccountSwitch != null && senderLocalSwitchUnavailableReason == null
+
     val autoMemoryCleanupThreshold: Int
         get() = RepeatCountParser.parse(
             autoMemoryCleanupThresholdText.ifBlank {
@@ -207,4 +250,18 @@ data class AutomationUiState(
 data class MaintenanceState(
     val isBusy: Boolean = false,
     val message: String = ""
+)
+
+data class PendingSenderAccountSwitch(
+    val accountId: String,
+    val email: String,
+    val alias: String
+) {
+    val displayLabel: String
+        get() = alias.trim().ifBlank { email.trim().ifBlank { "예약 계정" } }
+}
+
+data class AutomationSnackbarMessage(
+    val id: Long,
+    val text: String
 )

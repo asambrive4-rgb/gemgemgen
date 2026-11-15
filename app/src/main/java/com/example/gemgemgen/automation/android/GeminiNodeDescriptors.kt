@@ -40,6 +40,18 @@ internal object GeminiNodeDescriptors {
             TOOLBAR_HEADER_CONTAINER
         )
 
+        const val SIDEBAR_DRAWER_CONTAINER = "com.google.android.googlequicksearchbox:id/assistant_robin_side_nav_host_drawer_container"
+        val DEFAULT_SIDEBAR_DRAWER_CONTAINER_IDS: List<String> = listOf(
+            SIDEBAR_DRAWER_CONTAINER
+        )
+
+        const val SIDEBAR_THREAD_ITEM = "thread_item"
+        const val SIDEBAR_THREAD_ITEM_QUALIFIED = "com.google.android.googlequicksearchbox:id/thread_item"
+        val DEFAULT_SIDEBAR_THREAD_ITEM_IDS: List<String> = listOf(
+            SIDEBAR_THREAD_ITEM,
+            SIDEBAR_THREAD_ITEM_QUALIFIED
+        )
+
         const val PROFILE_INTERNAL_IMAGE = "com.google.android.googlequicksearchbox:id/og_apd_internal_image_view"
         const val PROFILE_RING = "com.google.android.googlequicksearchbox:id/og_apd_ring_view"
         const val PROFILE_PARTICLE_DISC = "com.google.android.googlequicksearchbox:id/account_particle_disc"

@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정의 개별 사용량 항목과 전체 목록 상태, 5시간·주간 리셋 만료 자동 보정, 정렬 키 사전 계산(Decorate-Sort-Undecorate) 기반 메인/서브 그룹별 즉각 분류·정렬, 소진 판별·사유(당분간 사용 금지 포함), 대표 계정 요약 규칙을 정의합니다.
+// 역할: 다중 제미나이 계정의 개별 사용량 항목과 전체 목록 상태, 메인만 사용 모드 및 비상 예외 허용, 5시간·주간 리셋 만료 자동 보정, 정렬 키 사전 계산(Decorate-Sort-Undecorate) 기반 메인/서브 그룹별 즉각 분류·정렬, 소진 판별·사유(당분간 사용 금지 포함), 대표 계정 요약 규칙을 정의합니다.
 package com.example.gemgemgen.usage.domain
 
 /**
@@ -314,7 +314,8 @@ data class MultiGeminiUsageState(
     val accounts: List<GeminiAccountUsageEntry> = emptyList(),
     val selectedAccountId: String? = null,
     val isRefreshingAll: Boolean = false,
-    val isInitialized: Boolean = false
+    val isInitialized: Boolean = false,
+    val isMainOnlyMode: Boolean = false
 ) {
     /** 등록된 계정이 없는 빈 상태 여부 */
     val isEmpty: Boolean
@@ -354,11 +355,31 @@ data class MultiGeminiUsageState(
 
     /**
      * 메인 화면 요약 버튼에 표시할 대표/현재 계정 항목.
+     * [isMainOnlyMode]가 true인 경우 메인 그룹 계정을 최우선으로 반환합니다.
      * [selectedAccountId]와 일치하는 계정을 우선 반환하며, 없으면 첫 번째 계정을 반환합니다.
      */
     val representativeAccount: GeminiAccountUsageEntry?
-        get() = accounts.firstOrNull { it.profile.id == selectedAccountId }
-            ?: accounts.firstOrNull()
+        get() {
+            val selected = accounts.firstOrNull { it.profile.id == selectedAccountId }
+            if (!isMainOnlyMode) {
+                return selected ?: accounts.firstOrNull()
+            }
+            if (selected != null && selected.profile.group == GeminiAccountGroup.MAIN) {
+                return selected
+            }
+            val mainAvailable = availableAccountsSorted(GeminiAccountGroup.MAIN)
+            if (mainAvailable.isNotEmpty()) {
+                return mainAvailable.first()
+            }
+            val firstMain = mainAccounts.firstOrNull()
+            if (firstMain != null) {
+                if (selected != null && selected.profile.group == GeminiAccountGroup.SUB) {
+                    return selected
+                }
+                return firstMain
+            }
+            return selected ?: accounts.firstOrNull()
+        }
 
     /**
      * 메인 화면 요약 버튼에 적용할 포인트 컬러 경고 단계.
@@ -440,10 +461,21 @@ data class MultiGeminiUsageState(
 
     /**
      * 전체 그룹의 즉시 사용 가능/확인 중 계정 목록을 최적 사용 순서로 정렬합니다.
+     * [isMainOnlyMode]가 true인 경우 메인 그룹 계정을 최우선으로 반환하며,
+     * 메인 그룹 계정이 비어있거나 모두 소진된 경우에만 비상 예외로 서브 계정을 반환합니다.
      */
     fun availableAccountsSorted(
         nowMillis: Long = System.currentTimeMillis()
-    ): List<GeminiAccountUsageEntry> = availableAccountsSortedInternal(null, nowMillis)
+    ): List<GeminiAccountUsageEntry> {
+        if (isMainOnlyMode) {
+            val mainAvailable = availableAccountsSortedInternal(GeminiAccountGroup.MAIN, nowMillis)
+            if (mainAvailable.isNotEmpty()) {
+                return mainAvailable
+            }
+            // 비상 예외 허용: 메인 그룹 계정이 전멸한 경우 전체 계정(서브 포함) 반환
+        }
+        return availableAccountsSortedInternal(null, nowMillis)
+    }
 
     private fun availableAccountsSortedInternal(
         group: GeminiAccountGroup?,
@@ -454,9 +486,12 @@ data class MultiGeminiUsageState(
         val unconfirmedAccounts = mutableListOf<GeminiAccountUsageEntry>()
 
         for (entry in baseAccounts) {
+            if (entry.isQuotaExhausted(nowMillis)) {
+                continue
+            }
             if (entry.displayedSuccess == null) {
                 unconfirmedAccounts.add(entry)
-            } else if (!entry.isQuotaExhausted(nowMillis)) {
+            } else {
                 usableDecorated.add(
                     UsableAccountSortItem(
                         entry = entry,
@@ -523,8 +558,17 @@ data class MultiGeminiUsageState(
 
     /**
      * 전체 계정을 최적 사용 순서로 정렬합니다.
+     * [isMainOnlyMode]가 true인 경우 메인 그룹 계정을 우선 정렬합니다.
      */
     fun sortedAccountsForUsage(
         nowMillis: Long = System.currentTimeMillis()
-    ): List<GeminiAccountUsageEntry> = availableAccountsSorted(nowMillis) + exhaustedAccountsSorted(nowMillis)
+    ): List<GeminiAccountUsageEntry> {
+        if (isMainOnlyMode) {
+            val mainSorted = sortedAccountsForUsage(GeminiAccountGroup.MAIN, nowMillis)
+            if (mainSorted.isNotEmpty()) {
+                return mainSorted + sortedAccountsForUsage(GeminiAccountGroup.SUB, nowMillis)
+            }
+        }
+        return availableAccountsSorted(nowMillis) + exhaustedAccountsSorted(nowMillis)
+    }
 }

@@ -1,4 +1,4 @@
-// 역할: Gemini 앱에서 사이드바 또는 상단 메뉴를 통해 Google 프로필(OneGoogle Bento)을 열어 대상 구글 계정으로 지연 없이 빠르게 자동 전환합니다.
+// 역할: Gemini 앱 패키지 범위 내에서 사이드바 고정 하단 프로필 카드 또는 상단 메뉴를 통해 Google 프로필(OneGoogle Bento)을 열어 대상 구글 계정으로 안전하게 자동 전환합니다.
 package com.example.gemgemgen.automation.android
 
 import android.os.Handler
@@ -16,6 +16,8 @@ internal data class GeminiAccountSwitchNodeLabels(
         AppDefaults.GEMINI_PACKAGE_NAME
     ),
     val toolbarViewIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_TOOLBAR_IDS,
+    val sidebarDrawerContainerIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_SIDEBAR_DRAWER_CONTAINER_IDS,
+    val sidebarThreadItemIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_SIDEBAR_THREAD_ITEM_IDS,
     val profileButtonViewIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_PROFILE_BUTTON_IDS,
     val profileButtonDescriptions: List<String> = listOf(
         "계정 및 설정",
@@ -58,46 +60,159 @@ internal data class GeminiAccountSwitchNodeLabels(
 
 internal data class GeminiSidebarProfileCandidate(
     val className: String = "",
+    val viewIdResourceName: String = "",
     val contentDescription: String = "",
-    val isClickableOrCheckable: Boolean = false,
+    val childTexts: List<String> = emptyList(),
+    val childDescriptions: List<String> = emptyList(),
+    val isClickable: Boolean = false,
+    val isCheckable: Boolean = false,
+    val isInsideScrollable: Boolean = false,
+    val bounds: NodeBounds? = null,
     val parent: GeminiSidebarProfileCandidate? = null
-)
+) {
+    val isClickableOrCheckable: Boolean
+        get() = isClickable || isCheckable
+}
 
 internal object GeminiSidebarProfileMatcher {
+    private val BADGE_EXACT_TOKENS = setOf("pro", "plus", "ultra", "advanced")
+    private val PROFILE_SUBSTRING_KEYWORDS = listOf(
+        "google 계정",
+        "google account",
+        "계정 및 설정",
+        "signed in"
+    )
+    private val NON_PROFILE_MENU_TEXTS = setOf(
+        "새 채팅",
+        "new chat",
+        "채팅 검색",
+        "search chats",
+        "spark",
+        "학생",
+        "이미지",
+        "동영상",
+        "라이브러리",
+        "notebooks",
+        "최근"
+    )
+
     fun isSidebarOpen(
         candidates: List<GeminiSidebarProfileCandidate>,
-        closeSidebarCandidates: List<String>
+        closeSidebarCandidates: List<String>,
+        sidebarDrawerContainerIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_SIDEBAR_DRAWER_CONTAINER_IDS
     ): Boolean {
         return candidates.any { candidate ->
             val desc = candidate.contentDescription.trim()
-            closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }
+            val viewId = candidate.viewIdResourceName.trim()
+            (viewId.isNotEmpty() && sidebarDrawerContainerIds.any { it.equals(viewId, ignoreCase = true) }) ||
+                closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }
         }
     }
 
     /**
-     * 사이드바가 실제로 열려 있음이 확인된 경우에만 프로필/라디오 버튼 노드를 감지합니다.
-     * 사이드바가 닫혀 있는 상태라면 화면 내 라디오 버튼이 존재하더라도 null을 반환합니다.
+     * 사이드바가 실제로 열려 있음이 확인된 경우에만 하단 고정 프로필 노드를 감지합니다.
+     * - 최근 대화 항목(`thread_item`), 체크 가능(`isCheckable`) 메뉴, 스크롤 목록 내부 항목,
+     *   그리고 '사이드바 닫기' 버튼을 철저히 배제하여 사이드바가 다시 닫히거나 엉뚱한 대화가 열리는 현상을 방지합니다.
      */
     fun findSidebarProfileCandidate(
         candidates: List<GeminiSidebarProfileCandidate>,
-        closeSidebarCandidates: List<String>
+        closeSidebarCandidates: List<String>,
+        sidebarDrawerContainerIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_SIDEBAR_DRAWER_CONTAINER_IDS,
+        sidebarThreadItemIds: List<String> = GeminiNodeDescriptors.AccountSwitch.DEFAULT_SIDEBAR_THREAD_ITEM_IDS
     ): GeminiSidebarProfileCandidate? {
-        val isSidebarOpen = isSidebarOpen(candidates, closeSidebarCandidates)
+        val isSidebarOpen = isSidebarOpen(candidates, closeSidebarCandidates, sidebarDrawerContainerIds)
         if (!isSidebarOpen) return null
 
+        // 1순위: 구형 RadioButton 기반 프로필 노드
         val radioButtonNode = candidates.firstOrNull { candidate ->
-            candidate.className.contains("RadioButton", ignoreCase = true)
+            candidate.className.contains("RadioButton", ignoreCase = true) &&
+                !isExcludedSidebarCandidate(candidate, closeSidebarCandidates, sidebarThreadItemIds)
         }
         if (radioButtonNode != null) {
             val parent = radioButtonNode.parent
-            if (parent != null && parent.isClickableOrCheckable) {
+            if (parent != null && parent.isClickableOrCheckable &&
+                !isExcludedSidebarCandidate(parent, closeSidebarCandidates, sidebarThreadItemIds)
+            ) {
                 return parent
             }
             return radioButtonNode
         }
 
-        return null
+        // 2순위: 스크롤 영역 바깥(하단 고정 푸터)의 클릭 가능한 프로필 후보
+        val footerCandidates = candidates.filter { candidate ->
+            candidate.isClickable &&
+                !candidate.isCheckable &&
+                !candidate.isInsideScrollable &&
+                !isExcludedSidebarCandidate(candidate, closeSidebarCandidates, sidebarThreadItemIds) &&
+                isValidProfileRowBounds(candidate.bounds)
+        }
+
+        // 2-A: 명확한 프로필 배지("PRO", "PLUS" 등 단독 토큰)나 계정 설명 키워드를 가진 하단 고정 행
+        val badgeMatched = footerCandidates
+            .filter { hasExplicitProfileBadgeOrKeyword(it) }
+            .maxByOrNull { it.bounds?.bottom ?: 0 }
+        if (badgeMatched != null) {
+            return badgeMatched
+        }
+
+        // 2-B: 사이드바 하단 고정 영역에서 가장 아래에 위치한 넓은 클릭 가능 카드
+        return footerCandidates
+            .filter { (it.bounds?.let { b -> b.right - b.left } ?: 0) >= MIN_SIDEBAR_PROFILE_WIDTH_PX }
+            .maxByOrNull { it.bounds?.bottom ?: 0 }
     }
+
+    internal fun isExcludedSidebarCandidate(
+        candidate: GeminiSidebarProfileCandidate,
+        closeSidebarCandidates: List<String>,
+        sidebarThreadItemIds: List<String>
+    ): Boolean {
+        val viewId = candidate.viewIdResourceName.trim()
+        if (viewId.isNotEmpty() && sidebarThreadItemIds.any { viewId.equals(it, ignoreCase = true) || viewId.endsWith("/$it", ignoreCase = true) }) {
+            return true
+        }
+        val selfDesc = candidate.contentDescription.trim()
+        if (selfDesc.isNotEmpty() && closeSidebarCandidates.any { selfDesc.equals(it, ignoreCase = true) }) {
+            return true
+        }
+        if (candidate.childDescriptions.any { childDesc ->
+                val trimmed = childDesc.trim()
+                closeSidebarCandidates.any { trimmed.equals(it, ignoreCase = true) }
+            }
+        ) {
+            return true
+        }
+        if (candidate.childTexts.any { childText ->
+                NON_PROFILE_MENU_TEXTS.contains(childText.trim().lowercase())
+            }
+        ) {
+            return true
+        }
+        return false
+    }
+
+    internal fun hasExplicitProfileBadgeOrKeyword(candidate: GeminiSidebarProfileCandidate): Boolean {
+        val hasBadgeToken = candidate.childTexts.any { text ->
+            val normalized = text.trim().lowercase()
+            normalized in BADGE_EXACT_TOKENS || normalized.contains("@")
+        }
+        if (hasBadgeToken) return true
+
+        val allTextsAndDescs = (candidate.childTexts + candidate.childDescriptions + listOf(candidate.contentDescription))
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+
+        return allTextsAndDescs.any { item ->
+            PROFILE_SUBSTRING_KEYWORDS.any { keyword -> item.contains(keyword) }
+        }
+    }
+
+    private fun isValidProfileRowBounds(bounds: NodeBounds?): Boolean {
+        if (bounds == null) return false
+        val height = bounds.bottom - bounds.top
+        return height in 48..320
+    }
+
+    private const val MIN_SIDEBAR_PROFILE_WIDTH_PX = 250
 }
 
 internal class GeminiAccountSwitchAutomation(
@@ -236,6 +351,13 @@ internal class GeminiAccountSwitchAutomation(
                         }
                     }
                     retryOrFail("사이드바 하단 Google 프로필 메뉴를 열지 못했습니다.") { checkPhase() }
+                    return
+                }
+
+                // 사이드바가 이미 열려 있는 상태에서 하단 프로필 노드가 아직 렌더링 중이거나 찾지 못한 경우,
+                // 하위 Fallback(툴바 탭 등)으로 내려가서 사이드바를 다시 닫아버리는 현상을 원천 차단합니다.
+                if (isSidebarCurrentlyOpen(allNodes())) {
+                    retryOrFail("사이드바 하단 Google 프로필 메뉴를 찾고 있습니다.") { checkPhase() }
                     return
                 }
 
@@ -681,68 +803,121 @@ internal class GeminiAccountSwitchAutomation(
         return tapX to tapY
     }
 
-    private fun findSidebarProfileNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
-        var isSidebarOpen = false
-        var radioButtonNode: AccessibilityNodeInfo? = null
-        val clickableCandidates = mutableListOf<AccessibilityNodeInfo>()
-
+    private fun isSidebarCurrentlyOpen(nodes: Sequence<AccessibilityNodeInfo>): Boolean {
         for (node in nodes) {
+            val viewId = node.viewIdResourceName?.trim().orEmpty()
+            if (viewId.isNotEmpty() && labels.sidebarDrawerContainerIds.any { it.equals(viewId, ignoreCase = true) }) {
+                return true
+            }
+            val desc = node.contentDescription?.toString()?.trim().orEmpty()
+            if (desc.isNotEmpty() && labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun findSidebarProfileNode(nodes: Sequence<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        val nodeList = nodes.toList()
+        if (nodeList.isEmpty()) return null
+
+        var drawerNode: AccessibilityNodeInfo? = null
+        var isSidebarOpen = false
+        for (node in nodeList) {
+            val viewId = node.viewIdResourceName?.trim().orEmpty()
+            if (drawerNode == null && viewId.isNotEmpty() &&
+                labels.sidebarDrawerContainerIds.any { it.equals(viewId, ignoreCase = true) }
+            ) {
+                drawerNode = node
+                isSidebarOpen = true
+            }
             if (!isSidebarOpen) {
                 val desc = node.contentDescription?.toString()?.trim().orEmpty()
-                if (labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }) {
+                if (desc.isNotEmpty() && labels.closeSidebarCandidates.any { desc.equals(it, ignoreCase = true) }) {
                     isSidebarOpen = true
-                }
-            }
-            if (radioButtonNode == null && node.className?.contains("RadioButton", ignoreCase = true) == true) {
-                radioButtonNode = node
-            }
-            val isClickableOrCheckable = node.isClickable || node.isCheckable
-            if (isClickableOrCheckable) {
-                val b = node.nodeBounds()
-                if (b != null && (b.bottom - b.top) in 50..300) {
-                    clickableCandidates.add(node)
                 }
             }
         }
         if (!isSidebarOpen) return null
 
-        if (radioButtonNode != null) {
-            val parent = radioButtonNode.parent
-            if (parent != null && (parent.isClickable || parent.isCheckable)) {
-                return parent
-            }
-            return radioButtonNode
+        // 사이드바 드로어 컨테이너가 식별된 경우 탐색 범위를 드로어 서브트리 내부로 엄격히 한정
+        val searchNodes: List<AccessibilityNodeInfo> = if (drawerNode != null) {
+            AccessibilityNodeTraversal.lazyTraverse(drawerNode, ::isGeminiPackage).toList()
+        } else {
+            nodeList
         }
 
-        val profileIndicators = listOf(
-            "pro",
-            "plus",
-            "google 계정",
-            "google account",
-            "signed in",
-            targetEmail.lowercase(),
-            targetAlias.lowercase()
-        ).filter { it.isNotBlank() }
+        val scrollableBoundsList = searchNodes
+            .filter { it.isScrollable }
+            .mapNotNull { it.nodeBounds() }
 
-        for (node in clickableCandidates) {
-            val hasIndicator = AccessibilityNodeTraversal.lazyTraverse(node).any { child ->
-                val text = child.text?.toString()?.lowercase().orEmpty()
-                val desc = child.contentDescription?.toString()?.lowercase().orEmpty()
-                profileIndicators.any { ind -> text.contains(ind) || desc.contains(ind) }
+        val candidateToNode = LinkedHashMap<GeminiSidebarProfileCandidate, AccessibilityNodeInfo>()
+        val candidates = ArrayList<GeminiSidebarProfileCandidate>(searchNodes.size)
+
+        for (node in searchNodes) {
+            val isClickable = node.isClickable
+            val isCheckable = node.isCheckable
+            val isRadioButton = node.className?.toString()?.contains("RadioButton", ignoreCase = true) == true
+            val bounds = if (isClickable || isCheckable || isRadioButton) node.nodeBounds() else null
+
+            val isInsideScrollable = bounds != null && scrollableBoundsList.any { scrollBounds ->
+                bounds.top >= scrollBounds.top - 4 && bounds.bottom <= scrollBounds.bottom + 4
             }
-            if (hasIndicator) {
-                return node
+
+            val childTexts = mutableListOf<String>()
+            val childDescs = mutableListOf<String>()
+            if (isClickable || isCheckable) {
+                for (child in AccessibilityNodeTraversal.lazyTraverse(node, ::isGeminiPackage)) {
+                    if (child === node) continue
+                    val t = child.text?.toString()?.trim()
+                    if (!t.isNullOrEmpty()) childTexts.add(t)
+                    val d = child.contentDescription?.toString()?.trim()
+                    if (!d.isNullOrEmpty()) childDescs.add(d)
+                }
             }
+
+            val parentCandidate = if (isRadioButton) {
+                val p = node.parent
+                if (p != null) {
+                    GeminiSidebarProfileCandidate(
+                        className = p.className?.toString().orEmpty(),
+                        viewIdResourceName = p.viewIdResourceName?.trim().orEmpty(),
+                        contentDescription = p.contentDescription?.toString()?.trim().orEmpty(),
+                        isClickable = p.isClickable,
+                        isCheckable = p.isCheckable,
+                        bounds = p.nodeBounds()
+                    ).also { candidateToNode[it] = p }
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+
+            val candidate = GeminiSidebarProfileCandidate(
+                className = node.className?.toString().orEmpty(),
+                viewIdResourceName = node.viewIdResourceName?.trim().orEmpty(),
+                contentDescription = node.contentDescription?.toString()?.trim().orEmpty(),
+                childTexts = childTexts,
+                childDescriptions = childDescs,
+                isClickable = isClickable,
+                isCheckable = isCheckable,
+                isInsideScrollable = isInsideScrollable,
+                bounds = bounds,
+                parent = parentCandidate
+            )
+            candidates.add(candidate)
+            candidateToNode[candidate] = node
         }
 
-        val bottomNode = clickableCandidates
-            .filter { (it.nodeBounds()?.let { b -> b.right - b.left } ?: 0) >= 250 }
-            .maxByOrNull { it.nodeBounds()?.bottom ?: 0 }
-        if (bottomNode != null) {
-            return bottomNode
-        }
+        val matchedCandidate = GeminiSidebarProfileMatcher.findSidebarProfileCandidate(
+            candidates = candidates,
+            closeSidebarCandidates = labels.closeSidebarCandidates,
+            sidebarDrawerContainerIds = labels.sidebarDrawerContainerIds,
+            sidebarThreadItemIds = labels.sidebarThreadItemIds
+        ) ?: return null
 
-        return null
+        return candidateToNode[matchedCandidate]
     }
 
     private fun findSidebarProfileTapPoint(profileNode: AccessibilityNodeInfo): Pair<Float, Float>? {
@@ -943,9 +1118,18 @@ internal class GeminiAccountSwitchAutomation(
         }
     }
 
+    private fun isGeminiPackage(packageName: CharSequence?): Boolean {
+        val pkg = packageName?.toString() ?: return false
+        return labels.geminiPackageNames.any { it.equals(pkg, ignoreCase = true) }
+    }
+
     private fun allNodes(): Sequence<AccessibilityNodeInfo> {
         val roots = allRootsProvider().ifEmpty { listOfNotNull(rootProvider()) }
-        return roots.asSequence().flatMap { root -> AccessibilityNodeTraversal.lazyTraverse(root) }
+        val geminiRoots = roots.filter { isGeminiPackage(it.packageName) }
+        val targetRoots = geminiRoots.ifEmpty { roots }
+        return targetRoots.asSequence().flatMap { root ->
+            AccessibilityNodeTraversal.lazyTraverse(root, ::isGeminiPackage)
+        }
     }
 
     private fun finish(result: SwitchGeminiAccountResult) {

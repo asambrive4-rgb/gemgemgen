@@ -255,14 +255,18 @@ class GeminiAccessibilityService : AccessibilityService() {
                     targetAlias = targetAlias,
                     returnToHostApp = returnToHostApp,
                     handler = handler,
-                    rootProvider = { rootInActiveWindow },
+                    rootProvider = { findTargetAppRoot(GeminiAccessibilityNodeFinder.GEMINI_ACCESSIBILITY_PACKAGES) },
                     allRootsProvider = {
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                             runCatching { clearCache() }
                         }
                         val activeRoot = runCatching { rootInActiveWindow }.getOrNull()
                         val winRoots = runCatching { windows.mapNotNull { it.root } }.getOrNull().orEmpty()
-                        (listOfNotNull(activeRoot) + winRoots).distinct()
+                        val combined = (listOfNotNull(activeRoot) + winRoots).distinct()
+                        val geminiRoots = combined.filter {
+                            it.packageName?.toString() in GeminiAccessibilityNodeFinder.GEMINI_ACCESSIBILITY_PACKAGES
+                        }
+                        geminiRoots.ifEmpty { combined }
                     },
                     currentPackageProvider = {
                         rootInActiveWindow?.packageName?.toString()

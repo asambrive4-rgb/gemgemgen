@@ -1,9 +1,10 @@
-﻿// 역할: 자동화 실행(프롬프트 실험 모드 조건 검증 포함), 변주, 앱 제어, 메모리 정리 및 Gemini 계정 전환 등 전반적인 실행 인가 정책을 총괄하는 도메인 정책입니다.
+﻿// 역할: 자동화 실행(프롬프트 실험 모드 조건 검증 포함), 변주, 앱 제어, 메모리 정리, Gemini 계정 전환 및 송신 기기 대기·수신 기기 예약 생성 등 전반적인 실행 인가 정책을 총괄하는 도메인 정책입니다.
 package com.example.gemgemgen.automation.domain
 
 import com.example.gemgemgen.environment.domain.EnvironmentStatus
 import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
+import com.example.gemgemgen.usage.domain.GeminiQuotaExhaustionReason
 
 enum class GeminiAppControlBlockReason {
     AutomationRunning,
@@ -275,5 +276,128 @@ object AutomationExecutionPolicy {
                 environmentStatus.isGeminiInstalled && environmentStatus.isAccessibilityServiceEnabled
         }
     }
+
+    /**
+     * 송신 기기(SENDER)에서 다른 계정으로 수신 기기 선행(예약) 생성을 실행할 수 없는 사유를 반환합니다.
+     * 실행 가능한 경우 null을 반환합니다.
+     */
+    fun reservePreGenerationUnavailableReason(
+        mode: AutomationMode,
+        targetApp: AutomationTargetApp,
+        remoteAutomationStatus: RemoteAutomationStatus,
+        promptTemplate: String,
+        isRunning: Boolean,
+        isVariationRunning: Boolean = false,
+        isMaintenanceBusy: Boolean = false,
+        isStartInProgress: Boolean = false,
+        isExperimentMode: Boolean = false,
+        selectedExperimentItem: PromptExperimentItem? = null,
+        exhaustionReason: GeminiQuotaExhaustionReason? = null
+    ): String? {
+        if (mode != AutomationMode.SENDER) {
+            return "송신(SENDER) 모드에서만 예약 생성을 사용할 수 있습니다."
+        }
+        if (targetApp != AutomationTargetApp.GEMINI) {
+            return "대상 앱이 Gemini로 선택된 경우에만 예약할 수 있습니다."
+        }
+        when (exhaustionReason) {
+            GeminiQuotaExhaustionReason.SUSPENDED ->
+                return "당분간 사용 금지 상태인 계정은 예약할 수 없습니다."
+            GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED ->
+                return "수동 소진 처리된 계정은 예약할 수 없습니다."
+            GeminiQuotaExhaustionReason.FIVE_HOUR_EXHAUSTED,
+            GeminiQuotaExhaustionReason.WEEKLY_EXHAUSTED ->
+                return "사용량이 소진된 계정은 예약할 수 없습니다."
+            null -> Unit
+        }
+        if (!remoteAutomationStatus.canSend) {
+            return "연결된 수신 기기가 없습니다. 송신·수신 연결 상태를 확인해주세요."
+        }
+        if (isRunning || isStartInProgress) {
+            return "자동화가 이미 실행 중입니다."
+        }
+        if (isVariationRunning) {
+            return "변주 자동화 실행 중에는 예약할 수 없습니다."
+        }
+        if (isMaintenanceBusy) {
+            return "유지보수 작업이 진행 중입니다."
+        }
+        PromptExperimentPolicy.validateExperimentReady(
+            isExperimentMode = isExperimentMode,
+            promptTemplate = promptTemplate,
+            selectedItem = selectedExperimentItem
+        )?.let { return it }
+        if (!hasPromptTemplate(promptTemplate)) {
+            return "프롬프트를 먼저 입력해주세요."
+        }
+        return null
+    }
+
+    /**
+     * 송신 기기(SENDER)에서 수신 기기 선행(예약) 이미지 생성 실행 가능 여부를 판정합니다.
+     */
+    fun canReservePreGeneration(
+        mode: AutomationMode,
+        targetApp: AutomationTargetApp,
+        remoteAutomationStatus: RemoteAutomationStatus,
+        promptTemplate: String,
+        isRunning: Boolean,
+        isVariationRunning: Boolean = false,
+        isMaintenanceBusy: Boolean = false,
+        isStartInProgress: Boolean = false,
+        isExperimentMode: Boolean = false,
+        selectedExperimentItem: PromptExperimentItem? = null,
+        exhaustionReason: GeminiQuotaExhaustionReason? = null
+    ): Boolean = reservePreGenerationUnavailableReason(
+        mode = mode,
+        targetApp = targetApp,
+        remoteAutomationStatus = remoteAutomationStatus,
+        promptTemplate = promptTemplate,
+        isRunning = isRunning,
+        isVariationRunning = isVariationRunning,
+        isMaintenanceBusy = isMaintenanceBusy,
+        isStartInProgress = isStartInProgress,
+        isExperimentMode = isExperimentMode,
+        selectedExperimentItem = selectedExperimentItem,
+        exhaustionReason = exhaustionReason
+    ) == null
+
+    /**
+     * 송신 기기(SENDER) 단독 로컬 Gemini 계정 전환(수신 기기가 이미 생성 중이거나 전환된 경우 포함) 불가 사유를 반환합니다.
+     */
+    fun senderLocalSwitchUnavailableReason(
+        mode: AutomationMode,
+        environmentStatus: EnvironmentStatus,
+        isVariationRunning: Boolean = false,
+        isMaintenanceBusy: Boolean = false
+    ): String? = when {
+        mode != AutomationMode.SENDER ->
+            "송신(SENDER) 모드에서만 송신 기기 계정 전환을 사용할 수 있습니다."
+        isVariationRunning ->
+            "변주 자동화 실행 중에는 계정을 전환할 수 없습니다."
+        isMaintenanceBusy ->
+            "유지보수 작업이 진행 중입니다."
+        !environmentStatus.isGeminiInstalled ->
+            "Gemini 앱이 설치되어 있지 않습니다."
+        !environmentStatus.isAccessibilityServiceEnabled ->
+            "접근성 서비스를 먼저 켜주세요."
+        else -> null
+    }
+
+    /**
+     * 송신 기기(SENDER) 단독 로컬 Gemini 계정 전환 가능 여부를 판정합니다.
+     * 수신 기기 원격 자동화 실행 중(`isRunning == true`)에도 송신 기기 단독 전환을 허용합니다.
+     */
+    fun canSwitchSenderLocalAccount(
+        mode: AutomationMode,
+        environmentStatus: EnvironmentStatus,
+        isVariationRunning: Boolean = false,
+        isMaintenanceBusy: Boolean = false
+    ): Boolean = senderLocalSwitchUnavailableReason(
+        mode = mode,
+        environmentStatus = environmentStatus,
+        isVariationRunning = isVariationRunning,
+        isMaintenanceBusy = isMaintenanceBusy
+    ) == null
 }
 

@@ -32,6 +32,12 @@ class GeminiNodeDescriptorsTest {
         assertTrue(toolbarIds.contains("com.google.android.googlequicksearchbox:id/assistant_robin_chat_compose_toolbar"))
         assertTrue(toolbarIds.contains("com.google.android.googlequicksearchbox:id/assistant_robin_chat_header_container"))
 
+        val drawerIds = GeminiNodeDescriptors.AccountSwitch.DEFAULT_SIDEBAR_DRAWER_CONTAINER_IDS
+        assertTrue(drawerIds.contains("com.google.android.googlequicksearchbox:id/assistant_robin_side_nav_host_drawer_container"))
+
+        val threadIds = GeminiNodeDescriptors.AccountSwitch.DEFAULT_SIDEBAR_THREAD_ITEM_IDS
+        assertTrue(threadIds.contains("thread_item"))
+
         val profileIds = GeminiNodeDescriptors.AccountSwitch.DEFAULT_PROFILE_BUTTON_IDS
         assertTrue(profileIds.contains("com.google.android.googlequicksearchbox:id/og_apd_internal_image_view"))
         assertTrue(profileIds.contains("com.google.android.googlequicksearchbox:id/og_apd_ring_view"))

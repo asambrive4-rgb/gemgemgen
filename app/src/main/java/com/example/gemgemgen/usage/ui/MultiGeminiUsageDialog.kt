@@ -1,7 +1,8 @@
-// 역할: 다중 제미나이 계정의 메인/서브 탭 분리 목록(토스 침전 바닥형 3단계 표면 위계), 수동 소진/복구 및 당분간 사용 금지 토글, 선택 탭 우선 새로고침, 실시간 초기화 만료 반영 및 목록↔로그인 화면을 한 모달 안에서 전환하는 계정 사용량 다이얼로그 호스트(Single Dialog Host)를 제공합니다. (로그인 WebView 자체는 GeminiAccountLoginView가 담당)
+// 역할: 다중 제미나이 계정의 메인/서브 탭 분리 목록(토스 침전 바닥형 3단계 표면 위계), 메인만 사용 토글, 수동 소진/복구 및 당분간 사용 금지 토글, 송신(SENDER) 모드 수신 기기 선행 예약 생성 버튼 및 모달 내부 스낵바, 선택 탭 우선 새로고침, 실시간 초기화 만료 반영 및 목록↔로그인 화면을 한 모달 안에서 전환하는 계정 사용량 다이얼로그 호스트(Single Dialog Host)를 제공합니다. (로그인 WebView 자체는 GeminiAccountLoginView가 담당)
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -61,10 +62,13 @@ import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuInsetBed
 import com.example.gemgemgen.ui.theme.NeuModalDialogFrame
+import com.example.gemgemgen.ui.theme.NeuSnackbarHost
+import com.example.gemgemgen.ui.theme.rememberNeuSnackbarHostState
 import com.example.gemgemgen.usage.android.GeminiAccountLoginSessionHandler
 import com.example.gemgemgen.usage.android.MultiProfileGeminiUsageFetcher
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
 import com.example.gemgemgen.usage.domain.GeminiAccountProfile
+import com.example.gemgemgen.usage.domain.GeminiAccountUsageEntry
 import com.example.gemgemgen.usage.domain.MultiGeminiUsageState
 import kotlinx.coroutines.delay
 
@@ -98,18 +102,28 @@ fun MultiGeminiUsageDialog(
     onRefreshAccount: (accountId: String) -> Unit,
     onRefreshAll: (GeminiAccountGroup?) -> Unit,
     onSwitchAccount: ((accountId: String) -> Unit)? = null,
+    onReserveAccount: ((accountId: String) -> Unit)? = null,
+    reserveAccountBlockReason: ((entry: GeminiAccountUsageEntry, nowMillis: Long) -> String?)? = null,
     onMoveAccountGroup: ((accountId: String, targetGroup: GeminiAccountGroup) -> Unit)? = null,
     onToggleManualExhaustion: ((accountId: String, isExhausted: Boolean) -> Unit)? = null,
     onToggleAccountSuspension: ((accountId: String, isSuspended: Boolean) -> Unit)? = null,
+    onToggleMainOnlyMode: ((Boolean) -> Unit)? = null,
+    snackbarMessageId: Long? = null,
+    snackbarMessageText: String? = null,
+    onConsumeSnackbarMessage: ((Long) -> Unit)? = null,
     onDismiss: () -> Unit,
     sessionHandler: GeminiAccountLoginSessionHandler = MultiProfileGeminiUsageFetcher.loginSessionHandler()
 ) {
     var activeStage by remember {
         mutableStateOf<MultiUsageModalStage>(MultiUsageModalStage.AccountList)
     }
-    var selectedTab by remember(multiUsageState.representativeAccount?.profile?.id) {
+    var selectedTab by remember(multiUsageState.representativeAccount?.profile?.id, multiUsageState.isMainOnlyMode) {
         mutableStateOf(
-            multiUsageState.representativeAccount?.profile?.group ?: GeminiAccountGroup.MAIN
+            if (multiUsageState.isMainOnlyMode) {
+                GeminiAccountGroup.MAIN
+            } else {
+                multiUsageState.representativeAccount?.profile?.group ?: GeminiAccountGroup.MAIN
+            }
         )
     }
 
@@ -180,9 +194,15 @@ fun MultiGeminiUsageDialog(
                         onEditAccount = openExistingAccountStage,
                         onRemoveAccount = onRemoveAccount,
                         onSwitchAccount = onSwitchAccount,
+                        onReserveAccount = onReserveAccount,
+                        reserveAccountBlockReason = reserveAccountBlockReason,
                         onMoveAccountGroup = onMoveAccountGroup,
                         onToggleManualExhaustion = onToggleManualExhaustion,
                         onToggleAccountSuspension = onToggleAccountSuspension,
+                        onToggleMainOnlyMode = onToggleMainOnlyMode,
+                        snackbarMessageId = snackbarMessageId,
+                        snackbarMessageText = snackbarMessageText,
+                        onConsumeSnackbarMessage = onConsumeSnackbarMessage,
                         onDismiss = onDismiss
                     )
                 }
@@ -223,13 +243,24 @@ private fun MultiAccountListContent(
     onEditAccount: (GeminiAccountProfile) -> Unit,
     onRemoveAccount: (String) -> Unit,
     onSwitchAccount: ((String) -> Unit)? = null,
+    onReserveAccount: ((String) -> Unit)? = null,
+    reserveAccountBlockReason: ((GeminiAccountUsageEntry, Long) -> String?)? = null,
     onMoveAccountGroup: ((String, GeminiAccountGroup) -> Unit)? = null,
     onToggleManualExhaustion: ((accountId: String, isExhausted: Boolean) -> Unit)? = null,
     onToggleAccountSuspension: ((accountId: String, isSuspended: Boolean) -> Unit)? = null,
+    onToggleMainOnlyMode: ((Boolean) -> Unit)? = null,
+    snackbarMessageId: Long? = null,
+    snackbarMessageText: String? = null,
+    onConsumeSnackbarMessage: ((Long) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val representativeId = multiUsageState.representativeAccount?.profile?.id
     val brandHighlightColor = resolveGeminiUsageNormalHighlightColor()
+    val snackbarHostState = rememberNeuSnackbarHostState(
+        messageId = snackbarMessageId,
+        messageText = snackbarMessageText,
+        onConsumed = onConsumeSnackbarMessage
+    )
 
     var nowMillis by remember(multiUsageState) {
         mutableLongStateOf(System.currentTimeMillis())
@@ -241,10 +272,11 @@ private fun MultiAccountListContent(
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
         // 모달 상단 헤더: 타이틀 + [+ 계정 추가], [전체 새로고침(🔄)], 닫기(✕)
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -281,26 +313,59 @@ private fun MultiAccountListContent(
                 }
             }
 
-            // 닫기(✕) 버튼
-            Surface(
-                shape = CircleShape,
-                color = AppTheme.colors.insetBed,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onDismiss)
-                    .semantics { contentDescription = "모달 닫기" }
+            // 우측 액션: '메인만 사용' 컴팩트 토글 & 닫기(✕) 버튼
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                if (onToggleMainOnlyMode != null) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleMainOnlyMode(!multiUsageState.isMainOnlyMode) }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                            .semantics {
+                                role = Role.Switch
+                                contentDescription = "메인 계정만 사용: ${if (multiUsageState.isMainOnlyMode) "켜짐" else "꺼짐"}"
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text(
+                            text = "메인만 사용",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (multiUsageState.isMainOnlyMode) brandHighlightColor else AppTheme.colors.textSecondary,
+                            fontWeight = if (multiUsageState.isMainOnlyMode) FontWeight.SemiBold else FontWeight.Normal,
+                            fontSize = 11.sp
+                        )
+                        MiniToggleSwitch(
+                            checked = multiUsageState.isMainOnlyMode,
+                            activeColor = brandHighlightColor
+                        )
+                    }
+                }
+
+                // 닫기(✕) 버튼
+                Surface(
+                    shape = CircleShape,
+                    color = AppTheme.colors.insetBed,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onDismiss)
+                        .semantics { contentDescription = "모달 닫기" }
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null,
-                        tint = AppTheme.colors.textPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            tint = AppTheme.colors.textPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -416,37 +481,21 @@ private fun MultiAccountListContent(
                         items = usableOrPendingAccounts,
                         key = { it.profile.id }
                     ) { accountEntry ->
-                        GeminiAccountRowCard(
-                            entry = accountEntry,
-                            isRepresentative = accountEntry.profile.id == representativeId,
-                            onSelectRepresentative = {
-                                onSelectRepresentativeAccount(accountEntry.profile.id)
-                            },
-                            onRefresh = {
-                                onRefreshAccount(accountEntry.profile.id)
-                            },
-                            onOpenLogin = {
-                                onOpenAccountLogin(accountEntry.profile)
-                            },
-                            onEditAccount = {
-                                onEditAccount(accountEntry.profile)
-                            },
-                            onDeleteAccount = {
-                                onRemoveAccount(accountEntry.profile.id)
-                            },
-                            onSwitchAccount = onSwitchAccount?.let { switchFn ->
-                                { switchFn(accountEntry.profile.id) }
-                            },
-                            onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
-                                { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
-                            },
-                            onToggleManualExhaustion = onToggleManualExhaustion?.let { fn ->
-                                { isExhausted -> fn(accountEntry.profile.id, isExhausted) }
-                            },
-                            onToggleAccountSuspension = onToggleAccountSuspension?.let { fn ->
-                                { isSuspended -> fn(accountEntry.profile.id, isSuspended) }
-                            },
-                            nowMillis = nowMillis
+                        UsageAccountRowCardItem(
+                            accountEntry = accountEntry,
+                            representativeId = representativeId,
+                            nowMillis = nowMillis,
+                            onSelectRepresentativeAccount = onSelectRepresentativeAccount,
+                            onRefreshAccount = onRefreshAccount,
+                            onOpenAccountLogin = onOpenAccountLogin,
+                            onEditAccount = onEditAccount,
+                            onRemoveAccount = onRemoveAccount,
+                            onSwitchAccount = onSwitchAccount,
+                            onReserveAccount = onReserveAccount,
+                            isReserveEnabled = reserveAccountBlockReason?.invoke(accountEntry, nowMillis) == null,
+                            onMoveAccountGroup = onMoveAccountGroup,
+                            onToggleManualExhaustion = onToggleManualExhaustion,
+                            onToggleAccountSuspension = onToggleAccountSuspension
                         )
                     }
                 }
@@ -476,44 +525,91 @@ private fun MultiAccountListContent(
                         items = exhaustedAccounts,
                         key = { it.profile.id }
                     ) { accountEntry ->
-                        GeminiAccountRowCard(
-                            entry = accountEntry,
-                            isRepresentative = accountEntry.profile.id == representativeId,
-                            onSelectRepresentative = {
-                                onSelectRepresentativeAccount(accountEntry.profile.id)
-                            },
-                            onRefresh = {
-                                onRefreshAccount(accountEntry.profile.id)
-                            },
-                            onOpenLogin = {
-                                onOpenAccountLogin(accountEntry.profile)
-                            },
-                            onEditAccount = {
-                                onEditAccount(accountEntry.profile)
-                            },
-                            onDeleteAccount = {
-                                onRemoveAccount(accountEntry.profile.id)
-                            },
-                            onSwitchAccount = onSwitchAccount?.let { switchFn ->
-                                { switchFn(accountEntry.profile.id) }
-                            },
-                            onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
-                                { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
-                            },
-                            onToggleManualExhaustion = onToggleManualExhaustion?.let { fn ->
-                                { isExhausted -> fn(accountEntry.profile.id, isExhausted) }
-                            },
-                            onToggleAccountSuspension = onToggleAccountSuspension?.let { fn ->
-                                { isSuspended -> fn(accountEntry.profile.id, isSuspended) }
-                            },
-                            nowMillis = nowMillis
+                        UsageAccountRowCardItem(
+                            accountEntry = accountEntry,
+                            representativeId = representativeId,
+                            nowMillis = nowMillis,
+                            onSelectRepresentativeAccount = onSelectRepresentativeAccount,
+                            onRefreshAccount = onRefreshAccount,
+                            onOpenAccountLogin = onOpenAccountLogin,
+                            onEditAccount = onEditAccount,
+                            onRemoveAccount = onRemoveAccount,
+                            onSwitchAccount = onSwitchAccount,
+                            onReserveAccount = onReserveAccount,
+                            isReserveEnabled = reserveAccountBlockReason?.invoke(accountEntry, nowMillis) == null,
+                            onMoveAccountGroup = onMoveAccountGroup,
+                            onToggleManualExhaustion = onToggleManualExhaustion,
+                            onToggleAccountSuspension = onToggleAccountSuspension
                         )
                     }
                 }
             }
         }
     }
+        }
+
+        NeuSnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 4.dp, vertical = 4.dp)
+        )
+    }
 }
+
+@Composable
+private fun UsageAccountRowCardItem(
+    accountEntry: GeminiAccountUsageEntry,
+    representativeId: String?,
+    nowMillis: Long,
+    onSelectRepresentativeAccount: (String) -> Unit,
+    onRefreshAccount: (String) -> Unit,
+    onOpenAccountLogin: (GeminiAccountProfile) -> Unit,
+    onEditAccount: (GeminiAccountProfile) -> Unit,
+    onRemoveAccount: (String) -> Unit,
+    onSwitchAccount: ((String) -> Unit)?,
+    onReserveAccount: ((String) -> Unit)?,
+    isReserveEnabled: Boolean,
+    onMoveAccountGroup: ((String, GeminiAccountGroup) -> Unit)?,
+    onToggleManualExhaustion: ((accountId: String, isExhausted: Boolean) -> Unit)?,
+    onToggleAccountSuspension: ((accountId: String, isSuspended: Boolean) -> Unit)?
+) {
+    GeminiAccountRowCard(
+        entry = accountEntry,
+        isRepresentative = accountEntry.profile.id == representativeId,
+        onSelectRepresentative = {
+            onSelectRepresentativeAccount(accountEntry.profile.id)
+        },
+        onRefresh = {
+            onRefreshAccount(accountEntry.profile.id)
+        },
+        onOpenLogin = {
+            onOpenAccountLogin(accountEntry.profile)
+        },
+        onEditAccount = {
+            onEditAccount(accountEntry.profile)
+        },
+        onDeleteAccount = {
+            onRemoveAccount(accountEntry.profile.id)
+        },
+        onSwitchAccount = onSwitchAccount?.let { switchFn ->
+            { switchFn(accountEntry.profile.id) }
+        },
+        onReserveAccount = onReserveAccount?.let { reserveFn ->
+            { reserveFn(accountEntry.profile.id) }
+        },
+        isReserveEnabled = isReserveEnabled,
+        onMoveAccountGroup = onMoveAccountGroup?.let { moveFn ->
+            { targetGroup -> moveFn(accountEntry.profile.id, targetGroup) }
+        },
+        onToggleManualExhaustion = onToggleManualExhaustion?.let { fn ->
+            { isExhausted -> fn(accountEntry.profile.id, isExhausted) }
+        },
+        onToggleAccountSuspension = onToggleAccountSuspension?.let { fn ->
+            { isSuspended -> fn(accountEntry.profile.id, isSuspended) }
+        },
+        nowMillis = nowMillis
+    )
 }
 
 /**
@@ -689,6 +785,49 @@ private fun AccountSectionHeader(
             style = MaterialTheme.typography.labelSmall,
             color = AppTheme.colors.textSecondary,
             fontSize = 10.sp
+        )
+    }
+}
+
+@Composable
+/**
+ * 서브 옵션용 미니멀 토글 스위치 (28dp x 16dp).
+ * 과도하게 튀지 않으면서도 명확한 상태 피드백을 제공합니다.
+ */
+private fun MiniToggleSwitch(
+    checked: Boolean,
+    activeColor: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
+    val trackColor = if (checked) {
+        activeColor.copy(alpha = 0.28f)
+    } else {
+        AppTheme.colors.cardBorder.copy(alpha = 0.45f)
+    }
+    val thumbColor = if (checked) {
+        activeColor
+    } else {
+        AppTheme.colors.textSecondary.copy(alpha = 0.7f)
+    }
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 14.dp else 2.dp,
+        animationSpec = tween(durationMillis = 150),
+        label = "MiniToggleThumbOffset"
+    )
+
+    Box(
+        modifier = modifier
+            .size(width = 28.dp, height = 16.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(trackColor),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(start = thumbOffset)
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(thumbColor)
         )
     }
 }

@@ -1,4 +1,4 @@
-// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 수동 소진/복구 및 당분간 사용 금지, 대표 자동 위임, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션/이메일 오염 방지 규칙을 검증합니다.
+// 역할: 5개 이상의 다중 제미나이 계정 추가·삭제(CRUD), 메인/서브 그룹 분리, 메인만 사용 모드 및 비상 예외 허용, 수동 소진/복구 및 당분간 사용 금지, 대표 자동 위임, 선택 탭 우선 스마트 새로고침, 유휴 WebView 메모리 즉시 해제 및 독립 쿠키 세션/이메일 오염 방지 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -780,6 +780,81 @@ class MultiGeminiUsageRepositoryTest {
         )
     }
 
+    @Test
+    fun setMainOnlyMode_whenEnabled_prioritizesMainAccountsForRepresentativeAndDelegation() = runBlocking {
+        val fakeRemote = MultiProfileGeminiUsageRemoteDataSource { profile ->
+            GeminiUsageFetchResult(
+                usageState = GeminiUsageState.Success(
+                    fiveHourPercent = 20,
+                    fiveHourResetText = "2시간 후",
+                    weeklyPercent = 30,
+                    weeklyResetText = "5일 후",
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource()
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        // 메인 2개, 서브 2개 계정 등록
+        repository.addAccount(alias = "메인1", email = "main1@gmail.com", accountId = "main_1", group = GeminiAccountGroup.MAIN)
+        repository.addAccount(alias = "메인2", email = "main2@gmail.com", accountId = "main_2", group = GeminiAccountGroup.MAIN)
+        repository.addAccount(alias = "서브1", email = "sub1@gmail.com", accountId = "sub_1", group = GeminiAccountGroup.SUB)
+        repository.addAccount(alias = "서브2", email = "sub2@gmail.com", accountId = "sub_2", group = GeminiAccountGroup.SUB)
+
+        // 초기 상태: 메인만 사용 꺼짐, 서브 계정을 대표로 수동 선택
+        assertFalse(repository.state.value.isMainOnlyMode)
+        repository.selectRepresentativeAccount("sub_1")
+        assertEquals("sub_1", repository.state.value.selectedAccountId)
+        assertEquals("sub_1", repository.state.value.representativeAccount?.profile?.id)
+
+        // 1. '메인만 사용' 모드 ON: 대표 계정이 서브에서 메인의 사용 가능 1위 계정(main_1)으로 자동 교체됨
+        repository.setMainOnlyMode(true)
+        assertTrue(repository.state.value.isMainOnlyMode)
+        assertEquals("main_1", repository.state.value.selectedAccountId)
+        assertEquals("main_1", repository.state.value.representativeAccount?.profile?.id)
+
+        // 2. 현재 대표인 main_1이 소진될 때: 다음 대표가 서브(sub_1)가 아닌 다음 메인(main_2)으로 위임됨
+        repository.setAccountManuallyExhausted("main_1", true)
+        assertEquals("main_2", repository.state.value.selectedAccountId)
+        assertEquals("main_2", repository.state.value.representativeAccount?.profile?.id)
+    }
+
+    @Test
+    fun setMainOnlyMode_emergencyFallback_allowsSubAccountWhenAllMainAccountsExhausted() = runBlocking {
+        val fakeRemote = MultiProfileGeminiUsageRemoteDataSource {
+            GeminiUsageFetchResult(usageState = GeminiUsageState.Loading)
+        }
+        val fakeLocal = InMemoryMultiUsageLocalDataSource()
+        val repository = MultiGeminiUsageRepository(
+            remoteDataSource = fakeRemote,
+            localDataSource = fakeLocal,
+            scope = CoroutineScope(Dispatchers.Unconfined),
+            dispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
+            autoRefreshOnInit = false
+        )
+
+        repository.addAccount(alias = "메인1", email = "main1@gmail.com", accountId = "main_1", group = GeminiAccountGroup.MAIN)
+        repository.addAccount(alias = "서브1", email = "sub1@gmail.com", accountId = "sub_1", group = GeminiAccountGroup.SUB)
+
+        repository.setMainOnlyMode(true)
+        assertTrue(repository.state.value.isMainOnlyMode)
+
+        // 메인1을 소진 상태로 전환 -> 메인 계정이 전멸함
+        repository.setAccountManuallyExhausted("main_1", true)
+
+        // 3. 비상 예외 허용: 모든 메인 계정이 소진되었을 때 사용 가능 목록에 서브1이 fallback으로 포함됨
+        val available = repository.state.value.availableAccountsSorted()
+        assertEquals(1, available.size)
+        assertEquals("sub_1", available.first().profile.id)
+    }
+
     private class InMemoryMultiUsageLocalDataSource(
         initial: PersistedMultiGeminiUsageSnapshot = PersistedMultiGeminiUsageSnapshot()
     ) : MultiGeminiUsageLocalDataSource {
@@ -815,6 +890,10 @@ class MultiGeminiUsageRepositoryTest {
 
         override suspend fun saveSelectedAccountId(accountId: String?) {
             snapshot = snapshot.copy(selectedAccountId = accountId)
+        }
+
+        override suspend fun saveMainOnlyMode(isMainOnlyMode: Boolean) {
+            snapshot = snapshot.copy(isMainOnlyMode = isMainOnlyMode)
         }
     }
 }

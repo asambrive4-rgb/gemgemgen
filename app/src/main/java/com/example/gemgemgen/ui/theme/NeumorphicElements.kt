@@ -1,4 +1,4 @@
-// 역할: 토스 스타일의 무테두리(Borderless) 고대비 카드, 버튼, 인셋 베드, 칩, 회색 알약 버튼(NeuPillButton), 드롭다운 메뉴(NeuDropdownMenu), 세그먼트 탭바 및 공통 모달·확인 다이얼로그 UI 요소를 제공합니다.
+// 역할: 토스 스타일의 무테두리(Borderless) 고대비 카드, 버튼, 인셋 베드, 칩, 회색 알약 버튼(NeuPillButton), 드롭다운 메뉴(NeuDropdownMenu), 세그먼트 탭바, 스낵바 호스트(NeuSnackbarHost) 및 공통 모달·확인 다이얼로그 UI 요소를 제공합니다.
 package com.example.gemgemgen.ui.theme
 
 import androidx.compose.animation.AnimatedContent
@@ -35,11 +35,17 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +59,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -769,5 +776,54 @@ fun NeuPillButton(
         ) {
             content()
         }
+    }
+}
+
+/**
+ * 일회성 UI 메시지 ID 변화를 감지해 중복 없이 토스 스타일 스낵바를 표시하는 공통 상태 헬퍼입니다.
+ */
+@Composable
+fun rememberNeuSnackbarHostState(
+    messageId: Long?,
+    messageText: String?,
+    onConsumed: ((Long) -> Unit)?,
+    enabled: Boolean = true
+): SnackbarHostState {
+    val hostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    LaunchedEffect(messageId, enabled) {
+        if (!enabled) return@LaunchedEffect
+        val id = messageId ?: return@LaunchedEffect
+        val text = messageText ?: return@LaunchedEffect
+        onConsumed?.invoke(id)
+        coroutineScope.launch {
+            hostState.currentSnackbarData?.dismiss()
+            hostState.showSnackbar(
+                message = text,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+    return hostState
+}
+
+/**
+ * 토스 스타일 무테두리 스낵바 호스트.
+ */
+@Composable
+fun NeuSnackbarHost(
+    hostState: SnackbarHostState,
+    modifier: Modifier = Modifier
+) {
+    SnackbarHost(
+        hostState = hostState,
+        modifier = modifier
+    ) { data ->
+        Snackbar(
+            snackbarData = data,
+            shape = RoundedCornerShape(14.dp),
+            containerColor = AppTheme.colors.textPrimary,
+            contentColor = AppTheme.colors.card
+        )
     }
 }

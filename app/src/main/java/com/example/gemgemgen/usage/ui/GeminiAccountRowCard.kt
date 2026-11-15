@@ -1,4 +1,4 @@
-// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(토스 침전 바닥형 부유 카드, 대표 계정 6dp 풀높이 플러시 액센트 바, 테마별 원형 체크마크 인디케이터, 8dp 게이지 바, 우측 상단 계정 전환 버튼 유지, 표준 회색 알약 버튼 기반 확인 UI, 소진 Dim UI)를 제공합니다.
+// 역할: 다중 계정 모달의 수직 목록에 표시되는 컴팩트 구글 계정 사용량 카드(토스 침전 바닥형 부유 카드, 대표 계정 6dp 풀높이 플러시 액센트 바, 테마별 원형 체크마크 인디케이터, 8dp 게이지 바, 우측 상단 계정 전환·수신 기기 선행 예약 생성 버튼 유지, 표준 회색 알약 버튼 기반 확인 UI, 소진 Dim UI)를 제공합니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -54,8 +55,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -88,6 +93,55 @@ import java.util.Locale
  * 5. 개별 계정 [전환] 버튼, [새로고침] 아이콘, [계정 삭제] 메뉴 (더보기 메뉴 및 2단계 확인)
  */
 @Composable
+private fun AccountActionPillButton(
+    text: String,
+    icon: ImageVector,
+    containerColor: Color,
+    contentColor: Color,
+    contentDesc: String,
+    stateDesc: String? = null,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(9.dp),
+        color = containerColor,
+        modifier = Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .clickable(onClick = onClick)
+            .semantics {
+                role = Role.Button
+                contentDescription = contentDesc
+                if (stateDesc != null) {
+                    stateDescription = stateDesc
+                }
+            }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(13.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = contentColor,
+                fontSize = 11.sp,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
+
+@Composable
 fun GeminiAccountRowCard(
     entry: GeminiAccountUsageEntry,
     isRepresentative: Boolean,
@@ -97,6 +151,8 @@ fun GeminiAccountRowCard(
     onEditAccount: () -> Unit,
     onDeleteAccount: () -> Unit,
     onSwitchAccount: (() -> Unit)? = null,
+    onReserveAccount: (() -> Unit)? = null,
+    isReserveEnabled: Boolean = true,
     onMoveAccountGroup: ((GeminiAccountGroup) -> Unit)? = null,
     onToggleManualExhaustion: ((Boolean) -> Unit)? = null,
     onToggleAccountSuspension: ((Boolean) -> Unit)? = null,
@@ -198,7 +254,8 @@ fun GeminiAccountRowCard(
                             fontWeight = FontWeight.Bold,
                             color = AppTheme.colors.textPrimary,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
 
                         if (exhaustionReason != null) {
@@ -222,43 +279,42 @@ fun GeminiAccountRowCard(
                     }
                 }
 
-                // 우측 액션: 개별 계정 [전환] 버튼, [새로고침] 아이콘 및 [계정 삭제] 메뉴
+                // 우측 액션: 개별 계정 [전환]·[예약] 버튼, [새로고침] 아이콘 및 [계정 삭제] 메뉴
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (onSwitchAccount != null) {
-                        Surface(
-                            shape = RoundedCornerShape(9.dp),
-                            color = brandHighlightColor.copy(alpha = 0.16f),
-                            modifier = Modifier
-                                .height(32.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .clickable(onClick = onSwitchAccount)
-                                .semantics {
-                                    contentDescription = "${entry.profile.displayAlias} 계정 전환"
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.SwapHoriz,
-                                    contentDescription = null,
-                                    tint = brandHighlightColor,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Text(
-                                    text = "전환",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = brandHighlightColor,
-                                    fontSize = 11.sp
-                                )
-                            }
+                        AccountActionPillButton(
+                            text = "전환",
+                            icon = Icons.Default.SwapHoriz,
+                            containerColor = brandHighlightColor.copy(alpha = 0.16f),
+                            contentColor = brandHighlightColor,
+                            contentDesc = "${entry.profile.displayAlias} 계정 전환",
+                            onClick = onSwitchAccount
+                        )
+                    }
+
+                    if (onReserveAccount != null) {
+                        val reserveBg = if (isReserveEnabled) {
+                            AppTheme.colors.accent.copy(alpha = 0.14f)
+                        } else {
+                            AppTheme.colors.insetBed
                         }
+                        val reserveFg = if (isReserveEnabled) {
+                            AppTheme.colors.accent
+                        } else {
+                            AppTheme.colors.textSecondary.copy(alpha = 0.48f)
+                        }
+                        AccountActionPillButton(
+                            text = "예약",
+                            icon = Icons.Default.Schedule,
+                            containerColor = reserveBg,
+                            contentColor = reserveFg,
+                            contentDesc = "${entry.profile.displayAlias} 수신 기기 예약 생성",
+                            stateDesc = if (isReserveEnabled) "사용 가능" else "사용 불가",
+                            onClick = onReserveAccount
+                        )
                     }
 
                     if (onToggleManualExhaustion != null) {

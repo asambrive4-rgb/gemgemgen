@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 실험(연금술) 관리 모달 연동, 상용구·카테고리 관리 및 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼 및 수직 목록 모달, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
+// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 실험(연금술) 관리 모달 연동, 상용구·카테고리 관리 및 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼·송신 대기 계정 전환 캡슐·수직 목록 모달·스낵바, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +24,8 @@ import com.example.gemgemgen.remote.ui.resolveConnectionText
 import com.example.gemgemgen.ui.clearFocusOnOutsideTap
 import com.example.gemgemgen.ui.rememberIsImeVisible
 import com.example.gemgemgen.ui.theme.AppTheme
+import com.example.gemgemgen.ui.theme.NeuSnackbarHost
+import com.example.gemgemgen.ui.theme.rememberNeuSnackbarHostState
 import com.example.gemgemgen.usage.ui.GeminiUsageSummaryButton
 import com.example.gemgemgen.usage.ui.MultiGeminiUsageDialog
 
@@ -42,10 +44,17 @@ internal fun AutomationScreen(
     modifier: Modifier = Modifier
 ) {
     val isKeyboardVisible = rememberIsImeVisible()
+    val snackbarHostState = rememberNeuSnackbarHostState(
+        messageId = uiState.snackbarMessage?.id,
+        messageText = uiState.snackbarMessage?.text,
+        onConsumed = actions::consumeSnackbarMessage,
+        enabled = !uiState.showMultiGeminiUsageDialog
+    )
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = AppTheme.colors.canvas
+        containerColor = AppTheme.colors.canvas,
+        snackbarHost = { NeuSnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -77,7 +86,12 @@ internal fun AutomationScreen(
                         GeminiUsageSummaryButton(
                             multiUsageState = uiState.multiGeminiUsageState,
                             onClick = actions::openMultiGeminiUsageDialog,
-                            onRefreshClick = { actions.refreshAllGeminiUsage(null) }
+                            onRefreshClick = { actions.refreshAllGeminiUsage(null) },
+                            pendingSwitchAlias = uiState.pendingSenderAccountSwitch?.displayLabel,
+                            isPendingSwitchEnabled = uiState.canSwitchPendingSenderAccount,
+                            isSwitchingPendingAccount = uiState.isMaintenanceBusy,
+                            onSwitchPendingSenderAccount = actions::switchSenderToPendingAccount,
+                            onDismissPendingSenderAccount = actions::dismissPendingSenderAccountSwitch
                         )
                     }
                 }
@@ -226,9 +240,21 @@ internal fun AutomationScreen(
                     onRefreshAccount = actions::refreshGeminiAccountUsage,
                     onRefreshAll = actions::refreshAllGeminiUsage,
                     onSwitchAccount = actions::switchGeminiAccount,
+                    onReserveAccount = if (uiState.automationMode == AutomationMode.SENDER) {
+                        actions::reserveGeminiAccount
+                    } else {
+                        null
+                    },
+                    reserveAccountBlockReason = { entry, nowMillis ->
+                        uiState.reserveAccountBlockReason(entry, nowMillis)
+                    },
                     onMoveAccountGroup = actions::moveGeminiAccountGroup,
                     onToggleManualExhaustion = actions::toggleGeminiAccountManualExhaustion,
                     onToggleAccountSuspension = actions::toggleGeminiAccountSuspension,
+                    onToggleMainOnlyMode = actions::toggleGeminiMainOnlyMode,
+                    snackbarMessageId = uiState.snackbarMessage?.id,
+                    snackbarMessageText = uiState.snackbarMessage?.text,
+                    onConsumeSnackbarMessage = actions::consumeSnackbarMessage,
                     onDismiss = actions::closeMultiGeminiUsageDialog
                 )
             }

@@ -1,4 +1,4 @@
-// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 이메일/세션 교차 오염 방지, 비차단 인메모리 즉시 반응 및 비동기 DataStore 영속화 기반 계정 그룹 이동·수동 소진/복구·당분간 사용 금지·대표 자동 위임, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
+// 역할: 다중 제미나이 계정(5개 이상, 메인/서브 그룹 분리)의 CRUD, 메인만 사용 모드 및 대표 자동 위임, 이메일/세션 교차 오염 방지, 비차단 인메모리 즉시 반응 및 비동기 DataStore 영속화 기반 계정 그룹 이동·수동 소진/복구·당분간 사용 금지, DataStore Warm Start 캐시 즉시 방출, 원격 대표 계정 동기화 및 스마트 새로고침을 조율하는 저장소입니다.
 package com.example.gemgemgen.usage.usecase
 
 import com.example.gemgemgen.core.AppDispatchers
@@ -51,7 +51,8 @@ fun interface MultiProfileGeminiUsageRemoteDataSource {
 data class PersistedMultiGeminiUsageSnapshot(
     val profiles: List<GeminiAccountProfile> = emptyList(),
     val cachedUsageByAccountId: Map<String, GeminiUsageState.Success> = emptyMap(),
-    val selectedAccountId: String? = null
+    val selectedAccountId: String? = null,
+    val isMainOnlyMode: Boolean = false
 )
 
 /**
@@ -68,6 +69,7 @@ interface MultiGeminiUsageLocalDataSource {
     suspend fun saveAccountSuccess(accountId: String, state: GeminiUsageState.Success)
     suspend fun removeAccountData(accountId: String)
     suspend fun saveSelectedAccountId(accountId: String?)
+    suspend fun saveMainOnlyMode(isMainOnlyMode: Boolean) {}
 }
 
 /**
@@ -135,7 +137,8 @@ class MultiGeminiUsageRepository(
                     accounts = mergedEntries,
                     selectedAccountId = resolvedSelectedId,
                     isRefreshingAll = false,
-                    isInitialized = true
+                    isInitialized = true,
+                    isMainOnlyMode = snapshot.isMainOnlyMode
                 )
             }
 
@@ -520,6 +523,52 @@ class MultiGeminiUsageRepository(
     fun triggerSelectRepresentativeAccount(accountId: String) {
         scope.launch {
             selectRepresentativeAccount(accountId)
+        }
+    }
+
+    /**
+     * '메인만 사용' 모드를 설정하고, 필요 시 대표 계정을 메인 계정으로 자동 교체하며 DataStore에 비동기 영속화합니다.
+     */
+    suspend fun setMainOnlyMode(enabled: Boolean) {
+        val (toPersistSelectedId, shouldSave) = mutationMutex.withLock {
+            val current = _state.value
+            if (current.isMainOnlyMode == enabled) return@withLock null to false
+
+            var nextSelectedId = current.selectedAccountId
+            if (enabled) {
+                val currentRep = current.representativeAccount
+                if (currentRep == null || currentRep.profile.group != GeminiAccountGroup.MAIN) {
+                    val now = nowProvider()
+                    val mainAvailable = current.availableAccountsSorted(GeminiAccountGroup.MAIN, now)
+                    nextSelectedId = mainAvailable.firstOrNull()?.profile?.id
+                        ?: current.mainAccounts.firstOrNull()?.profile?.id
+                        ?: nextSelectedId
+                }
+            }
+
+            _state.update {
+                it.copy(
+                    isMainOnlyMode = enabled,
+                    selectedAccountId = nextSelectedId
+                )
+            }
+            nextSelectedId to true
+        }
+
+        if (shouldSave) {
+            runCatching { localDataSource.saveMainOnlyMode(enabled) }
+            if (toPersistSelectedId != null) {
+                runCatching { localDataSource.saveSelectedAccountId(toPersistSelectedId) }
+            }
+        }
+    }
+
+    /**
+     * 비동기 코루틴 스코프에서 '메인만 사용' 모드 변경을 트리거합니다.
+     */
+    fun triggerSetMainOnlyMode(enabled: Boolean) {
+        scope.launch {
+            setMainOnlyMode(enabled)
         }
     }
 

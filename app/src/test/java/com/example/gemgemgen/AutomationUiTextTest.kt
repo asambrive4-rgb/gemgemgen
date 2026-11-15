@@ -1,6 +1,7 @@
-// 역할: 자동화 화면의 안내 문구 변환 로직을 검증합니다.
+// 역할: 자동화 화면의 안내 문구, 예약·송신 단독 계정 전환 안내 메시지 변환 로직을 검증합니다.
 package com.example.gemgemgen
 
+import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.automation.domain.AutomationRunState
 import com.example.gemgemgen.automation.domain.GeminiAppControlBlockReason
 import com.example.gemgemgen.automation.domain.SelfAppControlBlockReason
@@ -86,6 +87,34 @@ class AutomationUiTextTest {
         )
         assertTrue(
             AutomationUiText.MEMORY_CLEANUP_SCHEDULE_CANCELED_TEXT.contains("취소")
+        )
+    }
+
+    @Test
+    fun senderLocalAndReceiverPrepareTexts_formatAliasAndBlockReason() {
+        assertEquals(
+            "송신 기기 Gemini 계정을 '서브2'(으)로 전환 중...",
+            AutomationUiText.senderLocalAccountSwitchStartingText("서브2")
+        )
+        assertEquals(
+            "송신 기기 Gemini 계정 전환을 취소했습니다.",
+            AutomationUiText.senderLocalAccountSwitchCanceledText()
+        )
+        assertEquals(
+            "수신 기기 계정을 '서브2'(으)로 전환 중",
+            AutomationUiText.receiverAccountSwitchPreparingText("서브2")
+        )
+        assertEquals(
+            "접근성 서비스를 먼저 켜주세요.",
+            AutomationUiText.senderLocalAccountSwitchUnavailableMessage(
+                AutomationUiState(
+                    automationMode = AutomationMode.SENDER,
+                    environmentStatus = EnvironmentStatus(
+                        isGeminiInstalled = true,
+                        isAccessibilityServiceEnabled = false
+                    )
+                )
+            )
         )
     }
 }

@@ -1,4 +1,4 @@
-// 역할: 메인 화면 프롬프트 에디터 하단에 대표 계정의 제미나이 사용률(%·만료 자동 보정)과 70%/90% 주의·경고 컬러를 공통 NeuCard·NeuButton 기반 토스 스타일로 표시하고, 모달 진입 없이 즉시 새로고침하거나 다중 계정 모달을 여는 요약 바입니다.
+// 역할: 메인 화면 프롬프트 에디터 하단에 대표 계정의 제미나이 사용률(%·만료 자동 보정)과 70%/90% 주의·경고 컬러를 공통 NeuCard·NeuButton 기반 토스 스타일로 표시하고, 송신(SENDER) 모드 예약 생성 시 대기 중인 송신 기기 계정 전환 캡슐([전환 + X])과 즉시 새로고침 버튼·다중 계정 모달 진입을 제공하는 요약 바입니다.
 package com.example.gemgemgen.usage.ui
 
 import androidx.compose.foundation.Image
@@ -8,14 +8,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -29,12 +35,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,7 +78,12 @@ fun GeminiUsageSummaryButton(
     multiUsageState: MultiGeminiUsageState,
     onClick: () -> Unit,
     onRefreshClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    pendingSwitchAlias: String? = null,
+    isPendingSwitchEnabled: Boolean = true,
+    isSwitchingPendingAccount: Boolean = false,
+    onSwitchPendingSenderAccount: () -> Unit = {},
+    onDismissPendingSenderAccount: () -> Unit = {}
 ) {
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -97,9 +110,11 @@ fun GeminiUsageSummaryButton(
 
     val shape = RoundedCornerShape(16.dp)
 
+    val aliasText = multiUsageState.representativeAccount?.profile?.displayAlias ?: "계정 추가"
+    val rowSpacing = if (pendingSwitchAlias != null) 6.dp else 8.dp
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(rowSpacing),
         verticalAlignment = Alignment.CenterVertically
     ) {
         NeuCard(
@@ -119,14 +134,16 @@ fun GeminiUsageSummaryButton(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                    .padding(horizontal = if (pendingSwitchAlias != null) 12.dp else 14.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
-                    modifier = Modifier.weight(1f, fill = false)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = if (resetTimeText != null) 6.dp else 0.dp)
                 ) {
                     Image(
                         imageVector = GeminiGradientLogo,
@@ -135,12 +152,22 @@ fun GeminiUsageSummaryButton(
                     )
 
                     Text(
-                        text = multiUsageState.summaryAccountLabel,
+                        text = aliasText,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.colors.textPrimary,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    Text(
+                        text = "▾",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = AppTheme.colors.textPrimary,
+                        maxLines = 1,
+                        softWrap = false
                     )
 
                     badgeText?.let { badge ->
@@ -154,6 +181,8 @@ fun GeminiUsageSummaryButton(
                                 fontWeight = FontWeight.ExtraBold,
                                 color = accentColor,
                                 fontSize = 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                             )
                         }
@@ -175,10 +204,21 @@ fun GeminiUsageSummaryButton(
                         color = AppTheme.colors.textSecondary,
                         fontSize = 12.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        softWrap = false
                     )
                 }
             }
+        }
+
+        if (pendingSwitchAlias != null) {
+            PendingSenderSwitchCapsule(
+                targetAlias = pendingSwitchAlias,
+                isEnabled = isPendingSwitchEnabled,
+                isSwitching = isSwitchingPendingAccount,
+                shape = shape,
+                onSwitchClick = onSwitchPendingSenderAccount,
+                onDismissClick = onDismissPendingSenderAccount
+            )
         }
 
         NeuButton(
@@ -243,5 +283,96 @@ internal fun GeminiUsageWarningBadge(
             fontSize = 10.sp,
             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
         )
+    }
+}
+
+@Composable
+private fun PendingSenderSwitchCapsule(
+    targetAlias: String,
+    isEnabled: Boolean,
+    isSwitching: Boolean,
+    shape: RoundedCornerShape,
+    onSwitchClick: () -> Unit,
+    onDismissClick: () -> Unit
+) {
+    val activeTint = if (isEnabled) AppTheme.colors.primary else AppTheme.colors.textSecondary
+    NeuCard(
+        shape = shape,
+        backgroundColor = AppTheme.colors.card,
+        elevation = 2.dp,
+        modifier = Modifier.height(42.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxHeight(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                    .clickable(enabled = !isSwitching, onClick = onSwitchClick)
+                    .alpha(if (isEnabled && !isSwitching) 1f else 0.55f)
+                    .padding(start = 10.dp, end = 8.dp)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "송신 기기도 $targetAlias 계정으로 전환"
+                        stateDescription = if (isEnabled) "사용 가능" else "사용 불가"
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (isSwitching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = activeTint
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.SwapHoriz,
+                        contentDescription = null,
+                        tint = activeTint,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Text(
+                    text = "$targetAlias 전환",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = activeTint,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 88.dp)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(18.dp)
+                    .background(AppTheme.colors.cardBorder.copy(alpha = 0.55f))
+            )
+
+            Box(
+                modifier = Modifier
+                    .width(34.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
+                    .clickable(onClick = onDismissClick)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "송신 기기 계정 전환 대기 버튼 닫기"
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    tint = AppTheme.colors.textSecondary,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+        }
     }
 }

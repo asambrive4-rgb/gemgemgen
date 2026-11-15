@@ -1,4 +1,4 @@
-﻿// 역할: 자동화 화면과 플로팅 바에 표시되는 상태 메시지 및 버튼 문구를 제공합니다.
+﻿// 역할: 자동화 화면과 플로팅 바에 표시되는 상태 메시지, 예약·송신 단독 계정 전환 안내 문구 및 버튼 문구를 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationRunState
@@ -134,4 +134,21 @@ object AutomationUiText {
             else -> "Gemini 계정 전환을 지금 실행할 수 없습니다."
         }
     }
+
+    fun senderLocalAccountSwitchStartingText(aliasOrEmail: String): String {
+        val label = aliasOrEmail.trim().ifBlank { "선택한 계정" }
+        return "송신 기기 Gemini 계정을 '$label'(으)로 전환 중..."
+    }
+
+    fun senderLocalAccountSwitchCanceledText(): String =
+        "송신 기기 Gemini 계정 전환을 취소했습니다."
+
+    fun receiverAccountSwitchPreparingText(aliasOrEmail: String): String {
+        val label = aliasOrEmail.trim().ifBlank { "선택한 계정" }
+        return "수신 기기 계정을 '$label'(으)로 전환 중"
+    }
+
+    fun senderLocalAccountSwitchUnavailableMessage(state: AutomationUiState): String =
+        state.senderLocalSwitchUnavailableReason
+            ?: "송신 기기 Gemini 계정 전환을 지금 실행할 수 없습니다."
 }

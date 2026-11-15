@@ -1,9 +1,10 @@
-// 역할: Gemini 구글 계정 전환 접근성 노드 라벨, 사이드바 프로필 탐색 규칙 및 계정 식별자 매칭 규칙을 검증합니다.
+// 역할: Gemini 구글 계정 전환 접근성 노드 라벨, 사이드바 하단 고정 프로필 탐색 규칙(사이드바 닫기·스레드 오클릭 방어 포함) 및 계정 식별자 매칭 규칙을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.GeminiAccountSwitchNodeLabels
 import com.example.gemgemgen.automation.android.GeminiSidebarProfileCandidate
 import com.example.gemgemgen.automation.android.GeminiSidebarProfileMatcher
+import com.example.gemgemgen.automation.android.NodeBounds
 import com.example.gemgemgen.automation.domain.GeminiAccountMatcher
 import com.example.gemgemgen.automation.domain.GeminiAccountNodeCandidate
 import org.junit.Assert.assertEquals
@@ -19,6 +20,8 @@ class GeminiAccountSwitchAutomationTest {
     fun defaultNodeLabels_containsOneGoogleBentoAndRobinToolbarIds() {
         val labels = GeminiAccountSwitchNodeLabels()
         assertTrue(labels.toolbarViewIds.contains("com.google.android.googlequicksearchbox:id/assistant_robin_chat_compose_toolbar"))
+        assertTrue(labels.sidebarDrawerContainerIds.contains("com.google.android.googlequicksearchbox:id/assistant_robin_side_nav_host_drawer_container"))
+        assertTrue(labels.sidebarThreadItemIds.contains("thread_item"))
         assertTrue(labels.bentoMenuContainerIds.contains("com.google.android.googlequicksearchbox:id/og_bento_menu_content_container"))
         assertTrue(labels.accountHeaderContainerIds.contains("com.google.android.googlequicksearchbox:id/og_bento_account_management_header_container"))
         assertTrue(labels.availableAccountRowIds.contains("com.google.android.googlequicksearchbox:id/og_bento_available_account_root"))
@@ -154,7 +157,7 @@ class GeminiAccountSwitchAutomationTest {
         val labels = GeminiAccountSwitchNodeLabels()
         val radioButtonNode = GeminiSidebarProfileCandidate(
             className = "android.widget.RadioButton",
-            isClickableOrCheckable = true
+            isClickable = true
         )
         val normalNode = GeminiSidebarProfileCandidate(
             contentDescription = "새 채팅"
@@ -177,7 +180,7 @@ class GeminiAccountSwitchAutomationTest {
         )
         val radioButtonNode = GeminiSidebarProfileCandidate(
             className = "android.widget.RadioButton",
-            isClickableOrCheckable = true
+            isClickable = true
         )
         val candidates = listOf(closeSidebarNode, radioButtonNode)
 
@@ -198,11 +201,11 @@ class GeminiAccountSwitchAutomationTest {
         )
         val parentNode = GeminiSidebarProfileCandidate(
             className = "android.widget.LinearLayout",
-            isClickableOrCheckable = true
+            isClickable = true
         )
         val radioButtonNode = GeminiSidebarProfileCandidate(
             className = "android.widget.RadioButton",
-            isClickableOrCheckable = false,
+            isClickable = false,
             parent = parentNode
         )
         val candidates = listOf(closeSidebarNode, radioButtonNode)
@@ -212,5 +215,97 @@ class GeminiAccountSwitchAutomationTest {
             closeSidebarCandidates = labels.closeSidebarCandidates
         )
         assertEquals(parentNode, result)
+    }
+
+    @Test
+    fun findSidebarProfileCandidate_ignoresThreadItemWithProSubstringAndCloseSidebarWrapper() {
+        val labels = GeminiAccountSwitchNodeLabels()
+        val closeSidebarButtonWrapper = GeminiSidebarProfileCandidate(
+            className = "android.view.View",
+            childDescriptions = listOf("사이드바 닫기"),
+            isClickable = true,
+            bounds = NodeBounds(left = 772, top = 68, right = 856, bottom = 152)
+        )
+        val closeSidebarLeaf = GeminiSidebarProfileCandidate(
+            className = "android.view.View",
+            contentDescription = "사이드바 닫기",
+            isClickable = false,
+            bounds = NodeBounds(left = 790, top = 86, right = 839, bottom = 135)
+        )
+        val newChatItem = GeminiSidebarProfileCandidate(
+            className = "android.view.View",
+            childTexts = listOf("새 채팅"),
+            isClickable = true,
+            isCheckable = true,
+            isInsideScrollable = true,
+            bounds = NodeBounds(left = 14, top = 152, right = 863, bottom = 236)
+        )
+        val threadWithProSubstring = GeminiSidebarProfileCandidate(
+            className = "android.view.View",
+            viewIdResourceName = "thread_item",
+            childTexts = listOf("Prompt engineering tips"),
+            isClickable = true,
+            isCheckable = true,
+            isInsideScrollable = true,
+            bounds = NodeBounds(left = 14, top = 964, right = 863, bottom = 1048)
+        )
+        val footerProfileRow = GeminiSidebarProfileCandidate(
+            className = "android.view.View",
+            childTexts = listOf("miki fee", "PRO"),
+            isClickable = true,
+            isCheckable = false,
+            isInsideScrollable = false,
+            bounds = NodeBounds(left = 14, top = 1417, right = 863, bottom = 1502)
+        )
+
+        val candidates = listOf(
+            closeSidebarButtonWrapper,
+            closeSidebarLeaf,
+            newChatItem,
+            threadWithProSubstring,
+            footerProfileRow
+        )
+
+        val result = GeminiSidebarProfileMatcher.findSidebarProfileCandidate(
+            candidates = candidates,
+            closeSidebarCandidates = labels.closeSidebarCandidates,
+            sidebarDrawerContainerIds = labels.sidebarDrawerContainerIds,
+            sidebarThreadItemIds = labels.sidebarThreadItemIds
+        )
+        assertEquals(footerProfileRow, result)
+    }
+
+    @Test
+    fun findSidebarProfileCandidate_whenOnlyCloseSidebarAndThreadsExist_returnsNullWithoutClickingClose() {
+        val labels = GeminiAccountSwitchNodeLabels()
+        val closeSidebarButtonWrapper = GeminiSidebarProfileCandidate(
+            className = "android.view.View",
+            childDescriptions = listOf("사이드바 닫기"),
+            isClickable = true,
+            bounds = NodeBounds(left = 772, top = 68, right = 856, bottom = 152)
+        )
+        val closeSidebarLeaf = GeminiSidebarProfileCandidate(
+            className = "android.view.View",
+            contentDescription = "사이드바 닫기",
+            isClickable = false,
+            bounds = NodeBounds(left = 790, top = 86, right = 839, bottom = 135)
+        )
+        val threadItem = GeminiSidebarProfileCandidate(
+            className = "android.view.View",
+            viewIdResourceName = "thread_item",
+            childTexts = listOf("Prompt archive test"),
+            isClickable = true,
+            isCheckable = true,
+            isInsideScrollable = true,
+            bounds = NodeBounds(left = 14, top = 964, right = 863, bottom = 1048)
+        )
+
+        val result = GeminiSidebarProfileMatcher.findSidebarProfileCandidate(
+            candidates = listOf(closeSidebarButtonWrapper, closeSidebarLeaf, threadItem),
+            closeSidebarCandidates = labels.closeSidebarCandidates,
+            sidebarDrawerContainerIds = labels.sidebarDrawerContainerIds,
+            sidebarThreadItemIds = labels.sidebarThreadItemIds
+        )
+        assertNull(result)
     }
 }

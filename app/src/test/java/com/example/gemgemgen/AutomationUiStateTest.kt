@@ -1,4 +1,4 @@
-﻿// 역할: 자동화 메인 화면 UI 상태의 기본값과 파생 상태 계산을 검증합니다.
+﻿// 역할: 자동화 메인 화면 UI 상태의 기본값, 예약·송신 단독 계정 전환 가용성 및 파생 상태 계산을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.automation.android.*
@@ -17,6 +17,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.example.gemgemgen.automation.domain.AutomationMode
 import com.example.gemgemgen.remote.domain.RemoteAutomationStatus
+import com.example.gemgemgen.usage.domain.GeminiQuotaExhaustionReason
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 
 class AutomationUiStateTest {
     @Test
@@ -190,6 +193,51 @@ class AutomationUiStateTest {
     @Test
     fun geminiSidebarOpenMode_defaultsToFalse() {
         assertFalse(AutomationUiState().geminiSidebarOpenMode)
+    }
+
+    @Test
+    fun reserveAccountBlockReason_and_canSwitchPendingSenderAccount_reflectPolicy() {
+        val pairedStatus = RemoteAutomationStatus(
+            mode = AutomationMode.SENDER,
+            discoveredDeviceName = "S25 FE",
+            isPaired = true
+        )
+        val readySenderState = AutomationUiState(
+            promptTemplate = "prompt",
+            selectedTargetApp = AutomationTargetApp.GEMINI,
+            automationMode = AutomationMode.SENDER,
+            remoteAutomationStatus = pairedStatus,
+            environmentStatus = readyEnvironment(),
+            automationState = AutomationRunState.Running("수신 기기 생성 중"),
+            pendingSenderAccountSwitch = PendingSenderAccountSwitch(
+                accountId = "acc_2",
+                email = "b@gmail.com",
+                alias = "서브2"
+            )
+        )
+
+        assertTrue(readySenderState.canSwitchPendingSenderAccount)
+        assertNull(readySenderState.senderLocalSwitchUnavailableReason)
+        assertNotNull(readySenderState.reserveAccountBlockReason(exhaustionReason = null))
+        assertNull(
+            readySenderState.copy(automationState = AutomationRunState.Idle)
+                .reserveAccountBlockReason(exhaustionReason = null)
+        )
+        assertNotNull(
+            readySenderState.copy(
+                automationState = AutomationRunState.Idle,
+                selectedTargetApp = AutomationTargetApp.FLOW
+            ).reserveAccountBlockReason(exhaustionReason = null)
+        )
+        assertNotNull(
+            readySenderState.copy(automationState = AutomationRunState.Idle)
+                .reserveAccountBlockReason(exhaustionReason = GeminiQuotaExhaustionReason.MANUAL_EXHAUSTED)
+        )
+        assertFalse(
+            readySenderState.copy(
+                environmentStatus = readyEnvironment().copy(isAccessibilityServiceEnabled = false)
+            ).canSwitchPendingSenderAccount
+        )
     }
 
     private fun readyEnvironment(): EnvironmentStatus {

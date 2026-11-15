@@ -1,9 +1,10 @@
-// 역할: Jetpack DataStore와 kotlinx.serialization을 사용해 다중 제미나이 계정 프로필 목록(수동 소진·사용 금지 플래그 포함), 대표 계정 선택 상태 및 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
+// 역할: Jetpack DataStore와 kotlinx.serialization을 사용해 다중 제미나이 계정 프로필 목록(수동 소진·사용 금지 플래그 포함), 대표 계정 선택 상태, 메인만 사용 모드 및 계정별 마지막 성공 사용량 스냅샷을 영구 저장합니다.
 package com.example.gemgemgen.usage.android
 
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -50,11 +51,13 @@ class DataStoreMultiGeminiUsageDataSource(
             val profiles = parseProfilesJson(preferences[KEY_ACCOUNTS_JSON])
             val cachedMap = parseCachedUsagesJson(preferences[KEY_CACHED_USAGES_JSON])
             val selectedAccountId = preferences[KEY_SELECTED_ACCOUNT_ID]?.takeIf { it.isNotBlank() }
+            val isMainOnlyMode = preferences[KEY_IS_MAIN_ONLY_MODE] ?: false
 
             PersistedMultiGeminiUsageSnapshot(
                 profiles = profiles,
                 cachedUsageByAccountId = cachedMap,
-                selectedAccountId = selectedAccountId
+                selectedAccountId = selectedAccountId,
+                isMainOnlyMode = isMainOnlyMode
             )
         }
 
@@ -133,6 +136,12 @@ class DataStoreMultiGeminiUsageDataSource(
         }
     }
 
+    override suspend fun saveMainOnlyMode(isMainOnlyMode: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[KEY_IS_MAIN_ONLY_MODE] = isMainOnlyMode
+        }
+    }
+
     suspend fun selectAccountByEmailOrAlias(email: String, alias: String): String? {
         val normEmail = email.trim().lowercase()
         val normAlias = alias.trim().lowercase()
@@ -191,6 +200,7 @@ class DataStoreMultiGeminiUsageDataSource(
         val KEY_ACCOUNTS_JSON = stringPreferencesKey("multi_gemini_accounts_json")
         val KEY_CACHED_USAGES_JSON = stringPreferencesKey("multi_gemini_cached_usages_json")
         val KEY_SELECTED_ACCOUNT_ID = stringPreferencesKey("multi_gemini_selected_account_id")
+        val KEY_IS_MAIN_ONLY_MODE = booleanPreferencesKey("multi_gemini_is_main_only_mode")
 
         fun serializeProfilesJson(profiles: List<GeminiAccountProfile>): String {
             return usageJson.encodeToString(profiles)

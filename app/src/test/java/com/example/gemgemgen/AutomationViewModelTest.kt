@@ -1,4 +1,4 @@
-// 역할: 자동화 뷰모델의 상태 변경, 화면 액션 인터페이스 및 비즈니스 이벤트 흐름을 검증합니다.
+// 역할: 자동화 뷰모델의 상태 변경, 화면 액션 인터페이스, 수신 기기 선행 예약 생성·송신 단독 계정 전환 흐름 및 비즈니스 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.ui.text.TextRange
@@ -16,6 +16,8 @@ import com.example.gemgemgen.wildcard.domain.*
 import com.example.gemgemgen.wildcard.usecase.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.example.gemgemgen.remote.domain.*
@@ -1599,7 +1601,8 @@ class AutomationViewModelTest {
         themePaletteStore: com.example.gemgemgen.ui.theme.ThemePaletteStore? = null,
         multiGeminiUsageRepository: com.example.gemgemgen.usage.usecase.MultiGeminiUsageRepository? = null,
         dispatchers: AppDispatchers = AppDispatchers(io = Dispatchers.Unconfined, main = Dispatchers.Unconfined),
-        coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined)
+        coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Unconfined),
+        postAutomationUsageRefreshDelayMillis: Long = 10_000L
     ): AutomationViewModel {
         val resolvedRemote = manageRemoteAutomation ?: ManageRemoteAutomationUseCase(
             FakeRemoteGateway()
@@ -1638,7 +1641,8 @@ class AutomationViewModelTest {
             multiGeminiUsageRepository = multiGeminiUsageRepository,
             runVariationPrompt = runVariationPrompt,
             dispatchers = dispatchers,
-            coroutineScope = coroutineScope
+            coroutineScope = coroutineScope,
+            postAutomationUsageRefreshDelayMillis = postAutomationUsageRefreshDelayMillis
         )
     }
 
@@ -2110,6 +2114,300 @@ class AutomationViewModelTest {
         viewModel.runAutomation()
         waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
         assertEquals(0, memoryGateway.cleanCount)
+    }
+
+    @Test
+    fun reserveGeminiAccount_whenBlocked_emitsSnackbarAndKeepsDialogOpenWithoutRemoteCalls() {
+        val fetched = mutableListOf<String>()
+        val repository = multiUsageRepository(fetched = fetched, withCache = true)
+        val remoteGateway = RecordingReserveRemoteGateway()
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val maintenance = AppMaintenanceUseCase(remoteSenderGateway = manageRemote)
+        val viewModel = viewModel(
+            appMaintenance = maintenance,
+            manageRemoteAutomation = manageRemote,
+            multiGeminiUsageRepository = repository
+        )
+
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.promptEditor.onPromptTemplateChange("reserve prompt")
+        viewModel.onTargetAppSelected(AutomationTargetApp.FLOW)
+        viewModel.openMultiGeminiUsageDialog()
+
+        viewModel.reserveGeminiAccount("acc_2")
+
+        assertTrue(viewModel.uiState.value.showMultiGeminiUsageDialog)
+        assertNull(viewModel.uiState.value.pendingSenderAccountSwitch)
+        val snackbar = viewModel.uiState.value.snackbarMessage
+        assertNotNull(snackbar)
+        assertTrue(snackbar!!.text.contains("Gemini"))
+        assertTrue(remoteGateway.callOrder.isEmpty())
+
+        viewModel.consumeSnackbarMessage(snackbar.id)
+        assertNull(viewModel.uiState.value.snackbarMessage)
+    }
+
+    @Test
+    fun reserveGeminiAccount_inSenderGeminiMode_runsCleanupSwitchesReceiverStartsRemoteAndRefreshesReservedAccount() {
+        val fetched = mutableListOf<String>()
+        val repository = multiUsageRepository(fetched = fetched, withCache = true)
+        val remoteGateway = RecordingReserveRemoteGateway(completeImmediately = true)
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val maintenance = AppMaintenanceUseCase(remoteSenderGateway = manageRemote)
+        val viewModel = viewModel(
+            appMaintenance = maintenance,
+            manageRemoteAutomation = manageRemote,
+            multiGeminiUsageRepository = repository,
+            postAutomationUsageRefreshDelayMillis = 10L
+        )
+
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.promptEditor.onPromptTemplateChange("reserve prompt")
+        viewModel.onAutoMemoryCleanupThresholdChange("2")
+        viewModel.onRepeatCountChange("2")
+
+        // 먼저 대표 계정(acc_1)으로 2회 생성해 누적 카운트가 정리 임계치(2)에 도달하도록 함
+        assertEquals(AutomationStartDecision.RemoteStarted, viewModel.runAutomation())
+        waitUntil { fetched == listOf("acc_1") }
+        fetched.clear()
+        remoteGateway.callOrder.clear()
+        remoteGateway.sendRequests.clear()
+        remoteGateway.resetToIdle()
+
+        viewModel.onRepeatCountChange("3")
+        viewModel.openMultiGeminiUsageDialog()
+        viewModel.reserveGeminiAccount("acc_2")
+
+        assertFalse(viewModel.uiState.value.showMultiGeminiUsageDialog)
+        assertEquals("acc_1", viewModel.uiState.value.multiGeminiUsageState.selectedAccountId)
+        assertEquals(
+            PendingSenderAccountSwitch(
+                accountId = "acc_2",
+                email = "account2@gmail.com",
+                alias = "계정 2"
+            ),
+            viewModel.uiState.value.pendingSenderAccountSwitch
+        )
+
+        waitUntil { viewModel.uiState.value.automationState == AutomationRunState.Success }
+        assertEquals(
+            listOf(
+                "remoteCleanMemory",
+                "remoteSwitch:account2@gmail.com:계정 2",
+                "remoteSend:GEMINI:3"
+            ),
+            remoteGateway.callOrder
+        )
+
+        // 완료 후 자동 사용량 새로고침은 송신 기기(acc_1)가 아니라 실제 생성한 계정(acc_2)만 대상으로 실행
+        waitUntil { fetched.isNotEmpty() }
+        assertEquals(listOf("acc_2"), fetched)
+    }
+
+    @Test
+    fun reserveGeminiAccount_receiverSwitchFails_abortsBeforeRemoteSendClearsPendingAndShowsSnackbar() {
+        val fetched = mutableListOf<String>()
+        val repository = multiUsageRepository(fetched = fetched, withCache = true)
+        val remoteGateway = RecordingReserveRemoteGateway(
+            switchResult = RemoteActionResult.Failure("수신 기기 전환 실패"),
+            completeImmediately = true
+        )
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val maintenance = AppMaintenanceUseCase(remoteSenderGateway = manageRemote)
+        var shortAlertCount = 0
+        val viewModel = viewModel(
+            appMaintenance = maintenance,
+            manageRemoteAutomation = manageRemote,
+            soundAlertGateway = SoundAlertGateway { shortAlertCount += 1 },
+            multiGeminiUsageRepository = repository,
+            postAutomationUsageRefreshDelayMillis = 10L
+        )
+
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.promptEditor.onPromptTemplateChange("reserve prompt")
+        viewModel.openMultiGeminiUsageDialog()
+
+        viewModel.reserveGeminiAccount("acc_2")
+
+        waitUntil { viewModel.uiState.value.automationState is AutomationRunState.Failure }
+        assertTrue(remoteGateway.sendRequests.isEmpty())
+        assertEquals(listOf("remoteSwitch:account2@gmail.com:계정 2"), remoteGateway.callOrder)
+        assertNull(viewModel.uiState.value.pendingSenderAccountSwitch)
+        assertTrue(viewModel.uiState.value.snackbarMessage?.text?.contains("수신 기기 전환 실패") == true)
+        assertEquals(1, shortAlertCount)
+
+        Thread.sleep(30)
+        assertTrue(fetched.isEmpty())
+    }
+
+    @Test
+    fun switchSenderToPendingAccount_whileReceiverGenerating_switchesOnlyLocalWithoutReturnUpdatesRepresentativeAndClearsPending() {
+        val fetched = mutableListOf<String>()
+        val repository = multiUsageRepository(fetched = fetched, withCache = true)
+        val remoteGateway = RecordingReserveRemoteGateway(completeImmediately = false)
+        val localSwitchCalls = mutableListOf<Triple<String, String, Boolean>>()
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val maintenance = AppMaintenanceUseCase(
+            geminiAccountSwitchGateway = GeminiAccountSwitchGateway { email, alias, returnToHostApp ->
+                localSwitchCalls += Triple(email, alias, returnToHostApp)
+                SwitchGeminiAccountResult.Success
+            },
+            remoteSenderGateway = manageRemote
+        )
+        val viewModel = viewModel(
+            appMaintenance = maintenance,
+            manageRemoteAutomation = manageRemote,
+            multiGeminiUsageRepository = repository
+        )
+
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.promptEditor.onPromptTemplateChange("reserve prompt")
+        viewModel.openMultiGeminiUsageDialog()
+        viewModel.reserveGeminiAccount("acc_2")
+
+        assertTrue(viewModel.uiState.value.isRunning)
+        assertNotNull(viewModel.uiState.value.pendingSenderAccountSwitch)
+
+        // 수신 기기가 아직 이미지 생성 중인 상태에서 송신 기기 단독 전환 클릭
+        viewModel.switchSenderToPendingAccount()
+
+        assertEquals(
+            listOf(Triple("account2@gmail.com", "계정 2", false)),
+            localSwitchCalls
+        )
+        assertEquals("acc_2", viewModel.uiState.value.multiGeminiUsageState.selectedAccountId)
+        assertNull(viewModel.uiState.value.pendingSenderAccountSwitch)
+        assertFalse(viewModel.uiState.value.isMaintenanceBusy)
+        assertEquals(0, remoteGateway.forceStopCount)
+        assertEquals(1, remoteGateway.switchCount)
+        assertTrue(viewModel.uiState.value.isRunning)
+    }
+
+    @Test
+    fun switchSenderToPendingAccount_whenLocalFails_keepsPendingSwitchAndShowsSnackbar() {
+        val fetched = mutableListOf<String>()
+        val repository = multiUsageRepository(fetched = fetched, withCache = true)
+        val remoteGateway = RecordingReserveRemoteGateway(completeImmediately = false)
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val maintenance = AppMaintenanceUseCase(
+            geminiAccountSwitchGateway = GeminiAccountSwitchGateway { _, _, _ ->
+                SwitchGeminiAccountResult.Failure("로컬 계정 전환 실패")
+            },
+            remoteSenderGateway = manageRemote
+        )
+        val viewModel = viewModel(
+            appMaintenance = maintenance,
+            manageRemoteAutomation = manageRemote,
+            multiGeminiUsageRepository = repository
+        )
+
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.promptEditor.onPromptTemplateChange("reserve prompt")
+        viewModel.reserveGeminiAccount("acc_2")
+
+        viewModel.switchSenderToPendingAccount()
+
+        assertEquals("acc_1", viewModel.uiState.value.multiGeminiUsageState.selectedAccountId)
+        assertNotNull(viewModel.uiState.value.pendingSenderAccountSwitch)
+        assertTrue(viewModel.uiState.value.snackbarMessage?.text?.contains("로컬 계정 전환 실패") == true)
+    }
+
+    @Test
+    fun dismissPendingSenderAccountSwitch_clearsPendingWithoutStoppingRemoteAutomation_andStillRefreshesReservedAccount() {
+        val fetched = mutableListOf<String>()
+        val repository = multiUsageRepository(fetched = fetched, withCache = true)
+        val remoteGateway = RecordingReserveRemoteGateway(completeImmediately = false)
+        val manageRemote = ManageRemoteAutomationUseCase(remoteGateway)
+        val maintenance = AppMaintenanceUseCase(remoteSenderGateway = manageRemote)
+        val viewModel = viewModel(
+            appMaintenance = maintenance,
+            manageRemoteAutomation = manageRemote,
+            multiGeminiUsageRepository = repository,
+            postAutomationUsageRefreshDelayMillis = 10L
+        )
+
+        viewModel.onAutomationModeSelected(AutomationMode.SENDER)
+        viewModel.promptEditor.onPromptTemplateChange("reserve prompt")
+        viewModel.reserveGeminiAccount("acc_2")
+
+        assertTrue(viewModel.uiState.value.isRunning)
+        assertNotNull(viewModel.uiState.value.pendingSenderAccountSwitch)
+
+        viewModel.dismissPendingSenderAccountSwitch()
+
+        assertNull(viewModel.uiState.value.pendingSenderAccountSwitch)
+        assertEquals(0, remoteGateway.forceStopCount)
+        assertTrue(viewModel.uiState.value.isRunning)
+
+        // X로 닫았더라도 수신 기기 작업이 끝나면 실제 생성한 계정(acc_2) 사용량만 새로고침
+        remoteGateway.completeSuccess()
+        waitUntil { fetched.isNotEmpty() }
+        assertEquals(listOf("acc_2"), fetched)
+    }
+
+    private class RecordingReserveRemoteGateway(
+        private val switchResult: RemoteActionResult = RemoteActionResult.Success,
+        private val completeImmediately: Boolean = true
+    ) : RemoteAutomationGateway {
+        val callOrder = mutableListOf<String>()
+        val sendRequests = mutableListOf<RemoteAutomationRequest>()
+        var forceStopCount = 0
+        var switchCount = 0
+
+        override val status = MutableStateFlow(
+            RemoteAutomationStatus(
+                mode = AutomationMode.SENDER,
+                discoveredDeviceName = "S25 FE",
+                isPaired = true
+            )
+        )
+
+        override fun selectMode(mode: AutomationMode) {
+            status.value = status.value.copy(mode = mode)
+        }
+
+        override suspend fun disconnect(): RemoteActionResult = RemoteActionResult.Success
+
+        override suspend fun send(request: RemoteAutomationRequest) {
+            sendRequests += request
+            val count = RepeatCountParser.parse(request.repeatCountText)
+            callOrder += "remoteSend:${request.targetApp.name}:$count"
+            status.value = status.value.copy(
+                automationState = AutomationRunState.Running(
+                    step = "원격 실행 중",
+                    currentIndex = count,
+                    totalCount = count
+                )
+            )
+            if (completeImmediately) {
+                status.value = status.value.copy(automationState = AutomationRunState.Success)
+            }
+        }
+
+        fun completeSuccess() {
+            status.value = status.value.copy(automationState = AutomationRunState.Success)
+        }
+
+        fun resetToIdle() {
+            status.value = status.value.copy(automationState = AutomationRunState.Idle)
+        }
+
+        override fun updateRepeatCount(requestId: String, repeatCount: Int) = Unit
+
+        override fun forceStop(requestId: String?) {
+            forceStopCount += 1
+        }
+
+        override suspend fun cleanMemory(): RemoteActionResult {
+            callOrder += "remoteCleanMemory"
+            return RemoteActionResult.Success
+        }
+
+        override suspend fun switchGeminiAccount(email: String, alias: String): RemoteActionResult {
+            switchCount += 1
+            callOrder += "remoteSwitch:$email:$alias"
+            return switchResult
+        }
     }
 
     private companion object {

@@ -1,4 +1,4 @@
-﻿// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 실험 세트 관리, 상용구/연동 와일드카드 자동완성 및 일괄 치환, 제미나이 사용량 모니터링, 메모리 정리를 총괄 관리하는 뷰모델입니다.
+// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 실험 세트 관리, 상용구/연동 와일드카드 자동완성 및 일괄 치환, 제미나이 사용량 모니터링, 수신 기기 선행 예약 생성·송신 단독 계정 전환, 메모리 정리를 총괄 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -92,7 +92,8 @@ class AutomationViewModel(
     private val automationSettingsStore: AutomationSettingsRepository? = null,
     private val multiGeminiUsageRepository: MultiGeminiUsageRepository? = null,
     private val wildcardLinkedFilesRepository: WildcardLinkedFilesRepository? = null,
-    coroutineScope: CoroutineScope? = null
+    coroutineScope: CoroutineScope? = null,
+    private val postAutomationUsageRefreshDelayMillis: Long = 10_000L
 ) : ViewModel(), AutomationScreenActions {
     private val scope = coroutineScope ?: viewModelScope
     private var automationPreparationJob: Job? = null
@@ -102,6 +103,10 @@ class AutomationViewModel(
     private var activeRunRequestedCount: Int = 0
     private var activeRunMaxIndex: Int = 0
     private var isPreStartCleanupInProgress: Boolean = false
+    private var isPreStartSwitchInProgress: Boolean = false
+    private var pendingPreparationSwitch: PendingSenderAccountSwitch? = null
+    private var activeRunUsageRefreshAccountId: String? = null
+    private var nextSnackbarMessageId: Long = 1L
     override val promptEditor: PromptEditorCoordinator = PromptEditorCoordinator(
         clipboardGateway = clipboardGateway,
         scope = scope,
@@ -257,6 +262,13 @@ class AutomationViewModel(
     }
 
     override fun removeGeminiAccount(accountId: String) {
+        _uiState.update { current ->
+            if (current.pendingSenderAccountSwitch?.accountId == accountId) {
+                current.copy(pendingSenderAccountSwitch = null)
+            } else {
+                current
+            }
+        }
         multiGeminiUsageRepository?.triggerRemoveAccount(accountId)
     }
 
@@ -293,8 +305,14 @@ class AutomationViewModel(
         }
 
         val profile = targetEntry.profile
+        val willStartSwitch = currentState.canSwitchGeminiAccount
         selectRepresentativeGeminiAccount(accountId)
-        _uiState.update { it.copy(showMultiGeminiUsageDialog = false) }
+        _uiState.update {
+            it.copy(
+                showMultiGeminiUsageDialog = false,
+                pendingSenderAccountSwitch = if (willStartSwitch) null else it.pendingSenderAccountSwitch
+            )
+        }
 
         val mode = _uiState.value.automationMode
         executeMaintenance(
@@ -312,6 +330,169 @@ class AutomationViewModel(
         )
     }
 
+    override fun reserveGeminiAccount(accountId: String) {
+        promptEditor.syncPromptTemplateFromTextField()
+        val state = _uiState.value
+        val targetEntry = state.multiGeminiUsageState.accounts
+            .firstOrNull { it.profile.id == accountId }
+        if (targetEntry == null) {
+            emitSnackbar("예약 생성할 계정을 찾지 못했습니다.")
+            return
+        }
+
+        val isStartInProgress = automationPreparationJob?.isActive == true
+        val blockReason = state.reserveAccountBlockReason(
+            entry = targetEntry,
+            nowMillis = System.currentTimeMillis(),
+            isStartInProgress = isStartInProgress
+        )
+        if (blockReason != null) {
+            emitSnackbar(blockReason)
+            return
+        }
+
+        val profile = targetEntry.profile
+        val effectivePromptTemplate = PromptExperimentPolicy.resolvePromptTemplate(
+            isExperimentMode = state.isExperimentMode,
+            promptTemplate = state.promptTemplate,
+            selectedItem = state.selectedExperimentItem
+        )
+        promptEditor.onAutomationStarted(state.promptTemplate)
+        postAutomationUsageRefreshJob?.cancel()
+        promptEditor.cancelParagraphSelection()
+
+        val request = AutomationRunRequest(
+            promptTemplate = effectivePromptTemplate,
+            repeatCountText = state.repeatCountText,
+            targetApp = AutomationTargetApp.GEMINI,
+            flowImageCount = state.flowImageCount
+        )
+        val pendingSwitch = PendingSenderAccountSwitch(
+            accountId = profile.id,
+            email = profile.email,
+            alias = profile.displayAlias
+        )
+        launchPreparedAutomation(
+            request = request,
+            isRemote = true,
+            mode = state.automationMode,
+            shouldCleanBeforeStart = state.shouldAutoCleanMemoryBeforeStart,
+            pendingRemoteAccountSwitch = pendingSwitch,
+            usageRefreshAccountId = profile.id,
+            additionalInitialUpdate = { current ->
+                current.copy(
+                    showMultiGeminiUsageDialog = false,
+                    pendingSenderAccountSwitch = pendingSwitch
+                )
+            }
+        )
+    }
+
+    override fun switchSenderToPendingAccount() {
+        val currentState = _uiState.value
+        val pending = currentState.pendingSenderAccountSwitch ?: return
+        val blockReason = currentState.senderLocalSwitchUnavailableReason
+        if (blockReason != null) {
+            _uiState.update {
+                it.copy(
+                    maintenanceState = MaintenanceState(isBusy = false, message = blockReason),
+                    snackbarMessage = createSnackbarMessage(blockReason)
+                )
+            }
+            return
+        }
+
+        val targetLabel = pending.displayLabel
+        _uiState.update {
+            it.copy(
+                maintenanceState = MaintenanceState(
+                    isBusy = true,
+                    message = AutomationUiText.senderLocalAccountSwitchStartingText(targetLabel)
+                )
+            )
+        }
+        scope.launch {
+            val result = try {
+                withContext(dispatchers.io) {
+                    appMaintenance.switchLocalGeminiAccount(
+                        email = pending.email,
+                        alias = targetLabel,
+                        returnToHostApp = false
+                    )
+                }
+            } catch (error: CancellationException) {
+                _uiState.update {
+                    it.copy(
+                        maintenanceState = MaintenanceState(
+                            isBusy = false,
+                            message = AutomationUiText.senderLocalAccountSwitchCanceledText()
+                        )
+                    )
+                }
+                throw error
+            } catch (error: Exception) {
+                MaintenanceResult.Failure(error.message ?: "송신 기기 계정 전환 중 오류가 발생했습니다.")
+            }
+
+            if (result is MaintenanceResult.Success) {
+                selectRepresentativeGeminiAccount(pending.accountId)
+                _uiState.update { current ->
+                    current.copy(
+                        pendingSenderAccountSwitch = if (current.pendingSenderAccountSwitch == pending) {
+                            null
+                        } else {
+                            current.pendingSenderAccountSwitch
+                        },
+                        maintenanceState = MaintenanceState(
+                            isBusy = false,
+                            message = result.displayMessage
+                        )
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        maintenanceState = MaintenanceState(
+                            isBusy = false,
+                            message = result.displayMessage
+                        ),
+                        snackbarMessage = createSnackbarMessage(result.displayMessage)
+                    )
+                }
+            }
+        }
+    }
+
+    override fun dismissPendingSenderAccountSwitch() {
+        _uiState.update {
+            if (it.pendingSenderAccountSwitch == null) it else it.copy(pendingSenderAccountSwitch = null)
+        }
+    }
+
+    override fun consumeSnackbarMessage(id: Long) {
+        _uiState.update {
+            if (it.snackbarMessage?.id == id) it.copy(snackbarMessage = null) else it
+        }
+    }
+
+    private fun createSnackbarMessage(text: String): AutomationSnackbarMessage =
+        AutomationSnackbarMessage(id = nextSnackbarMessageId++, text = text)
+
+    private fun emitSnackbar(text: String) {
+        _uiState.update { it.copy(snackbarMessage = createSnackbarMessage(text)) }
+    }
+
+    private fun clearPendingSwitchIfMatches(target: PendingSenderAccountSwitch?) {
+        if (target == null) return
+        _uiState.update { current ->
+            if (current.pendingSenderAccountSwitch == target) {
+                current.copy(pendingSenderAccountSwitch = null)
+            } else {
+                current
+            }
+        }
+    }
+
     override fun refreshGeminiAccountUsage(accountId: String) {
         multiGeminiUsageRepository?.triggerRefreshAccount(accountId)
     }
@@ -320,8 +501,16 @@ class AutomationViewModel(
         multiGeminiUsageRepository?.triggerRefreshAll(prioritizedGroup = prioritizedGroup)
     }
 
-    private fun refreshGeminiUsage() {
-        multiGeminiUsageRepository?.triggerRefreshRepresentativeAccount()
+    override fun toggleGeminiMainOnlyMode(enabled: Boolean) {
+        multiGeminiUsageRepository?.triggerSetMainOnlyMode(enabled)
+    }
+
+    private fun refreshGeminiUsage(accountId: String? = null) {
+        if (accountId != null) {
+            multiGeminiUsageRepository?.triggerRefreshAccount(accountId)
+        } else {
+            multiGeminiUsageRepository?.triggerRefreshRepresentativeAccount()
+        }
     }
 
     override fun onToggleCopyPromptOnStart(enabled: Boolean) {
@@ -1238,39 +1427,67 @@ class AutomationViewModel(
             flowImageCount = state.flowImageCount
         )
 
-        val shouldCleanBeforeStart = state.shouldAutoCleanMemoryBeforeStart
-        val isRemote = decision is AutomationStartDecision.RemoteStarted
+        launchPreparedAutomation(
+            request = request,
+            isRemote = decision is AutomationStartDecision.RemoteStarted,
+            mode = state.automationMode,
+            shouldCleanBeforeStart = state.shouldAutoCleanMemoryBeforeStart
+        )
+        return decision
+    }
+
+    private fun launchPreparedAutomation(
+        request: AutomationRunRequest,
+        isRemote: Boolean,
+        mode: AutomationMode,
+        shouldCleanBeforeStart: Boolean,
+        pendingRemoteAccountSwitch: PendingSenderAccountSwitch? = null,
+        usageRefreshAccountId: String? = null,
+        additionalInitialUpdate: ((AutomationUiState) -> AutomationUiState)? = null
+    ) {
         if (isRemote) isRemoteRunActive = true
-        activeRunTargetApp = state.selectedTargetApp
-        activeRunRequestedCount = RepeatCountParser.parse(state.repeatCountText)
+        activeRunTargetApp = request.targetApp
+        activeRunRequestedCount = RepeatCountParser.parse(request.repeatCountText)
         activeRunMaxIndex = 0
         isPreStartCleanupInProgress = shouldCleanBeforeStart
+        isPreStartSwitchInProgress = pendingRemoteAccountSwitch != null
+        pendingPreparationSwitch = pendingRemoteAccountSwitch
+        activeRunUsageRefreshAccountId = usageRefreshAccountId
 
         val initialStep = when {
-            shouldCleanBeforeStart -> AutomationUiText.memoryCleanupStartingText(state.automationMode)
+            shouldCleanBeforeStart -> AutomationUiText.memoryCleanupStartingText(mode)
+            pendingRemoteAccountSwitch != null ->
+                AutomationUiText.receiverAccountSwitchPreparingText(pendingRemoteAccountSwitch.displayLabel)
             isRemote -> "S25 FE로 요청 전송 중"
             else -> "자동화 준비 중"
         }
         handleAutomationState(
             AutomationRunState.Running(initialStep),
-            additionalUpdate = { it.copy(isMemoryCleanupScheduled = false) }
+            additionalUpdate = { current ->
+                val clearedCleanup = current.copy(isMemoryCleanupScheduled = false)
+                additionalInitialUpdate?.invoke(clearedCleanup) ?: clearedCleanup
+            }
         )
 
         val job = scope.launch {
             if (shouldCleanBeforeStart) {
                 val cleanupResult = try {
                     withContext(dispatchers.io) {
-                        performMemoryCleanup(state.automationMode)
+                        performMemoryCleanup(mode)
                     }
                 } catch (error: CancellationException) {
-                    isPreStartCleanupInProgress = false
+                    clearPendingSwitchIfMatches(pendingRemoteAccountSwitch)
+                    pendingPreparationSwitch = null
+                    activeRunUsageRefreshAccountId = null
                     handleAutomationState(AutomationRunState.Stopped)
                     throw error
                 } catch (error: Exception) {
                     MaintenanceResult.Failure(error.message ?: "메모리 정리 중 오류가 발생했습니다.")
                 }
-                isPreStartCleanupInProgress = false
                 if (cleanupResult !is MaintenanceResult.Success) {
+                    clearPendingSwitchIfMatches(pendingRemoteAccountSwitch)
+                    pendingPreparationSwitch = null
+                    activeRunUsageRefreshAccountId = null
                     _uiState.update {
                         it.copy(
                             maintenanceState = MaintenanceState(
@@ -1282,6 +1499,7 @@ class AutomationViewModel(
                     handleAutomationState(AutomationRunState.Failure(cleanupResult.displayMessage))
                     return@launch
                 }
+                isPreStartCleanupInProgress = false
                 _uiState.update {
                     it.copy(
                         maintenanceState = MaintenanceState(
@@ -1290,8 +1508,59 @@ class AutomationViewModel(
                         )
                     )
                 }
-                val postCleanupStep = if (isRemote) "S25 FE로 요청 전송 중" else "자동화 준비 중"
+                val postCleanupStep = when {
+                    pendingRemoteAccountSwitch != null ->
+                        AutomationUiText.receiverAccountSwitchPreparingText(pendingRemoteAccountSwitch.displayLabel)
+                    isRemote -> "S25 FE로 요청 전송 중"
+                    else -> "자동화 준비 중"
+                }
                 handleAutomationState(AutomationRunState.Running(postCleanupStep))
+            }
+
+            if (pendingRemoteAccountSwitch != null) {
+                val switchResult = try {
+                    withContext(dispatchers.io) {
+                        appMaintenance.switchRemoteGeminiAccount(
+                            email = pendingRemoteAccountSwitch.email,
+                            alias = pendingRemoteAccountSwitch.displayLabel
+                        )
+                    }
+                } catch (error: CancellationException) {
+                    clearPendingSwitchIfMatches(pendingRemoteAccountSwitch)
+                    pendingPreparationSwitch = null
+                    activeRunUsageRefreshAccountId = null
+                    handleAutomationState(AutomationRunState.Stopped)
+                    throw error
+                } catch (error: Exception) {
+                    MaintenanceResult.Failure(error.message ?: "수신 기기 계정 전환 중 오류가 발생했습니다.")
+                }
+                if (switchResult !is MaintenanceResult.Success) {
+                    clearPendingSwitchIfMatches(pendingRemoteAccountSwitch)
+                    pendingPreparationSwitch = null
+                    activeRunUsageRefreshAccountId = null
+                    _uiState.update {
+                        it.copy(
+                            maintenanceState = MaintenanceState(
+                                isBusy = false,
+                                message = switchResult.displayMessage
+                            ),
+                            snackbarMessage = createSnackbarMessage(switchResult.displayMessage)
+                        )
+                    }
+                    handleAutomationState(AutomationRunState.Failure(switchResult.displayMessage))
+                    return@launch
+                }
+                isPreStartSwitchInProgress = false
+                pendingPreparationSwitch = null
+                _uiState.update {
+                    it.copy(
+                        maintenanceState = MaintenanceState(
+                            isBusy = false,
+                            message = switchResult.displayMessage
+                        )
+                    )
+                }
+                handleAutomationState(AutomationRunState.Running("S25 FE로 요청 전송 중"))
             }
 
             if (isRemote) {
@@ -1306,7 +1575,6 @@ class AutomationViewModel(
                 automationPreparationJob = null
             }
         }
-        return decision
     }
 
     private suspend fun executeRemoteAutomationRequest(request: AutomationRunRequest) {
@@ -1333,6 +1601,11 @@ class AutomationViewModel(
     override fun cancelAutomation() {
         _uiState.update { it.copy(isMemoryCleanupScheduled = false) }
         isPreStartCleanupInProgress = false
+        val pendingPrep = pendingPreparationSwitch
+        pendingPreparationSwitch = null
+        if (pendingPrep != null) {
+            clearPendingSwitchIfMatches(pendingPrep)
+        }
         val wasRemoteRunActive = isRemoteRunActive
         isRemoteRunActive = false
         val preparationJob = automationPreparationJob
@@ -1352,6 +1625,15 @@ class AutomationViewModel(
     override fun onAutomationModeSelected(mode: AutomationMode) {
         if (_uiState.value.isRunning || _uiState.value.isVariationRunning) return
         isRemoteRunActive = false
+        if (mode != AutomationMode.SENDER) {
+            _uiState.update {
+                if (it.pendingSenderAccountSwitch != null) {
+                    it.copy(pendingSenderAccountSwitch = null)
+                } else {
+                    it
+                }
+            }
+        }
         handleAutomationState(AutomationRunState.Idle)
         manageRemoteAutomation.selectMode(mode)
     }
@@ -1535,11 +1817,15 @@ class AutomationViewModel(
         var shouldExecuteScheduledCleanup = false
         if (state.isTerminal()) {
             val completedTargetApp = activeRunTargetApp
-            val wasPreStartCleanup = isPreStartCleanupInProgress
+            val wasPreStartPreparation = isPreStartCleanupInProgress || isPreStartSwitchInProgress
+            val completedUsageRefreshAccountId = activeRunUsageRefreshAccountId
             activeRunTargetApp = null
             isPreStartCleanupInProgress = false
+            isPreStartSwitchInProgress = false
+            pendingPreparationSwitch = null
+            activeRunUsageRefreshAccountId = null
 
-            val generatedInSession = if (!wasPreStartCleanup && completedTargetApp == AutomationTargetApp.GEMINI) {
+            val generatedInSession = if (!wasPreStartPreparation && completedTargetApp == AutomationTargetApp.GEMINI) {
                 when (state) {
                     AutomationRunState.Success -> activeRunRequestedCount.coerceAtLeast(activeRunMaxIndex)
                     is AutomationRunState.Failure,
@@ -1580,7 +1866,7 @@ class AutomationViewModel(
                 }
             }
 
-            if (!wasPreStartCleanup && (completedTargetApp == AutomationTargetApp.GEMINI || completedTargetApp == null)) {
+            if (!wasPreStartPreparation && (completedTargetApp == AutomationTargetApp.GEMINI || completedTargetApp == null)) {
                 // 메모리 정리가 예약된 경우, 정리 완료 후 10초 뒤에 갱신해 앱 포커스 변동과 겹치지 않게 함
                 val cleanupFirst = shouldExecuteScheduledCleanup
                 shouldExecuteScheduledCleanup = false
@@ -1591,8 +1877,8 @@ class AutomationViewModel(
                         executeCleanDeviceMemory()
                         _uiState.first { !it.maintenanceState.isBusy }
                     }
-                    delay(10_000L)
-                    refreshGeminiUsage()
+                    delay(postAutomationUsageRefreshDelayMillis)
+                    refreshGeminiUsage(completedUsageRefreshAccountId)
                 }
             }
         }

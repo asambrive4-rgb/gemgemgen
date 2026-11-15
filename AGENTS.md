@@ -12,7 +12,8 @@ LLM 코딩 에이전트가 이 프로젝트에서 **필요한 부분만 정확�
 불필요한 코드·죽은 코드(Dead Code)·중복 구현 정리, 코드 다이어트, 복잡한 로직 단순화, 다차원 코드 품질/구조 검토와 관련된 작업을 할 때는 프로젝트 전용 스킬인 `clean-code`(`.agents/skills/clean-code/SKILL.md`), `code-simplification`(`.agents/skills/code-simplification/SKILL.md`), `code-review-and-quality`(`.agents/skills/code-review-and-quality/SKILL.md`)를 확인하고 활용하세요.  
 UI, UX, 디자인 시스템, 색상 테마, 컴포넌트 스타일링, 화면 일관화와 관련된 작업을 할 때는 `docs/디자인.md`를 먼저 확인하고 그 기준을 따르세요.  
 화면 전환, 다이얼로그 깜빡임 방지, Hold Screen, Single Dialog Host, 탭 전환 최적화와 관련된 작업을 할 때는 `docs/flicker-free-ui-guidelines.md`를 먼저 확인하고 그 기준을 따르세요.  
-모바일 가상 키보드(IME), 입력창 포커스 제어, 자동완성 칩, 하단 고정 바 및 터치 인터랙션과 관련된 작업을 할 때는 `docs/mobile-interaction-ux-guidelines.md`를 먼저 확인하고 그 기준을 따르세요.
+모바일 가상 키보드(IME), 입력창 포커스 제어, 자동완성 칩, 하단 고정 바 및 터치 인터랙션과 관련된 작업을 할 때는 `docs/mobile-interaction-ux-guidelines.md`를 먼저 확인하고 그 기준을 따르세요.  
+UI/UX 기획, 화면 구성, 기능 제안, 원격 송수신 및 자동화 흐름을 수정할 때는 `docs/usage-environment.md`를 먼저 확인하여 사용자의 실제 기기 및 운용 환경을 참고하세요.
 
 ---
 
