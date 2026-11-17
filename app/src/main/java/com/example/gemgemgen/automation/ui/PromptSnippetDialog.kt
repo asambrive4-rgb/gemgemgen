@@ -1,4 +1,4 @@
-// 역할: 토스 침전 바닥형 표면 위계와 상단 툴바 액션 기반 단일 모달 호스트(Single Dialog Host)로 상용구(다중 단축어 포함) 목록 조회·필터링, 아코디언 토글 및 흔들림 없는 등록 폼·카테고리 관리·찾아 바꾸기 서브 스테이지 전환을 제공하는 다이얼로그입니다.
+// 역할: 토스 침전 바닥형 표면 위계와 상단 툴바 액션 기반 단일 모달 호스트(Single Dialog Host)로 상용구(다중 단축어 포함) 목록 조회·필터링, 아코디언 토글, 자동완성 칩 롱프레스 직행 수정 및 흔들림 없는 등록 폼·카테고리 관리·찾아 바꾸기 서브 스테이지 전환을 제공하는 다이얼로그입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -114,6 +114,7 @@ fun PromptSnippetDialog(
     categories: List<String> = emptyList(),
     currentPromptText: String = "",
     isSelectionPrompt: Boolean = false,
+    initialEditingSnippet: PromptSnippet? = null,
     onAddSnippet: (shortcut: String, additionalShortcuts: List<String>, content: String, category: String) -> Unit,
     onUpdateSnippet: (id: String, shortcut: String, additionalShortcuts: List<String>, content: String, category: String) -> Unit = { _, _, _, _, _ -> },
     onDeleteSnippet: (id: String) -> Unit,
@@ -145,8 +146,18 @@ fun PromptSnippetDialog(
         list
     }
 
+    val isDirectEditMode = initialEditingSnippet != null
+
     // 현재 활성화된 화면 단계 (보관함 vs 폼 vs 카테고리 관리 vs 찾아 바꾸기)
-    var activeStage by remember { mutableStateOf<PromptSnippetStage>(PromptSnippetStage.Vault) }
+    var activeStage by remember(initialEditingSnippet?.id) {
+        mutableStateOf<PromptSnippetStage>(
+            if (initialEditingSnippet != null) {
+                PromptSnippetStage.Form(editingSnippet = initialEditingSnippet)
+            } else {
+                PromptSnippetStage.Vault
+            }
+        )
+    }
 
     // 보관함 필터 상태
     var selectedFilter by remember { mutableStateOf<SnippetCategoryFilter>(SnippetCategoryFilter.All) }
@@ -169,9 +180,19 @@ fun PromptSnippetDialog(
     }
 
     // 폼 입력 상태 (단순 타이핑 중 상위 모달 전체 리컴포지션을 유발하지 않도록 텍스트는 DraftHolder에 보관)
-    val formDraft = remember { SnippetFormDraftHolder() }
-    var additionalShortcutsInput by remember { mutableStateOf<List<String>>(emptyList()) }
-    var errorMessage by remember { mutableStateOf("") }
+    val formDraft = remember(initialEditingSnippet?.id) {
+        SnippetFormDraftHolder().apply {
+            if (initialEditingSnippet != null) {
+                shortcutInput = initialEditingSnippet.shortcut
+                categoryInput = initialEditingSnippet.category
+                contentInput = initialEditingSnippet.content
+            }
+        }
+    }
+    var additionalShortcutsInput by remember(initialEditingSnippet?.id) {
+        mutableStateOf(initialEditingSnippet?.additionalShortcuts ?: emptyList())
+    }
+    var errorMessage by remember(initialEditingSnippet?.id) { mutableStateOf("") }
 
     // 수정 모드로 폼 열기 핸들러
     val openEditFormStage: (PromptSnippet) -> Unit = { snippet ->
@@ -307,7 +328,7 @@ fun PromptSnippetDialog(
                                     errorMessage = ""
                                 }
                             },
-                            onCancel = backToVault,
+                            onCancel = if (isDirectEditMode) onDismiss else backToVault,
                             onSave = {
                                 val shortcut = formDraft.shortcutInput.trim()
                                 val cleanedAdditional = additionalShortcutsInput
@@ -339,7 +360,11 @@ fun PromptSnippetDialog(
                                         } else {
                                             onAddSnippet(shortcut, cleanedAdditional, content, category)
                                         }
-                                        backToVault()
+                                        if (isDirectEditMode) {
+                                            onDismiss()
+                                        } else {
+                                            backToVault()
+                                        }
                                     }
                                 }
                             }

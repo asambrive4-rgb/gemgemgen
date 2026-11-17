@@ -1,6 +1,9 @@
-// 역할: 상용구·연동 와일드카드 개별 항목·와일드카드 토큰 추천 칩을 3색 시각적 위계와 출처 카테고리 뱃지로 표시합니다.
+// 역할: 상용구·연동 와일드카드 개별 항목·와일드카드 토큰 추천 칩을 3색 시각적 위계와 출처 카테고리 뱃지로 표시하고, 짧은 터치 치환과 롱프레스 즉시 편집을 지원합니다.
 package com.example.gemgemgen.automation.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -24,8 +27,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +49,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal fun IsolatedPromptSuggestionBar(
     activeSuggestionsFlow: StateFlow<List<WildcardTokenAutocomplete.Candidate>>,
     onSuggestionClick: (WildcardTokenAutocomplete.Candidate) -> Unit,
+    onSuggestionLongClick: (WildcardTokenAutocomplete.Candidate) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val suggestions by activeSuggestionsFlow.collectAsStateWithLifecycle()
@@ -50,6 +57,7 @@ internal fun IsolatedPromptSuggestionBar(
         PromptSuggestionBar(
             suggestions = suggestions,
             onSuggestionClick = onSuggestionClick,
+            onSuggestionLongClick = onSuggestionLongClick,
             modifier = modifier
         )
     }
@@ -60,6 +68,7 @@ internal fun IsolatedPromptSuggestionBar(
 internal fun PromptSuggestionBar(
     suggestions: List<WildcardTokenAutocomplete.Candidate>,
     onSuggestionClick: (WildcardTokenAutocomplete.Candidate) -> Unit,
+    onSuggestionLongClick: (WildcardTokenAutocomplete.Candidate) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -78,7 +87,8 @@ internal fun PromptSuggestionBar(
                 key("${candidate.type}:${candidate.name}:${candidate.token}") {
                     WildcardSuggestionChip(
                         candidate = candidate,
-                        onClick = { onSuggestionClick(candidate) }
+                        onClick = { onSuggestionClick(candidate) },
+                        onLongClick = { onSuggestionLongClick(candidate) }
                     )
                 }
             }
@@ -86,10 +96,12 @@ internal fun PromptSuggestionBar(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun WildcardSuggestionChip(
     candidate: WildcardTokenAutocomplete.Candidate,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isSnippet = candidate.type == WildcardTokenAutocomplete.Candidate.Type.SNIPPET
@@ -117,13 +129,18 @@ internal fun WildcardSuggestionChip(
         else -> "와일드카드 토큰 ${candidate.displayText} 삽입"
     }
 
-    Surface(
-        onClick = onClick,
-        shape = shape,
-        color = containerColor,
-        modifier = modifier.semantics {
-            contentDescription = description
-        }
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(containerColor)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .semantics {
+                role = Role.Button
+                contentDescription = description
+            }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -166,4 +183,3 @@ internal fun WildcardSuggestionChip(
         }
     }
 }
-

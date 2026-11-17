@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터, 실험(연금술) 관리 모달 연동, 상용구·카테고리 관리 및 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼·송신 대기 계정 전환 캡슐·수직 목록 모달·스낵바, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
+// 역할: 화면 액션 인터페이스 지원, 가상 키보드 반응형 에디터 및 추천 칩 롱프레스 직행 편집 연결, 실험(연금술) 관리 모달 연동, 상용구·카테고리 관리 및 일괄 치환 모달 연동, 다중 제미나이 계정 사용량 요약 버튼·송신 대기 계정 전환 캡슐·수직 목록 모달·스낵바, 하단 네비게이션 바 위에 고정되는 시작·수신 제어 바를 구성합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -147,7 +147,8 @@ internal fun AutomationScreen(
                         ) {
                             IsolatedPromptSuggestionBar(
                                 activeSuggestionsFlow = actions.promptEditor.activeSuggestions,
-                                onSuggestionClick = actions.promptEditor::applySuggestion
+                                onSuggestionClick = actions.promptEditor::applySuggestion,
+                                onSuggestionLongClick = actions::onEditSuggestionCandidate
                             )
 
                             KeyboardPromptAccessoryBar(
@@ -213,6 +214,7 @@ internal fun AutomationScreen(
                     categories = uiState.promptSnippetCategories,
                     currentPromptText = selectedText ?: promptTemplateState.text.toString(),
                     isSelectionPrompt = selectedText != null,
+                    initialEditingSnippet = uiState.initialEditingSnippet,
                     onAddSnippet = actions::addPromptSnippet,
                     onUpdateSnippet = actions::updatePromptSnippet,
                     onDeleteSnippet = actions::deletePromptSnippet,

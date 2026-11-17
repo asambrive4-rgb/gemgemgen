@@ -1,4 +1,4 @@
-// 역할: 자동화 뷰모델의 상태 변경, 화면 액션 인터페이스, 수신 기기 선행 예약 생성·송신 단독 계정 전환 흐름 및 비즈니스 이벤트 흐름을 검증합니다.
+// 역할: 자동화 뷰모델의 상태 변경, 화면 액션 인터페이스, 자동완성 상용구 칩 롱프레스 직행 수정, 수신 기기 선행 예약 생성·송신 단독 계정 전환 흐름 및 비즈니스 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import androidx.compose.ui.text.TextRange
@@ -2343,6 +2343,92 @@ class AutomationViewModelTest {
         remoteGateway.completeSuccess()
         waitUntil { fetched.isNotEmpty() }
         assertEquals(listOf("acc_2"), fetched)
+    }
+
+    @Test
+    fun onEditSuggestionCandidate_forSnippet_opensDialogInDirectEditMode_andPreservesPromptAndCursor() {
+        val targetSnippet = PromptSnippet(
+            id = "snip_1",
+            shortcut = "고화질",
+            additionalShortcuts = listOf("HQ"),
+            content = "8k masterpiece",
+            category = "스타일"
+        )
+        val snippetRepository = object : PromptSnippetRepository {
+            private var items = listOf(targetSnippet)
+            override fun load(): List<PromptSnippet> = items
+            override fun save(snippets: List<PromptSnippet>) { items = snippets }
+        }
+        val viewModel = viewModel(promptSnippetRepository = snippetRepository)
+        viewModel.promptEditor.onPromptTemplateChange("배경 고화")
+        viewModel.promptTemplateTextFieldState.edit {
+            selection = TextRange(5)
+        }
+
+        val candidate = WildcardTokenAutocomplete.Candidate(
+            name = "고화질",
+            token = "8k masterpiece",
+            displayText = "고화질",
+            category = "스타일",
+            aliases = listOf("HQ"),
+            type = WildcardTokenAutocomplete.Candidate.Type.SNIPPET
+        )
+
+        viewModel.onEditSuggestionCandidate(candidate)
+
+        assertTrue(viewModel.uiState.value.showPromptSnippetDialog)
+        assertEquals("snip_1", viewModel.uiState.value.initialEditingSnippetId)
+        assertEquals(targetSnippet, viewModel.uiState.value.initialEditingSnippet)
+        // 메인 프롬프트 텍스트 및 커서 위치 보존 확인
+        assertEquals("배경 고화", viewModel.uiState.value.promptTemplate)
+        assertEquals("배경 고화", viewModel.promptTemplateTextFieldState.text.toString())
+        assertEquals(TextRange(5), viewModel.promptTemplateTextFieldState.selection)
+
+        // 상용구 수정 후 프롬프트 입력창은 그대로 유지되고 추천 후보만 갱신되는지 확인
+        viewModel.updatePromptSnippet(
+            id = "snip_1",
+            shortcut = "고화질업",
+            additionalShortcuts = listOf("HQ"),
+            content = "16k ultra detailed",
+            category = "스타일"
+        )
+        viewModel.dismissPromptSnippetDialog()
+
+        assertFalse(viewModel.uiState.value.showPromptSnippetDialog)
+        assertNull(viewModel.uiState.value.initialEditingSnippetId)
+        assertEquals("배경 고화", viewModel.uiState.value.promptTemplate)
+        assertEquals(TextRange(5), viewModel.promptTemplateTextFieldState.selection)
+        val updatedSuggestions = viewModel.promptEditor.activeSuggestions.value
+        assertEquals(1, updatedSuggestions.size)
+        assertEquals("고화질업", updatedSuggestions[0].name)
+        assertEquals("16k ultra detailed", updatedSuggestions[0].token)
+    }
+
+    @Test
+    fun showPromptSnippetDialog_resetsInitialEditingSnippetId() {
+        val targetSnippet = PromptSnippet(
+            id = "snip_1",
+            shortcut = "고화질",
+            content = "8k masterpiece"
+        )
+        val snippetRepository = object : PromptSnippetRepository {
+            override fun load(): List<PromptSnippet> = listOf(targetSnippet)
+            override fun save(snippets: List<PromptSnippet>) = Unit
+        }
+        val viewModel = viewModel(promptSnippetRepository = snippetRepository)
+        val candidate = WildcardTokenAutocomplete.Candidate(
+            name = "고화질",
+            token = "8k masterpiece",
+            displayText = "고화질",
+            type = WildcardTokenAutocomplete.Candidate.Type.SNIPPET
+        )
+
+        viewModel.onEditSuggestionCandidate(candidate)
+        assertEquals("snip_1", viewModel.uiState.value.initialEditingSnippetId)
+
+        viewModel.showPromptSnippetDialog()
+        assertTrue(viewModel.uiState.value.showPromptSnippetDialog)
+        assertNull(viewModel.uiState.value.initialEditingSnippetId)
     }
 
     private class RecordingReserveRemoteGateway(

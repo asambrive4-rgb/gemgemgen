@@ -1,4 +1,4 @@
-// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 실험(연금술) 액션, 다중 계정 제미나이 예약 생성·송신 단독 전환 액션 및 상용구·카테고리 관리 액션을 제공하는 안정적인(Stable) UI 액션 인터페이스입니다.
+// 역할: 자동화 화면에서 발생하는 사용자 입력 인터랙션, 프롬프트 에디터 액션 그룹, 자동완성 칩 롱프레스 직행 편집 액션, 실험(연금술) 액션, 다중 계정 제미나이 예약 생성·송신 단독 전환 액션 및 상용구·카테고리 관리 액션을 제공하는 안정적인(Stable) UI 액션 인터페이스입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.runtime.Stable
@@ -7,6 +7,7 @@ import com.example.gemgemgen.automation.domain.InstructionTab
 import com.example.gemgemgen.automation.domain.PromptInstructionConfig
 import com.example.gemgemgen.automation.domain.VariationPromptConfig
 import com.example.gemgemgen.automation.domain.AutomationMode
+import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.ui.theme.AppThemeMode
 import com.example.gemgemgen.ui.theme.AppThemePalette
 import com.example.gemgemgen.usage.domain.GeminiAccountGroup
@@ -60,9 +61,10 @@ interface AutomationScreenActions {
     fun moveExperimentItem(presetId: String, itemId: String, delta: Int) {}
     fun reorderExperimentItems(presetId: String, fromIndex: Int, toIndex: Int) {}
 
-    // 상용구 (Prompt Snippet) 및 카테고리 관리
+    // 상용구 (Prompt Snippet) 및 카테고리 관리 / 자동완성 칩 롱프레스 수정
     fun showPromptSnippetDialog() {}
     fun dismissPromptSnippetDialog() {}
+    fun onEditSuggestionCandidate(candidate: WildcardTokenAutocomplete.Candidate) {}
     fun addPromptSnippet(shortcut: String, additionalShortcuts: List<String> = emptyList(), content: String, category: String = "") {}
     fun addPromptSnippet(shortcut: String, content: String, category: String = "") {
         addPromptSnippet(shortcut, emptyList(), content, category)

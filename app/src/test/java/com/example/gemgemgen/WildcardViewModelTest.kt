@@ -1,4 +1,4 @@
-// 역할: 와일드카드 뷰모델의 파일 탐색, 편집, 화면 액션 인터페이스 및 폴더 관리 이벤트 흐름을 검증합니다.
+// 역할: 와일드카드 뷰모델의 파일 탐색, 편집, 자동완성 칩 대상 파일 직행 오픈, 화면 액션 인터페이스 및 폴더 관리 이벤트 흐름을 검증합니다.
 package com.example.gemgemgen
 
 import com.example.gemgemgen.analysis.usecase.*
@@ -465,6 +465,56 @@ class WildcardViewModelTest {
         viewModel.classifyCoordinator.requestClassify()
         assertTrue(viewModel.uiState.value.classify.showClassifyCriteriaDialog)
         assertEquals("", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun selectFileForAutocomplete_byToken_opensMatchingTxtFile() {
+        val fileManager = FakeWildcardFileManager(
+            "color.txt" to "blue",
+            "여성 의상.txt" to "dress\nskirt"
+        )
+        val viewModel = viewModel(fileManager = fileManager)
+        assertEquals("color.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+
+        viewModel.selectFileForAutocomplete(tokenOrEmpty = "__여성의상__", categoryOrEmpty = "")
+
+        assertEquals("여성 의상.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+        assertEquals("dress\nskirt", viewModel.uiState.value.editor.editingText)
+    }
+
+    @Test
+    fun selectFileForAutocomplete_byCategory_opensMatchingTxtFile() {
+        val fileManager = FakeWildcardFileManager(
+            "color.txt" to "blue",
+            "헤어스타일.txt" to "포니테일\n단발"
+        )
+        val viewModel = viewModel(fileManager = fileManager)
+        assertEquals("color.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+
+        viewModel.selectFileForAutocomplete(tokenOrEmpty = "", categoryOrEmpty = "헤어스타일")
+
+        assertEquals("헤어스타일.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+        assertEquals("포니테일\n단발", viewModel.uiState.value.editor.editingText)
+    }
+
+    @Test
+    fun selectFileForAutocomplete_withUnsavedChanges_setsPendingOpenAction() {
+        val fileManager = FakeWildcardFileManager(
+            "color.txt" to "blue",
+            "hair.txt" to "black hair"
+        )
+        val viewModel = viewModel(fileManager = fileManager)
+        assertEquals("color.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+
+        viewModel.onTextChange("navy blue")
+        assertTrue(viewModel.uiState.value.editor.hasUnsavedChanges)
+
+        viewModel.selectFileForAutocomplete(tokenOrEmpty = "__hair__", categoryOrEmpty = "")
+
+        assertEquals("color.txt", viewModel.uiState.value.editor.selectedFile?.fileName)
+        val pending = viewModel.uiState.value.pendingAction
+        assertTrue(pending is WildcardPendingAction.OpenFile)
+        assertEquals("hair.txt", (pending as WildcardPendingAction.OpenFile).file.fileName)
     }
 
     private fun viewModel(

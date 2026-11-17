@@ -1,4 +1,4 @@
-﻿// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 송신 기기 대기 계정 전환 상태·일시 알림(Snackbar), 상용구·카테고리 목록, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
+// 역할: 자동화 메인 화면의 프롬프트 편집, 실험(연금술) 모드·프리셋 상태, 실행 상태, 다중 제미나이 계정 사용량 한도 상태 및 모달 가시성, 송신 기기 대기 계정 전환 상태·일시 알림(Snackbar), 상용구·카테고리 목록 및 직행 수정 대상, 추천 후보, 자동/예약 메모리 정리 등 UI 상태를 정의합니다.
 package com.example.gemgemgen.automation.ui
 
 import com.example.gemgemgen.automation.domain.AutomationExecutionPolicy
@@ -55,6 +55,8 @@ data class AutomationUiState(
     val promptSnippetCategories: List<String> = emptyList(),
     /** 상용구(텍스트 대치) 관리 다이얼로그 표시 여부 */
     val showPromptSnippetDialog: Boolean = false,
+    /** 자동완성 칩 롱프레스 등으로 상용구 수정 폼을 곧바로 열 때 대상 상용구 ID */
+    val initialEditingSnippetId: String? = null,
     val promptInstructionConfig: com.example.gemgemgen.automation.domain.PromptInstructionConfig =
         com.example.gemgemgen.automation.domain.PromptInstructionConfig.DEFAULT,
     val showInstructionConfigDialog: Boolean = false,
@@ -85,6 +87,11 @@ data class AutomationUiState(
     /** 태블릿 가로 화면 등 Gemini 사이드바가 열려 있는 상태에서 자동화를 진행할지 여부 (기본값 OFF) */
     val geminiSidebarOpenMode: Boolean = AppDefaults.DEFAULT_GEMINI_SIDEBAR_OPEN_MODE
 ) {
+    val initialEditingSnippet: com.example.gemgemgen.automation.domain.PromptSnippet?
+        get() = initialEditingSnippetId?.let { targetId ->
+            promptSnippets.firstOrNull { it.id == targetId }
+        }
+
     val activeExperimentPreset: PromptExperimentPreset
         get() = experimentPresets.firstOrNull { it.id == activeExperimentPresetId }
             ?: experimentPresets.firstOrNull()

@@ -1,4 +1,4 @@
-﻿// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 포함), 플로팅 오버레이 부착 감시 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
+﻿// 역할: 접근성 서비스 연결, 액션 바인딩(Gemini 계정 전환 및 자동완성 칩 롱프레스 직행 편집 포함), 플로팅 오버레이 부착 감시 및 라이프사이클 이벤트 제어로 자동화 화면을 호스팅합니다.
 package com.example.gemgemgen.ui.android
 
 import android.Manifest
@@ -31,6 +31,7 @@ import com.example.gemgemgen.analysis.ui.AnalysisViewModel
 import com.example.gemgemgen.automation.android.FloatingAutomationBarController
 import com.example.gemgemgen.automation.ui.AutomationScreenActions
 import com.example.gemgemgen.automation.domain.AutomationStartDecision
+import com.example.gemgemgen.automation.domain.WildcardTokenAutocomplete
 import com.example.gemgemgen.automation.ui.AutomationViewModel
 import com.example.gemgemgen.ui.AutomationApp
 import com.example.gemgemgen.ui.MainTab
@@ -169,6 +170,36 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
         selectedTab = tab
     }
 
+    fun editSuggestionCandidate(candidate: WildcardTokenAutocomplete.Candidate) {
+        when (candidate.type) {
+            WildcardTokenAutocomplete.Candidate.Type.SNIPPET -> {
+                automationViewModel.onEditSuggestionCandidate(candidate)
+            }
+            WildcardTokenAutocomplete.Candidate.Type.WILDCARD -> {
+                val wildcardViewModel = getOrCreateWildcardViewModel()
+                wildcardViewModel.onFolderAccessChanged(
+                    mainUiState.environmentStatus.canEditWildcardFiles
+                )
+                wildcardViewModel.selectFileForAutocomplete(
+                    tokenOrEmpty = candidate.token,
+                    categoryOrEmpty = ""
+                )
+                selectMainTab(MainTab.WILDCARD)
+            }
+            WildcardTokenAutocomplete.Candidate.Type.WILDCARD_ITEM -> {
+                val wildcardViewModel = getOrCreateWildcardViewModel()
+                wildcardViewModel.onFolderAccessChanged(
+                    mainUiState.environmentStatus.canEditWildcardFiles
+                )
+                wildcardViewModel.selectFileForAutocomplete(
+                    tokenOrEmpty = "",
+                    categoryOrEmpty = candidate.category
+                )
+                selectMainTab(MainTab.WILDCARD)
+            }
+        }
+    }
+
     fun bringMainActivityToFront() {
         platformNavigator.bringMainActivityToFront()
     }
@@ -267,7 +298,8 @@ fun AndroidAutomationHost(container: AndroidAppContainer) {
                 selectSafWildcardFolder = ::selectSafWildcardFolder,
                 openWildcardStorageSettings = ::openWildcardStorageSettings,
                 runAutomation = ::runAutomation,
-                selectAutomationMode = ::selectAutomationMode
+                selectAutomationMode = ::selectAutomationMode,
+                editSuggestionCandidate = ::editSuggestionCandidate
             )
         },
         analysisContent = {
@@ -319,8 +351,12 @@ private fun createAutomationActions(
     selectSafWildcardFolder: () -> Unit,
     openWildcardStorageSettings: () -> Unit,
     runAutomation: () -> Unit,
-    selectAutomationMode: (AutomationMode) -> Unit
+    selectAutomationMode: (AutomationMode) -> Unit,
+    editSuggestionCandidate: (WildcardTokenAutocomplete.Candidate) -> Unit
 ): AutomationScreenActions = object : AutomationScreenActions by automationViewModel {
+    override fun onEditSuggestionCandidate(candidate: WildcardTokenAutocomplete.Candidate) {
+        editSuggestionCandidate(candidate)
+    }
     override fun onRunAutomation() {
         runAutomation()
     }

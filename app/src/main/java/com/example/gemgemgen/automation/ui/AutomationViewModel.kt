@@ -1,4 +1,4 @@
-// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 실험 세트 관리, 상용구/연동 와일드카드 자동완성 및 일괄 치환, 제미나이 사용량 모니터링, 수신 기기 선행 예약 생성·송신 단독 계정 전환, 메모리 정리를 총괄 관리하는 뷰모델입니다.
+// 역할: 화면 액션 인터페이스 구현, 프롬프트 편집, 실험 세트 관리, 상용구/연동 와일드카드 자동완성·롱프레스 직행 편집 및 일괄 치환, 제미나이 사용량 모니터링, 수신 기기 선행 예약 생성·송신 단독 계정 전환, 메모리 정리를 총괄 관리하는 뷰모델입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.text.input.TextFieldState
@@ -783,11 +783,34 @@ class AutomationViewModel(
     }
 
     override fun showPromptSnippetDialog() {
-        _uiState.update { it.copy(showPromptSnippetDialog = true) }
+        _uiState.update {
+            it.copy(
+                showPromptSnippetDialog = true,
+                initialEditingSnippetId = null
+            )
+        }
     }
 
     override fun dismissPromptSnippetDialog() {
-        _uiState.update { it.copy(showPromptSnippetDialog = false) }
+        _uiState.update {
+            it.copy(
+                showPromptSnippetDialog = false,
+                initialEditingSnippetId = null
+            )
+        }
+    }
+
+    override fun onEditSuggestionCandidate(candidate: WildcardTokenAutocomplete.Candidate) {
+        if (candidate.type != WildcardTokenAutocomplete.Candidate.Type.SNIPPET) return
+        val matchedSnippet = _uiState.value.promptSnippets.firstOrNull {
+            it.shortcut.trim().equals(candidate.name.trim(), ignoreCase = true)
+        } ?: return
+        _uiState.update {
+            it.copy(
+                showPromptSnippetDialog = true,
+                initialEditingSnippetId = matchedSnippet.id
+            )
+        }
     }
 
     override fun addPromptSnippet(

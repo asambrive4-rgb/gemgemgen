@@ -1,4 +1,4 @@
-// 역할: 와일드카드 세트·단어 편집, 폴더 관리, 상용구 자동완성 칩 연동 토글, AI 분류 조율 및 화면 액션 처리를 총괄하는 뷰모델입니다.
+// 역할: 와일드카드 세트·단어 편집, 폴더 관리, 상용구 자동완성 칩 연동 토글 및 자동완성 후보 기반 파일 즉시 열기, AI 분류 조율 및 화면 액션 처리를 총괄하는 뷰모델입니다.
 package com.example.gemgemgen.wildcard.ui
 
 import androidx.lifecycle.ViewModel
@@ -312,6 +312,61 @@ class WildcardViewModel(
             return
         }
         openFile(file)
+    }
+
+    /**
+     * 자동완성 추천 칩(와일드카드 토큰 또는 연동 와일드카드 개별 항목) 롱프레스 시
+     * 해당 와일드카드 .txt 파일을 찾아 에디터에 엽니다.
+     * 현재 파일에 미저장 변경사항이 있으면 기존 저장 확인 다이얼로그를 먼저 표시합니다.
+     */
+    fun selectFileForAutocomplete(
+        tokenOrEmpty: String,
+        categoryOrEmpty: String
+    ) {
+        val state = uiState.value
+        if (state.isFileOperationInProgress) return
+
+        fun matchesTarget(file: WildcardTextFile): Boolean {
+            if (categoryOrEmpty.isNotBlank()) {
+                val baseName = file.fileName.removeSuffix(".txt")
+                if (baseName.equals(categoryOrEmpty.trim(), ignoreCase = true) ||
+                    file.fileName.equals("${categoryOrEmpty.trim()}.txt", ignoreCase = true)
+                ) {
+                    return true
+                }
+            }
+            if (tokenOrEmpty.isNotBlank()) {
+                val fileToken = com.example.gemgemgen.wildcard.domain.WildcardFileParser.tokenFromFileName(file.fileName)
+                if (fileToken != null && fileToken.equals(tokenOrEmpty.trim(), ignoreCase = true)) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        val existingTarget = state.files.firstOrNull(::matchesTarget)
+        if (existingTarget != null) {
+            selectFile(existingTarget)
+            return
+        }
+
+        launchFileOperation(errorMessage = "파일 목록을 불러오지 못했습니다.", onError = ::showFileListError) {
+            val workspace = manageWildcardFiles.refreshWorkspace(
+                selectedFile = uiState.value.editor.selectedFile,
+                openFirstFile = false
+            )
+            _uiState.update { it.copy(files = workspace.files, error = "") }
+            val refreshedTarget = workspace.files.firstOrNull(::matchesTarget) ?: return@launchFileOperation
+            val currentState = uiState.value
+            if (currentState.editor.selectedFile?.id == refreshedTarget.id) return@launchFileOperation
+            if (currentState.editor.hasUnsavedChanges) {
+                _uiState.update {
+                    it.copy(pendingAction = WildcardPendingAction.OpenFile(refreshedTarget), message = "", error = "")
+                }
+            } else {
+                openFileInCurrentOperation(refreshedTarget)
+            }
+        }
     }
 
     override fun onTextChange(value: String) {
