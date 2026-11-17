@@ -31,17 +31,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -210,7 +205,6 @@ internal fun SnippetFormContent(
     val resetKey = editingSnippet?.id ?: "new"
     val formScrollState = rememberScrollState()
     val contentScrollState = rememberScrollState()
-    var isContentFocused by remember { mutableStateOf(false) }
 
     val shortcutState = rememberSyncedTextFieldState(
         value = shortcutInput,
@@ -245,23 +239,6 @@ internal fun SnippetFormContent(
             val trimmed = shortcutState.text.toString().trim()
             trimmed.isNotEmpty() && existingShortcutsSet.contains(trimmed.lowercase())
         }
-    }
-
-    // 가상 키보드가 올라오며 폼 스크롤 영역의 maxValue가 커질 때, 본문 입력칸이 포커스된 상태라면
-    // 같은 프레임에서 스크롤 위치를 동기화하여 2단계 덜컹거림 없이 한 번에 자리 잡도록 한다.
-    LaunchedEffect(isContentFocused) {
-        if (!isContentFocused) return@LaunchedEffect
-        if (formScrollState.maxValue > 0) {
-            formScrollState.scrollTo(formScrollState.maxValue)
-        }
-        var previousMax = formScrollState.maxValue
-        snapshotFlow { formScrollState.maxValue }
-            .collect { currentMax ->
-                if (currentMax > previousMax) {
-                    formScrollState.scrollTo(currentMax)
-                }
-                previousMax = currentMax
-            }
     }
 
     var firstAdditionalDuplicateError: String? = null
@@ -537,10 +514,7 @@ internal fun SnippetFormContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(SnippetContentInputFieldHeight)
-                        .graphicsLayer()
-                        .onFocusChanged { focusState ->
-                            isContentFocused = focusState.isFocused
-                        },
+                        .graphicsLayer(),
                     shape = RoundedCornerShape(12.dp),
                     colors = appTextFieldColors(),
                     lineLimits = TextFieldLineLimits.MultiLine(
