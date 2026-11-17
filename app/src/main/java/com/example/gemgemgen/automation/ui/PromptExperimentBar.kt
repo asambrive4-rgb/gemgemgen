@@ -1,4 +1,4 @@
-// 역할: 에디터 상단에 펼쳐져 프리셋(세트) 전환, 위치 태그(`{{실험}}`) 원터치 삽입, 2열 무테두리 그리드 기반 실험 프롬프트 번호 선택(기본 4개 상시 노출, 초과 시 세로 스크롤) 및 롱탭 관리를 지원하는 실험(연금술) 바 UI입니다.
+// 역할: 에디터 상단에 펼쳐져 프리셋(세트) 전환, 위치 태그(`{{실험}}`) 원터치 삽입, 2열 무테두리 그리드 기반 실험 프롬프트 번호 선택·원터치 복사(기본 4개 상시 노출, 초과 시 세로 스크롤) 및 롱탭 관리를 지원하는 실험(연금술) 바 UI입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -26,15 +25,18 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,20 +44,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.gemgemgen.automation.domain.PromptExperimentItem
 import com.example.gemgemgen.automation.domain.PromptExperimentPreset
+import com.example.gemgemgen.core.ClipboardGateway
+import com.example.gemgemgen.core.android.rememberClipboardGateway
 import com.example.gemgemgen.ui.theme.AppTheme
 import com.example.gemgemgen.ui.theme.NeuButton
 import com.example.gemgemgen.ui.theme.NeuDropdownMenu
 import com.example.gemgemgen.ui.theme.NeuDropdownMenuDivider
 import com.example.gemgemgen.ui.theme.NeuInsetBed
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun PromptExperimentBar(
@@ -70,6 +77,8 @@ internal fun PromptExperimentBar(
     onOpenManageDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val clipboardGateway = rememberClipboardGateway()
+
     NeuInsetBed(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp)
@@ -171,6 +180,7 @@ internal fun PromptExperimentBar(
                                     number = number,
                                     item = item,
                                     selected = isSelected,
+                                    clipboardGateway = clipboardGateway,
                                     onClick = { onSelectItem(item.id) },
                                     onLongClick = onOpenManageDialog,
                                     modifier = Modifier.weight(1f)
@@ -365,6 +375,7 @@ private fun ExperimentGridChip(
     number: Int,
     item: PromptExperimentItem,
     selected: Boolean,
+    clipboardGateway: ClipboardGateway,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -374,6 +385,8 @@ private fun ExperimentGridChip(
     val contentColor = if (selected) AppTheme.colors.onPrimary else AppTheme.colors.textPrimary
     val badgeBgColor = if (selected) AppTheme.colors.onPrimary.copy(alpha = 0.22f) else AppTheme.colors.insetBed
     val badgeTextColor = if (selected) AppTheme.colors.onPrimary else AppTheme.colors.primary
+    val copyDefaultTint = if (selected) AppTheme.colors.onPrimary.copy(alpha = 0.88f) else AppTheme.colors.textSecondary
+    val copyDoneTint = if (selected) AppTheme.colors.onPrimary else AppTheme.colors.primary
 
     val singleLinePreview = remember(item.content) {
         item.content.replace("\n", " ").trim()
@@ -388,9 +401,9 @@ private fun ExperimentGridChip(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 10.dp),
+            .padding(start = 10.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Surface(
             shape = RoundedCornerShape(7.dp),
@@ -415,6 +428,52 @@ private fun ExperimentGridChip(
             overflow = TextOverflow.Ellipsis,
             fontSize = 13.sp,
             modifier = Modifier.weight(1f)
+        )
+
+        ExperimentCopyIconButton(
+            textToCopy = item.content,
+            clipboardGateway = clipboardGateway,
+            contentDescriptionLabel = "${number}번 항목 복사",
+            defaultTint = copyDefaultTint,
+            copiedTint = copyDoneTint,
+            iconSize = 15.dp
+        )
+    }
+}
+
+@Composable
+internal fun ExperimentCopyIconButton(
+    textToCopy: String,
+    clipboardGateway: ClipboardGateway,
+    contentDescriptionLabel: String,
+    defaultTint: Color = AppTheme.colors.textSecondary,
+    copiedTint: Color = AppTheme.colors.primary,
+    iconSize: Dp = 17.dp,
+    modifier: Modifier = Modifier
+) {
+    var isCopied by remember(textToCopy) { mutableStateOf(false) }
+
+    LaunchedEffect(isCopied) {
+        if (isCopied) {
+            delay(1500)
+            isCopied = false
+        }
+    }
+
+    IconButton(
+        onClick = {
+            if (textToCopy.isNotBlank()) {
+                clipboardGateway.writeText(textToCopy)
+                isCopied = true
+            }
+        },
+        modifier = modifier.size(36.dp)
+    ) {
+        Icon(
+            imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+            contentDescription = if (isCopied) "${contentDescriptionLabel}됨" else contentDescriptionLabel,
+            tint = if (isCopied) copiedTint else defaultTint,
+            modifier = Modifier.size(iconSize)
         )
     }
 }

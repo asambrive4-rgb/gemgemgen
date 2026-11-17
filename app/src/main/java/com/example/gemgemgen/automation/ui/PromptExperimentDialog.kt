@@ -1,4 +1,4 @@
-// 역할: 프롬프트 실험(연금술) 다이얼로그의 메인 호스트 화면으로, 세트 선택·실험 항목 목록 관리 및 서브 단계 화면들과의 단일 모달 호스트(Single Dialog Host) 전환을 제공합니다.
+// 역할: 프롬프트 실험(연금술) 다이얼로그의 메인 호스트 화면으로, 세트 선택·실험 항목 원터치 복사 및 목록 관리·서브 단계 화면들과의 단일 모달 호스트(Single Dialog Host) 전환을 제공합니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -525,6 +525,7 @@ private fun ExperimentMainListContent(
                             selected = isSelected,
                             isDragging = isDragging,
                             dragOffset = if (isDragging) dragState.dragAccumulatedY else 0f,
+                            clipboardGateway = clipboardGateway,
                             onSelectClick = { onSelectItem(item.id) },
                             onDragStart = { dragState.startDrag(item.id) },
                             onDrag = { deltaY -> dragState.onDrag(deltaY) },
@@ -698,6 +699,7 @@ private fun ExperimentItemRowCard(
     selected: Boolean,
     isDragging: Boolean,
     dragOffset: Float,
+    clipboardGateway: ClipboardGateway,
     onSelectClick: () -> Unit,
     onDragStart: () -> Unit,
     onDrag: (Float) -> Unit,
@@ -812,6 +814,12 @@ private fun ExperimentItemRowCard(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                ExperimentCopyIconButton(
+                    textToCopy = item.content,
+                    clipboardGateway = clipboardGateway,
+                    contentDescriptionLabel = "${number}번 항목 복사",
+                    iconSize = 17.dp
+                )
                 IconButton(
                     onClick = onEditClick,
                     modifier = Modifier.size(36.dp)

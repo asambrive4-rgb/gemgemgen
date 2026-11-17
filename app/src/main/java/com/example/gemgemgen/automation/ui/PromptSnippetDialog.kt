@@ -1,4 +1,4 @@
-// 역할: 토스 침전 바닥형 표면 위계와 상단 툴바 액션 기반 단일 모달 호스트(Single Dialog Host)로 상용구(다중 단축어 포함) 목록 조회·필터링, 아코디언 토글 및 등록 폼·카테고리 관리·찾아 바꾸기 서브 스테이지 전환을 제공하는 다이얼로그입니다.
+// 역할: 토스 침전 바닥형 표면 위계와 상단 툴바 액션 기반 단일 모달 호스트(Single Dialog Host)로 상용구(다중 단축어 포함) 목록 조회·필터링, 아코디언 토글 및 흔들림 없는 등록 폼·카테고리 관리·찾아 바꾸기 서브 스테이지 전환을 제공하는 다이얼로그입니다.
 package com.example.gemgemgen.automation.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -97,6 +97,15 @@ private sealed interface SnippetCategoryFilter {
 }
 
 /**
+ * 타이핑 중 매 글자마다 상위 다이얼로그 전체가 리컴포지션되는 현상을 막기 위한 폼 드래프트 홀더.
+ */
+private class SnippetFormDraftHolder {
+    var shortcutInput: String = ""
+    var categoryInput: String = ""
+    var contentInput: String = ""
+}
+
+/**
  * 프롬프트 상용구 관리 다이얼로그
  */
 @Composable
@@ -159,39 +168,37 @@ fun PromptSnippetDialog(
         }
     }
 
-    // 폼 입력 상태
-    var shortcutInput by remember { mutableStateOf("") }
+    // 폼 입력 상태 (단순 타이핑 중 상위 모달 전체 리컴포지션을 유발하지 않도록 텍스트는 DraftHolder에 보관)
+    val formDraft = remember { SnippetFormDraftHolder() }
     var additionalShortcutsInput by remember { mutableStateOf<List<String>>(emptyList()) }
-    var categoryInput by remember { mutableStateOf("") }
-    var contentInput by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
 
     // 수정 모드로 폼 열기 핸들러
     val openEditFormStage: (PromptSnippet) -> Unit = { snippet ->
-        shortcutInput = snippet.shortcut
+        formDraft.shortcutInput = snippet.shortcut
         additionalShortcutsInput = snippet.additionalShortcuts
-        categoryInput = snippet.category
-        contentInput = snippet.content
+        formDraft.categoryInput = snippet.category
+        formDraft.contentInput = snippet.content
         errorMessage = ""
         activeStage = PromptSnippetStage.Form(editingSnippet = snippet)
     }
 
     // 신규 등록 모드로 폼 열기 핸들러 (현재 필터가 특정 카테고리면 기본 선택값으로 채워줌)
     val openNewFormStage: () -> Unit = {
-        shortcutInput = ""
+        formDraft.shortcutInput = ""
         additionalShortcutsInput = emptyList()
-        categoryInput = (selectedFilter as? SnippetCategoryFilter.Named)?.category.orEmpty()
-        contentInput = ""
+        formDraft.categoryInput = (selectedFilter as? SnippetCategoryFilter.Named)?.category.orEmpty()
+        formDraft.contentInput = ""
         errorMessage = ""
         activeStage = PromptSnippetStage.Form(editingSnippet = null)
     }
 
     // 보관함 목록으로 복귀 핸들러
     val backToVault: () -> Unit = {
-        shortcutInput = ""
+        formDraft.shortcutInput = ""
         additionalShortcutsInput = emptyList()
-        categoryInput = ""
-        contentInput = ""
+        formDraft.categoryInput = ""
+        formDraft.contentInput = ""
         errorMessage = ""
         activeStage = PromptSnippetStage.Vault
     }
@@ -223,10 +230,12 @@ fun PromptSnippetDialog(
             )
 
             // 2. 단일 모달 내부 화면 전환 (보관함 목록 ↔ 등록/수정 폼 ↔ 카테고리 관리 ↔ 찾아 바꾸기)
+            // SizeTransform(스프링 크기 애니메이션)을 비활성화(using(null))하여 키보드 개폐 및 입력 중 외곽 바운스를 차단한다.
             AnimatedContent(
                 targetState = activeStage,
                 transitionSpec = {
-                    fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
+                    (fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140)))
+                        .using(null)
                 },
                 contentKey = { stage ->
                     when (stage) {
@@ -264,10 +273,10 @@ fun PromptSnippetDialog(
                         }
                         SnippetFormContent(
                             editingSnippet = stage.editingSnippet,
-                            shortcutInput = shortcutInput,
+                            shortcutInput = formDraft.shortcutInput,
                             additionalShortcutsInput = additionalShortcutsInput,
-                            categoryInput = categoryInput,
-                            contentInput = contentInput,
+                            categoryInput = formDraft.categoryInput,
+                            contentInput = formDraft.contentInput,
                             availableCategories = effectiveCategories,
                             errorMessage = errorMessage,
                             currentPromptText = currentPromptText,
@@ -275,29 +284,37 @@ fun PromptSnippetDialog(
                             existingShortcuts = otherShortcuts,
                             clipboardGateway = clipboardGateway,
                             onShortcutChange = {
-                                shortcutInput = it.filterNot { char -> char.isWhitespace() }
-                                errorMessage = ""
+                                formDraft.shortcutInput = it.filterNot { char -> char.isWhitespace() }
+                                if (errorMessage.isNotEmpty()) {
+                                    errorMessage = ""
+                                }
                             },
                             onAdditionalShortcutsChange = {
                                 additionalShortcutsInput = it
-                                errorMessage = ""
+                                if (errorMessage.isNotEmpty()) {
+                                    errorMessage = ""
+                                }
                             },
                             onCategoryChange = {
-                                categoryInput = it.filterNot { char -> char.isWhitespace() }
-                                errorMessage = ""
+                                formDraft.categoryInput = it.filterNot { char -> char.isWhitespace() }
+                                if (errorMessage.isNotEmpty()) {
+                                    errorMessage = ""
+                                }
                             },
                             onContentChange = {
-                                contentInput = it
-                                errorMessage = ""
+                                formDraft.contentInput = it
+                                if (errorMessage.isNotEmpty()) {
+                                    errorMessage = ""
+                                }
                             },
                             onCancel = backToVault,
                             onSave = {
-                                val shortcut = shortcutInput.trim()
+                                val shortcut = formDraft.shortcutInput.trim()
                                 val cleanedAdditional = additionalShortcutsInput
                                     .map { it.trim() }
                                     .filter { it.isNotEmpty() }
-                                val category = categoryInput.trim()
-                                val content = contentInput.trim()
+                                val category = formDraft.categoryInput.trim()
+                                val content = formDraft.contentInput.trim()
                                 val otherShortcutsSet = otherShortcuts.toSet()
 
                                 when {

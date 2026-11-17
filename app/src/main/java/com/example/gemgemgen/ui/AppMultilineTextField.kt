@@ -1,4 +1,4 @@
-// 역할: GPU 레이어 캐싱과 스크롤, 자리표시자, 문단 선택, 문구 검색 하이라이트 및 외부 문자열 상태와 TextFieldState 간 양방향 동기화를 지원하는 공용 텍스트 입력창 UI를 제공합니다.
+// 역할: GPU 레이어 캐싱과 스크롤, 자리표시자, 문단 선택, 문구 검색 하이라이트 및 타이핑 에코로 인한 커서 튐을 방지하는 외부 문자열 상태와 TextFieldState 간 양방향 동기화를 지원하는 공용 텍스트 입력창 UI를 제공합니다.
 package com.example.gemgemgen.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -52,8 +52,9 @@ data class TextHighlightRange(
  * 외부 문자열 상태(`value`)와 최신 `TextFieldState`를 양방향으로 안전하게 동기화하는 헬퍼.
  *
  * - 사용자가 타이핑하는 동안에는 `TextFieldState`가 내부 버퍼와 한글 조합(IME Composition) 및 커서 위치를 직접 보존합니다.
- * - 클립보드 붙여넣기, 실행 취소, 파일 전환, 초기화처럼 외부에서 `value`가 바뀐 경우에만 `TextFieldState`를 갱신하여
- *   빠른 타이핑 중 이전 프레임 에코로 인해 글자가 씹히거나 커서가 튀는 현상을 방지합니다.
+ * - 연속 타이핑 중 상위 상태 리컴포지션 지연으로 이전 프레임 문자열이 뒤늦게 도착하더라도 `pendingEmittedTexts`로 에코를 식별해 무시합니다.
+ * - 클립보드 붙여넣기, 실행 취소, 파일 전환, 초기화처럼 외부에서 실제로 `value`가 바뀐 경우에만 `TextFieldState`를 갱신하여
+ *   빠른 타이핑이나 중간 위치 수정 중 글자가 씹히거나 커서·스크롤이 맨 끝으로 튀는 현상을 방지합니다.
  */
 @Composable
 fun rememberSyncedTextFieldState(
@@ -69,10 +70,23 @@ fun rememberSyncedTextFieldState(
     }
     val onValueChangeLatest by rememberUpdatedState(onValueChange)
     val lastEmittedText = remember(resetKey) { mutableStateOf(value) }
+    val pendingEmittedTexts = remember(resetKey) {
+        LinkedHashSet<String>().apply { add(value) }
+    }
 
     LaunchedEffect(value, state) {
-        if (value != lastEmittedText.value && !state.text.contentEquals(value)) {
+        if (value == lastEmittedText.value) {
+            pendingEmittedTexts.clear()
+            pendingEmittedTexts.add(value)
+            return@LaunchedEffect
+        }
+        if (pendingEmittedTexts.contains(value)) {
+            return@LaunchedEffect
+        }
+        if (!state.text.contentEquals(value)) {
             lastEmittedText.value = value
+            pendingEmittedTexts.clear()
+            pendingEmittedTexts.add(value)
             state.setTextAndPlaceCursorAtEnd(value)
         }
     }
@@ -83,6 +97,7 @@ fun rememberSyncedTextFieldState(
             .collect { currentText ->
                 if (currentText != lastEmittedText.value) {
                     lastEmittedText.value = currentText
+                    pendingEmittedTexts.add(currentText)
                     onValueChangeLatest(currentText)
                 }
             }
